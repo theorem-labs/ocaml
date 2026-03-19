@@ -1,0 +1,10 @@
+_build/
+*.vo
+*.vok
+*.vos
+*.glob
+*.aux
+a.out
+*.byte
+*.exe
+*.csexp

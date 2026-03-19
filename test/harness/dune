@@ -1,0 +1,5 @@
+(executables
+ (names harness trace manual_test)
+ (libraries unix)
+ (flags (:standard -w -a))
+ (modules harness trace manual_test loader interp_extracted))
