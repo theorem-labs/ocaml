@@ -1040,6 +1040,7 @@ let rec append s1 s2 =
 type value =
 | Val_int of int
 | Val_block of int * value list
+| Val_ptr of int
 
 (** val closure_tag : int **)
 
@@ -1133,20 +1134,7 @@ let val_bool = function
 
 let is_int = function
 | Val_int _ -> true
-| Val_block (_, _) -> false
-
-(** val field : value -> int -> value option **)
-
-let field v n0 =
-  match v with
-  | Val_int _ -> None
-  | Val_block (_, fields) -> nth_error fields n0
-
-(** val block_size : value -> int option **)
-
-let block_size = function
-| Val_int _ -> None
-| Val_block (_, fields) -> Some (length fields)
+| _ -> false
 
 (** val set_nth : 'a1 list -> int -> 'a1 -> 'a1 list option **)
 
@@ -1162,27 +1150,15 @@ let rec set_nth l n0 x =
        | None -> None)
        n0)
 
-(** val set_field : value -> int -> value -> value option **)
-
-let set_field v n0 x =
-  match v with
-  | Val_int _ -> None
-  | Val_block (t, fields) ->
-    (match set_nth fields n0 x with
-     | Some fields' -> Some (Val_block (t, fields'))
-     | None -> None)
-
 (** val value_eqb : value -> value -> bool **)
 
 let rec value_eqb v1 v2 =
   match v1 with
-  | Val_int n1 ->
-    (match v2 with
-     | Val_int n2 -> Z.eqb n1 n2
-     | Val_block (_, _) -> false)
+  | Val_int n1 -> (match v2 with
+                   | Val_int n2 -> Z.eqb n1 n2
+                   | _ -> false)
   | Val_block (t1, fs1) ->
     (match v2 with
-     | Val_int _ -> false
      | Val_block (t2, fs2) ->
        (&&) ((=) t1 t2)
          (let rec list_eqb l1 l2 =
@@ -1194,7 +1170,11 @@ let rec value_eqb v1 v2 =
               (match l2 with
                | [] -> false
                | v4 :: r2 -> (&&) (value_eqb v3 v4) (list_eqb r1 r2))
-          in list_eqb fs1 fs2))
+          in list_eqb fs1 fs2)
+     | _ -> false)
+  | Val_ptr a1 -> (match v2 with
+                   | Val_ptr a2 -> (=) a1 a2
+                   | _ -> false)
 
 type instruction =
 | ACC of int
@@ -1301,9 +1281,11 @@ type instruction =
 type trap_frame = { trap_pc : int; trap_sp_offset : int; trap_env : value;
                     trap_extra_args : int }
 
+type heap = (int * value list) list
+
 type state = { pc : int; accu : value; stack : value list; env : value;
                extra_args : int; global : value list;
-               trap_stack : trap_frame list }
+               trap_stack : trap_frame list; hp : heap; next_addr : int }
 
 type step_result =
 | Step of state
@@ -1320,27 +1302,96 @@ type run_result =
 
 let set_accu s v =
   { pc = s.pc; accu = v; stack = s.stack; env = s.env; extra_args =
-    s.extra_args; global = s.global; trap_stack = s.trap_stack }
+    s.extra_args; global = s.global; trap_stack = s.trap_stack; hp = s.hp;
+    next_addr = s.next_addr }
+
+(** val heap_lookup : heap -> int -> (int * value list) option **)
+
+let rec heap_lookup h addr =
+  match h with
+  | [] -> None
+  | p :: rest ->
+    let (a, fs) = p in
+    if (=) a addr then Some (a, fs) else heap_lookup rest addr
+
+(** val heap_alloc : state -> int -> value list -> state * value **)
+
+let heap_alloc s _ fields =
+  let addr = s.next_addr in
+  let s' = { pc = s.pc; accu = s.accu; stack = s.stack; env = s.env;
+    extra_args = s.extra_args; global = s.global; trap_stack = s.trap_stack;
+    hp = ((addr, fields) :: s.hp); next_addr = (Stdlib.Int.succ addr) }
+  in
+  (s', (Val_ptr addr))
+
+(** val heap_update : heap -> int -> value list -> heap **)
+
+let rec heap_update h addr fields =
+  match h with
+  | [] -> []
+  | p :: rest ->
+    let (a, fs) = p in
+    if (=) a addr
+    then (a, fields) :: rest
+    else (a, fs) :: (heap_update rest addr fields)
+
+(** val field_or_heap : state -> value -> int -> value option **)
+
+let field_or_heap s v n0 =
+  match v with
+  | Val_int _ -> None
+  | Val_block (_, fields) -> nth_error fields n0
+  | Val_ptr addr ->
+    (match heap_lookup s.hp addr with
+     | Some p -> let (_, fields) = p in nth_error fields n0
+     | None -> None)
+
+(** val tag_or_heap : state -> value -> int option **)
+
+let tag_or_heap s = function
+| Val_int _ -> None
+| Val_block (t, _) -> Some t
+| Val_ptr addr ->
+  (match heap_lookup s.hp addr with
+   | Some p -> let (t, _) = p in Some t
+   | None -> None)
+
+(** val size_or_heap : state -> value -> int option **)
+
+let size_or_heap s = function
+| Val_int _ -> None
+| Val_block (_, fields) -> Some (length fields)
+| Val_ptr addr ->
+  (match heap_lookup s.hp addr with
+   | Some p -> let (_, fields) = p in Some (length fields)
+   | None -> None)
 
 (** val initial_state : value list -> state **)
 
 let initial_state global_data =
   { pc = 0; accu = val_unit; stack = []; env = val_unit; extra_args = 0;
-    global = global_data; trap_stack = [] }
+    global = global_data; trap_stack = []; hp = []; next_addr = 0 }
 
 (** val get_code_ptr : value -> int option **)
 
 let get_code_ptr = function
-| Val_int _ -> None
 | Val_block (t, fields) ->
   if (=) t closure_tag
   then (match fields with
         | [] -> None
-        | v0 :: _ ->
-          (match v0 with
-           | Val_int pc0 -> Some pc0
-           | Val_block (_, _) -> None))
+        | v0 :: _ -> (match v0 with
+                      | Val_int pc0 -> Some pc0
+                      | _ -> None))
   else None
+| _ -> None
+
+(** val st :
+    state -> int -> value -> value list -> value -> int -> value list ->
+    trap_frame list -> state **)
+
+let st s pc0 accu0 stack0 env0 ea glob ts =
+  { pc = pc0; accu = accu0; stack = stack0; env = env0; extra_args = ea;
+    global = glob; trap_stack = ts; hp = s.hp; next_addr = s.next_addr }
 
 (** val step : instruction list -> state -> step_result **)
 
@@ -1352,55 +1403,47 @@ let step code s =
      | ACC n0 ->
        (match nth_error s.stack n0 with
         | Some v ->
-          Step { pc = pc'; accu = v; stack = s.stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
         | None ->
           Error
             ('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))
      | PUSH ->
-       Step { pc = pc'; accu = s.accu; stack = (s.accu :: s.stack); env =
-         s.env; extra_args = s.extra_args; global = s.global; trap_stack =
-         s.trap_stack }
+       Step
+         (st s pc' s.accu (s.accu :: s.stack) s.env s.extra_args s.global
+           s.trap_stack)
      | PUSHACC n0 ->
        let new_stack = s.accu :: s.stack in
        (match nth_error new_stack n0 with
         | Some v ->
-          Step { pc = pc'; accu = v; stack = new_stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
         | None ->
           Error
             ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))
      | POP n0 ->
-       Step { pc = pc'; accu = s.accu; stack = (skipn n0 s.stack); env =
-         s.env; extra_args = s.extra_args; global = s.global; trap_stack =
-         s.trap_stack }
+       Step
+         (st s pc' s.accu (skipn n0 s.stack) s.env s.extra_args s.global
+           s.trap_stack)
      | ASSIGN n0 ->
        (match set_nth s.stack n0 s.accu with
         | Some new_stack ->
-          Step { pc = pc'; accu = val_unit; stack = new_stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step
+            (st s pc' val_unit new_stack s.env s.extra_args s.global
+              s.trap_stack)
         | None ->
           Error
             ('A'::('S'::('S'::('I'::('G'::('N'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))
      | ENVACC n0 ->
-       (match field s.env n0 with
+       (match field_or_heap s s.env n0 with
         | Some v ->
-          Step { pc = pc'; accu = v; stack = s.stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
         | None ->
           Error
             ('E'::('N'::('V'::('A'::('C'::('C'::(':'::(' '::('e'::('n'::('v'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))
      | PUSHENVACC n0 ->
        let new_stack = s.accu :: s.stack in
-       (match field s.env n0 with
+       (match field_or_heap s s.env n0 with
         | Some v ->
-          Step { pc = pc'; accu = v; stack = new_stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
         | None ->
           Error
             ('P'::('U'::('S'::('H'::('E'::('N'::('V'::('A'::('C'::('C'::(':'::(' '::('e'::('n'::('v'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))))
@@ -1408,15 +1451,13 @@ let step code s =
        let frame = (Val_int ret_addr) :: (s.env :: ((Val_int
          (Z.of_nat s.extra_args)) :: s.stack))
        in
-       Step { pc = pc'; accu = s.accu; stack = frame; env = s.env;
-       extra_args = s.extra_args; global = s.global; trap_stack =
-       s.trap_stack }
+       Step (st s pc' s.accu frame s.env s.extra_args s.global s.trap_stack)
      | APPLY n0 ->
        (match get_code_ptr s.accu with
         | Some target_pc ->
-          Step { pc = target_pc; accu = s.accu; stack = s.stack; env =
-            s.accu; extra_args = (Nat.sub n0 (Stdlib.Int.succ 0)); global =
-            s.global; trap_stack = s.trap_stack }
+          Step
+            (st s target_pc s.accu s.stack s.accu
+              (Nat.sub n0 (Stdlib.Int.succ 0)) s.global s.trap_stack)
         | None ->
           Error
             ('A'::('P'::('P'::('L'::('Y'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))
@@ -1431,9 +1472,8 @@ let step code s =
              let new_stack = arg1 :: ((Val_int pc') :: (s.env :: ((Val_int
                (Z.of_nat s.extra_args)) :: rest)))
              in
-             Step { pc = target_pc; accu = s.accu; stack = new_stack; env =
-             s.accu; extra_args = 0; global = s.global; trap_stack =
-             s.trap_stack }
+             Step
+             (st s target_pc s.accu new_stack s.accu 0 s.global s.trap_stack)
            | None ->
              Error
                ('A'::('P'::('P'::('L'::('Y'::('1'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))
@@ -1454,9 +1494,9 @@ let step code s =
                   pc') :: (s.env :: ((Val_int
                   (Z.of_nat s.extra_args)) :: rest))))
                 in
-                Step { pc = target_pc; accu = s.accu; stack = new_stack;
-                env = s.accu; extra_args = (Stdlib.Int.succ 0); global =
-                s.global; trap_stack = s.trap_stack }
+                Step
+                (st s target_pc s.accu new_stack s.accu (Stdlib.Int.succ 0)
+                  s.global s.trap_stack)
               | None ->
                 Error
                   ('A'::('P'::('P'::('L'::('Y'::('2'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[]))))))))))))))))))))))))))))))))
@@ -1482,10 +1522,9 @@ let step code s =
                      pc') :: (s.env :: ((Val_int
                      (Z.of_nat s.extra_args)) :: rest)))))
                    in
-                   Step { pc = target_pc; accu = s.accu; stack = new_stack;
-                   env = s.accu; extra_args = (Stdlib.Int.succ
-                   (Stdlib.Int.succ 0)); global = s.global; trap_stack =
-                   s.trap_stack }
+                   Step
+                   (st s target_pc s.accu new_stack s.accu (Stdlib.Int.succ
+                     (Stdlib.Int.succ 0)) s.global s.trap_stack)
                  | None ->
                    Error
                      ('A'::('P'::('P'::('L'::('Y'::('3'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))))
@@ -1494,10 +1533,10 @@ let step code s =
        let base = skipn slotsize s.stack in
        (match get_code_ptr s.accu with
         | Some target_pc ->
-          Step { pc = target_pc; accu = s.accu; stack = (app args base);
-            env = s.accu; extra_args =
-            (Nat.add s.extra_args (Nat.sub nargs (Stdlib.Int.succ 0)));
-            global = s.global; trap_stack = s.trap_stack }
+          Step
+            (st s target_pc s.accu (app args base) s.accu
+              (Nat.add s.extra_args (Nat.sub nargs (Stdlib.Int.succ 0)))
+              s.global s.trap_stack)
         | None ->
           Error
             ('A'::('P'::('P'::('T'::('E'::('R'::('M'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))
@@ -1510,9 +1549,9 @@ let step code s =
           let base = skipn slotsize s.stack in
           (match get_code_ptr s.accu with
            | Some target_pc ->
-             Step { pc = target_pc; accu = s.accu; stack = (arg1 :: base);
-               env = s.accu; extra_args = s.extra_args; global = s.global;
-               trap_stack = s.trap_stack }
+             Step
+               (st s target_pc s.accu (arg1 :: base) s.accu s.extra_args
+                 s.global s.trap_stack)
            | None ->
              Error
                ('A'::('P'::('P'::('T'::('E'::('R'::('M'::('1'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))))
@@ -1530,10 +1569,10 @@ let step code s =
              let base = skipn slotsize s.stack in
              (match get_code_ptr s.accu with
               | Some target_pc ->
-                Step { pc = target_pc; accu = s.accu; stack =
-                  (arg1 :: (arg2 :: base)); env = s.accu; extra_args =
-                  (Nat.add s.extra_args (Stdlib.Int.succ 0)); global =
-                  s.global; trap_stack = s.trap_stack }
+                Step
+                  (st s target_pc s.accu (arg1 :: (arg2 :: base)) s.accu
+                    (Nat.add s.extra_args (Stdlib.Int.succ 0)) s.global
+                    s.trap_stack)
               | None ->
                 Error
                   ('A'::('P'::('P'::('T'::('E'::('R'::('M'::('2'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[]))))))))))))))))))))))))))))))))))
@@ -1556,12 +1595,12 @@ let step code s =
                 let base = skipn slotsize s.stack in
                 (match get_code_ptr s.accu with
                  | Some target_pc ->
-                   Step { pc = target_pc; accu = s.accu; stack =
-                     (arg1 :: (arg2 :: (arg3 :: base))); env = s.accu;
-                     extra_args =
-                     (Nat.add s.extra_args (Stdlib.Int.succ (Stdlib.Int.succ
-                       0)));
-                     global = s.global; trap_stack = s.trap_stack }
+                   Step
+                     (st s target_pc s.accu
+                       (arg1 :: (arg2 :: (arg3 :: base))) s.accu
+                       (Nat.add s.extra_args (Stdlib.Int.succ
+                         (Stdlib.Int.succ 0)))
+                       s.global s.trap_stack)
                  | None ->
                    Error
                      ('A'::('P'::('P'::('T'::('E'::('R'::('M'::('3'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))))))
@@ -1570,10 +1609,10 @@ let step code s =
        if Nat.ltb 0 s.extra_args
        then (match get_code_ptr s.accu with
              | Some target_pc ->
-               Step { pc = target_pc; accu = s.accu; stack = stk; env =
-                 s.accu; extra_args =
-                 (Nat.sub s.extra_args (Stdlib.Int.succ 0)); global =
-                 s.global; trap_stack = s.trap_stack }
+               Step
+                 (st s target_pc s.accu stk s.accu
+                   (Nat.sub s.extra_args (Stdlib.Int.succ 0)) s.global
+                   s.trap_stack)
              | None ->
                Error
                  ('R'::('E'::('T'::('U'::('R'::('N'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[]))))))))))))))))))))))))))))))
@@ -1596,21 +1635,17 @@ let step code s =
                       | v0 :: rest ->
                         (match v0 with
                          | Val_int saved_ea ->
-                           Step { pc = ret_pc; accu = s.accu; stack = rest;
-                             env = saved_env; extra_args =
-                             (Z.to_nat saved_ea); global = s.global;
-                             trap_stack = s.trap_stack }
-                         | Val_block (_, _) ->
+                           Step
+                             (st s ret_pc s.accu rest saved_env
+                               (Z.to_nat saved_ea) s.global s.trap_stack)
+                         | _ ->
                            Error
                              ('R'::('E'::('T'::('U'::('R'::('N'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))))))
-                | Val_block (_, _) ->
+                | _ ->
                   Error
                     ('R'::('E'::('T'::('U'::('R'::('N'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))))
      | RESTART ->
        (match s.env with
-        | Val_int _ ->
-          Error
-            ('R'::('E'::('S'::('T'::('A'::('R'::('T'::(':'::(' '::('e'::('n'::('v'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('b'::('l'::('o'::('c'::('k'::[])))))))))))))))))))))))))))
         | Val_block (t, fields) ->
           if (=) t closure_tag
           then let num_args =
@@ -1624,19 +1659,22 @@ let step code s =
                let new_stack = app args s.stack in
                (match nth_error fields (Stdlib.Int.succ (Stdlib.Int.succ 0)) with
                 | Some saved_env ->
-                  Step { pc = pc'; accu = s.accu; stack = new_stack; env =
-                    saved_env; extra_args = (Nat.add s.extra_args num_args);
-                    global = s.global; trap_stack = s.trap_stack }
+                  Step
+                    (st s pc' s.accu new_stack saved_env
+                      (Nat.add s.extra_args num_args) s.global s.trap_stack)
                 | None ->
                   Error
                     ('R'::('E'::('S'::('T'::('A'::('R'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))
           else Error
-                 ('R'::('E'::('S'::('T'::('A'::('R'::('T'::(':'::(' '::('e'::('n'::('v'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[]))))))))))))))))))))))))))))))
+                 ('R'::('E'::('S'::('T'::('A'::('R'::('T'::(':'::(' '::('e'::('n'::('v'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))
+        | _ ->
+          Error
+            ('R'::('E'::('S'::('T'::('A'::('R'::('T'::(':'::(' '::('e'::('n'::('v'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('b'::('l'::('o'::('c'::('k'::[]))))))))))))))))))))))))))))
      | GRAB required ->
        if (<=) required s.extra_args
-       then Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-              extra_args = (Nat.sub s.extra_args required); global =
-              s.global; trap_stack = s.trap_stack }
+       then Step
+              (st s pc' s.accu s.stack s.env (Nat.sub s.extra_args required)
+                s.global s.trap_stack)
        else let num_args = Stdlib.Int.succ s.extra_args in
             let saved_args = firstn num_args s.stack in
             let rest_stack = skipn num_args s.stack in
@@ -1663,14 +1701,13 @@ let step code s =
                       | v0 :: rest ->
                         (match v0 with
                          | Val_int saved_ea ->
-                           Step { pc = ret_pc; accu = closure; stack = rest;
-                             env = saved_env; extra_args =
-                             (Z.to_nat saved_ea); global = s.global;
-                             trap_stack = s.trap_stack }
-                         | Val_block (_, _) ->
+                           Step
+                             (st s ret_pc closure rest saved_env
+                               (Z.to_nat saved_ea) s.global s.trap_stack)
+                         | _ ->
                            Error
                              ('G'::('R'::('A'::('B'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))))
-                | Val_block (_, _) ->
+                | _ ->
                   Error
                     ('G'::('R'::('A'::('B'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
      | CLOSURE (nvars, code_ofs) ->
@@ -1681,9 +1718,7 @@ let step code s =
        let closure = Val_block (closure_tag, ((Val_int
          code_ofs) :: (closinfo :: vars)))
        in
-       Step { pc = pc'; accu = closure; stack = rest; env = s.env;
-       extra_args = s.extra_args; global = s.global; trap_stack =
-       s.trap_stack }
+       Step (st s pc' closure rest s.env s.extra_args s.global s.trap_stack)
      | CLOSUREREC (nfuncs, nvars, code_offsets) ->
        if (=) nfuncs (Stdlib.Int.succ 0)
        then let stk = if Nat.ltb 0 nvars then s.accu :: s.stack else s.stack
@@ -1699,32 +1734,30 @@ let step code s =
                let closure = Val_block (closure_tag, ((Val_int
                  ofs) :: (closinfo :: vars)))
                in
-               Step { pc = pc'; accu = closure; stack = (closure :: rest);
-               env = s.env; extra_args = s.extra_args; global = s.global;
-               trap_stack = s.trap_stack })
+               Step
+               (st s pc' closure (closure :: rest) s.env s.extra_args
+                 s.global s.trap_stack))
        else Error
               ('C'::('L'::('O'::('S'::('U'::('R'::('E'::('R'::('E'::('C'::(':'::(' '::('m'::('u'::('t'::('u'::('a'::('l'::(' '::('r'::('e'::('c'::('u'::('r'::('s'::('i'::('o'::('n'::(' '::('('::('n'::('f'::('u'::('n'::('c'::('s'::('>'::('1'::(')'::(' '::('n'::('o'::('t'::(' '::('y'::('e'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))))))))))))))))))))))))))))))))
      | OFFSETCLOSURE ofs ->
        if Z.eqb ofs 0
-       then Step { pc = pc'; accu = s.env; stack = s.stack; env = s.env;
-              extra_args = s.extra_args; global = s.global; trap_stack =
-              s.trap_stack }
+       then Step
+              (st s pc' s.env s.stack s.env s.extra_args s.global
+                s.trap_stack)
        else Error
               ('O'::('F'::('F'::('S'::('E'::('T'::('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('n'::('o'::('n'::('-'::('z'::('e'::('r'::('o'::(' '::('o'::('f'::('f'::('s'::('e'::('t'::(' '::('n'::('o'::('t'::(' '::('y'::('e'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))))))))))))))
      | PUSHOFFSETCLOSURE ofs ->
        let new_stack = s.accu :: s.stack in
        if Z.eqb ofs 0
-       then Step { pc = pc'; accu = s.env; stack = new_stack; env = s.env;
-              extra_args = s.extra_args; global = s.global; trap_stack =
-              s.trap_stack }
+       then Step
+              (st s pc' s.env new_stack s.env s.extra_args s.global
+                s.trap_stack)
        else Error
               ('P'::('U'::('S'::('H'::('O'::('F'::('F'::('S'::('E'::('T'::('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('n'::('o'::('n'::('-'::('z'::('e'::('r'::('o'::(' '::('o'::('f'::('f'::('s'::('e'::('t'::(' '::('n'::('o'::('t'::(' '::('y'::('e'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))))))))))))))))))
      | GETGLOBAL n0 ->
        (match nth_error s.global n0 with
         | Some v ->
-          Step { pc = pc'; accu = v; stack = s.stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
         | None ->
           Error
             ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))
@@ -1732,20 +1765,17 @@ let step code s =
        let new_stack = s.accu :: s.stack in
        (match nth_error s.global n0 with
         | Some v ->
-          Step { pc = pc'; accu = v; stack = new_stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
         | None ->
           Error
             ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
      | GETGLOBALFIELD (n0, p) ->
        (match nth_error s.global n0 with
         | Some glob ->
-          (match field glob p with
+          (match field_or_heap s glob p with
            | Some v ->
-             Step { pc = pc'; accu = v; stack = s.stack; env = s.env;
-               extra_args = s.extra_args; global = s.global; trap_stack =
-               s.trap_stack }
+             Step
+               (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
            | None ->
              Error
                ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('f'::('i'::('e'::('l'::('d'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))
@@ -1756,11 +1786,10 @@ let step code s =
        let new_stack = s.accu :: s.stack in
        (match nth_error s.global n0 with
         | Some glob ->
-          (match field glob p with
+          (match field_or_heap s glob p with
            | Some v ->
-             Step { pc = pc'; accu = v; stack = new_stack; env = s.env;
-               extra_args = s.extra_args; global = s.global; trap_stack =
-               s.trap_stack }
+             Step
+               (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
            | None ->
              Error
                ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('f'::('i'::('e'::('l'::('d'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))))))
@@ -1773,39 +1802,35 @@ let step code s =
          | Some g -> g
          | None -> s.global
        in
-       Step { pc = pc'; accu = val_unit; stack = s.stack; env = s.env;
-       extra_args = s.extra_args; global = new_global; trap_stack =
-       s.trap_stack }
+       Step
+       (st s pc' val_unit s.stack s.env s.extra_args new_global s.trap_stack)
      | ATOM t ->
-       Step { pc = pc'; accu = (Val_block (t, [])); stack = s.stack; env =
-         s.env; extra_args = s.extra_args; global = s.global; trap_stack =
-         s.trap_stack }
+       Step
+         (st s pc' (Val_block (t, [])) s.stack s.env s.extra_args s.global
+           s.trap_stack)
      | PUSHATOM t ->
        let new_stack = s.accu :: s.stack in
-       Step { pc = pc'; accu = (Val_block (t, [])); stack = new_stack; env =
-       s.env; extra_args = s.extra_args; global = s.global; trap_stack =
-       s.trap_stack }
+       Step
+       (st s pc' (Val_block (t, [])) new_stack s.env s.extra_args s.global
+         s.trap_stack)
      | MAKEBLOCK (t, size) ->
        let fields =
          s.accu :: (firstn (Nat.sub size (Stdlib.Int.succ 0)) s.stack)
        in
        let new_stack = skipn (Nat.sub size (Stdlib.Int.succ 0)) s.stack in
-       Step { pc = pc'; accu = (Val_block (t, fields)); stack = new_stack;
-       env = s.env; extra_args = s.extra_args; global = s.global;
-       trap_stack = s.trap_stack }
+       let (s', ptr) = heap_alloc s t fields in
+       Step (st s' pc' ptr new_stack s.env s.extra_args s.global s.trap_stack)
      | MAKEBLOCK1 t ->
-       Step { pc = pc'; accu = (Val_block (t, (s.accu :: []))); stack =
-         s.stack; env = s.env; extra_args = s.extra_args; global = s.global;
-         trap_stack = s.trap_stack }
+       let (s', ptr) = heap_alloc s t (s.accu :: []) in
+       Step (st s' pc' ptr s.stack s.env s.extra_args s.global s.trap_stack)
      | MAKEBLOCK2 t ->
        (match s.stack with
         | [] ->
           Error
             ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('2'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
         | v1 :: rest ->
-          Step { pc = pc'; accu = (Val_block (t, (s.accu :: (v1 :: []))));
-            stack = rest; env = s.env; extra_args = s.extra_args; global =
-            s.global; trap_stack = s.trap_stack })
+          let (s', ptr) = heap_alloc s t (s.accu :: (v1 :: [])) in
+          Step (st s' pc' ptr rest s.env s.extra_args s.global s.trap_stack))
      | MAKEBLOCK3 t ->
        (match s.stack with
         | [] ->
@@ -1817,19 +1842,16 @@ let step code s =
              Error
                ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('3'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
            | v2 :: rest ->
-             Step { pc = pc'; accu = (Val_block (t,
-               (s.accu :: (v1 :: (v2 :: []))))); stack = rest; env = s.env;
-               extra_args = s.extra_args; global = s.global; trap_stack =
-               s.trap_stack }))
+             let (s', ptr) = heap_alloc s t (s.accu :: (v1 :: (v2 :: []))) in
+             Step
+             (st s' pc' ptr rest s.env s.extra_args s.global s.trap_stack)))
      | MAKEFLOATBLOCK _ ->
        Error
          ('M'::('A'::('K'::('E'::('F'::('L'::('O'::('A'::('T'::('B'::('L'::('O'::('C'::('K'::(':'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))))
      | GETFIELD n0 ->
-       (match field s.accu n0 with
+       (match field_or_heap s s.accu n0 with
         | Some v ->
-          Step { pc = pc'; accu = v; stack = s.stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack }
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
         | None ->
           Error
             ('G'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))
@@ -1842,23 +1864,45 @@ let step code s =
           Error
             ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))
         | newval :: rest ->
-          (match set_field s.accu n0 newval with
-           | Some _ ->
-             Step { pc = pc'; accu = val_unit; stack = rest; env = s.env;
-               extra_args = s.extra_args; global = s.global; trap_stack =
-               s.trap_stack }
-           | None ->
+          (match s.accu with
+           | Val_int _ ->
              Error
-               ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[])))))))))))))))))))))))))
+               ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('b'::('l'::('o'::('c'::('k'::[])))))))))))))))))))))
+           | Val_block (_, fields) ->
+             (match set_nth fields n0 newval with
+              | Some _ ->
+                Step
+                  (st s pc' val_unit rest s.env s.extra_args s.global
+                    s.trap_stack)
+              | None ->
+                Error
+                  ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))
+           | Val_ptr addr ->
+             (match heap_lookup s.hp addr with
+              | Some p ->
+                let (_, fields) = p in
+                (match set_nth fields n0 newval with
+                 | Some new_fields ->
+                   let new_hp = heap_update s.hp addr new_fields in
+                   Step { pc = pc'; accu = val_unit; stack = rest; env =
+                   s.env; extra_args = s.extra_args; global = s.global;
+                   trap_stack = s.trap_stack; hp = new_hp; next_addr =
+                   s.next_addr }
+                 | None ->
+                   Error
+                     ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))))))))))))))))
+              | None ->
+                Error
+                  ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('d'::('a'::('n'::('g'::('l'::('i'::('n'::('g'::(' '::('p'::('o'::('i'::('n'::('t'::('e'::('r'::[])))))))))))))))))))))))))))))
      | SETFLOATFIELD _ ->
        Error
          ('S'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))
      | VECTLENGTH ->
-       (match block_size s.accu with
+       (match size_or_heap s s.accu with
         | Some n0 ->
-          Step { pc = pc'; accu = (Val_int (Z.of_nat n0)); stack = s.stack;
-            env = s.env; extra_args = s.extra_args; global = s.global;
-            trap_stack = s.trap_stack }
+          Step
+            (st s pc' (Val_int (Z.of_nat n0)) s.stack s.env s.extra_args
+              s.global s.trap_stack)
         | None ->
           Error
             ('V'::('E'::('C'::('T'::('L'::('E'::('N'::('G'::('T'::('H'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('b'::('l'::('o'::('c'::('k'::[]))))))))))))))))))))))))
@@ -1870,15 +1914,14 @@ let step code s =
         | v :: rest ->
           (match v with
            | Val_int idx ->
-             (match field s.accu (Z.to_nat idx) with
+             (match field_or_heap s s.accu (Z.to_nat idx) with
               | Some v0 ->
-                Step { pc = pc'; accu = v0; stack = rest; env = s.env;
-                  extra_args = s.extra_args; global = s.global; trap_stack =
-                  s.trap_stack }
+                Step
+                  (st s pc' v0 rest s.env s.extra_args s.global s.trap_stack)
               | None ->
                 Error
                   ('G'::('E'::('T'::('V'::('E'::('C'::('T'::('I'::('T'::('E'::('M'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))
-           | Val_block (_, _) ->
+           | _ ->
              Error
                ('G'::('E'::('T'::('V'::('E'::('C'::('T'::('I'::('T'::('E'::('M'::(':'::(' '::('b'::('a'::('d'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))))))
      | SETVECTITEM ->
@@ -1894,10 +1937,10 @@ let step code s =
                 Error
                   ('S'::('E'::('T'::('V'::('E'::('C'::('T'::('I'::('T'::('E'::('M'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))
               | _ :: rest ->
-                Step { pc = pc'; accu = val_unit; stack = rest; env = s.env;
-                  extra_args = s.extra_args; global = s.global; trap_stack =
-                  s.trap_stack })
-           | Val_block (_, _) ->
+                Step
+                  (st s pc' val_unit rest s.env s.extra_args s.global
+                    s.trap_stack))
+           | _ ->
              Error
                ('S'::('E'::('T'::('V'::('E'::('C'::('T'::('I'::('T'::('E'::('M'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))
      | GETBYTESCHAR ->
@@ -1910,83 +1953,95 @@ let step code s =
        Error
          ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('n'::('o'::('t'::(' '::('y'::('e'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))))))
      | BRANCH target ->
-       Step { pc = target; accu = s.accu; stack = s.stack; env = s.env;
-         extra_args = s.extra_args; global = s.global; trap_stack =
-         s.trap_stack }
+       Step
+         (st s target s.accu s.stack s.env s.extra_args s.global s.trap_stack)
      | BRANCHIF target ->
        (match s.accu with
         | Val_int z0 ->
           ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-             (fun _ -> Step { pc = pc'; accu = s.accu; stack = s.stack; env =
-             s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
-             (fun _ -> Step { pc = target; accu = s.accu; stack = s.stack;
-             env = s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
-             (fun _ -> Step { pc = target; accu = s.accu; stack = s.stack;
-             env = s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
+             (fun _ -> Step
+             (st s pc' s.accu s.stack s.env s.extra_args s.global
+               s.trap_stack))
+             (fun _ -> Step
+             (st s target s.accu s.stack s.env s.extra_args s.global
+               s.trap_stack))
+             (fun _ -> Step
+             (st s target s.accu s.stack s.env s.extra_args s.global
+               s.trap_stack))
              z0)
-        | Val_block (_, _) ->
-          Step { pc = target; accu = s.accu; stack = s.stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack })
+        | _ ->
+          Step
+            (st s target s.accu s.stack s.env s.extra_args s.global
+              s.trap_stack))
      | BRANCHIFNOT target ->
        (match s.accu with
         | Val_int z0 ->
           ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-             (fun _ -> Step { pc = target; accu = s.accu; stack = s.stack;
-             env = s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
-             (fun _ -> Step { pc = pc'; accu = s.accu; stack = s.stack; env =
-             s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
-             (fun _ -> Step { pc = pc'; accu = s.accu; stack = s.stack; env =
-             s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
+             (fun _ -> Step
+             (st s target s.accu s.stack s.env s.extra_args s.global
+               s.trap_stack))
+             (fun _ -> Step
+             (st s pc' s.accu s.stack s.env s.extra_args s.global
+               s.trap_stack))
+             (fun _ -> Step
+             (st s pc' s.accu s.stack s.env s.extra_args s.global
+               s.trap_stack))
              z0)
-        | Val_block (_, _) ->
-          Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack })
+        | _ ->
+          Step
+            (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_stack))
      | SWITCH (_, _, const_targets, block_targets) ->
        (match s.accu with
         | Val_int n0 ->
           (match nth_error const_targets (Z.to_nat n0) with
            | Some target ->
-             Step { pc = target; accu = s.accu; stack = s.stack; env = s.env;
-               extra_args = s.extra_args; global = s.global; trap_stack =
-               s.trap_stack }
+             Step
+               (st s target s.accu s.stack s.env s.extra_args s.global
+                 s.trap_stack)
            | None ->
              Error
                ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('c'::('o'::('n'::('s'::('t'::('a'::('n'::('t'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('r'::('a'::('n'::('g'::('e'::[]))))))))))))))))))))))))))))))))))))
         | Val_block (t, _) ->
           (match nth_error block_targets t with
            | Some target ->
-             Step { pc = target; accu = s.accu; stack = s.stack; env = s.env;
-               extra_args = s.extra_args; global = s.global; trap_stack =
-               s.trap_stack }
+             Step
+               (st s target s.accu s.stack s.env s.extra_args s.global
+                 s.trap_stack)
            | None ->
              Error
-               ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('b'::('l'::('o'::('c'::('k'::(' '::('t'::('a'::('g'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('r'::('a'::('n'::('g'::('e'::[]))))))))))))))))))))))))))))))))
+               ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('b'::('l'::('o'::('c'::('k'::(' '::('t'::('a'::('g'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('r'::('a'::('n'::('g'::('e'::[])))))))))))))))))))))))))))))))
+        | Val_ptr _ ->
+          (match tag_or_heap s s.accu with
+           | Some t ->
+             (match nth_error block_targets t with
+              | Some target ->
+                Step
+                  (st s target s.accu s.stack s.env s.extra_args s.global
+                    s.trap_stack)
+              | None ->
+                Error
+                  ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('b'::('l'::('o'::('c'::('k'::(' '::('t'::('a'::('g'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('r'::('a'::('n'::('g'::('e'::[])))))))))))))))))))))))))))))))
+           | None ->
+             Error
+               ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('d'::('a'::('n'::('g'::('l'::('i'::('n'::('g'::(' '::('p'::('o'::('i'::('n'::('t'::('e'::('r'::[]))))))))))))))))))))))))))
      | BOOLNOT ->
        (match s.accu with
         | Val_int z0 ->
           ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-             (fun _ -> Step { pc = pc'; accu = val_true; stack = s.stack;
-             env = s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
-             (fun _ -> Step { pc = pc'; accu = val_false; stack = s.stack;
-             env = s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
-             (fun _ -> Step { pc = pc'; accu = val_false; stack = s.stack;
-             env = s.env; extra_args = s.extra_args; global = s.global;
-             trap_stack = s.trap_stack })
+             (fun _ -> Step
+             (st s pc' val_true s.stack s.env s.extra_args s.global
+               s.trap_stack))
+             (fun _ -> Step
+             (st s pc' val_false s.stack s.env s.extra_args s.global
+               s.trap_stack))
+             (fun _ -> Step
+             (st s pc' val_false s.stack s.env s.extra_args s.global
+               s.trap_stack))
              z0)
-        | Val_block (_, _) ->
-          Step { pc = pc'; accu = val_false; stack = s.stack; env = s.env;
-            extra_args = s.extra_args; global = s.global; trap_stack =
-            s.trap_stack })
+        | _ ->
+          Step
+            (st s pc' val_false s.stack s.env s.extra_args s.global
+              s.trap_stack))
      | PUSHTRAP handler_pc ->
        let trap_frame0 = (Val_int handler_pc) :: ((Val_int
          0) :: (s.env :: ((Val_int (Z.of_nat s.extra_args)) :: s.stack)))
@@ -1995,20 +2050,20 @@ let step code s =
          (length trap_frame0); trap_env = s.env; trap_extra_args =
          s.extra_args }
        in
-       Step { pc = pc'; accu = s.accu; stack = trap_frame0; env = s.env;
-       extra_args = s.extra_args; global = s.global; trap_stack =
-       (tf :: s.trap_stack) }
+       Step
+       (st s pc' s.accu trap_frame0 s.env s.extra_args s.global
+         (tf :: s.trap_stack))
      | POPTRAP ->
        (match s.trap_stack with
         | [] ->
           Error
             ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('n'::('o'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))
         | _ :: rest ->
-          Step { pc = pc'; accu = s.accu; stack =
-            (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-              (Stdlib.Int.succ 0)))) s.stack);
-            env = s.env; extra_args = s.extra_args; global = s.global;
-            trap_stack = rest })
+          Step
+            (st s pc' s.accu
+              (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ 0)))) s.stack)
+              s.env s.extra_args s.global rest))
      | RAISE ->
        (match s.trap_stack with
         | [] ->
@@ -2020,49 +2075,48 @@ let step code s =
           in
           (match restored with
            | [] ->
-             Step { pc = tf.trap_pc; accu = s.accu; stack =
-               (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                 (Stdlib.Int.succ 0)))) restored);
-               env = tf.trap_env; extra_args = tf.trap_extra_args; global =
-               s.global; trap_stack = rest }
+             Step
+               (st s tf.trap_pc s.accu
+                 (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                   (Stdlib.Int.succ 0)))) restored)
+                 tf.trap_env tf.trap_extra_args s.global rest)
            | _ :: l ->
              (match l with
               | [] ->
-                Step { pc = tf.trap_pc; accu = s.accu; stack =
-                  (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                    (Stdlib.Int.succ 0)))) restored);
-                  env = tf.trap_env; extra_args = tf.trap_extra_args;
-                  global = s.global; trap_stack = rest }
+                Step
+                  (st s tf.trap_pc s.accu
+                    (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                      (Stdlib.Int.succ 0)))) restored)
+                    tf.trap_env tf.trap_extra_args s.global rest)
               | _ :: l0 ->
                 (match l0 with
                  | [] ->
-                   Step { pc = tf.trap_pc; accu = s.accu; stack =
-                     (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                       (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                     env = tf.trap_env; extra_args = tf.trap_extra_args;
-                     global = s.global; trap_stack = rest }
+                   Step
+                     (st s tf.trap_pc s.accu
+                       (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                         (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
+                       tf.trap_env tf.trap_extra_args s.global rest)
                  | saved_env :: l1 ->
                    (match l1 with
                     | [] ->
-                      Step { pc = tf.trap_pc; accu = s.accu; stack =
-                        (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                          (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                        env = tf.trap_env; extra_args = tf.trap_extra_args;
-                        global = s.global; trap_stack = rest }
+                      Step
+                        (st s tf.trap_pc s.accu
+                          (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                            (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
+                          tf.trap_env tf.trap_extra_args s.global rest)
                     | v1 :: real_stack ->
                       (match v1 with
                        | Val_int saved_ea ->
-                         Step { pc = tf.trap_pc; accu = s.accu; stack =
-                           real_stack; env = saved_env; extra_args =
-                           (Z.to_nat saved_ea); global = s.global;
-                           trap_stack = rest }
-                       | Val_block (_, _) ->
-                         Step { pc = tf.trap_pc; accu = s.accu; stack =
-                           (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                             (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                           env = tf.trap_env; extra_args =
-                           tf.trap_extra_args; global = s.global;
-                           trap_stack = rest }))))))
+                         Step
+                           (st s tf.trap_pc s.accu real_stack saved_env
+                             (Z.to_nat saved_ea) s.global rest)
+                       | _ ->
+                         Step
+                           (st s tf.trap_pc s.accu
+                             (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                               (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                               restored)
+                             tf.trap_env tf.trap_extra_args s.global rest)))))))
      | RERAISE ->
        (match s.trap_stack with
         | [] ->
@@ -2074,49 +2128,48 @@ let step code s =
           in
           (match restored with
            | [] ->
-             Step { pc = tf.trap_pc; accu = s.accu; stack =
-               (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                 (Stdlib.Int.succ 0)))) restored);
-               env = tf.trap_env; extra_args = tf.trap_extra_args; global =
-               s.global; trap_stack = rest }
+             Step
+               (st s tf.trap_pc s.accu
+                 (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                   (Stdlib.Int.succ 0)))) restored)
+                 tf.trap_env tf.trap_extra_args s.global rest)
            | _ :: l ->
              (match l with
               | [] ->
-                Step { pc = tf.trap_pc; accu = s.accu; stack =
-                  (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                    (Stdlib.Int.succ 0)))) restored);
-                  env = tf.trap_env; extra_args = tf.trap_extra_args;
-                  global = s.global; trap_stack = rest }
+                Step
+                  (st s tf.trap_pc s.accu
+                    (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                      (Stdlib.Int.succ 0)))) restored)
+                    tf.trap_env tf.trap_extra_args s.global rest)
               | _ :: l0 ->
                 (match l0 with
                  | [] ->
-                   Step { pc = tf.trap_pc; accu = s.accu; stack =
-                     (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                       (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                     env = tf.trap_env; extra_args = tf.trap_extra_args;
-                     global = s.global; trap_stack = rest }
+                   Step
+                     (st s tf.trap_pc s.accu
+                       (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                         (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
+                       tf.trap_env tf.trap_extra_args s.global rest)
                  | saved_env :: l1 ->
                    (match l1 with
                     | [] ->
-                      Step { pc = tf.trap_pc; accu = s.accu; stack =
-                        (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                          (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                        env = tf.trap_env; extra_args = tf.trap_extra_args;
-                        global = s.global; trap_stack = rest }
+                      Step
+                        (st s tf.trap_pc s.accu
+                          (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                            (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
+                          tf.trap_env tf.trap_extra_args s.global rest)
                     | v1 :: real_stack ->
                       (match v1 with
                        | Val_int saved_ea ->
-                         Step { pc = tf.trap_pc; accu = s.accu; stack =
-                           real_stack; env = saved_env; extra_args =
-                           (Z.to_nat saved_ea); global = s.global;
-                           trap_stack = rest }
-                       | Val_block (_, _) ->
-                         Step { pc = tf.trap_pc; accu = s.accu; stack =
-                           (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                             (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                           env = tf.trap_env; extra_args =
-                           tf.trap_extra_args; global = s.global;
-                           trap_stack = rest }))))))
+                         Step
+                           (st s tf.trap_pc s.accu real_stack saved_env
+                             (Z.to_nat saved_ea) s.global rest)
+                       | _ ->
+                         Step
+                           (st s tf.trap_pc s.accu
+                             (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                               (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                               restored)
+                             tf.trap_env tf.trap_extra_args s.global rest)))))))
      | RAISE_NOTRACE ->
        (match s.trap_stack with
         | [] ->
@@ -2128,75 +2181,73 @@ let step code s =
           in
           (match restored with
            | [] ->
-             Step { pc = tf.trap_pc; accu = s.accu; stack =
-               (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                 (Stdlib.Int.succ 0)))) restored);
-               env = tf.trap_env; extra_args = tf.trap_extra_args; global =
-               s.global; trap_stack = rest }
+             Step
+               (st s tf.trap_pc s.accu
+                 (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                   (Stdlib.Int.succ 0)))) restored)
+                 tf.trap_env tf.trap_extra_args s.global rest)
            | _ :: l ->
              (match l with
               | [] ->
-                Step { pc = tf.trap_pc; accu = s.accu; stack =
-                  (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                    (Stdlib.Int.succ 0)))) restored);
-                  env = tf.trap_env; extra_args = tf.trap_extra_args;
-                  global = s.global; trap_stack = rest }
+                Step
+                  (st s tf.trap_pc s.accu
+                    (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                      (Stdlib.Int.succ 0)))) restored)
+                    tf.trap_env tf.trap_extra_args s.global rest)
               | _ :: l0 ->
                 (match l0 with
                  | [] ->
-                   Step { pc = tf.trap_pc; accu = s.accu; stack =
-                     (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                       (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                     env = tf.trap_env; extra_args = tf.trap_extra_args;
-                     global = s.global; trap_stack = rest }
+                   Step
+                     (st s tf.trap_pc s.accu
+                       (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                         (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
+                       tf.trap_env tf.trap_extra_args s.global rest)
                  | saved_env :: l1 ->
                    (match l1 with
                     | [] ->
-                      Step { pc = tf.trap_pc; accu = s.accu; stack =
-                        (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                          (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                        env = tf.trap_env; extra_args = tf.trap_extra_args;
-                        global = s.global; trap_stack = rest }
+                      Step
+                        (st s tf.trap_pc s.accu
+                          (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                            (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
+                          tf.trap_env tf.trap_extra_args s.global rest)
                     | v1 :: real_stack ->
                       (match v1 with
                        | Val_int saved_ea ->
-                         Step { pc = tf.trap_pc; accu = s.accu; stack =
-                           real_stack; env = saved_env; extra_args =
-                           (Z.to_nat saved_ea); global = s.global;
-                           trap_stack = rest }
-                       | Val_block (_, _) ->
-                         Step { pc = tf.trap_pc; accu = s.accu; stack =
-                           (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                             (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored);
-                           env = tf.trap_env; extra_args =
-                           tf.trap_extra_args; global = s.global;
-                           trap_stack = rest }))))))
+                         Step
+                           (st s tf.trap_pc s.accu real_stack saved_env
+                             (Z.to_nat saved_ea) s.global rest)
+                       | _ ->
+                         Step
+                           (st s tf.trap_pc s.accu
+                             (skipn (Stdlib.Int.succ (Stdlib.Int.succ
+                               (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                               restored)
+                             tf.trap_env tf.trap_extra_args s.global rest)))))))
      | C_CALL (nargs, prim_idx) ->
        let args =
          s.accu :: (firstn (Nat.sub nargs (Stdlib.Int.succ 0)) s.stack)
        in
        let new_stack = skipn (Nat.sub nargs (Stdlib.Int.succ 0)) s.stack in
-       let cont = { pc = pc'; accu = val_unit; stack = new_stack; env =
-         s.env; extra_args = s.extra_args; global = s.global; trap_stack =
-         s.trap_stack }
+       let cont =
+         st s pc' val_unit new_stack s.env s.extra_args s.global s.trap_stack
        in
        CCall_request (prim_idx, args, cont)
      | CONSTINT n0 ->
-       Step { pc = pc'; accu = (Val_int n0); stack = s.stack; env = s.env;
-         extra_args = s.extra_args; global = s.global; trap_stack =
-         s.trap_stack }
+       Step
+         (st s pc' (Val_int n0) s.stack s.env s.extra_args s.global
+           s.trap_stack)
      | PUSHCONSTINT n0 ->
        let new_stack = s.accu :: s.stack in
-       Step { pc = pc'; accu = (Val_int n0); stack = new_stack; env = s.env;
-       extra_args = s.extra_args; global = s.global; trap_stack =
-       s.trap_stack }
+       Step
+       (st s pc' (Val_int n0) new_stack s.env s.extra_args s.global
+         s.trap_stack)
      | NEGINT ->
        (match s.accu with
         | Val_int n0 ->
-          Step { pc = pc'; accu = (Val_int (Z.opp n0)); stack = s.stack;
-            env = s.env; extra_args = s.extra_args; global = s.global;
-            trap_stack = s.trap_stack }
-        | Val_block (_, _) ->
+          Step
+            (st s pc' (Val_int (Z.opp n0)) s.stack s.env s.extra_args
+              s.global s.trap_stack)
+        | _ ->
           Error
             ('N'::('E'::('G'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
      | ADDINT ->
@@ -2209,13 +2260,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.add a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.add a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('A'::('D'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('A'::('D'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | SUBINT ->
@@ -2228,13 +2279,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.sub a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.sub a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('S'::('U'::('B'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('S'::('U'::('B'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | MULINT ->
@@ -2247,13 +2298,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.mul a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.mul a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('M'::('U'::('L'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('M'::('U'::('L'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | DIVINT ->
@@ -2269,13 +2320,13 @@ let step code s =
                 if Z.eqb b 0
                 then Error
                        ('D'::('I'::('V'::('I'::('N'::('T'::(':'::(' '::('d'::('i'::('v'::('i'::('s'::('i'::('o'::('n'::(' '::('b'::('y'::(' '::('z'::('e'::('r'::('o'::[]))))))))))))))))))))))))
-                else Step { pc = pc'; accu = (Val_int (Z.quot a b)); stack =
-                       rest; env = s.env; extra_args = s.extra_args; global =
-                       s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                else Step
+                       (st s pc' (Val_int (Z.quot a b)) rest s.env
+                         s.extra_args s.global s.trap_stack)
+              | _ ->
                 Error
                   ('D'::('I'::('V'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('D'::('I'::('V'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | MODINT ->
@@ -2291,13 +2342,13 @@ let step code s =
                 if Z.eqb b 0
                 then Error
                        ('M'::('O'::('D'::('I'::('N'::('T'::(':'::(' '::('d'::('i'::('v'::('i'::('s'::('i'::('o'::('n'::(' '::('b'::('y'::(' '::('z'::('e'::('r'::('o'::[]))))))))))))))))))))))))
-                else Step { pc = pc'; accu = (Val_int (Z.rem a b)); stack =
-                       rest; env = s.env; extra_args = s.extra_args; global =
-                       s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                else Step
+                       (st s pc' (Val_int (Z.rem a b)) rest s.env
+                         s.extra_args s.global s.trap_stack)
+              | _ ->
                 Error
                   ('M'::('O'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('M'::('O'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | ANDINT ->
@@ -2310,13 +2361,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.coq_land a b)); stack =
-                  rest; env = s.env; extra_args = s.extra_args; global =
-                  s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.coq_land a b)) rest s.env
+                    s.extra_args s.global s.trap_stack)
+              | _ ->
                 Error
                   ('A'::('N'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('A'::('N'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | ORINT ->
@@ -2329,13 +2380,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.coq_lor a b)); stack =
-                  rest; env = s.env; extra_args = s.extra_args; global =
-                  s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.coq_lor a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('O'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('O'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))
      | XORINT ->
@@ -2348,13 +2399,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.coq_lxor a b)); stack =
-                  rest; env = s.env; extra_args = s.extra_args; global =
-                  s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.coq_lxor a b)) rest s.env
+                    s.extra_args s.global s.trap_stack)
+              | _ ->
                 Error
                   ('X'::('O'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('X'::('O'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | LSLINT ->
@@ -2367,13 +2418,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.shiftl a b)); stack =
-                  rest; env = s.env; extra_args = s.extra_args; global =
-                  s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.shiftl a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('L'::('S'::('L'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('L'::('S'::('L'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | LSRINT ->
@@ -2386,13 +2437,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.shiftr a b)); stack =
-                  rest; env = s.env; extra_args = s.extra_args; global =
-                  s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.shiftr a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('L'::('S'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('L'::('S'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | ASRINT ->
@@ -2405,13 +2456,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (Val_int (Z.shiftr a b)); stack =
-                  rest; env = s.env; extra_args = s.extra_args; global =
-                  s.global; trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (Val_int (Z.shiftr a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('A'::('S'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('A'::('S'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | EQ ->
@@ -2420,20 +2471,18 @@ let step code s =
           Error
             ('E'::('Q'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))
         | b :: rest ->
-          Step { pc = pc'; accu =
-            (if value_eqb s.accu b then val_true else val_false); stack =
-            rest; env = s.env; extra_args = s.extra_args; global = s.global;
-            trap_stack = s.trap_stack })
+          Step
+            (st s pc' (if value_eqb s.accu b then val_true else val_false)
+              rest s.env s.extra_args s.global s.trap_stack))
      | NEQ ->
        (match s.stack with
         | [] ->
           Error
             ('N'::('E'::('Q'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))
         | b :: rest ->
-          Step { pc = pc'; accu =
-            (if value_eqb s.accu b then val_false else val_true); stack =
-            rest; env = s.env; extra_args = s.extra_args; global = s.global;
-            trap_stack = s.trap_stack })
+          Step
+            (st s pc' (if value_eqb s.accu b then val_false else val_true)
+              rest s.env s.extra_args s.global s.trap_stack))
      | LTINT ->
        (match s.accu with
         | Val_int a ->
@@ -2444,13 +2493,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (val_bool (Z.ltb a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (val_bool (Z.ltb a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('L'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('L'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))
      | LEINT ->
@@ -2463,13 +2512,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (val_bool (Z.leb a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (val_bool (Z.leb a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('L'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('L'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))
      | GTINT ->
@@ -2482,13 +2531,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (val_bool (Z.gtb a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (val_bool (Z.gtb a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('G'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('G'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))
      | GEINT ->
@@ -2501,25 +2550,25 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (val_bool (Z.geb a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (val_bool (Z.geb a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('G'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('G'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))
      | OFFSETINT n0 ->
        (match s.accu with
         | Val_int a ->
-          Step { pc = pc'; accu = (Val_int (Z.add a n0)); stack = s.stack;
-            env = s.env; extra_args = s.extra_args; global = s.global;
-            trap_stack = s.trap_stack }
-        | Val_block (_, _) ->
+          Step
+            (st s pc' (Val_int (Z.add a n0)) s.stack s.env s.extra_args
+              s.global s.trap_stack)
+        | _ ->
           Error
             ('O'::('F'::('F'::('S'::('E'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))))
-     | OFFSETREF _ ->
+     | OFFSETREF n0 ->
        (match s.accu with
         | Val_int _ ->
           Error
@@ -2532,17 +2581,40 @@ let step code s =
            | v :: _ ->
              (match v with
               | Val_int _ ->
-                Step { pc = pc'; accu = val_unit; stack = s.stack; env =
-                  s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' val_unit s.stack s.env s.extra_args s.global
+                    s.trap_stack)
+              | _ ->
                 Error
-                  ('O'::('F'::('F'::('S'::('E'::('T'::('R'::('E'::('F'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('r'::('e'::('f'::[])))))))))))))))))))))))
+                  ('O'::('F'::('F'::('S'::('E'::('T'::('R'::('E'::('F'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('r'::('e'::('f'::[]))))))))))))))))))))))
+        | Val_ptr addr ->
+          (match heap_lookup s.hp addr with
+           | Some p ->
+             let (_, l) = p in
+             (match l with
+              | [] ->
+                Error
+                  ('O'::('F'::('F'::('S'::('E'::('T'::('R'::('E'::('F'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('r'::('e'::('f'::[]))))))))))))))))))))
+              | v :: rest ->
+                (match v with
+                 | Val_int old ->
+                   let new_hp =
+                     heap_update s.hp addr ((Val_int (Z.add old n0)) :: rest)
+                   in
+                   Step { pc = pc'; accu = val_unit; stack = s.stack; env =
+                   s.env; extra_args = s.extra_args; global = s.global;
+                   trap_stack = s.trap_stack; hp = new_hp; next_addr =
+                   s.next_addr }
+                 | _ ->
+                   Error
+                     ('O'::('F'::('F'::('S'::('E'::('T'::('R'::('E'::('F'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('r'::('e'::('f'::[]))))))))))))))))))))))
+           | None ->
+             Error
+               ('O'::('F'::('F'::('S'::('E'::('T'::('R'::('E'::('F'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('r'::('e'::('f'::[]))))))))))))))))))))))
      | ISINT ->
-       Step { pc = pc'; accu =
-         (if is_int s.accu then val_true else val_false); stack = s.stack;
-         env = s.env; extra_args = s.extra_args; global = s.global;
-         trap_stack = s.trap_stack }
+       Step
+         (st s pc' (if is_int s.accu then val_true else val_false) s.stack
+           s.env s.extra_args s.global s.trap_stack)
      | GETMETHOD ->
        Error
          ('G'::('E'::('T'::('M'::('E'::('T'::('H'::('O'::('D'::(':'::(' '::('O'::('O'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))
@@ -2556,78 +2628,78 @@ let step code s =
        (match s.accu with
         | Val_int a ->
           if Z.eqb a n0
-          then Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-          else Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('E'::('Q'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))
      | BNEQ (n0, target) ->
        (match s.accu with
         | Val_int a ->
           if Z.eqb a n0
-          then Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-          else Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('N'::('E'::('Q'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))
      | BLTINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
           if Z.ltb n0 a
-          then Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-          else Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
      | BLEINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
           if Z.leb n0 a
-          then Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-          else Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('L'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
      | BGTINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
           if Z.gtb n0 a
-          then Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-          else Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('G'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
      | BGEINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
           if Z.geb n0 a
-          then Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-          else Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
      | ULTINT ->
@@ -2640,13 +2712,13 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (val_bool (Z.ltb a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (val_bool (Z.ltb a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | UGEINT ->
@@ -2659,39 +2731,39 @@ let step code s =
            | v :: rest ->
              (match v with
               | Val_int b ->
-                Step { pc = pc'; accu = (val_bool (Z.geb a b)); stack = rest;
-                  env = s.env; extra_args = s.extra_args; global = s.global;
-                  trap_stack = s.trap_stack }
-              | Val_block (_, _) ->
+                Step
+                  (st s pc' (val_bool (Z.geb a b)) rest s.env s.extra_args
+                    s.global s.trap_stack)
+              | _ ->
                 Error
                   ('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
-        | Val_block (_, _) ->
+        | _ ->
           Error
             ('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
      | BULTINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
           if Z.ltb n0 a
-          then Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-          else Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))
      | BUGEINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
           if Z.geb n0 a
-          then Step { pc = target; accu = s.accu; stack = s.stack; env =
-                 s.env; extra_args = s.extra_args; global = s.global;
-                 trap_stack = s.trap_stack }
-          else Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-                 extra_args = s.extra_args; global = s.global; trap_stack =
-                 s.trap_stack }
-        | Val_block (_, _) ->
+          then Step
+                 (st s target s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+          else Step
+                 (st s pc' s.accu s.stack s.env s.extra_args s.global
+                   s.trap_stack)
+        | _ ->
           Error
             ('B'::('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))
      | STOP -> Halt s.accu
@@ -2708,9 +2780,7 @@ let step code s =
        Error
          ('R'::('E'::('P'::('E'::('R'::('F'::('O'::('R'::('M'::('T'::('E'::('R'::('M'::(':'::(' '::('e'::('f'::('f'::('e'::('c'::('t'::('s'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))
      | _ ->
-       Step { pc = pc'; accu = s.accu; stack = s.stack; env = s.env;
-         extra_args = s.extra_args; global = s.global; trap_stack =
-         s.trap_stack })
+       Step (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_stack))
   | None ->
     Error
       ('p'::('c'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))

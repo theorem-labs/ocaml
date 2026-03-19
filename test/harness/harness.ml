@@ -91,6 +91,10 @@ let make_handler prims buf =
     | "caml_create_bytes", [Val_int n] -> Some (Val_block (252, List.init n (fun _ -> Val_int 0)))
     | ("caml_blit_string" | "caml_blit_bytes"), _ -> Some (Val_int 0)
     | "caml_string_equal", [Val_block (252,a); Val_block (252,b)] -> Some (Val_int (if a=b then 1 else 0))
+    | "caml_int_compare", [Val_int a; Val_int b] ->
+      Some (Val_int (if a < b then -1 else if a > b then 1 else 0))
+    | "caml_compare", [Val_int a; Val_int b] ->
+      Some (Val_int (if a < b then -1 else if a > b then 1 else 0))
     | _ ->
       Printf.eprintf "  [ccall] %s (idx=%d, %d args)\n%!" name idx (List.length args);
       Some (Val_int 0)
@@ -183,6 +187,31 @@ let generators = [|
   (* Partial application *)
   (fun r -> let n = Random.State.int r 50 in
     Printf.sprintf "let () = let add x y = x + y in let inc = add 1 in print_int (inc %d); print_newline ()" n);
+  (* Ref: create, read, write *)
+  (fun r -> let n = Random.State.int r 100 in
+    Printf.sprintf "let () = let r = ref %d in r := !r + 1; print_int !r; print_newline ()" n);
+  (* Ref: aliasing *)
+  (fun r -> let n = Random.State.int r 100 in
+    Printf.sprintf "let () = let r = ref %d in let s = r in s := !s * 2; print_int !r; print_newline ()" n);
+  (* Ref: loop with ref counter *)
+  (fun r -> let n = Random.State.int r 10 in
+    Printf.sprintf "let () = let r = ref 0 in for i = 1 to %d do r := !r + i done; print_int !r; print_newline ()" n);
+  (* Exception: try/with *)
+  (fun r -> let n = Random.State.int r 10 in
+    Printf.sprintf "let () = print_int (try if %d > 5 then raise Exit else %d with Exit -> -1); print_newline ()" n n);
+  (* Exception: nested *)
+  (fun _r ->
+    "let () = print_int (try try raise Not_found with Exit -> 1 with Not_found -> 2); print_newline ()");
+  (* List operations *)
+  (fun r -> let n = Random.State.int r 10 in
+    Printf.sprintf "let () = let rec len = function [] -> 0 | _ :: t -> 1 + len t in print_int (len [%s]); print_newline ()"
+      (String.concat ";" (List.init n (fun i -> string_of_int i))));
+  (* Closure capture of mutable ref *)
+  (fun r -> let n = Random.State.int r 20 in
+    Printf.sprintf "let () = let r = ref 0 in let bump () = r := !r + 1 in for _ = 1 to %d do bump () done; print_int !r; print_newline ()" n);
+  (* Curried comparison *)
+  (fun r -> let a = Random.State.int r 100 in let b = Random.State.int r 100 in
+    Printf.sprintf "let () = print_int (compare %d %d); print_newline ()" a b);
 |]
 
 (* === Main === *)

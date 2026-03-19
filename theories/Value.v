@@ -5,7 +5,8 @@ Import ListNotations.
 
 Inductive value : Type :=
   | Val_int : Z -> value
-  | Val_block : nat -> list value -> value.
+  | Val_block : nat -> list value -> value
+  | Val_ptr : nat -> value.  (* heap pointer for mutable blocks *)
 
 Definition Closure_tag    := 247.
 Definition Object_tag     := 248.
@@ -21,24 +22,24 @@ Definition val_bool (b : bool) : value :=
   if b then val_true else val_false.
 
 Definition is_int (v : value) : bool :=
-  match v with Val_int _ => true | Val_block _ _ => false end.
+  match v with Val_int _ => true | _ => false end.
 
 Definition int_val (v : value) : option Z :=
-  match v with Val_int n => Some n | Val_block _ _ => None end.
+  match v with Val_int n => Some n | _ => None end.
 
 Definition tag (v : value) : option nat :=
-  match v with Val_int _ => None | Val_block t _ => Some t end.
+  match v with Val_block t _ => Some t | _ => None end.
 
 Definition field (v : value) (n : nat) : option value :=
   match v with
-  | Val_int _ => None
   | Val_block _ fields => nth_error fields n
+  | _ => None
   end.
 
 Definition block_size (v : value) : option nat :=
   match v with
-  | Val_int _ => None
   | Val_block _ fields => Some (length fields)
+  | _ => None
   end.
 
 Fixpoint set_nth {A : Type} (l : list A) (n : nat) (x : A) : option (list A) :=
@@ -54,12 +55,12 @@ Fixpoint set_nth {A : Type} (l : list A) (n : nat) (x : A) : option (list A) :=
 
 Definition set_field (v : value) (n : nat) (x : value) : option value :=
   match v with
-  | Val_int _ => None
   | Val_block t fields =>
     match set_nth fields n x with
     | Some fields' => Some (Val_block t fields')
     | None => None
     end
+  | _ => None
   end.
 
 Definition closure_code (v : value) : option Z :=
@@ -82,5 +83,6 @@ Fixpoint value_eqb (v1 v2 : value) : bool :=
       | v1 :: r1, v2 :: r2 => value_eqb v1 v2 && list_eqb r1 r2
       | _, _ => false
       end) fs1 fs2
+  | Val_ptr a1, Val_ptr a2 => Nat.eqb a1 a2
   | _, _ => false
   end.
