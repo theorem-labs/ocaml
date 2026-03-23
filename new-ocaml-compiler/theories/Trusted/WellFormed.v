@@ -1,0 +1,67 @@
+(* WellFormed.v - [TRUSTED] Decidable well-formedness check for bytecode.
+   Branch targets must be valid instruction indices and integer operands
+   must fit in 32 bits. Returns bool so it can be computed. *)
+
+From Stdlib Require Import ZArith PeanoNat Bool List.
+Import ListNotations.
+From OCamlInterp.Trusted Require Import Bytecode.
+Open Scope Z_scope.
+
+Definition z_fits_i32b (z : Z) : bool :=
+  Z.leb (-2147483648) z && Z.leb z 2147483647.
+
+Definition z_fits_u32b (z : Z) : bool :=
+  Z.leb 0 z && Z.leb z 4294967295.
+
+Definition nat_fits_i32b (n : nat) : bool :=
+  z_fits_i32b (Z.of_nat n).
+
+Definition valid_targetb (n : nat) (t : Z) : bool :=
+  Z.leb 0 t && Nat.ltb (Z.to_nat t) n.
+
+Definition all_valid_targetsb (n : nat) (ts : list Z) : bool :=
+  forallb (valid_targetb n) ts.
+
+Definition wf_instrb (n : nat) (i : instruction) : bool :=
+  match i with
+  | ACC k | PUSHACC k | POP k | ASSIGN k
+  | ENVACC k | PUSHENVACC k
+  | APPLY k | APPTERM1 k | APPTERM2 k | APPTERM3 k
+  | RETURN k | GRAB k
+  | GETGLOBAL k | PUSHGETGLOBAL k | SETGLOBAL k
+  | ATOM k | PUSHATOM k
+  | MAKEBLOCK1 k | MAKEBLOCK2 k | MAKEBLOCK3 k
+  | MAKEFLOATBLOCK k
+  | GETFIELD k | GETFLOATFIELD k | SETFIELD k | SETFLOATFIELD k
+  | RESUMETERM k | REPERFORMTERM k
+    => nat_fits_i32b k
+  | APPTERM a b | GETGLOBALFIELD a b | PUSHGETGLOBALFIELD a b
+  | MAKEBLOCK a b | C_CALL a b
+    => nat_fits_i32b a && nat_fits_i32b b
+  | PUSH_RETADDR t | BRANCH t | BRANCHIF t | BRANCHIFNOT t | PUSHTRAP t
+    => valid_targetb n t
+  | CLOSURE nv codeptr
+    => nat_fits_i32b nv && valid_targetb n codeptr
+  | CLOSUREREC nf nv ofs
+    => nat_fits_i32b nf && nat_fits_i32b nv
+       && all_valid_targetsb n ofs
+       && Nat.eqb (List.length ofs) nf
+  | SWITCH nc nb ct bt
+    => Nat.eqb (List.length ct) nc && Nat.eqb (List.length bt) nb
+       && all_valid_targetsb n ct && all_valid_targetsb n bt
+       && nat_fits_i32b nc && nat_fits_i32b nb
+  | BEQ v t | BNEQ v t | BLTINT v t | BLEINT v t
+  | BGTINT v t | BGEINT v t | BULTINT v t | BUGEINT v t
+    => z_fits_i32b v && valid_targetb n t
+  | CONSTINT v | PUSHCONSTINT v | OFFSETINT v | OFFSETREF v
+    => z_fits_i32b v
+  | OFFSETCLOSURE v | PUSHOFFSETCLOSURE v
+    => z_fits_i32b v
+  | GETPUBMET v
+    => z_fits_i32b v
+  | _ => true
+  end.
+
+Definition well_formed (code : list instruction) : bool :=
+  let n := List.length code in
+  forallb (wf_instrb n) code.

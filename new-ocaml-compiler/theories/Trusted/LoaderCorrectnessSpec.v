@@ -5,18 +5,14 @@
 
 From Stdlib Require Import ZArith List.
 Import ListNotations.
-From OCamlInterp.Trusted Require Import Bytecode Encode.
+From OCamlInterp.Trusted Require Import Bytecode Encode WellFormed.
 
 Module Type LoaderCorrectnessSpec.
 
   (* Decoder (provided by Untrusted) *)
   Parameter decode_bytecode : list Z -> nat -> nat -> list instruction.
 
-  (* Well-formedness predicates (provided by Untrusted) *)
-  Parameter z_fits_i32 : Z -> Prop.
-  Parameter well_formed : list instruction -> Prop.
-
-  (* Byte-level roundtrip: reading back encoded words *)
+  (* Byte-level read functions (provided by Untrusted) *)
   Parameter read_u32_le : list Z -> nat -> Z.
   Parameter read_i32_le : list Z -> nat -> Z.
 
@@ -25,12 +21,12 @@ Module Type LoaderCorrectnessSpec.
     read_u32_le (encode_word_le v) 0 = v.
 
   Axiom read_i32_le_encode_word_le : forall v,
-    z_fits_i32 v ->
+    z_fits_i32b v = true ->
     read_i32_le (encode_word_le v) 0 = v.
 
   (* Main roundtrip theorem: decoding encoded bytecode recovers the original *)
   Axiom decode_encode_inverse : forall code,
-    well_formed code ->
+    well_formed code = true ->
     decode_bytecode (encode_bytecode code) 0
                     (List.length (encode_bytecode code)) = code.
 

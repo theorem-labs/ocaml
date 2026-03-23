@@ -23,77 +23,10 @@
 
 From Stdlib Require Import ZArith PeanoNat Bool List Lia.
 Import ListNotations.
-From OCamlInterp.Trusted Require Import Bytecode Encode.
+From OCamlInterp.Trusted Require Import Bytecode Encode WellFormed.
 From OCamlInterp.Untrusted Require Import Loader.
 Open Scope Z_scope.
 Open Scope nat_scope.
-
-(* ================================================================== *)
-(* Well-formedness predicate                                           *)
-(* ================================================================== *)
-
-(* An instruction is well-formed with respect to a program of length [n]
-   if all branch targets are valid instruction indices and all integer
-   operands fit in 32 bits. *)
-
-Definition z_fits_i32 (z : Z) : Prop :=
-  (-2147483648 <= z <= 2147483647)%Z.
-
-Definition z_fits_u32 (z : Z) : Prop :=
-  (0 <= z <= 4294967295)%Z.
-
-Definition nat_fits_i32 (n : nat) : Prop :=
-  z_fits_i32 (Z.of_nat n).
-
-Definition valid_target (n : nat) (t : Z) : Prop :=
-  (0 <= t)%Z /\ (Z.to_nat t < n).
-
-Definition all_valid_targets (n : nat) (ts : list Z) : Prop :=
-  Forall (valid_target n) ts.
-
-(* Well-formedness for a single instruction relative to program length [n]. *)
-Definition wf_instr (n : nat) (i : instruction) : Prop :=
-  match i with
-  | ACC k | PUSHACC k | POP k | ASSIGN k
-  | ENVACC k | PUSHENVACC k
-  | APPLY k | APPTERM1 k | APPTERM2 k | APPTERM3 k
-  | RETURN k | GRAB k
-  | GETGLOBAL k | PUSHGETGLOBAL k | SETGLOBAL k
-  | ATOM k | PUSHATOM k
-  | MAKEBLOCK1 k | MAKEBLOCK2 k | MAKEBLOCK3 k
-  | MAKEFLOATBLOCK k
-  | GETFIELD k | GETFLOATFIELD k | SETFIELD k | SETFLOATFIELD k
-  | RESUMETERM k | REPERFORMTERM k
-    => nat_fits_i32 k
-  | APPTERM a b | GETGLOBALFIELD a b | PUSHGETGLOBALFIELD a b
-  | MAKEBLOCK a b | C_CALL a b
-    => nat_fits_i32 a /\ nat_fits_i32 b
-  | PUSH_RETADDR t | BRANCH t | BRANCHIF t | BRANCHIFNOT t | PUSHTRAP t
-    => valid_target n t
-  | CLOSURE nv codeptr
-    => nat_fits_i32 nv /\ valid_target n codeptr
-  | CLOSUREREC nf nv ofs
-    => nat_fits_i32 nf /\ nat_fits_i32 nv /\ all_valid_targets n ofs
-       /\ List.length ofs = nf
-  | SWITCH nc nb ct bt
-    => List.length ct = nc /\ List.length bt = nb
-       /\ all_valid_targets n ct /\ all_valid_targets n bt
-       /\ nat_fits_i32 nc /\ nat_fits_i32 nb
-  | BEQ v t | BNEQ v t | BLTINT v t | BLEINT v t
-  | BGTINT v t | BGEINT v t | BULTINT v t | BUGEINT v t
-    => z_fits_i32 v /\ valid_target n t
-  | CONSTINT v | PUSHCONSTINT v | OFFSETINT v | OFFSETREF v
-    => z_fits_i32 v
-  | OFFSETCLOSURE v | PUSHOFFSETCLOSURE v
-    => z_fits_i32 v
-  | GETPUBMET v
-    => z_fits_i32 v
-  | _ => True  (* instructions with no operands *)
-  end.
-
-Definition well_formed (code : list instruction) : Prop :=
-  let n := List.length code in
-  Forall (wf_instr n) code.
 
 (* ================================================================== *)
 (* Byte-level lemmas                                                   *)
@@ -144,7 +77,7 @@ Admitted.
 (* The signed variant: read_i32_le inverts encode_word_le for values
    in the signed 32-bit range [-2^31, 2^31). *)
 Lemma read_i32_le_encode_word_le : forall v,
-  z_fits_i32 v ->
+  z_fits_i32b v = true ->
   read_i32_le (encode_word_le v) 0 = v.
 Proof.
   (* This requires showing that:
@@ -233,7 +166,7 @@ Qed.
 
 Theorem decode_encode_inverse :
   forall code,
-    well_formed code ->
+    well_formed code = true ->
     decode_bytecode (encode_bytecode code) 0
                     (List.length (encode_bytecode code)) = code.
 Proof.
