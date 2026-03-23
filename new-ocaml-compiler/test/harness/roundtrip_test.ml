@@ -1,5 +1,6 @@
 (* roundtrip_test.ml - [TRUSTED] PBT: parse(pretty_print(ast)) = ast
-   Validates the untrusted parser against the trusted pretty-printer. *)
+   Validates the untrusted parser against the trusted pretty-printer.
+   Migrated to QCheck. *)
 
 open Interp_extracted
 
@@ -8,120 +9,132 @@ let cl s = List.init (String.length s) (fun i -> s.[i])
 (* char list -> string *)
 let sc l = let buf = Buffer.create (List.length l) in List.iter (Buffer.add_char buf) l; Buffer.contents buf
 
-(* === Random AST generators === *)
+(* === QCheck AST generators === *)
 
-let random_ident rng =
+let gen_ident : char list QCheck.Gen.t =
   let names = [|"x";"y";"z";"f";"g";"n";"m";"a";"b";"c";"acc";"result"|] in
-  cl names.(Random.State.int rng (Array.length names))
+  QCheck.Gen.(map cl (oneofa names))
 
-let random_constr_name rng =
+let gen_constr_name : char list QCheck.Gen.t =
   let names = [|"Foo";"Bar";"Baz";"Some2";"None2";"Cons";"Nil";"A";"B";"C"|] in
-  cl names.(Random.State.int rng (Array.length names))
+  QCheck.Gen.(map cl (oneofa names))
 
-let random_type_name rng =
+let gen_type_name : char list QCheck.Gen.t =
   let names = [|"t";"u";"mytype";"color"|] in
-  cl names.(Random.State.int rng (Array.length names))
+  QCheck.Gen.(map cl (oneofa names))
 
-let rec random_expr rng depth =
-  if depth <= 0 then random_leaf_expr rng
+let rec gen_expr depth : expr QCheck.Gen.t =
+  let open QCheck.Gen in
+  if depth <= 0 then gen_leaf_expr
   else
     let d = depth - 1 in
-    match Random.State.int rng 15 with
-    | 0 -> Exp_int (Random.State.int rng 200 - 100)
-    | 1 -> Exp_bool (Random.State.bool rng)
-    | 2 -> Exp_unit
-    | 3 -> Exp_var (random_ident rng)
-    | 4 ->
-      let ops = [|Op_add;Op_sub;Op_mul;Op_div;Op_mod;Op_eq;Op_neq;Op_lt;Op_le;Op_gt;Op_ge;Op_and;Op_or|] in
-      Exp_binop (ops.(Random.State.int rng (Array.length ops)), random_expr rng d, random_expr rng d)
-    | 5 ->
-      let ops = [|Op_neg; Op_not|] in
-      Exp_unop (ops.(Random.State.int rng (Array.length ops)), random_expr rng d)
-    | 6 -> Exp_if (random_expr rng d, random_expr rng d, random_expr rng d)
-    | 7 -> Exp_let (random_ident rng, random_expr rng d, random_expr rng d)
-    | 8 -> Exp_letrec (random_ident rng, random_expr rng d, random_expr rng d)
-    | 9 -> Exp_fun (random_ident rng, random_expr rng d)
-    | 10 -> Exp_app (random_expr rng d, random_expr rng d)
-    | 11 ->
-      let n = 2 + Random.State.int rng 3 in
-      Exp_tuple (List.init n (fun _ -> random_expr rng d))
-    | 12 ->
-      let c = random_constr_name rng in
-      if Random.State.bool rng then Exp_constr (c, Some (random_expr rng d))
-      else Exp_constr (c, None)
-    | 13 ->
-      let ncases = 1 + Random.State.int rng 3 in
-      Exp_match (random_expr rng d, List.init ncases (fun _ -> (random_pattern rng d, random_expr rng d)))
-    | 14 | _ -> Exp_seq (random_expr rng d, random_expr rng d)
+    oneof [
+      (* 0: int *)
+      map (fun n -> Exp_int n) (int_range (-100) 99);
+      (* 1: bool *)
+      map (fun b -> Exp_bool b) bool;
+      (* 2: unit *)
+      pure Exp_unit;
+      (* 3: var *)
+      map (fun x -> Exp_var x) gen_ident;
+      (* 4: binop *)
+      (let ops = [|Op_add;Op_sub;Op_mul;Op_div;Op_mod;Op_eq;Op_neq;Op_lt;Op_le;Op_gt;Op_ge;Op_and;Op_or|] in
+       map3 (fun op e1 e2 -> Exp_binop (op, e1, e2)) (oneofa ops) (gen_expr d) (gen_expr d));
+      (* 5: unop *)
+      (let ops = [|Op_neg; Op_not|] in
+       map2 (fun op e -> Exp_unop (op, e)) (oneofa ops) (gen_expr d));
+      (* 6: if *)
+      map3 (fun e1 e2 e3 -> Exp_if (e1, e2, e3)) (gen_expr d) (gen_expr d) (gen_expr d);
+      (* 7: let *)
+      map3 (fun x e1 e2 -> Exp_let (x, e1, e2)) gen_ident (gen_expr d) (gen_expr d);
+      (* 8: letrec *)
+      map3 (fun x e1 e2 -> Exp_letrec (x, e1, e2)) gen_ident (gen_expr d) (gen_expr d);
+      (* 9: fun *)
+      map2 (fun x e -> Exp_fun (x, e)) gen_ident (gen_expr d);
+      (* 10: app *)
+      map2 (fun e1 e2 -> Exp_app (e1, e2)) (gen_expr d) (gen_expr d);
+      (* 11: tuple *)
+      (int_range 2 4 >>= fun n ->
+       list_repeat n (gen_expr d) >|= fun es -> Exp_tuple es);
+      (* 12: constr *)
+      map2 (fun c opt -> Exp_constr (c, opt)) gen_constr_name
+        (oneof [map (fun e -> Some e) (gen_expr d); pure None]);
+      (* 13: match *)
+      (int_range 1 3 >>= fun ncases ->
+       map2 (fun e cases -> Exp_match (e, cases)) (gen_expr d)
+         (list_repeat ncases (map2 (fun p e -> (p, e)) (gen_pattern d) (gen_expr d))));
+      (* 14: seq *)
+      map2 (fun e1 e2 -> Exp_seq (e1, e2)) (gen_expr d) (gen_expr d);
+    ]
 
-and random_leaf_expr rng =
-  match Random.State.int rng 5 with
-  | 0 -> Exp_int (Random.State.int rng 200 - 100)
-  | 1 -> Exp_bool (Random.State.bool rng)
-  | 2 -> Exp_unit
-  | 3 -> Exp_var (random_ident rng)
-  | _ -> Exp_constr (random_constr_name rng, None)
+and gen_leaf_expr : expr QCheck.Gen.t =
+  let open QCheck.Gen in
+  oneof [
+    map (fun n -> Exp_int n) (int_range (-100) 99);
+    map (fun b -> Exp_bool b) bool;
+    pure Exp_unit;
+    map (fun x -> Exp_var x) gen_ident;
+    map (fun c -> Exp_constr (c, None)) gen_constr_name;
+  ]
 
-and random_pattern rng depth =
-  if depth <= 0 then random_leaf_pattern rng
+and gen_pattern depth : pattern QCheck.Gen.t =
+  let open QCheck.Gen in
+  if depth <= 0 then gen_leaf_pattern
   else
     let d = depth - 1 in
-    match Random.State.int rng 7 with
-    | 0 -> Pat_var (random_ident rng)
-    | 1 -> Pat_int (Random.State.int rng 200 - 100)
-    | 2 -> Pat_bool (Random.State.bool rng)
-    | 3 -> Pat_unit
-    | 4 ->
-      let n = 2 + Random.State.int rng 3 in
-      Pat_tuple (List.init n (fun _ -> random_pattern rng d))
-    | 5 ->
-      let c = random_constr_name rng in
-      if Random.State.bool rng then Pat_constr (c, Some (random_pattern rng d))
-      else Pat_constr (c, None)
-    | _ -> Pat_wild
+    oneof [
+      map (fun x -> Pat_var x) gen_ident;
+      map (fun n -> Pat_int n) (int_range (-100) 99);
+      map (fun b -> Pat_bool b) bool;
+      pure Pat_unit;
+      (int_range 2 4 >>= fun n ->
+       list_repeat n (gen_pattern d) >|= fun ps -> Pat_tuple ps);
+      map2 (fun c opt -> Pat_constr (c, opt)) gen_constr_name
+        (oneof [map (fun p -> Some p) (gen_pattern d); pure None]);
+      pure Pat_wild;
+    ]
 
-and random_leaf_pattern rng =
-  match Random.State.int rng 5 with
-  | 0 -> Pat_var (random_ident rng)
-  | 1 -> Pat_int (Random.State.int rng 200 - 100)
-  | 2 -> Pat_bool (Random.State.bool rng)
-  | 3 -> Pat_unit
-  | _ -> Pat_wild
+and gen_leaf_pattern : pattern QCheck.Gen.t =
+  let open QCheck.Gen in
+  oneof [
+    map (fun x -> Pat_var x) gen_ident;
+    map (fun n -> Pat_int n) (int_range (-100) 99);
+    map (fun b -> Pat_bool b) bool;
+    pure Pat_unit;
+    pure Pat_wild;
+  ]
 
-let random_type_expr rng depth =
-  if depth <= 0 then
-    match Random.State.int rng 3 with
-    | 0 -> Ty_int | 1 -> Ty_bool | _ -> Ty_unit
-  else
-    let gen_leaf () =
-      match Random.State.int rng 4 with
-      | 0 -> Ty_int | 1 -> Ty_bool | 2 -> Ty_unit
-      | _ -> Ty_constr (random_type_name rng, [])
-    in
-    ignore depth;
-    match Random.State.int rng 6 with
-    | 0 -> Ty_int | 1 -> Ty_bool | 2 -> Ty_unit
-    | 3 -> Ty_arrow (gen_leaf (), gen_leaf ())
-    | 4 -> Ty_tuple (List.init (2 + Random.State.int rng 2) (fun _ -> gen_leaf ()))
-    | _ -> Ty_constr (random_type_name rng, [])
+let gen_type_expr : type_expr QCheck.Gen.t =
+  let open QCheck.Gen in
+  let gen_leaf () =
+    oneof [pure Ty_int; pure Ty_bool; pure Ty_unit;
+           map (fun n -> Ty_constr (n, [])) gen_type_name]
+  in
+  oneof [
+    pure Ty_int; pure Ty_bool; pure Ty_unit;
+    map2 (fun a b -> Ty_arrow (a, b)) (gen_leaf ()) (gen_leaf ());
+    (int_range 2 3 >>= fun n ->
+     list_repeat n (gen_leaf ()) >|= fun ts -> Ty_tuple ts);
+    map (fun n -> Ty_constr (n, [])) gen_type_name;
+  ]
 
-let random_decl rng depth =
-  match Random.State.int rng 4 with
-  | 0 -> Decl_let (random_ident rng, random_expr rng depth)
-  | 1 -> Decl_letrec (random_ident rng, random_expr rng depth)
-  | 2 ->
-    let nparams = Random.State.int rng 2 in
-    let params = List.init nparams (fun _ -> random_ident rng) in
-    let nconstrs = 1 + Random.State.int rng 4 in
-    let constrs = List.init nconstrs (fun _ ->
-      let c = random_constr_name rng in
-      if Random.State.bool rng then (c, Some (random_type_expr rng depth))
-      else (c, None)) in
-    Decl_type (random_type_name rng, params, Td_variant constrs)
-  | _ -> Decl_expr (random_expr rng depth)
+let gen_decl depth : decl QCheck.Gen.t =
+  let open QCheck.Gen in
+  oneof [
+    map2 (fun x e -> Decl_let (x, e)) gen_ident (gen_expr depth);
+    map2 (fun x e -> Decl_letrec (x, e)) gen_ident (gen_expr depth);
+    (int_range 0 1 >>= fun nparams ->
+     int_range 1 4 >>= fun nconstrs ->
+     map3 (fun name params constrs -> Decl_type (name, params, Td_variant constrs))
+       gen_type_name
+       (list_repeat nparams gen_ident)
+       (list_repeat nconstrs
+         (map2 (fun c opt -> (c, opt)) gen_constr_name
+           (oneof [map (fun t -> Some t) gen_type_expr; pure None]))));
+    map (fun e -> Decl_expr e) (gen_expr depth);
+  ]
 
 (* === Normalization: resolve pretty-print ambiguities === *)
-(* Exp_unop(Op_neg, Exp_int n) -> Exp_int(-n) since pp produces "(-n)" for both *)
 let rec normalize_expr = function
   | Exp_unop (Op_neg, e) ->
     (match normalize_expr e with
@@ -188,7 +201,7 @@ and pattern_eq p1 p2 =
   | Pat_wild, Pat_wild -> true
   | _ -> false
 
-and list_eq f a b =
+let rec list_eq f a b =
   match a, b with
   | [], [] -> true
   | x :: xs, y :: ys -> f x y && list_eq f xs ys
@@ -220,58 +233,37 @@ let decl_eq d1 d2 =
   | Decl_expr e1, Decl_expr e2 -> expr_eq e1 e2
   | _ -> false
 
-(* === Main === *)
+(* === QCheck tests === *)
+
+let depth = 3
+
+let expr_roundtrip_test =
+  QCheck.Test.make ~name:"expr round-trip: parse(pp(e)) = e" ~count:500
+    (QCheck.make (gen_expr depth) ~print:(fun e -> sc (pp_expr e)))
+    (fun expr ->
+       let expr = normalize_expr expr in
+       let printed = sc (pp_expr expr) in
+       match Parser.parse printed with
+       | Result.Ok [Decl_expr parsed_expr] ->
+         let parsed_norm = normalize_expr parsed_expr in
+         let pp_match = sc (pp_expr expr) = sc (pp_expr parsed_norm) in
+         expr_eq expr parsed_norm || pp_match
+       | Result.Ok _ -> false
+       | Result.Error _msg -> false)
+
+let decl_roundtrip_test =
+  QCheck.Test.make ~name:"decl round-trip: parse(pp(d)) = d" ~count:100
+    (QCheck.make (gen_decl depth) ~print:(fun d -> sc (pp_decl d)))
+    (fun decl ->
+       let decl = normalize_decl decl in
+       let printed = sc (pp_decl decl) ^ ";;" in
+       match Parser.parse printed with
+       | Result.Ok [parsed_decl] ->
+         let parsed_norm = normalize_decl parsed_decl in
+         let pp_match = sc (pp_decl decl) = sc (pp_decl parsed_norm) in
+         decl_eq decl parsed_norm || pp_match
+       | Result.Ok _ -> false
+       | Result.Error _msg -> false)
+
 let () =
-  let num = try int_of_string Sys.argv.(1) with _ -> 500 in
-  let seed = try int_of_string Sys.argv.(2) with _ -> 42 in
-  let depth = try int_of_string Sys.argv.(3) with _ -> 3 in
-  let rng = Random.State.make [| seed |] in
-  Printf.printf "Round-trip PBT: %d tests (seed=%d, depth=%d)\n\n%!" num seed depth;
-  let pass = ref 0 and fail = ref 0 in
-
-  (* Test individual expressions *)
-  for _ = 1 to num do
-    let expr = normalize_expr (random_expr rng depth) in
-    let printed = sc (pp_expr expr) in
-    match Parser.parse printed with
-    | Result.Ok [Decl_expr parsed_expr] ->
-      let parsed_norm = normalize_expr parsed_expr in
-      let pp_match = sc (pp_expr expr) = sc (pp_expr parsed_norm) in
-      if expr_eq expr parsed_norm || pp_match then incr pass
-      else begin
-        Printf.printf "FAIL expr roundtrip:\n  printed:   %S\n  original:  %s\n  reparsed:  %s\n  re-pp:     %s\n%!"
-          printed (sc (pp_expr expr)) (sc (pp_expr parsed_expr)) (sc (pp_expr parsed_norm));
-        incr fail
-      end
-    | Result.Ok _ ->
-      Printf.printf "FAIL expr: parsed as non-expr decl\n  printed: %S\n%!" printed;
-      incr fail
-    | Result.Error msg ->
-      Printf.printf "FAIL expr parse error: %s\n  printed: %S\n%!" msg printed;
-      incr fail
-  done;
-
-  (* Test individual declarations *)
-  for _ = 1 to num / 5 do
-    let decl = normalize_decl (random_decl rng depth) in
-    let printed = sc (pp_decl decl) ^ ";;" in
-    match Parser.parse printed with
-    | Result.Ok [parsed_decl] ->
-      let parsed_norm = normalize_decl parsed_decl in
-      let pp_match = sc (pp_decl decl) = sc (pp_decl parsed_norm) in
-      if decl_eq decl parsed_norm || pp_match then incr pass
-      else begin
-        Printf.printf "FAIL decl roundtrip:\n  printed:   %S\n  original:  %s\n  reparsed:  %s\n%!"
-          printed (sc (pp_decl decl)) (sc (pp_decl parsed_norm));
-        incr fail
-      end
-    | Result.Ok ds ->
-      Printf.printf "FAIL decl: parsed as %d decls\n  printed: %S\n%!" (List.length ds) printed;
-      incr fail
-    | Result.Error msg ->
-      Printf.printf "FAIL decl parse error: %s\n  printed: %S\n%!" msg printed;
-      incr fail
-  done;
-
-  Printf.printf "\n=== Round-trip Results: %d pass, %d fail ===\n" !pass !fail;
-  if !fail > 0 then exit 1
+  exit (QCheck_base_runner.run_tests ~verbose:true [expr_roundtrip_test; decl_roundtrip_test])

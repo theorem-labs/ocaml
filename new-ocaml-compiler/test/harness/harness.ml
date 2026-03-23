@@ -1,4 +1,5 @@
-(* harness.ml - [TRUSTED] PBT harness: interpret-bytecode vs ocamlrun *)
+(* harness.ml - [TRUSTED] PBT harness: interpret-bytecode vs ocamlrun
+   Migrated to QCheck. *)
 
 open Interp_extracted
 
@@ -159,146 +160,155 @@ let string_of_chars cl =
   let buf = Buffer.create (List.length cl) in
   List.iter (Buffer.add_char buf) cl; Buffer.contents buf
 
-(* === Test generators === *)
-let generators = [|
-  (fun r -> Printf.sprintf "let () = print_int (%d + %d); print_newline ()"
-    (Random.State.int r 100) (Random.State.int r 100 + 1));
-  (fun r -> Printf.sprintf "let () = print_int (%d * %d); print_newline ()"
-    (Random.State.int r 50) (Random.State.int r 50));
-  (fun r -> let n = Random.State.int r 100 in let t = Random.State.int r 100 in
-    Printf.sprintf "let () = print_int (if %d > %d then 1 else 0); print_newline ()" n t);
-  (fun r -> let n = Random.State.int r 50 in
-    Printf.sprintf "let () = let f x = x + x in print_int (f %d); print_newline ()" n);
-  (fun r -> let n = Random.State.int r 10 in
-    Printf.sprintf "let () = let rec fact n = if n <= 1 then 1 else n * fact (n-1) in print_int (fact %d); print_newline ()" n);
-  (fun r -> let n = Random.State.int r 5 in
-    Printf.sprintf "let () = print_int (match %d with 0 -> 100 | 1 -> 200 | _ -> 999); print_newline ()" n);
-  (fun r -> let a = Random.State.int r 50 in let b = Random.State.int r 50 in
-    Printf.sprintf "let () = let p = (%d, %d) in print_int (fst p + snd p); print_newline ()" a b);
-  (fun r -> let a = Random.State.int r 100 in let b = Random.State.int r 100 + 1 in
-    Printf.sprintf "let () = print_int (%d - %d); print_newline ()" a b);
-  (* Nested let *)
-  (fun r -> let a = Random.State.int r 20 in let b = Random.State.int r 20 in let c = Random.State.int r 20 in
-    Printf.sprintf "let () = let x = %d in let y = %d in let z = %d in print_int (x + y + z); print_newline ()" a b c);
-  (* Boolean logic *)
-  (fun r -> let a = Random.State.int r 100 in let b = Random.State.int r 100 in
-    Printf.sprintf "let () = print_int (if %d > %d && %d < 200 then 1 else 0); print_newline ()" a b a);
-  (* Multi-arg function *)
-  (fun r -> let a = Random.State.int r 30 in let b = Random.State.int r 30 in
-    Printf.sprintf "let () = let f x y = x * y + 1 in print_int (f %d %d); print_newline ()" a b);
-  (* Higher-order function *)
-  (fun r -> let n = Random.State.int r 30 in
-    Printf.sprintf "let () = let apply f x = f x in let double x = x * 2 in print_int (apply double %d); print_newline ()" n);
-  (* List-like: nested pairs *)
-  (fun r -> let a = Random.State.int r 20 in let b = Random.State.int r 20 in
-    Printf.sprintf "let () = let p = (%d, (%d, 0)) in print_int (fst p + fst (snd p)); print_newline ()" a b);
-  (* Fibonacci *)
-  (fun r -> let n = Random.State.int r 15 in
-    Printf.sprintf "let () = let rec fib n = if n <= 1 then n else fib (n-1) + fib (n-2) in print_int (fib %d); print_newline ()" n);
-  (* Div and mod *)
-  (fun r -> let a = Random.State.int r 1000 + 1 in let b = Random.State.int r 50 + 1 in
-    Printf.sprintf "let () = print_int (%d / %d + %d mod %d); print_newline ()" a b a b);
-  (* Negative numbers *)
-  (fun r -> let a = Random.State.int r 100 in
-    Printf.sprintf "let () = print_int (- %d); print_newline ()" a);
-  (* Variant/constructor matching *)
-  (fun r -> let n = Random.State.int r 3 in
-    Printf.sprintf "type t = A | B | C\nlet () = print_int (match %s with A -> 10 | B -> 20 | C -> 30); print_newline ()"
-      (match n with 0 -> "A" | 1 -> "B" | _ -> "C"));
-  (* String output *)
-  (fun _r ->
-    "let () = print_string \"hello\"; print_newline ()");
-  (* Partial application *)
-  (fun r -> let n = Random.State.int r 50 in
-    Printf.sprintf "let () = let add x y = x + y in let inc = add 1 in print_int (inc %d); print_newline ()" n);
-  (* Ref: create, read, write *)
-  (fun r -> let n = Random.State.int r 100 in
-    Printf.sprintf "let () = let r = ref %d in r := !r + 1; print_int !r; print_newline ()" n);
-  (* Ref: aliasing *)
-  (fun r -> let n = Random.State.int r 100 in
-    Printf.sprintf "let () = let r = ref %d in let s = r in s := !s * 2; print_int !r; print_newline ()" n);
-  (* Ref: loop with ref counter *)
-  (fun r -> let n = Random.State.int r 10 in
-    Printf.sprintf "let () = let r = ref 0 in for i = 1 to %d do r := !r + i done; print_int !r; print_newline ()" n);
-  (* Exception: try/with *)
-  (fun r -> let n = Random.State.int r 10 in
-    Printf.sprintf "let () = print_int (try if %d > 5 then raise Exit else %d with Exit -> -1); print_newline ()" n n);
-  (* Exception: nested *)
-  (fun _r ->
-    "let () = print_int (try try raise Not_found with Exit -> 1 with Not_found -> 2); print_newline ()");
-  (* List operations *)
-  (fun r -> let n = Random.State.int r 10 in
-    Printf.sprintf "let () = let rec len = function [] -> 0 | _ :: t -> 1 + len t in print_int (len [%s]); print_newline ()"
-      (String.concat ";" (List.init n (fun i -> string_of_int i))));
-  (* Closure capture of mutable ref *)
-  (fun r -> let n = Random.State.int r 20 in
-    Printf.sprintf "let () = let r = ref 0 in let bump () = r := !r + 1 in for _ = 1 to %d do bump () done; print_int !r; print_newline ()" n);
-  (* Curried comparison *)
-  (fun r -> let a = Random.State.int r 100 in let b = Random.State.int r 100 in
-    Printf.sprintf "let () = print_int (compare %d %d); print_newline ()" a b);
-  (* String.length *)
-  (fun r -> let n = Random.State.int r 10 in
-    let s = String.init (n + 1) (fun i -> Char.chr (Char.code 'a' + i mod 26)) in
-    Printf.sprintf "let () = print_int (String.length %S); print_newline ()" s);
-  (* String.get / char access *)
-  (fun r -> let s = "hello" in let i = Random.State.int r (String.length s) in
-    Printf.sprintf "let () = print_int (Char.code (String.get %S %d)); print_newline ()" s i);
-  (* Variant with data *)
-  (fun r -> let n = Random.State.int r 100 in
-    Printf.sprintf "type myopt = None2 | Some2 of int\nlet () = print_int (match Some2 %d with None2 -> 0 | Some2 x -> x); print_newline ()" n);
-  (* Nested match *)
-  (fun r -> let a = Random.State.int r 5 in let b = Random.State.int r 5 in
-    Printf.sprintf "let () = print_int (match %d with 0 -> (match %d with 0 -> 100 | _ -> 200) | _ -> 300); print_newline ()" a b);
-  (* Mutual let binding (sequential) *)
-  (fun r -> let a = Random.State.int r 20 in let b = Random.State.int r 20 in
-    Printf.sprintf "let () = let x = %d in let y = x + %d in print_int (x + y); print_newline ()" a b);
-  (* Array-like: large tuple *)
-  (fun r -> let a = Random.State.int r 100 in let b = Random.State.int r 100 in
-    let c = Random.State.int r 100 in
-    Printf.sprintf "let () = let (a,b,c) = (%d,%d,%d) in print_int (a+b+c); print_newline ()" a b c);
-  (* Bitwise operations *)
-  (fun r -> let a = Random.State.int r 256 in let b = Random.State.int r 256 in
-    Printf.sprintf "let () = print_int (%d land %d); print_newline ()" a b);
-  (* Chained function application *)
-  (fun r -> let n = Random.State.int r 10 in
-    Printf.sprintf "let () = let f x = x + 1 in let g x = x * 2 in print_int (g (f %d)); print_newline ()" n);
-  (* While loop with ref *)
-  (fun r -> let n = Random.State.int r 10 in
-    Printf.sprintf "let () = let r = ref 0 in let i = ref 1 in while !i <= %d do r := !r + !i; i := !i + 1 done; print_int !r; print_newline ()" n);
-  (* Mutual recursion: even/odd *)
-  (fun r -> let n = Random.State.int r 20 in
-    Printf.sprintf "let () = let rec even n = if n = 0 then true else odd (n-1) and odd n = if n = 0 then false else even (n-1) in print_int (if even %d then 1 else 0); print_newline ()" n);
-|]
+(* === QCheck generators === *)
 
-(* === Main === *)
+let gen_source : string QCheck.Gen.t =
+  let open QCheck.Gen in
+  let gen_add = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (%d + %d); print_newline ()" a (b + 1)
+  ) (int_range 0 99) (int_range 0 99) in
+  let gen_mul = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (%d * %d); print_newline ()" a b
+  ) (int_range 0 49) (int_range 0 49) in
+  let gen_cmp = map2 (fun n t ->
+    Printf.sprintf "let () = print_int (if %d > %d then 1 else 0); print_newline ()" n t
+  ) (int_range 0 99) (int_range 0 99) in
+  let gen_fun = map (fun n ->
+    Printf.sprintf "let () = let f x = x + x in print_int (f %d); print_newline ()" n
+  ) (int_range 0 49) in
+  let gen_fact = map (fun n ->
+    Printf.sprintf "let () = let rec fact n = if n <= 1 then 1 else n * fact (n-1) in print_int (fact %d); print_newline ()" n
+  ) (int_range 0 9) in
+  let gen_match = map (fun n ->
+    Printf.sprintf "let () = print_int (match %d with 0 -> 100 | 1 -> 200 | _ -> 999); print_newline ()" n
+  ) (int_range 0 4) in
+  let gen_pair = map2 (fun a b ->
+    Printf.sprintf "let () = let p = (%d, %d) in print_int (fst p + snd p); print_newline ()" a b
+  ) (int_range 0 49) (int_range 0 49) in
+  let gen_sub = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (%d - %d); print_newline ()" a (b + 1)
+  ) (int_range 0 99) (int_range 0 99) in
+  let gen_nested_let = map3 (fun a b c ->
+    Printf.sprintf "let () = let x = %d in let y = %d in let z = %d in print_int (x + y + z); print_newline ()" a b c
+  ) (int_range 0 19) (int_range 0 19) (int_range 0 19) in
+  let gen_bool_logic = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (if %d > %d && %d < 200 then 1 else 0); print_newline ()" a b a
+  ) (int_range 0 99) (int_range 0 99) in
+  let gen_multi_arg = map2 (fun a b ->
+    Printf.sprintf "let () = let f x y = x * y + 1 in print_int (f %d %d); print_newline ()" a b
+  ) (int_range 0 29) (int_range 0 29) in
+  let gen_higher_order = map (fun n ->
+    Printf.sprintf "let () = let apply f x = f x in let double x = x * 2 in print_int (apply double %d); print_newline ()" n
+  ) (int_range 0 29) in
+  let gen_nested_pair = map2 (fun a b ->
+    Printf.sprintf "let () = let p = (%d, (%d, 0)) in print_int (fst p + fst (snd p)); print_newline ()" a b
+  ) (int_range 0 19) (int_range 0 19) in
+  let gen_fib = map (fun n ->
+    Printf.sprintf "let () = let rec fib n = if n <= 1 then n else fib (n-1) + fib (n-2) in print_int (fib %d); print_newline ()" n
+  ) (int_range 0 14) in
+  let gen_divmod = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (%d / %d + %d mod %d); print_newline ()" (a + 1) (b + 1) (a + 1) (b + 1)
+  ) (int_range 0 999) (int_range 0 49) in
+  let gen_neg = map (fun a ->
+    Printf.sprintf "let () = print_int (- %d); print_newline ()" a
+  ) (int_range 0 99) in
+  let gen_variant = map (fun n ->
+    Printf.sprintf "type t = A | B | C\nlet () = print_int (match %s with A -> 10 | B -> 20 | C -> 30); print_newline ()"
+      (match n with 0 -> "A" | 1 -> "B" | _ -> "C")
+  ) (int_range 0 2) in
+  let gen_string = pure "let () = print_string \"hello\"; print_newline ()" in
+  let gen_partial = map (fun n ->
+    Printf.sprintf "let () = let add x y = x + y in let inc = add 1 in print_int (inc %d); print_newline ()" n
+  ) (int_range 0 49) in
+  let gen_ref = map (fun n ->
+    Printf.sprintf "let () = let r = ref %d in r := !r + 1; print_int !r; print_newline ()" n
+  ) (int_range 0 99) in
+  let gen_ref_alias = map (fun n ->
+    Printf.sprintf "let () = let r = ref %d in let s = r in s := !s * 2; print_int !r; print_newline ()" n
+  ) (int_range 0 99) in
+  let gen_ref_loop = map (fun n ->
+    Printf.sprintf "let () = let r = ref 0 in for i = 1 to %d do r := !r + i done; print_int !r; print_newline ()" n
+  ) (int_range 0 9) in
+  let gen_try = map (fun n ->
+    Printf.sprintf "let () = print_int (try if %d > 5 then raise Exit else %d with Exit -> -1); print_newline ()" n n
+  ) (int_range 0 9) in
+  let gen_nested_try = pure
+    "let () = print_int (try try raise Not_found with Exit -> 1 with Not_found -> 2); print_newline ()" in
+  let gen_list = map (fun n ->
+    Printf.sprintf "let () = let rec len = function [] -> 0 | _ :: t -> 1 + len t in print_int (len [%s]); print_newline ()"
+      (String.concat ";" (List.init n (fun i -> string_of_int i)))
+  ) (int_range 0 9) in
+  let gen_closure_ref = map (fun n ->
+    Printf.sprintf "let () = let r = ref 0 in let bump () = r := !r + 1 in for _ = 1 to %d do bump () done; print_int !r; print_newline ()" n
+  ) (int_range 0 19) in
+  let gen_compare = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (compare %d %d); print_newline ()" a b
+  ) (int_range 0 99) (int_range 0 99) in
+  let gen_strlen = map (fun n ->
+    let s = String.init (n + 1) (fun i -> Char.chr (Char.code 'a' + i mod 26)) in
+    Printf.sprintf "let () = print_int (String.length %S); print_newline ()" s
+  ) (int_range 0 9) in
+  let gen_strget = map (fun i ->
+    let s = "hello" in
+    Printf.sprintf "let () = print_int (Char.code (String.get %S %d)); print_newline ()" s i
+  ) (int_range 0 4) in
+  let gen_variant_data = map (fun n ->
+    Printf.sprintf "type myopt = None2 | Some2 of int\nlet () = print_int (match Some2 %d with None2 -> 0 | Some2 x -> x); print_newline ()" n
+  ) (int_range 0 99) in
+  let gen_nested_match = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (match %d with 0 -> (match %d with 0 -> 100 | _ -> 200) | _ -> 300); print_newline ()" a b
+  ) (int_range 0 4) (int_range 0 4) in
+  let gen_seq_let = map2 (fun a b ->
+    Printf.sprintf "let () = let x = %d in let y = x + %d in print_int (x + y); print_newline ()" a b
+  ) (int_range 0 19) (int_range 0 19) in
+  let gen_triple = map3 (fun a b c ->
+    Printf.sprintf "let () = let (a,b,c) = (%d,%d,%d) in print_int (a+b+c); print_newline ()" a b c
+  ) (int_range 0 99) (int_range 0 99) (int_range 0 99) in
+  let gen_bitwise = map2 (fun a b ->
+    Printf.sprintf "let () = print_int (%d land %d); print_newline ()" a b
+  ) (int_range 0 255) (int_range 0 255) in
+  let gen_chain = map (fun n ->
+    Printf.sprintf "let () = let f x = x + 1 in let g x = x * 2 in print_int (g (f %d)); print_newline ()" n
+  ) (int_range 0 9) in
+  let gen_while = map (fun n ->
+    Printf.sprintf "let () = let r = ref 0 in let i = ref 1 in while !i <= %d do r := !r + !i; i := !i + 1 done; print_int !r; print_newline ()" n
+  ) (int_range 0 9) in
+  let gen_mutual_rec = map (fun n ->
+    Printf.sprintf "let () = let rec even n = if n = 0 then true else odd (n-1) and odd n = if n = 0 then false else even (n-1) in print_int (if even %d then 1 else 0); print_newline ()" n
+  ) (int_range 0 19) in
+  oneof [
+    gen_add; gen_mul; gen_cmp; gen_fun; gen_fact; gen_match; gen_pair;
+    gen_sub; gen_nested_let; gen_bool_logic; gen_multi_arg; gen_higher_order;
+    gen_nested_pair; gen_fib; gen_divmod; gen_neg; gen_variant; gen_string;
+    gen_partial; gen_ref; gen_ref_alias; gen_ref_loop; gen_try; gen_nested_try;
+    gen_list; gen_closure_ref; gen_compare; gen_strlen; gen_strget;
+    gen_variant_data; gen_nested_match; gen_seq_let; gen_triple; gen_bitwise;
+    gen_chain; gen_while; gen_mutual_rec;
+  ]
+
+(* Shared temp dir for all tests *)
+let temp_dir = ref ""
+
+let harness_test =
+  QCheck.Test.make ~name:"bytecode interpreter vs ocamlrun" ~count:200
+    (QCheck.make gen_source ~print:Fun.id)
+    (fun source ->
+       with_temp_dir (fun dir ->
+         match compile_and_run dir source with
+         | None ->
+           (* Skip: compile failed, assume valid *)
+           true
+         | Some expected ->
+           try
+             let result, output = run_ours (Filename.concat dir "test.byte") in
+             (match result with
+              | Finished _ -> output = expected
+              | Run_error msg ->
+                Printf.eprintf "Run error: %s\n%!" (string_of_chars msg); false
+              | Out_of_fuel _ ->
+                Printf.eprintf "Out of fuel\n%!"; false)
+           with exn ->
+             Printf.eprintf "Exception: %s\n%!" (Printexc.to_string exn); false))
+
 let () =
-  let num = try int_of_string Sys.argv.(1) with _ -> 20 in
-  let seed = try int_of_string Sys.argv.(2) with _ -> 42 in
-  let rng = Random.State.make [| seed |] in
-  Printf.printf "PBT: %d tests (seed=%d)\n\n%!" num seed;
-  let pass = ref 0 and fail = ref 0 and skip = ref 0 in
-  with_temp_dir (fun dir ->
-    for _ = 1 to num do
-      let gen = generators.(Random.State.int rng (Array.length generators)) in
-      let source = gen rng in
-      Printf.printf "Test: %s\n%!" source;
-      match compile_and_run dir source with
-      | None -> Printf.printf "  SKIP (compile failed)\n%!"; incr skip
-      | Some expected ->
-        Printf.printf "  ocamlrun: %S\n%!" expected;
-        (try
-           let result, output = run_ours (Filename.concat dir "test.byte") in
-           Printf.printf "  ours:     %S\n%!" output;
-           match result with
-           | Finished _ ->
-             if output = expected then (Printf.printf "  PASS\n%!"; incr pass)
-             else (Printf.printf "  FAIL: output mismatch\n%!"; incr fail)
-           | Run_error msg ->
-             Printf.printf "  FAIL: %s\n%!" (string_of_chars msg); incr fail
-           | Out_of_fuel _ ->
-             Printf.printf "  FAIL: out of fuel\n%!"; incr fail
-         with exn ->
-           Printf.printf "  FAIL: %s\n%!" (Printexc.to_string exn); incr fail)
-    done);
-  Printf.printf "\n=== Results: %d pass, %d fail, %d skip ===\n" !pass !fail !skip;
-  if !fail > 0 then exit 1
+  exit (QCheck_base_runner.run_tests ~verbose:true [harness_test])

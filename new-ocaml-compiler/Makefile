@@ -1,4 +1,4 @@
-.PHONY: all build extract test clean
+.PHONY: all build extract test testsuite clean
 
 all: build extract test
 
@@ -14,16 +14,33 @@ extract: build
 test: extract
 	dune build test/harness/harness.exe test/harness/manual_test.exe test/harness/roundtrip_test.exe test/harness/source_interp_test.exe test/harness/compile_test.exe test/harness/bytecode_equiv_test.exe
 	dune exec test/harness/manual_test.exe
-	@echo "--- Bytecode PBT ---"
-	dune exec test/harness/harness.exe -- 200 42
-	@echo "--- Parser Round-trip PBT ---"
-	dune exec test/harness/roundtrip_test.exe -- 500 42 4
-	@echo "--- Source Interpreter PBT ---"
-	dune exec test/harness/source_interp_test.exe -- 100 42
-	@echo "--- Compiler PBT ---"
-	dune exec test/harness/compile_test.exe -- 200 42
-	@echo "--- Bytecode Equivalence PBT (Part 5) ---"
-	dune exec test/harness/bytecode_equiv_test.exe -- 100 42
+	@echo "--- Bytecode PBT (QCheck) ---"
+	dune exec test/harness/harness.exe
+	@echo "--- Parser Round-trip PBT (QCheck) ---"
+	dune exec test/harness/roundtrip_test.exe
+	@echo "--- Source Interpreter PBT (QCheck) ---"
+	dune exec test/harness/source_interp_test.exe
+	@echo "--- Compiler PBT (QCheck) ---"
+	dune exec test/harness/compile_test.exe
+	@echo "--- Bytecode Equivalence PBT (QCheck) ---"
+	dune exec test/harness/bytecode_equiv_test.exe
+
+testsuite: extract
+	dune build test/harness/ocaml_testsuite_runner.exe
+	dune exec test/harness/ocaml_testsuite_runner.exe -- test/ocaml-testsuite/basic
+
+testsuite-all: extract
+	dune build test/harness/ocaml_testsuite_runner.exe
+	dune exec test/harness/ocaml_testsuite_runner.exe -- \
+		test/ocaml-testsuite/basic \
+		test/ocaml-testsuite/basic-more \
+		test/ocaml-testsuite/basic-modules \
+		test/ocaml-testsuite/basic-multdef \
+		test/ocaml-testsuite/basic-private \
+		test/ocaml-testsuite/basic-float \
+		test/ocaml-testsuite/basic-io \
+		test/ocaml-testsuite/basic-io-2 \
+		test/ocaml-testsuite/basic-manyargs
 
 clean:
 	dune clean
