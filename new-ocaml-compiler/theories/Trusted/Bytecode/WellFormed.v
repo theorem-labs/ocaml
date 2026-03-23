@@ -4,7 +4,7 @@
 
 From Stdlib Require Import ZArith PeanoNat Bool List.
 Import ListNotations.
-From OCamlInterp.Trusted Require Import Bytecode.
+From OCamlInterp.Trusted.Bytecode Require Import AST.
 Open Scope Z_scope.
 
 Definition z_fits_i32b (z : Z) : bool :=

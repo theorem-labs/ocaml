@@ -5,7 +5,7 @@
 
 From Stdlib Require Import ZArith List.
 Import ListNotations.
-From OCamlInterp.Trusted Require Import Bytecode Encode WellFormed.
+From OCamlInterp.Trusted.Bytecode Require Import AST Encode WellFormed.
 
 Module Type LoaderCorrectnessSpec.
 

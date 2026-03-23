@@ -9,7 +9,8 @@ From Stdlib Require Import ExtrOcamlNatInt.
 From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
 
-From OCamlInterp.Trusted Require Import Value Bytecode Machine Interp Encode IO.
+From OCamlInterp.Trusted.Bytecode Require Import Value AST Machine Interp Encode.
+From OCamlInterp.Trusted Require Import IO.
 From OCamlInterp Require Import Main.
 From OCamlInterp.Trusted Require Import Observable.
 From OCamlInterp.SemiTrusted Require Import Syntax PrettyPrint.
