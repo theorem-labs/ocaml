@@ -10,7 +10,8 @@ From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
 
 From OCamlInterp Require Import Value Bytecode Machine Interp Syntax PrettyPrint
-                                Observable SourceInterp Compile Correctness.
+                                Observable SourceInterp Compile Correctness Encode Loader
+                                IO Main.
 
 Extraction "Interp_extracted.ml"
   (* Value *)
@@ -30,4 +31,12 @@ Extraction "Interp_extracted.ml"
   (* Source interpreter *)
   svalue env eval eval_program interpret
   (* Compiler *)
-  compile_program.
+  compile_program
+  (* Encoder *)
+  encode_bytecode
+  (* Loader / decoder *)
+  decode_bytecode load_code_section
+  parse_sections find_section section
+  read_u32_le read_i32_le read_u32_be
+  (* Standalone entry point *)
+  main.
