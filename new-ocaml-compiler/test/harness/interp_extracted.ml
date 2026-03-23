@@ -44,6 +44,10 @@ include Coq__1
 
 let rec mul = ( * )
 
+(** val sub : int -> int -> int **)
+
+let rec sub = fun n m -> Stdlib.max 0 (n-m)
+
 (** val eqb : bool -> bool -> bool **)
 
 let eqb b1 b2 =
@@ -526,6 +530,66 @@ module Pos =
 
 module Coq_Pos =
  struct
+  (** val succ : int -> int **)
+
+  let rec succ = Stdlib.Int.succ
+
+  (** val add : int -> int -> int **)
+
+  let rec add = (+)
+
+  (** val add_carry : int -> int -> int **)
+
+  and add_carry x y =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun p ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun q -> (fun p->1+2*p) (add_carry p q))
+        (fun q -> (fun p->2*p) (add_carry p q))
+        (fun _ -> (fun p->1+2*p) (succ p))
+        y)
+      (fun p ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun q -> (fun p->2*p) (add_carry p q))
+        (fun q -> (fun p->1+2*p) (add p q))
+        (fun _ -> (fun p->2*p) (succ p))
+        y)
+      (fun _ ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun q -> (fun p->1+2*p) (succ q))
+        (fun q -> (fun p->2*p) (succ q))
+        (fun _ -> (fun p->1+2*p) 1)
+        y)
+      x
+
+  (** val pred_double : int -> int **)
+
+  let rec pred_double x =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun p -> (fun p->1+2*p) ((fun p->2*p) p))
+      (fun p -> (fun p->1+2*p) (pred_double p))
+      (fun _ -> 1)
+      x
+
+  (** val pred_N : int -> int **)
+
+  let pred_N x =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun p -> ((fun p->2*p) p))
+      (fun p -> (pred_double p))
+      (fun _ -> 0)
+      x
+
+  (** val mul : int -> int -> int **)
+
+  let rec mul = ( * )
+
   (** val iter_op : ('a1 -> 'a1 -> 'a1) -> int -> 'a1 -> 'a1 **)
 
   let rec iter_op op p a =
@@ -539,7 +603,29 @@ module Coq_Pos =
   (** val to_nat : int -> int **)
 
   let to_nat x =
-    iter_op add x (Stdlib.Int.succ 0)
+    iter_op Coq__1.add x (Stdlib.Int.succ 0)
+
+  (** val testbit : int -> int -> bool **)
+
+  let rec testbit p n0 =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun p0 ->
+      (fun f0 fp n -> if n=0 then f0 () else fp n)
+        (fun _ -> true)
+        (fun n1 -> testbit p0 (pred_N n1))
+        n0)
+      (fun p0 ->
+      (fun f0 fp n -> if n=0 then f0 () else fp n)
+        (fun _ -> false)
+        (fun n1 -> testbit p0 (pred_N n1))
+        n0)
+      (fun _ ->
+      (fun f0 fp n -> if n=0 then f0 () else fp n)
+        (fun _ -> true)
+        (fun _ -> false)
+        n0)
+      p
  end
 
 module N =
@@ -682,6 +768,30 @@ module N =
 
 module Coq_N =
  struct
+  (** val add : int -> int -> int **)
+
+  let add = (+)
+
+  (** val mul : int -> int -> int **)
+
+  let mul = ( * )
+
+  (** val testbit : int -> int -> bool **)
+
+  let testbit a n0 =
+    (fun f0 fp n -> if n=0 then f0 () else fp n)
+      (fun _ -> false)
+      (fun p -> Coq_Pos.testbit p n0)
+      a
+
+  (** val to_nat : int -> int **)
+
+  let to_nat a =
+    (fun f0 fp n -> if n=0 then f0 () else fp n)
+      (fun _ -> 0)
+      (fun p -> Pos.to_nat p)
+      a
+
   (** val of_nat : int -> int **)
 
   let of_nat n0 =
@@ -827,6 +937,67 @@ module Z =
 
   let of_N = fun p -> p
 
+  (** val pos_div_eucl : int -> int -> int * int **)
+
+  let rec pos_div_eucl a b =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun a' ->
+      let (q, r) = pos_div_eucl a' b in
+      let r' = add (mul ((fun p->2*p) 1) r) 1 in
+      if ltb r' b
+      then ((mul ((fun p->2*p) 1) q), r')
+      else ((add (mul ((fun p->2*p) 1) q) 1), (sub r' b)))
+      (fun a' ->
+      let (q, r) = pos_div_eucl a' b in
+      let r' = mul ((fun p->2*p) 1) r in
+      if ltb r' b
+      then ((mul ((fun p->2*p) 1) q), r')
+      else ((add (mul ((fun p->2*p) 1) q) 1), (sub r' b)))
+      (fun _ -> if leb ((fun p->2*p) 1) b then (0, 1) else (1, 0))
+      a
+
+  (** val div_eucl : int -> int -> int * int **)
+
+  let div_eucl a b =
+    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      (fun _ -> (0, 0))
+      (fun a' ->
+      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+        (fun _ -> (0, a))
+        (fun _ -> pos_div_eucl a' b)
+        (fun b' ->
+        let (q, r) = pos_div_eucl a' b' in
+        ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+           (fun _ -> ((opp q), 0))
+           (fun _ -> ((opp (add q 1)), (add b r)))
+           (fun _ -> ((opp (add q 1)), (add b r)))
+           r))
+        b)
+      (fun a' ->
+      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+        (fun _ -> (0, a))
+        (fun _ ->
+        let (q, r) = pos_div_eucl a' b in
+        ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+           (fun _ -> ((opp q), 0))
+           (fun _ -> ((opp (add q 1)), (sub b r)))
+           (fun _ -> ((opp (add q 1)), (sub b r)))
+           r))
+        (fun b' -> let (q, r) = pos_div_eucl a' b' in (q, (opp r)))
+        b)
+      a
+
+  (** val div : int -> int -> int **)
+
+  let div a b =
+    let (q, _) = div_eucl a b in q
+
+  (** val modulo : int -> int -> int **)
+
+  let modulo a b =
+    let (_, r) = div_eucl a b in r
+
   (** val quotrem : int -> int -> int * int **)
 
   let quotrem a b =
@@ -967,6 +1138,46 @@ module Z =
     | Gt -> true
     | _ -> false
 
+  (** val odd : int -> bool **)
+
+  let odd z0 =
+    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      (fun _ -> false)
+      (fun p ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun _ -> true)
+        (fun _ -> false)
+        (fun _ -> true)
+        p)
+      (fun p ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun _ -> true)
+        (fun _ -> false)
+        (fun _ -> true)
+        p)
+      z0
+
+  (** val testbit : int -> int -> bool **)
+
+  let testbit a n0 =
+    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      (fun _ -> odd a)
+      (fun p ->
+      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+        (fun _ -> false)
+        (fun a0 -> Coq_Pos.testbit a0 p)
+        (fun a0 -> negb (Coq_N.testbit (Coq_Pos.pred_N a0) p))
+        a)
+      (fun _ -> false)
+      n0
+
+  (** val lnot : int -> int **)
+
+  let lnot a =
+    pred (opp a)
+
   (** val ones : int -> int **)
 
   let ones n0 =
@@ -1016,6 +1227,12 @@ let rec nth_error l n0 =
 let rec rev = function
 | [] -> []
 | x :: l' -> app (rev l') (x :: [])
+
+(** val flat_map : ('a1 -> 'a2 list) -> 'a1 list -> 'a2 list **)
+
+let rec flat_map f = function
+| [] -> []
+| x :: l0 -> app (f x) (flat_map f l0)
 
 (** val fold_left : ('a1 -> 'a2 -> 'a1) -> 'a2 list -> 'a1 -> 'a1 **)
 
@@ -1072,6 +1289,31 @@ let ascii_of_N n0 =
 
 let ascii_of_nat a =
   ascii_of_N (Coq_N.of_nat a)
+
+(** val n_of_digits : bool list -> int **)
+
+let rec n_of_digits = function
+| [] -> 0
+| b :: l' ->
+  Coq_N.add (if b then 1 else 0) (Coq_N.mul ((fun p->2*p) 1) (n_of_digits l'))
+
+(** val n_of_ascii : char -> int **)
+
+let n_of_ascii a =
+  (* If this appears, you're using Ascii internals. Please don't *)
+ (fun f c ->
+  let n = Char.code c in
+  let h i = (n land (1 lsl i)) <> 0 in
+  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
+    (fun a0 a1 a2 a3 a4 a5 a6 a7 ->
+    n_of_digits
+      (a0 :: (a1 :: (a2 :: (a3 :: (a4 :: (a5 :: (a6 :: (a7 :: [])))))))))
+    a
+
+(** val nat_of_ascii : char -> int **)
+
+let nat_of_ascii a =
+  Coq_N.to_nat (n_of_ascii a)
 
 (** val eqb0 : char list -> char list -> bool **)
 
@@ -1232,6 +1474,74 @@ let infix_tag =
     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
     (Stdlib.Int.succ
     0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+(** val string_tag : int **)
+
+let string_tag =
+  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 (** val val_unit : value **)
 
@@ -4715,3 +5025,4744 @@ let compile_program prog =
     (Stdlib.Int.succ
     0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
     prog [] 0
+
+(** val instr_word_size : instruction -> int **)
+
+let instr_word_size = function
+| ACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| POP _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| ASSIGN _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| ENVACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHENVACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSH_RETADDR _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPLY _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPTERM (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| APPTERM1 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPTERM2 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPTERM3 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| RETURN _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GRAB _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| CLOSURE (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| CLOSUREREC (_, _, ofs) ->
+  add (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))) (length ofs)
+| OFFSETCLOSURE _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHOFFSETCLOSURE _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHGETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETGLOBALFIELD (_, _) ->
+  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| PUSHGETGLOBALFIELD (_, _) ->
+  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| SETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| ATOM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHATOM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEBLOCK (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| MAKEBLOCK1 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEBLOCK2 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEBLOCK3 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEFLOATBLOCK _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETFLOATFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| SETFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| SETFLOATFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| BRANCH _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| BRANCHIF _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| BRANCHIFNOT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| SWITCH (_, _, ct, bt) ->
+  add (add (Stdlib.Int.succ (Stdlib.Int.succ 0)) (length ct)) (length bt)
+| PUSHTRAP _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| C_CALL (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| CONSTINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHCONSTINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| OFFSETINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| OFFSETREF _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETPUBMET _ -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BEQ (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BNEQ (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BLTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BLEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BGTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BGEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BULTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BUGEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| RESUMETERM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| REPERFORMTERM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| _ -> Stdlib.Int.succ 0
+
+(** val build_offset_list : instruction list -> int -> int list **)
+
+let rec build_offset_list code acc =
+  match code with
+  | [] -> []
+  | i :: rest -> acc :: (build_offset_list rest (add acc (instr_word_size i)))
+
+(** val offset_map : instruction list -> int list **)
+
+let offset_map code =
+  build_offset_list code 0
+
+(** val lookup_offset : int list -> int -> int **)
+
+let lookup_offset omap idx =
+  match nth_error omap (Z.to_nat idx) with
+  | Some n0 -> Z.of_nat n0
+  | None -> 0
+
+(** val encode_word_le : int -> int list **)
+
+let encode_word_le v =
+  let u =
+    Z.coq_land v ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      1)))))))))))))))))))))))))))))))
+  in
+  let b0 =
+    Z.coq_land u ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  let b1 =
+    Z.coq_land (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  let b2 =
+    Z.coq_land
+      (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+        1)))))
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  let b3 =
+    Z.coq_land
+      (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+        1)))))
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  b0 :: (b1 :: (b2 :: (b3 :: [])))
+
+(** val emit_words : int list -> int list **)
+
+let emit_words ws =
+  flat_map encode_word_le ws
+
+(** val rel_offset : int list -> int -> int -> int **)
+
+let rel_offset omap from_word target_idx =
+  Z.sub (lookup_offset omap target_idx) from_word
+
+(** val encode_instr : int list -> int -> instruction -> int list **)
+
+let encode_instr omap idx i =
+  let w = Z.of_nat (match nth_error omap idx with
+                    | Some n0 -> n0
+                    | None -> 0)
+  in
+  (match i with
+   | ACC n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))) :: ((Z.of_nat n0) :: []))
+   | PUSH ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))) :: [])
+   | PUSHACC n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | POP n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | ASSIGN n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | ENVACC n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | PUSHENVACC n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1)))) :: ((Z.of_nat n0) :: []))
+   | PUSH_RETADDR t ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1)))) :: ((rel_offset omap (Z.add w 1) t) :: []))
+   | APPLY n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | APPLY1 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | APPLY2 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | APPLY3 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | APPTERM (n0, s) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: ((Z.of_nat s) :: [])))
+   | APPTERM1 s ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
+   | APPTERM2 s ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
+   | APPTERM3 s ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
+   | RETURN n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | RESTART ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | GRAB n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | CLOSURE (nv, codeptr) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1))))) :: ((Z.of_nat nv) :: ((rel_offset omap
+                                      (Z.add w ((fun p->2*p) 1)) codeptr) :: [])))
+   | CLOSUREREC (nf, nv, ofs_list) ->
+     emit_words
+       (app (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         ((fun p->2*p) 1))))) :: ((Z.of_nat nf) :: ((Z.of_nat nv) :: [])))
+         (map (fun t -> rel_offset omap (Z.add w ((fun p->1+2*p) 1)) t)
+           ofs_list))
+   | OFFSETCLOSURE n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: (n0 :: []))
+   | PUSHOFFSETCLOSURE n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: (n0 :: []))
+   | GETGLOBAL n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | PUSHGETGLOBAL n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | GETGLOBALFIELD (n0, p) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p)
+       1))))) :: ((Z.of_nat n0) :: ((Z.of_nat p) :: [])))
+   | PUSHGETGLOBALFIELD (n0, p) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: ((Z.of_nat p) :: [])))
+   | SETGLOBAL n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | ATOM t ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t) :: []))
+   | PUSHATOM t ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t) :: []))
+   | MAKEBLOCK (tag, sz) ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p)
+       1))))) :: ((Z.of_nat sz) :: ((Z.of_nat tag) :: [])))
+   | MAKEBLOCK1 t ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t) :: []))
+   | MAKEBLOCK2 t ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat t) :: []))
+   | MAKEBLOCK3 t ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat t) :: []))
+   | MAKEFLOATBLOCK s ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat s) :: []))
+   | GETFIELD n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))))) :: ((Z.of_nat n0) :: []))
+   | GETFLOATFIELD n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat n0) :: []))
+   | SETFIELD n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))))) :: ((Z.of_nat n0) :: []))
+   | SETFLOATFIELD n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))))) :: ((Z.of_nat n0) :: []))
+   | VECTLENGTH ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1)))))) :: [])
+   | GETVECTITEM ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | SETVECTITEM ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | GETBYTESCHAR ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | SETBYTESCHAR ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | GETSTRINGCHAR ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | BRANCH t ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t) :: []))
+   | BRANCHIF t ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t) :: []))
+   | BRANCHIFNOT t ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t) :: []))
+   | SWITCH (nc, nb, ct, bt) ->
+     let sizes =
+       Z.coq_lor (Z.of_nat nc)
+         (Z.shiftl (Z.of_nat nb) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) 1)))))
+     in
+     let base = Z.add w ((fun p->2*p) 1) in
+     let ct_rels = map (fun t -> rel_offset omap base t) ct in
+     let bt_rels = map (fun t -> rel_offset omap base t) bt in
+     emit_words
+       (app (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+         ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: (sizes :: []))
+         (app ct_rels bt_rels))
+   | BOOLNOT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | PUSHTRAP t ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t) :: []))
+   | POPTRAP ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | RAISE ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | RERAISE ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | RAISE_NOTRACE ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | CHECK_SIGNALS ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | C_CALL (narg, prim) ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->1+2*p)
+       1)))))) :: ((Z.of_nat narg) :: ((Z.of_nat prim) :: [])))
+   | CONSTINT n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
+   | PUSHCONSTINT n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
+   | NEGINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ADDINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | SUBINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | MULINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | DIVINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | MODINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ANDINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ORINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | XORINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LSLINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LSRINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ASRINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | EQ ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | NEQ ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LTINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LEINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | GTINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | GEINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | OFFSETINT n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
+   | OFFSETREF n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: (n0 :: []))
+   | ISINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | GETMETHOD ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | GETPUBMET t ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (t :: (0 :: [])))
+   | GETDYNMET ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: [])
+   | BEQ (n0, t) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | BNEQ (n0, t) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | BLTINT (n0, t) ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | BLEINT (n0, t) ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | BGTINT (n0, t) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | BGEINT (n0, t) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | ULTINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | UGEINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | BULTINT (n0, t) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | BUGEINT (n0, t) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t) :: [])))
+   | STOP ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: [])
+   | EVENT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | BREAK ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | PERFORM ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | RESUME ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | RESUMETERM n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: ((Z.of_nat n0) :: []))
+   | REPERFORMTERM n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: ((Z.of_nat n0) :: [])))
+
+(** val encode_instrs : int list -> int -> instruction list -> int list **)
+
+let rec encode_instrs omap idx = function
+| [] -> []
+| i :: rest ->
+  app (encode_instr omap idx i)
+    (encode_instrs omap (Stdlib.Int.succ idx) rest)
+
+(** val encode_bytecode : instruction list -> int list **)
+
+let encode_bytecode code =
+  let omap = offset_map code in encode_instrs omap 0 code
+
+(** val byte_at : int list -> int -> int **)
+
+let rec byte_at data off =
+  match data with
+  | [] -> 0
+  | b :: rest ->
+    ((fun fO fS n -> if n=0 then fO () else fS (n-1))
+       (fun _ -> b)
+       (fun n0 -> byte_at rest n0)
+       off)
+
+(** val read_u32_le : int list -> int -> int **)
+
+let read_u32_le data off =
+  let b0 = byte_at data off in
+  let b1 = byte_at data (Stdlib.Int.succ off) in
+  let b2 = byte_at data (Stdlib.Int.succ (Stdlib.Int.succ off)) in
+  let b3 =
+    byte_at data (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ off)))
+  in
+  Z.coq_lor b0
+    (Z.coq_lor (Z.shiftl b1 ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))
+      (Z.coq_lor
+        (Z.shiftl b2 ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+          1)))))
+        (Z.shiftl b3 ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+          ((fun p->1+2*p) 1)))))))
+
+(** val read_i32_le : int list -> int -> int **)
+
+let read_i32_le data off =
+  let u = read_u32_le data off in
+  if Z.testbit u ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))
+  then Z.coq_lor u
+         (Z.lnot
+           (Z.ones ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) 1)))))))
+  else u
+
+(** val read_u32_be : int list -> int -> int **)
+
+let read_u32_be data off =
+  let b0 = byte_at data off in
+  let b1 = byte_at data (Stdlib.Int.succ off) in
+  let b2 = byte_at data (Stdlib.Int.succ (Stdlib.Int.succ off)) in
+  let b3 =
+    byte_at data (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ off)))
+  in
+  Z.coq_lor
+    (Z.shiftl b0 ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+      1)))))
+    (Z.coq_lor
+      (Z.shiftl b1 ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+        1)))))
+      (Z.coq_lor (Z.shiftl b2 ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))
+        b3))
+
+type section = { sec_name : int; sec_offset : int; sec_length : int }
+
+(** val sum_section_lengths : int list -> int -> int -> int **)
+
+let rec sum_section_lengths data toc_offset n0 =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> 0)
+    (fun n' ->
+    let len =
+      Z.to_nat
+        (read_u32_be data
+          (add
+            (add toc_offset
+              (mul n' (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ 0))))))))))
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ 0))))))
+    in
+    add len (sum_section_lengths data toc_offset n'))
+    n0
+
+(** val build_sections :
+    int list -> int -> int -> int -> int -> section list **)
+
+let rec build_sections data toc_offset current i count =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> [])
+    (fun count' ->
+    let entry =
+      add toc_offset
+        (mul i (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ 0)))))))))
+    in
+    let name = read_u32_be data entry in
+    let slen =
+      Z.to_nat
+        (read_u32_be data
+          (add entry (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ 0))))))
+    in
+    { sec_name = name; sec_offset = current; sec_length =
+    slen } :: (build_sections data toc_offset (add current slen)
+                (Stdlib.Int.succ i) count'))
+    count
+
+(** val parse_sections : int list -> int -> section list **)
+
+let parse_sections data data_len =
+  let num_sections =
+    Z.to_nat
+      (read_u32_be data
+        (sub data_len (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ 0))))))))))))))))))
+  in
+  let toc_offset =
+    sub
+      (sub data_len (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ 0)))))))))))))))))
+      (mul num_sections (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ 0)))))))))
+  in
+  let total_data = sum_section_lengths data toc_offset num_sections in
+  let data_start = sub toc_offset total_data in
+  build_sections data toc_offset data_start 0 num_sections
+
+(** val cODE_name : int **)
+
+let cODE_name =
+  Z.coq_lor
+    (Z.shiftl ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->1+2*p) 1)))))
+    (Z.coq_lor
+      (Z.shiftl ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+        ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p)
+        ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1)))))
+      (Z.coq_lor
+        (Z.shiftl ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+          ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+          ((fun p->2*p) 1))))
+        ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+        ((fun p->2*p) ((fun p->2*p) 1))))))))
+
+(** val find_section : section list -> int -> section option **)
+
+let rec find_section secs name =
+  match secs with
+  | [] -> None
+  | s :: rest ->
+    if Z.eqb s.sec_name name then Some s else find_section rest name
+
+type raw_instr = { ri_word_offset : int; ri_opcode : int;
+                   ri_operands : int list }
+
+(** val operand_count : int -> int option **)
+
+let operand_count op =
+  if Z.eqb op ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1)))
+  then Some (Stdlib.Int.succ 0)
+  else if Z.eqb op ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+            1))))
+       then Some (Stdlib.Int.succ 0)
+       else if Z.eqb op ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+                 ((fun p->2*p) 1))))
+            then Some (Stdlib.Int.succ 0)
+            else if Z.eqb op ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+                      ((fun p->2*p) 1))))
+                 then Some (Stdlib.Int.succ 0)
+                 else if Z.eqb op ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+                           ((fun p->1+2*p) 1))))
+                      then Some (Stdlib.Int.succ 0)
+                      else if Z.eqb op ((fun p->2*p) ((fun p->1+2*p)
+                                ((fun p->1+2*p) ((fun p->1+2*p) 1))))
+                           then Some (Stdlib.Int.succ 0)
+                           else if Z.eqb op ((fun p->1+2*p) ((fun p->1+2*p)
+                                     ((fun p->1+2*p) ((fun p->1+2*p) 1))))
+                                then Some (Stdlib.Int.succ 0)
+                                else if Z.eqb op ((fun p->2*p) ((fun p->2*p)
+                                          ((fun p->2*p) ((fun p->2*p)
+                                          ((fun p->2*p) 1)))))
+                                     then Some (Stdlib.Int.succ 0)
+                                     else if Z.eqb op ((fun p->1+2*p)
+                                               ((fun p->2*p) ((fun p->1+2*p)
+                                               ((fun p->2*p) ((fun p->2*p)
+                                               1)))))
+                                          then Some (Stdlib.Int.succ 0)
+                                          else if Z.eqb op ((fun p->2*p)
+                                                    ((fun p->1+2*p)
+                                                    ((fun p->1+2*p)
+                                                    ((fun p->2*p)
+                                                    ((fun p->2*p) 1)))))
+                                               then Some (Stdlib.Int.succ 0)
+                                               else if Z.eqb op
+                                                         ((fun p->1+2*p)
+                                                         ((fun p->1+2*p)
+                                                         ((fun p->1+2*p)
+                                                         ((fun p->2*p)
+                                                         ((fun p->2*p) 1)))))
+                                                    then Some
+                                                           (Stdlib.Int.succ 0)
+                                                    else if Z.eqb op
+                                                              ((fun p->2*p)
+                                                              ((fun p->2*p)
+                                                              ((fun p->2*p)
+                                                              ((fun p->1+2*p)
+                                                              ((fun p->2*p)
+                                                              1)))))
+                                                         then Some
+                                                                (Stdlib.Int.succ
+                                                                0)
+                                                         else if Z.eqb op
+                                                                   ((fun p->2*p)
+                                                                   ((fun p->1+2*p)
+                                                                   ((fun p->2*p)
+                                                                   ((fun p->1+2*p)
+                                                                   ((fun p->2*p)
+                                                                   1)))))
+                                                              then Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                              else if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                   then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                   else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then None
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then None
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then None
+                                                                    else 
+                                                                    Some 0
+
+(** val read_operands : int list -> int -> int -> int -> int list * int **)
+
+let rec read_operands data code_offset pos n0 =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> ([], pos))
+    (fun n' ->
+    let v = read_i32_le data (add code_offset pos) in
+    let (rest, pos') =
+      read_operands data code_offset
+        (add pos (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ 0)))))
+        n'
+    in
+    ((v :: rest), pos'))
+    n0
+
+(** val decode_raw_aux :
+    int list -> int -> int -> int -> int -> raw_instr list **)
+
+let rec decode_raw_aux data code_offset code_length pos fuel =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> [])
+    (fun fuel' ->
+    if (<=) code_length pos
+    then []
+    else let word =
+           Nat.div pos (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+             (Stdlib.Int.succ 0))))
+         in
+         let op = read_u32_le data (add code_offset pos) in
+         let pos1 =
+           add pos (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+             (Stdlib.Int.succ 0))))
+         in
+         if Z.eqb op ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+              ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) 1))))))
+         then let sizes = read_i32_le data (add code_offset pos1) in
+              let pos2 =
+                add pos1 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                  (Stdlib.Int.succ 0))))
+              in
+              let nc =
+                Z.to_nat
+                  (Z.coq_land sizes
+                    (Z.ones ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                      ((fun p->2*p) 1))))))
+              in
+              let nb =
+                Z.to_nat
+                  (Z.shiftr sizes ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                    ((fun p->2*p) 1)))))
+              in
+              let (tbl, pos3) =
+                read_operands data code_offset pos2 (add nc nb)
+              in
+              { ri_word_offset = word; ri_opcode = op; ri_operands =
+              (sizes :: tbl) } :: (decode_raw_aux data code_offset
+                                    code_length pos3 fuel')
+         else if Z.eqb op ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+                   ((fun p->1+2*p) ((fun p->2*p) 1)))))
+              then let nf = read_i32_le data (add code_offset pos1) in
+                   let pos2 =
+                     add pos1 (Stdlib.Int.succ (Stdlib.Int.succ
+                       (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                   in
+                   let nv = read_i32_le data (add code_offset pos2) in
+                   let pos3 =
+                     add pos2 (Stdlib.Int.succ (Stdlib.Int.succ
+                       (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                   in
+                   let (ofs_list, pos4) =
+                     read_operands data code_offset pos3 (Z.to_nat nf)
+                   in
+                   { ri_word_offset = word; ri_opcode = op; ri_operands =
+                   (nf :: (nv :: ofs_list)) } :: (decode_raw_aux data
+                                                   code_offset code_length
+                                                   pos4 fuel')
+              else if Z.eqb op ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+                        ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+                        ((fun p->2*p) 1)))))))
+                   then let tag = read_i32_le data (add code_offset pos1) in
+                        let pos2 =
+                          add pos1 (Stdlib.Int.succ (Stdlib.Int.succ
+                            (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                        in
+                        let pos3 =
+                          add pos2 (Stdlib.Int.succ (Stdlib.Int.succ
+                            (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                        in
+                        { ri_word_offset = word; ri_opcode = op;
+                        ri_operands =
+                        (tag :: []) } :: (decode_raw_aux data code_offset
+                                           code_length pos3 fuel')
+                   else (match operand_count op with
+                         | Some n0 ->
+                           let (ops, pos2) =
+                             read_operands data code_offset pos1 n0
+                           in
+                           { ri_word_offset = word; ri_opcode = op;
+                           ri_operands =
+                           ops } :: (decode_raw_aux data code_offset
+                                      code_length pos2 fuel')
+                         | None -> []))
+    fuel
+
+(** val decode_raw : int list -> int -> int -> raw_instr list **)
+
+let decode_raw data code_offset code_length =
+  decode_raw_aux data code_offset code_length 0
+    (add code_length (Stdlib.Int.succ 0))
+
+(** val build_offset_map_aux : raw_instr list -> int -> (int * int) list **)
+
+let rec build_offset_map_aux raws idx =
+  match raws with
+  | [] -> []
+  | ri :: rest ->
+    (ri.ri_word_offset,
+      idx) :: (build_offset_map_aux rest (Stdlib.Int.succ idx))
+
+(** val build_offset_map : raw_instr list -> (int * int) list **)
+
+let build_offset_map raws =
+  build_offset_map_aux raws 0
+
+(** val lookup_offset0 : (int * int) list -> int -> int **)
+
+let rec lookup_offset0 m w =
+  match m with
+  | [] -> 0
+  | p :: rest ->
+    let (k, v) = p in if (=) k w then v else lookup_offset0 rest w
+
+(** val resolve_branch : (int * int) list -> int -> int -> int **)
+
+let resolve_branch omap wpos rel =
+  let target = Z.to_nat (Z.add wpos rel) in
+  Z.of_nat (lookup_offset0 omap target)
+
+(** val nat_of_z : int -> int **)
+
+let nat_of_z =
+  Z.to_nat
+
+(** val znth : int -> int list -> int **)
+
+let znth n0 l =
+  match nth_error l n0 with
+  | Some v -> v
+  | None -> 0
+
+(** val resolve_one : (int * int) list -> raw_instr -> instruction **)
+
+let resolve_one omap ri =
+  let op = ri.ri_opcode in
+  let ops = ri.ri_operands in
+  let w = ri.ri_word_offset in
+  let br = fun n0 ->
+    resolve_branch omap (Z.of_nat (add (add w (Stdlib.Int.succ 0)) n0))
+      (znth n0 ops)
+  in
+  if Z.eqb op 0
+  then ACC 0
+  else if Z.eqb op 1
+       then ACC (Stdlib.Int.succ 0)
+       else if Z.eqb op ((fun p->2*p) 1)
+            then ACC (Stdlib.Int.succ (Stdlib.Int.succ 0))
+            else if Z.eqb op ((fun p->1+2*p) 1)
+                 then ACC (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                        0)))
+                 else if Z.eqb op ((fun p->2*p) ((fun p->2*p) 1))
+                      then ACC (Stdlib.Int.succ (Stdlib.Int.succ
+                             (Stdlib.Int.succ (Stdlib.Int.succ 0))))
+                      else if Z.eqb op ((fun p->1+2*p) ((fun p->2*p) 1))
+                           then ACC (Stdlib.Int.succ (Stdlib.Int.succ
+                                  (Stdlib.Int.succ (Stdlib.Int.succ
+                                  (Stdlib.Int.succ 0)))))
+                           else if Z.eqb op ((fun p->2*p) ((fun p->1+2*p) 1))
+                                then ACC (Stdlib.Int.succ (Stdlib.Int.succ
+                                       (Stdlib.Int.succ (Stdlib.Int.succ
+                                       (Stdlib.Int.succ (Stdlib.Int.succ
+                                       0))))))
+                                else if Z.eqb op ((fun p->1+2*p)
+                                          ((fun p->1+2*p) 1))
+                                     then ACC (Stdlib.Int.succ
+                                            (Stdlib.Int.succ (Stdlib.Int.succ
+                                            (Stdlib.Int.succ (Stdlib.Int.succ
+                                            (Stdlib.Int.succ (Stdlib.Int.succ
+                                            0)))))))
+                                     else if Z.eqb op ((fun p->2*p)
+                                               ((fun p->2*p) ((fun p->2*p)
+                                               1)))
+                                          then ACC (nat_of_z (znth 0 ops))
+                                          else if Z.eqb op ((fun p->1+2*p)
+                                                    ((fun p->2*p)
+                                                    ((fun p->2*p) 1)))
+                                               then PUSH
+                                               else if Z.eqb op ((fun p->2*p)
+                                                         ((fun p->1+2*p)
+                                                         ((fun p->2*p) 1)))
+                                                    then PUSHACC 0
+                                                    else if Z.eqb op
+                                                              ((fun p->1+2*p)
+                                                              ((fun p->1+2*p)
+                                                              ((fun p->2*p)
+                                                              1)))
+                                                         then PUSHACC
+                                                                (Stdlib.Int.succ
+                                                                0)
+                                                         else if Z.eqb op
+                                                                   ((fun p->2*p)
+                                                                   ((fun p->2*p)
+                                                                   ((fun p->1+2*p)
+                                                                   1)))
+                                                              then PUSHACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                              else if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))
+                                                                   then 
+                                                                    PUSHACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                   else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))
+                                                                    then 
+                                                                    PUSHACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))
+                                                                    then 
+                                                                    PUSHACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))))))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))))))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHACC
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    POP
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    ASSIGN
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    ENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    ENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    ENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    ENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    ENVACC
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHENVACC
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSHENVACC
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))
+                                                                    then 
+                                                                    PUSH_RETADDR
+                                                                    (br 0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPLY
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPLY1
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPLY2
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPLY3
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPTERM
+                                                                    ((nat_of_z
+                                                                    (znth 0
+                                                                    ops)),
+                                                                    (nat_of_z
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    0) ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPTERM1
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPTERM2
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    APPTERM3
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    RETURN
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    RESTART
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    GRAB
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    CLOSURE
+                                                                    ((nat_of_z
+                                                                    (znth 0
+                                                                    ops)),
+                                                                    (resolve_branch
+                                                                    omap
+                                                                    (Z.of_nat
+                                                                    (add w
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))))
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    0) ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    let nf =
+                                                                    nat_of_z
+                                                                    (znth 0
+                                                                    ops)
+                                                                    in
+                                                                    let nv =
+                                                                    nat_of_z
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    0) ops)
+                                                                    in
+                                                                    let base =
+                                                                    Z.of_nat
+                                                                    (add w
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))))
+                                                                    in
+                                                                    let resolve_list =
+                                                                    let rec resolve_list = function
+                                                                    | [] -> []
+                                                                    | o :: rest ->
+                                                                    (resolve_branch
+                                                                    omap base
+                                                                    o) :: 
+                                                                    (resolve_list
+                                                                    rest)
+                                                                    in resolve_list
+                                                                    in
+                                                                    CLOSUREREC
+                                                                    (nf, nv,
+                                                                    (resolve_list
+                                                                    (skipn
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)) ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    OFFSETCLOSURE
+                                                                    ((~-)
+                                                                    ((fun p->1+2*p)
+                                                                    1))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    OFFSETCLOSURE
+                                                                    0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    OFFSETCLOSURE
+                                                                    ((fun p->1+2*p)
+                                                                    1)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    OFFSETCLOSURE
+                                                                    (znth 0
+                                                                    ops)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHOFFSETCLOSURE
+                                                                    ((~-)
+                                                                    ((fun p->1+2*p)
+                                                                    1))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHOFFSETCLOSURE
+                                                                    0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHOFFSETCLOSURE
+                                                                    ((fun p->1+2*p)
+                                                                    1)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHOFFSETCLOSURE
+                                                                    (znth 0
+                                                                    ops)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    GETGLOBAL
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHGETGLOBAL
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    GETGLOBALFIELD
+                                                                    ((nat_of_z
+                                                                    (znth 0
+                                                                    ops)),
+                                                                    (nat_of_z
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    0) ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHGETGLOBALFIELD
+                                                                    ((nat_of_z
+                                                                    (znth 0
+                                                                    ops)),
+                                                                    (nat_of_z
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    0) ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    SETGLOBAL
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    ATOM 0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    ATOM
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHATOM 0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    PUSHATOM
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    MAKEBLOCK
+                                                                    ((nat_of_z
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    0) ops)),
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1)))))
+                                                                    then 
+                                                                    MAKEBLOCK1
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    MAKEBLOCK2
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    MAKEBLOCK3
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    MAKEFLOATBLOCK
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETFIELD 0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETFIELD
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETFIELD
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETFIELD
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETFIELD
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETFLOATFIELD
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETFIELD 0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETFIELD
+                                                                    (Stdlib.Int.succ
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETFIELD
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETFIELD
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETFIELD
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETFLOATFIELD
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    VECTLENGTH
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETVECTITEM
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETVECTITEM
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    GETBYTESCHAR
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SETBYTESCHAR
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    BRANCH
+                                                                    (br 0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    BRANCHIF
+                                                                    (br 0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    BRANCHIFNOT
+                                                                    (br 0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    let sizes =
+                                                                    znth 0 ops
+                                                                    in
+                                                                    let nc =
+                                                                    Z.to_nat
+                                                                    (Z.coq_land
+                                                                    sizes
+                                                                    (Z.ones
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    in
+                                                                    let nb =
+                                                                    Z.to_nat
+                                                                    (Z.shiftr
+                                                                    sizes
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))
+                                                                    in
+                                                                    let base =
+                                                                    Z.of_nat
+                                                                    (add w
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    in
+                                                                    let resolve_n =
+                                                                    let rec resolve_n start count =
+                                                                      
+                                                                    (fun fO fS n -> if n=0 then fO () else fS (n-1))
+                                                                    (fun _ ->
+                                                                    [])
+                                                                    (fun count' ->
+                                                                    (resolve_branch
+                                                                    omap base
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    start)
+                                                                    ops)) :: 
+                                                                    (resolve_n
+                                                                    (Stdlib.Int.succ
+                                                                    start)
+                                                                    count'))
+                                                                    count
+                                                                    in resolve_n
+                                                                    in
+                                                                    SWITCH
+                                                                    (nc, nb,
+                                                                    (resolve_n
+                                                                    0 nc),
+                                                                    (resolve_n
+                                                                    nc nb))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    BOOLNOT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    PUSHTRAP
+                                                                    (br 0)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    POPTRAP
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then RAISE
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    CHECK_SIGNALS
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    C_CALL
+                                                                    ((Stdlib.Int.succ
+                                                                    0),
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    C_CALL
+                                                                    ((Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)),
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    C_CALL
+                                                                    ((Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))),
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    C_CALL
+                                                                    ((Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0)))),
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    C_CALL
+                                                                    ((Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    (Stdlib.Int.succ
+                                                                    0))))),
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    C_CALL
+                                                                    ((nat_of_z
+                                                                    (znth 0
+                                                                    ops)),
+                                                                    (nat_of_z
+                                                                    (znth
+                                                                    (Stdlib.Int.succ
+                                                                    0) ops)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    CONSTINT 0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    CONSTINT 1
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    CONSTINT
+                                                                    ((fun p->2*p)
+                                                                    1)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    CONSTINT
+                                                                    ((fun p->1+2*p)
+                                                                    1)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    CONSTINT
+                                                                    (znth 0
+                                                                    ops)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    PUSHCONSTINT
+                                                                    0
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    PUSHCONSTINT
+                                                                    1
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    PUSHCONSTINT
+                                                                    ((fun p->2*p)
+                                                                    1)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    PUSHCONSTINT
+                                                                    ((fun p->1+2*p)
+                                                                    1)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    PUSHCONSTINT
+                                                                    (znth 0
+                                                                    ops)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    NEGINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    ADDINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    SUBINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    MULINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    DIVINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    MODINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    ANDINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then ORINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    XORINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    LSLINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    LSRINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    ASRINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then EQ
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then NEQ
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then LTINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then LEINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then GTINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then GEINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    1))))))
+                                                                    then 
+                                                                    OFFSETINT
+                                                                    (znth 0
+                                                                    ops)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    OFFSETREF
+                                                                    (znth 0
+                                                                    ops)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then ISINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    GETMETHOD
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BEQ
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BNEQ
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BLTINT
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BLEINT
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BGTINT
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BGEINT
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    ULTINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    UGEINT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BULTINT
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    BUGEINT
+                                                                    ((znth 0
+                                                                    ops),
+                                                                    (br
+                                                                    (Stdlib.Int.succ
+                                                                    0)))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    GETPUBMET
+                                                                    (znth 0
+                                                                    ops)
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    GETDYNMET
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then STOP
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then EVENT
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then BREAK
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    RERAISE
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    RAISE_NOTRACE
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    GETSTRINGCHAR
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    PERFORM
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    RESUME
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    RESUMETERM
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else 
+                                                                    if 
+                                                                    Z.eqb op
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->1+2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1)))))))
+                                                                    then 
+                                                                    REPERFORMTERM
+                                                                    (nat_of_z
+                                                                    (znth 0
+                                                                    ops))
+                                                                    else STOP
+
+(** val resolve_all : raw_instr list -> instruction list **)
+
+let resolve_all raws =
+  let omap = build_offset_map raws in map (resolve_one omap) raws
+
+(** val decode_bytecode : int list -> int -> int -> instruction list **)
+
+let decode_bytecode data code_offset code_length =
+  resolve_all (decode_raw data code_offset code_length)
+
+(** val load_code_section : int list -> int -> instruction list option **)
+
+let load_code_section data data_len =
+  let secs = parse_sections data data_len in
+  (match find_section secs cODE_name with
+   | Some s -> Some (decode_bytecode data s.sec_offset s.sec_length)
+   | None -> None)
+
+type byte_string = bytes
+
+(** val read_file : int list -> byte_string **)
+
+let read_file = 
+  fun cs ->
+    let buf = Buffer.create 256 in
+    let rec to_chars = function
+      | [] -> ()
+      | c :: rest -> Buffer.add_char buf (Char.chr c); to_chars rest
+    in
+    to_chars cs;
+    let filename = Buffer.contents buf in
+    let ic = open_in_bin filename in
+    let n = in_channel_length ic in
+    let data = Bytes.create n in
+    really_input ic data 0 n;
+    close_in ic;
+    data
+
+
+(** val byte_string_to_list : byte_string -> int list **)
+
+let byte_string_to_list = 
+  fun bs ->
+    let n = Bytes.length bs in
+    let rec build i acc =
+      if i < 0 then acc
+      else build (i - 1) (Char.code (Bytes.get bs i) :: acc)
+    in
+    build (n - 1) []
+
+
+(** val byte_string_length : byte_string -> int **)
+
+let byte_string_length = 
+  fun bs -> Bytes.length bs
+
+
+(** val sys_argv : int list list **)
+
+let sys_argv = 
+  let argv = Array.to_list Sys.argv in
+  List.map (fun s ->
+    let n = String.length s in
+    let rec build i acc =
+      if i < 0 then acc
+      else build (i - 1) (Char.code s.[i] :: acc)
+    in
+    build (n - 1) []
+  ) argv
+
+
+(** val unmarshal_globals : byte_string -> int -> int -> int list list **)
+
+let unmarshal_globals = 
+  fun bs ofs len ->
+    let sub = Bytes.sub bs ofs len in
+    let obj : Obj.t = Marshal.from_bytes sub 0 in
+    let arr : Obj.t array = Obj.obj obj in
+    let rec obj_to_encoding (o : Obj.t) : int list =
+      if Obj.is_int o then [0; (Obj.obj o : int)]
+      else
+        let tag = Obj.tag o in
+        if tag = Obj.string_tag then
+          let s : string = Obj.obj o in
+          let n = String.length s in
+          let rec chars i acc =
+            if i < 0 then acc
+            else chars (i - 1) (Char.code s.[i] :: acc)
+          in
+          2 :: n :: chars (n - 1) []
+        else if tag < Obj.no_scan_tag then
+          let size = Obj.size o in
+          let fields = List.concat_map (fun i ->
+            obj_to_encoding (Obj.field o i)
+          ) (List.init size Fun.id) in
+          1 :: tag :: size :: fields
+        else
+          [1; tag; 0]
+    in
+    Array.to_list (Array.map obj_to_encoding arr)
+
+
+(** val load_primitives : byte_string -> int -> int -> int list list **)
+
+let load_primitives = 
+  fun bs ofs len ->
+    let raw = Bytes.sub_string bs ofs len in
+    let prims = List.filter (fun s -> String.length s > 0)
+                  (String.split_on_char '\000' raw) in
+    List.map (fun s ->
+      let n = String.length s in
+      let rec build i acc =
+        if i < 0 then acc
+        else build (i - 1) (Char.code s.[i] :: acc)
+      in
+      build (n - 1) []
+    ) prims
+
+
+(** val decode_value_aux : int list -> int -> value * int list **)
+
+let rec decode_value_aux data fuel =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> ((Val_int 0), data))
+    (fun fuel' ->
+    match data with
+    | [] -> ((Val_int 0), [])
+    | z0 :: l ->
+      ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+         (fun _ ->
+         match l with
+         | [] -> ((Val_int 0), [])
+         | n0 :: rest -> ((Val_int n0), rest))
+         (fun p ->
+         (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+           (fun _ -> ((Val_int 0), []))
+           (fun p0 ->
+           (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+             (fun _ -> ((Val_int 0), []))
+             (fun _ -> ((Val_int 0), []))
+             (fun _ ->
+             match l with
+             | [] -> ((Val_int 0), [])
+             | len :: rest ->
+               let chars = firstn (Z.to_nat len) rest in
+               let rest' = skipn (Z.to_nat len) rest in
+               ((Val_block (string_tag, (map (fun x -> Val_int x) chars))),
+               rest'))
+             p0)
+           (fun _ ->
+           match l with
+           | [] -> ((Val_int 0), [])
+           | tag :: l0 ->
+             (match l0 with
+              | [] -> ((Val_int 0), [])
+              | size :: rest ->
+                let (fields, rest') =
+                  let rec read_fields r n0 =
+                    (fun fO fS n -> if n=0 then fO () else fS (n-1))
+                      (fun _ -> ([], r))
+                      (fun n' ->
+                      let (v, r') = decode_value_aux r fuel' in
+                      let (vs, r'') = read_fields r' n' in ((v :: vs), r''))
+                      n0
+                  in read_fields rest (Z.to_nat size)
+                in
+                ((Val_block ((Z.to_nat tag), fields)), rest')))
+           p)
+         (fun _ -> ((Val_int 0), []))
+         z0))
+    fuel
+
+(** val decode_value : int list -> value **)
+
+let decode_value data =
+  fst
+    (decode_value_aux data (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ
+      0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+(** val decode_globals : int list list -> value list **)
+
+let decode_globals encodings =
+  map decode_value encodings
+
+(** val dATA_name : int **)
+
+let dATA_name =
+  Z.coq_lor
+    (Z.shiftl ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->1+2*p) 1)))))
+    (Z.coq_lor
+      (Z.shiftl ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+        ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+        ((fun p->2*p) ((fun p->2*p) 1)))))
+      (Z.coq_lor
+        (Z.shiftl ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+          ((fun p->1+2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+          ((fun p->2*p) 1))))
+        ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+        ((fun p->2*p) ((fun p->2*p) 1))))))))
+
+(** val pRIM_name : int **)
+
+let pRIM_name =
+  Z.coq_lor
+    (Z.shiftl ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->1+2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->1+2*p) 1)))))
+    (Z.coq_lor
+      (Z.shiftl ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+        ((fun p->1+2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+        ((fun p->2*p) ((fun p->2*p) 1)))))
+      (Z.coq_lor
+        (Z.shiftl ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+          ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
+          ((fun p->2*p) 1))))
+        ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+        ((fun p->2*p) ((fun p->2*p) 1))))))))
+
+(** val list_z_eqb : int list -> int list -> bool **)
+
+let rec list_z_eqb a b =
+  match a with
+  | [] -> (match b with
+           | [] -> true
+           | _ :: _ -> false)
+  | x :: xs ->
+    (match b with
+     | [] -> false
+     | y :: ys -> (&&) (Z.eqb x y) (list_z_eqb xs ys))
+
+(** val str_to_codes : char list -> int list **)
+
+let rec str_to_codes = function
+| [] -> []
+| c::rest -> (Z.of_nat (nat_of_ascii c)) :: (str_to_codes rest)
+
+(** val z_to_string_aux : int -> int -> int list -> int list **)
+
+let rec z_to_string_aux n0 fuel acc =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> acc)
+    (fun fuel' ->
+    if Z.eqb n0 0
+    then (match acc with
+          | [] ->
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+              ((fun p->1+2*p) 1))))) :: []
+          | _ :: _ -> acc)
+    else z_to_string_aux
+           (Z.div n0 ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) 1)))) fuel'
+           ((Z.add
+              (Z.modulo n0 ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) 1))))
+              ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+              ((fun p->1+2*p) 1)))))) :: acc))
+    fuel
+
+(** val z_to_string_codes : int -> int list **)
+
+let z_to_string_codes n0 =
+  if Z.ltb n0 0
+  then ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         ((fun p->2*p)
+         1))))) :: (z_to_string_aux (Z.opp n0) (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     (Stdlib.Int.succ (Stdlib.Int.succ
+                     0)))))))))))))))))))))))))))))) [])
+  else z_to_string_aux n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         0)))))))))))))))))))))))))))))) []
+
+(** val mk_zeros : int -> value list **)
+
+let rec mk_zeros n0 =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> [])
+    (fun n' -> (Val_int 0) :: (mk_zeros n'))
+    n0
+
+(** val handle_output_char : value list -> value option **)
+
+let handle_output_char _ =
+  Some (Val_int 0)
+
+(** val handle_output_bytes : value list -> value option **)
+
+let handle_output_bytes _ =
+  Some (Val_int 0)
+
+(** val handle_format_int : value list -> value option **)
+
+let handle_format_int = function
+| [] -> Some (Val_int 0)
+| _ :: l ->
+  (match l with
+   | [] -> Some (Val_int 0)
+   | v0 :: _ ->
+     (match v0 with
+      | Val_int n0 ->
+        Some (Val_block (string_tag,
+          (map (fun x -> Val_int x) (z_to_string_codes n0))))
+      | _ -> Some (Val_int 0)))
+
+(** val handle_open_descriptor : value list -> value option **)
+
+let handle_open_descriptor = function
+| [] ->
+  Some (Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
+    ((Val_int 0) :: [])))
+| v :: _ ->
+  (match v with
+   | Val_int fd ->
+     Some (Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
+       ((Val_int fd) :: [])))
+   | _ ->
+     Some (Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+       0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
+       ((Val_int 0) :: []))))
+
+(** val handle_obj_tag : value list -> value option **)
+
+let handle_obj_tag = function
+| [] -> Some (Val_int 0)
+| v :: _ ->
+  (match v with
+   | Val_int _ ->
+     Some (Val_int ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))))))))
+   | Val_block (t, _) -> Some (Val_int (Z.of_nat t))
+   | _ -> Some (Val_int 0))
+
+(** val handle_string_length : value list -> value option **)
+
+let handle_string_length = function
+| [] -> Some (Val_int 0)
+| v :: _ ->
+  (match v with
+   | Val_block (_, cs) -> Some (Val_int (Z.of_nat (length cs)))
+   | _ -> Some (Val_int 0))
+
+(** val handle_create_bytes : value list -> value option **)
+
+let handle_create_bytes = function
+| [] -> Some (Val_int 0)
+| v :: _ ->
+  (match v with
+   | Val_int n0 -> Some (Val_block (string_tag, (mk_zeros (Z.to_nat n0))))
+   | _ -> Some (Val_int 0))
+
+(** val handle_string_equal : value list -> value option **)
+
+let handle_string_equal = function
+| [] -> Some (Val_int 0)
+| v :: l ->
+  (match v with
+   | Val_block (_, a) ->
+     (match l with
+      | [] -> Some (Val_int 0)
+      | v0 :: _ ->
+        (match v0 with
+         | Val_block (_, b) ->
+           let veqb =
+             let rec veqb l1 l2 =
+               match l1 with
+               | [] -> (match l2 with
+                        | [] -> true
+                        | _ :: _ -> false)
+               | v1 :: r1 ->
+                 (match v1 with
+                  | Val_int x ->
+                    (match l2 with
+                     | [] -> false
+                     | v2 :: r2 ->
+                       (match v2 with
+                        | Val_int y -> (&&) (Z.eqb x y) (veqb r1 r2)
+                        | _ -> false))
+                  | _ -> false)
+             in veqb
+           in
+           Some (Val_int (if veqb a b then 1 else 0))
+         | _ -> Some (Val_int 0)))
+   | _ -> Some (Val_int 0))
+
+(** val handle_int_compare : value list -> value option **)
+
+let handle_int_compare = function
+| [] -> Some (Val_int 0)
+| v :: l ->
+  (match v with
+   | Val_int a ->
+     (match l with
+      | [] -> Some (Val_int 0)
+      | v0 :: _ ->
+        (match v0 with
+         | Val_int b ->
+           Some (Val_int
+             (if Z.ltb a b then (~-) 1 else if Z.ltb b a then 1 else 0))
+         | _ -> Some (Val_int 0)))
+   | _ -> Some (Val_int 0))
+
+(** val handle_string_concat : value list -> value option **)
+
+let handle_string_concat = function
+| [] -> Some (Val_int 0)
+| v :: l ->
+  (match v with
+   | Val_block (_, a) ->
+     (match l with
+      | [] -> Some (Val_int 0)
+      | v0 :: _ ->
+        (match v0 with
+         | Val_block (_, b) -> Some (Val_block (string_tag, (app a b)))
+         | _ -> Some (Val_int 0)))
+   | _ -> Some (Val_int 0))
+
+(** val handle_identity : value list -> value option **)
+
+let handle_identity = function
+| [] -> Some (Val_int 0)
+| v :: _ -> Some v
+
+(** val handle_string_get : value list -> value option **)
+
+let handle_string_get = function
+| [] -> Some (Val_int 0)
+| v :: l ->
+  (match v with
+   | Val_block (_, cs) ->
+     (match l with
+      | [] -> Some (Val_int 0)
+      | v0 :: _ ->
+        (match v0 with
+         | Val_int i ->
+           (match nth_error cs (Z.to_nat i) with
+            | Some v1 -> Some v1
+            | None -> Some (Val_int 0))
+         | _ -> Some (Val_int 0)))
+   | _ -> Some (Val_int 0))
+
+(** val make_ccall_handler :
+    int list list -> int -> value list -> value option **)
+
+let make_ccall_handler prims idx args =
+  let name = match nth_error prims idx with
+             | Some n0 -> n0
+             | None -> [] in
+  if list_z_eqb name
+       (str_to_codes
+         ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('u'::('t'::('p'::('u'::('t'::('_'::('c'::('h'::('a'::('r'::[]))))))))))))))))))))
+  then handle_output_char args
+  else if (||)
+            (list_z_eqb name
+              (str_to_codes
+                ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('u'::('t'::('p'::('u'::('t'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))))))
+            (list_z_eqb name
+              (str_to_codes
+                ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('u'::('t'::('p'::('u'::('t'::[]))))))))))))))))
+       then handle_output_bytes args
+       else if list_z_eqb name
+                 (str_to_codes
+                   ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('f'::('l'::('u'::('s'::('h'::[]))))))))))))))
+            then Some (Val_int 0)
+            else if list_z_eqb name
+                      (str_to_codes
+                        ('c'::('a'::('m'::('l'::('_'::('f'::('o'::('r'::('m'::('a'::('t'::('_'::('i'::('n'::('t'::[]))))))))))))))))
+                 then handle_format_int args
+                 else if list_z_eqb name
+                           (str_to_codes
+                             ('c'::('a'::('m'::('l'::('_'::('r'::('e'::('g'::('i'::('s'::('t'::('e'::('r'::('_'::('n'::('a'::('m'::('e'::('d'::('_'::('v'::('a'::('l'::('u'::('e'::[]))))))))))))))))))))))))))
+                      then Some (Val_int 0)
+                      else if list_z_eqb name
+                                (str_to_codes
+                                  ('c'::('a'::('m'::('l'::('_'::('f'::('r'::('e'::('s'::('h'::('_'::('o'::('o'::('_'::('i'::('d'::[])))))))))))))))))
+                           then Some (Val_int 0)
+                           else if (||)
+                                     (list_z_eqb name
+                                       (str_to_codes
+                                         ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('p'::('e'::('n'::('_'::('d'::('e'::('s'::('c'::('r'::('i'::('p'::('t'::('o'::('r'::('_'::('i'::('n'::[]))))))))))))))))))))))))))))
+                                     (list_z_eqb name
+                                       (str_to_codes
+                                         ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('p'::('e'::('n'::('_'::('d'::('e'::('s'::('c'::('r'::('i'::('p'::('t'::('o'::('r'::('_'::('o'::('u'::('t'::[])))))))))))))))))))))))))))))
+                                then handle_open_descriptor args
+                                else if list_z_eqb name
+                                          (str_to_codes
+                                            ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('s'::('e'::('t'::('_'::('c'::('h'::('a'::('n'::('n'::('e'::('l'::('_'::('n'::('a'::('m'::('e'::[])))))))))))))))))))))))))
+                                     then Some (Val_int 0)
+                                     else if list_z_eqb name
+                                               (str_to_codes
+                                                 ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('m'::('a'::('x'::('_'::('w'::('o'::('s'::('i'::('z'::('e'::[]))))))))))))))))))))))))))
+                                          then Some (Val_int
+                                                 (Z.sub
+                                                   (Z.shiftl 1
+                                                     ((fun p->1+2*p)
+                                                     ((fun p->2*p)
+                                                     ((fun p->2*p)
+                                                     ((fun p->1+2*p)
+                                                     ((fun p->1+2*p) 1))))))
+                                                   1))
+                                          else if list_z_eqb name
+                                                    (str_to_codes
+                                                      ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('i'::('n'::('t'::('_'::('s'::('i'::('z'::('e'::[]))))))))))))))))))))))))
+                                               then Some (Val_int
+                                                      ((fun p->1+2*p)
+                                                      ((fun p->1+2*p)
+                                                      ((fun p->1+2*p)
+                                                      ((fun p->1+2*p)
+                                                      ((fun p->1+2*p) 1))))))
+                                               else if list_z_eqb name
+                                                         (str_to_codes
+                                                           ('c'::('a'::('m'::('l'::('_'::('o'::('b'::('j'::('_'::('t'::('a'::('g'::[])))))))))))))
+                                                    then handle_obj_tag args
+                                                    else if (||)
+                                                              (list_z_eqb
+                                                                name
+                                                                (str_to_codes
+                                                                  ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[]))))))))))))))))))))
+                                                              (list_z_eqb
+                                                                name
+                                                                (str_to_codes
+                                                                  ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[])))))))))))))))))))))))
+                                                         then handle_string_length
+                                                                args
+                                                         else if list_z_eqb
+                                                                   name
+                                                                   (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('c'::('r'::('e'::('a'::('t'::('e'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))
+                                                              then handle_create_bytes
+                                                                    args
+                                                              else if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('l'::('i'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('l'::('i'::('t'::('_'::('b'::('y'::('t'::('e'::('s'::[])))))))))))))))))
+                                                                   then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                   else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('e'::('q'::('u'::('a'::('l'::[]))))))))))))))))))
+                                                                    then 
+                                                                    handle_string_equal
+                                                                    args
+                                                                    else 
+                                                                    if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('i'::('n'::('t'::('_'::('c'::('o'::('m'::('p'::('a'::('r'::('e'::[]))))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('c'::('o'::('m'::('p'::('a'::('r'::('e'::[]))))))))))))))
+                                                                    then 
+                                                                    handle_int_compare
+                                                                    args
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('c'::('o'::('n'::('c'::('a'::('t'::[])))))))))))))))))))
+                                                                    then 
+                                                                    handle_string_concat
+                                                                    args
+                                                                    else 
+                                                                    if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('o'::('f'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('y'::('t'::('e'::('s'::('_'::('o'::('f'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))))))))))))
+                                                                    then 
+                                                                    handle_identity
+                                                                    args
+                                                                    else 
+                                                                    if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('g'::('e'::('t'::[])))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('y'::('t'::('e'::('s'::('_'::('g'::('e'::('t'::[]))))))))))))))))
+                                                                    then 
+                                                                    handle_string_get
+                                                                    args
+                                                                    else 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+
+(** val main : int **)
+
+let main =
+  match nth_error sys_argv (Stdlib.Int.succ 0) with
+  | Some filename_codes ->
+    let raw_bytes = read_file filename_codes in
+    let data = byte_string_to_list raw_bytes in
+    let data_len = Z.to_nat (byte_string_length raw_bytes) in
+    (match load_code_section data data_len with
+     | Some code ->
+       let secs = parse_sections data data_len in
+       let globals =
+         match find_section secs dATA_name with
+         | Some s ->
+           let encodings =
+             unmarshal_globals raw_bytes (Z.of_nat s.sec_offset)
+               (Z.of_nat s.sec_length)
+           in
+           decode_globals encodings
+         | None -> []
+       in
+       let prims =
+         match find_section secs pRIM_name with
+         | Some s ->
+           load_primitives raw_bytes (Z.of_nat s.sec_offset)
+             (Z.of_nat s.sec_length)
+         | None -> []
+       in
+       let handler = make_ccall_handler prims in
+       let init = initial_state globals in
+       let fuel =
+         Z.to_nat ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+           ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+           ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+           ((fun p->1+2*p) ((fun p->2*p) 1))))))))))))))))))))))))))
+       in
+       (match run fuel code init handler with
+        | Finished _ -> 0
+        | _ -> 1)
+     | None -> 1)
+  | None -> 1

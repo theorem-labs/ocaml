@@ -103,6 +103,79 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_app (Exp_app (Exp_var (cl "f"), Exp_int a), Exp_int b))))] in
       let src = Printf.sprintf "let () = print_int (let f x y = x * y + 1 in f %d %d); print_newline ()" a b in
       (prog, src)) (int_range 0 29) (int_range 0 29));
+    (* match on int *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_int n,
+          [(Pat_int 0, Exp_int 100);
+           (Pat_int 1, Exp_int 200);
+           (Pat_wild, Exp_int 999)])))] in
+      let src = Printf.sprintf "let () = print_int (match %d with 0 -> 100 | 1 -> 200 | _ -> 999); print_newline ()" n in
+      (prog, src)) (int_range 0 2));
+    (* match with variable binding *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_int n,
+          [(Pat_int 0, Exp_int 42);
+           (Pat_var (cl "x"), Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1))])))] in
+      let src = Printf.sprintf "let () = print_int (match %d with 0 -> 42 | x -> x + 1); print_newline ()" n in
+      (prog, src)) (int_range 0 99));
+    (* division and modulo *)
+    (map2 (fun a b ->
+      let a = a + 1 in let b = b + 1 in
+      let prog = [Decl_expr (print_int_nl
+        (Exp_binop (Op_add,
+          Exp_binop (Op_div, Exp_int a, Exp_int b),
+          Exp_binop (Op_mod, Exp_int a, Exp_int b))))] in
+      let src = Printf.sprintf "let () = print_int (%d / %d + %d mod %d); print_newline ()" a b a b in
+      (prog, src)) (int_range 0 499) (int_range 0 19));
+    (* higher-order function *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "apply",
+          Exp_fun (cl "f", Exp_fun (cl "x", Exp_app (Exp_var (cl "f"), Exp_var (cl "x")))),
+          Exp_let (cl "double",
+            Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)),
+            Exp_app (Exp_app (Exp_var (cl "apply"), Exp_var (cl "double")), Exp_int n)))))] in
+      let src = Printf.sprintf "let () = print_int (let apply f x = f x in let double x = x * 2 in apply double %d); print_newline ()" n in
+      (prog, src)) (int_range 0 29));
+    (* multiple prints *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr
+        (Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int a),
+          Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int b),
+            Exp_app (Exp_var (cl "print_newline"), Exp_unit))))] in
+      let src = Printf.sprintf "let () = print_int %d; print_int %d; print_newline ()" a b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+    (* variable shadowing *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "x", Exp_int a,
+          Exp_let (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int b),
+            Exp_var (cl "x")))))] in
+      let src = Printf.sprintf "let () = print_int (let x = %d in let x = x + %d in x); print_newline ()" a b in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
+    (* recursive function with match *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_letrec (cl "count",
+          Exp_fun (cl "n",
+            Exp_match (Exp_var (cl "n"),
+              [(Pat_int 0, Exp_int 0);
+               (Pat_var (cl "x"), Exp_binop (Op_add, Exp_int 1,
+                 Exp_app (Exp_var (cl "count"),
+                   Exp_binop (Op_sub, Exp_var (cl "x"), Exp_int 1))))])),
+          Exp_app (Exp_var (cl "count"), Exp_int n))))] in
+      let src = Printf.sprintf "let () = print_int (let rec count n = match n with 0 -> 0 | x -> 1 + count (x - 1) in count %d); print_newline ()" n in
+      (prog, src)) (int_range 0 7));
+    (* closure capturing variable *)
+    (map2 (fun n m ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "make_adder",
+          Exp_fun (cl "n", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "n")))),
+          Exp_app (Exp_app (Exp_var (cl "make_adder"), Exp_int n), Exp_int m))))] in
+      let src = Printf.sprintf "let () = print_int (let make_adder n x = n + x in make_adder %d %d); print_newline ()" n m in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
   ]
 
 let print_test_case (_prog, src) = src
