@@ -10,10 +10,9 @@ From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
 
 From OCamlInterp.Trusted Require Import Value Bytecode Machine Interp Loader IO Main.
-From OCamlInterp.SemiTrusted Require Import Syntax PrettyPrint Observable.
-From OCamlInterp.Untrusted Require Import SourceInterp Compile.
-From OCamlInterp.Checker Require Import Encode.
-From OCamlInterp Require Import Correctness.
+From OCamlInterp.Trusted Require Import Observable.
+From OCamlInterp.SemiTrusted Require Import Syntax PrettyPrint.
+From OCamlInterp.Untrusted Require Import SourceInterp Compile Encode CorrectnessProofs.
 
 Extraction "Interp_extracted.ml"
   (* Value *)

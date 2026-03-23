@@ -12,7 +12,8 @@
 From Stdlib Require Import ZArith Strings.String PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Trusted Require Import Value Bytecode Machine Interp.
-From OCamlInterp.SemiTrusted Require Import Syntax Observable.
+From OCamlInterp.Trusted Require Import Observable.
+From OCamlInterp.SemiTrusted Require Import Syntax.
 From OCamlInterp.Untrusted Require Import SourceInterp Compile.
 Open Scope Z_scope.
 
