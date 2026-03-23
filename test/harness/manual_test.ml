@@ -42,21 +42,6 @@ let () =
    | Run_error msg -> Printf.printf "Test 2 ERROR: "; List.iter print_char msg; print_newline ()
    | Out_of_fuel _ -> Printf.printf "Test 2: out of fuel\n");
 
-  (* Let rec test: factorial 5 *)
-  let code3 = [
-    BRANCH 10;         (* 0: jump to main *)
-    (* fact body at pc=1: GRAB 0 then compute *)
-    GRAB 0;            (* 1: need 1 arg *)
-    ACC 0;             (* 2: get n *)
-    PUSH;              (* 3: push n *)
-    CONSTINT 1;        (* 4: accu = 1 *)
-    LEINT;             (* 5: accu = (n <= 1) *)
-    BRANCHIFNOT 8;     (* 6: if not (n<=1) goto 8 *)
-    CONSTINT 1;        (* 7: return 1 *)
-    RETURN 1;          (* 7.5: -- wait need to restructure *)
-  ] in
-  ignore code3;  (* skip this test for now *)
-
   (* Global variable test *)
   let code4 = [
     CONSTINT 42;     (* 0: accu = 42 *)

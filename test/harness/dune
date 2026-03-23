@@ -1,5 +1,6 @@
 (executables
- (names harness trace manual_test)
+ (names harness trace manual_test roundtrip_test source_interp_test compile_test bytecode_equiv_test)
  (libraries unix)
  (flags (:standard -w -a))
- (modules harness trace manual_test loader interp_extracted))
+ (modules harness trace manual_test roundtrip_test source_interp_test compile_test bytecode_equiv_test
+          test_common loader lexer parser interp_extracted))

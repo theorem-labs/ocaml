@@ -6,6 +6,8 @@ let rec show_value = function
   | Val_block (t, fs) -> Printf.sprintf "Block(%d,[%s]%s)" t
       (String.concat ";" (List.map show_value (List.filteri (fun i _ -> i < 5) fs)))
       (if List.length fs > 5 then Printf.sprintf "...+%d" (List.length fs - 5) else "")
+  | Val_ptr a -> Printf.sprintf "Ptr(%d)" a
+  | Val_closure (a, o) -> Printf.sprintf "Clos(%d+%d)" a o
 
 let string_of_chars cl =
   let buf = Buffer.create (List.length cl) in

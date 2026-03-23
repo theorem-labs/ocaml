@@ -9,14 +9,25 @@ From Stdlib Require Import ExtrOcamlNatInt.
 From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
 
-From OCamlInterp Require Import Value Bytecode Machine Interp Syntax PrettyPrint.
+From OCamlInterp Require Import Value Bytecode Machine Interp Syntax PrettyPrint
+                                Observable SourceInterp Compile Correctness.
 
 Extraction "Interp_extracted.ml"
-  value Val_int Val_block Val_ptr
+  (* Value *)
+  value Val_int Val_block Val_ptr Val_closure
+  (* Bytecode *)
   instruction
+  (* Machine / bytecode interpreter *)
   state mk_state step run run_pure
   step_result run_result
   set_accu initial_state
   field_or_heap tag_or_heap size_or_heap
   heap_alloc heap_lookup heap_update
-  pp_expr pp_pattern pp_decl pp_program.
+  (* Pretty-printer *)
+  pp_expr pp_pattern pp_decl pp_program
+  (* Observable behavior *)
+  event behavior termination mk_behavior
+  (* Source interpreter *)
+  svalue env eval eval_program interpret
+  (* Compiler *)
+  compile_program.

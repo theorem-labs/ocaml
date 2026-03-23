@@ -15,12 +15,30 @@ Local Notation length := Datatypes.length (only parsing).
 Local Notation skipn := List.skipn (only parsing).
 Local Notation firstn := List.firstn (only parsing).
 
-Definition get_code_ptr (v : value) : option Z :=
+(* OCaml int is 63-bit on 64-bit architectures. *)
+Definition word_bits := 63.
+Definition z_unsigned (a : Z) : Z := Z.land a (Z.ones word_bits).
+Definition z_lsr (a b : Z) : Z := Z.shiftr (z_unsigned a) b.
+
+Definition get_code_ptr_from (fields : list value) (ofs : nat) : option Z :=
+  match nth_error fields ofs with
+  | Some (Val_int pc) => Some pc
+  | _ => None
+  end.
+
+Definition get_code_ptr_s (s : state) (v : value) : option Z :=
   match v with
   | Val_block t fields =>
     if Nat.eqb t Closure_tag then
       match fields with Val_int pc :: _ => Some pc | _ => None end
     else None
+  | Val_closure addr ofs =>
+    match heap_lookup s.(hp) addr with
+    | Some (t, fields) =>
+      if Nat.eqb t Closure_tag then get_code_ptr_from fields ofs
+      else None
+    | None => None
+    end
   | _ => None
   end.
 
@@ -79,7 +97,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
     Step (st s pc' s.(accu) frame s.(env) s.(extra_args) s.(global) s.(trap_stack))
 
   | APPLY n =>
-    match get_code_ptr s.(accu) with
+    match get_code_ptr_s s s.(accu) with
     | Some target_pc =>
       Step (st s target_pc s.(accu) s.(stack) s.(accu) (Nat.sub n 1) s.(global) s.(trap_stack))
     | None => Error "APPLY: accu is not a closure"
@@ -88,7 +106,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | APPLY1 =>
     match s.(stack) with
     | arg1 :: rest =>
-      match get_code_ptr s.(accu) with
+      match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         let new_stack := arg1 :: Val_int pc' :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: rest in
         Step (st s target_pc s.(accu) new_stack s.(accu) 0 s.(global) s.(trap_stack))
@@ -100,7 +118,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | APPLY2 =>
     match s.(stack) with
     | arg1 :: arg2 :: rest =>
-      match get_code_ptr s.(accu) with
+      match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         let new_stack := arg1 :: arg2 :: Val_int pc' :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: rest in
         Step (st s target_pc s.(accu) new_stack s.(accu) 1 s.(global) s.(trap_stack))
@@ -112,7 +130,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | APPLY3 =>
     match s.(stack) with
     | arg1 :: arg2 :: arg3 :: rest =>
-      match get_code_ptr s.(accu) with
+      match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         let new_stack := arg1 :: arg2 :: arg3 :: Val_int pc' :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: rest in
         Step (st s target_pc s.(accu) new_stack s.(accu) 2 s.(global) s.(trap_stack))
@@ -124,7 +142,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | APPTERM nargs slotsize =>
     let args := firstn nargs s.(stack) in
     let base := skipn slotsize s.(stack) in
-    match get_code_ptr s.(accu) with
+    match get_code_ptr_s s s.(accu) with
     | Some target_pc =>
       Step (st s target_pc s.(accu) (args ++ base) s.(accu) (Nat.add s.(extra_args) (Nat.sub nargs 1)) s.(global) s.(trap_stack))
     | None => Error "APPTERM: accu is not a closure"
@@ -134,7 +152,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
     match s.(stack) with
     | arg1 :: _ =>
       let base := skipn slotsize s.(stack) in
-      match get_code_ptr s.(accu) with
+      match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         Step (st s target_pc s.(accu) (arg1 :: base) s.(accu) s.(extra_args) s.(global) s.(trap_stack))
       | None => Error "APPTERM1: accu is not a closure"
@@ -146,7 +164,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
     match s.(stack) with
     | arg1 :: arg2 :: _ =>
       let base := skipn slotsize s.(stack) in
-      match get_code_ptr s.(accu) with
+      match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         Step (st s target_pc s.(accu) (arg1 :: arg2 :: base) s.(accu) (Nat.add s.(extra_args) 1) s.(global) s.(trap_stack))
       | None => Error "APPTERM2: accu is not a closure"
@@ -158,7 +176,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
     match s.(stack) with
     | arg1 :: arg2 :: arg3 :: _ =>
       let base := skipn slotsize s.(stack) in
-      match get_code_ptr s.(accu) with
+      match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         Step (st s target_pc s.(accu) (arg1 :: arg2 :: arg3 :: base) s.(accu) (Nat.add s.(extra_args) 2) s.(global) s.(trap_stack))
       | None => Error "APPTERM3: accu is not a closure"
@@ -169,7 +187,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | RETURN stacksize =>
     let stk := skipn stacksize s.(stack) in
     if Nat.ltb 0 s.(extra_args) then
-      match get_code_ptr s.(accu) with
+      match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         Step (st s target_pc s.(accu) stk s.(accu) (Nat.sub s.(extra_args) 1) s.(global) s.(trap_stack))
       | None => Error "RETURN: accu is not a closure"
@@ -183,17 +201,26 @@ Definition step (code : list instruction) (s : state) : step_result :=
 
   | RESTART =>
     (* Partial application closure: [code, closinfo, saved_env, arg1, arg2, ...] *)
+    let restart_fields (all_fields : list value) (ofs : nat) : step_result :=
+      let fields := skipn ofs all_fields in
+      let num_args := Nat.sub (length fields) 3 in
+      let args := skipn 3 fields in
+      let new_stack := args ++ s.(stack) in
+      match nth_error fields 2 with
+      | Some saved_env =>
+        Step (st s pc' s.(accu) new_stack saved_env (Nat.add s.(extra_args) num_args) s.(global) s.(trap_stack))
+      | None => Error "RESTART: malformed closure"
+      end in
     match s.(env) with
+    | Val_closure addr ofs =>
+      match heap_lookup s.(hp) addr with
+      | Some (t, all_fields) =>
+        if Nat.eqb t Closure_tag then restart_fields all_fields ofs
+        else Error "RESTART: env is not a closure"
+      | None => Error "RESTART: dangling pointer"
+      end
     | Val_block t fields =>
-      if Nat.eqb t Closure_tag then
-        let num_args := Nat.sub (length fields) 3 in  (* skip code, closinfo, saved_env *)
-        let args := skipn 3 fields in  (* args start after saved_env *)
-        let new_stack := args ++ s.(stack) in
-        match nth_error fields 2 with  (* saved_env at field 2 *)
-        | Some saved_env =>
-          Step (st s pc' s.(accu) new_stack saved_env (Nat.add s.(extra_args) num_args) s.(global) s.(trap_stack))
-        | None => Error "RESTART: malformed closure"
-        end
+      if Nat.eqb t Closure_tag then restart_fields fields 0%nat
       else Error "RESTART: env is not a closure"
     | _ => Error "RESTART: env is not a block"
     end
@@ -207,10 +234,13 @@ Definition step (code : list instruction) (s : state) : step_result :=
       let saved_args := firstn num_args s.(stack) in
       let rest_stack := skipn num_args s.(stack) in
       let closinfo := Val_int 0 in
-      let closure := Val_block Closure_tag (Val_int (s.(pc) - 1) :: closinfo :: s.(env) :: saved_args) in
+      let fields := Val_int (s.(pc) - 1) :: closinfo :: s.(env) :: saved_args in
+      let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+      let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+      let closure := Val_closure addr 0%nat in
       match rest_stack with
       | Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest =>
-        Step (st s ret_pc closure rest saved_env (Z.to_nat saved_ea) s.(global) s.(trap_stack))
+        Step (st s' ret_pc closure rest saved_env (Z.to_nat saved_ea) s.(global) s.(trap_stack))
       | _ => Error "GRAB: malformed return frame"
       end
 
@@ -218,36 +248,82 @@ Definition step (code : list instruction) (s : state) : step_result :=
     let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
     let vars := firstn nvars stk in
     let rest := skipn nvars stk in
-    (* OCaml closures: [code_ptr, closinfo, env_var_0, ...] *)
-    let closinfo := Val_int 0 in  (* dummy closinfo *)
-    let closure := Val_block Closure_tag (Val_int code_ofs :: closinfo :: vars) in
-    Step (st s pc' closure rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    let closinfo := Val_int 0 in
+    let fields := Val_int code_ofs :: closinfo :: vars in
+    let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+    let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+    let closure := Val_closure addr 0%nat in
+    Step (st s' pc' closure rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
 
   | CLOSUREREC nfuncs nvars code_offsets =>
-    if Nat.eqb nfuncs 1 then
-      let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
-      let vars := firstn nvars stk in
-      let rest := skipn nvars stk in
-      match code_offsets with
-      | ofs :: _ =>
-        let closinfo := Val_int 0 in
-        let closure := Val_block Closure_tag (Val_int ofs :: closinfo :: vars) in
-        (* CLOSUREREC pushes the closure onto the stack (unlike CLOSURE) *)
-        Step (st s pc' closure (closure :: rest) s.(env) s.(extra_args) s.(global) s.(trap_stack))
-      | [] => Error "CLOSUREREC: no code offsets"
-      end
-    else Error "CLOSUREREC: mutual recursion (nfuncs>1) not yet supported"
+    let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
+    let vars := firstn nvars stk in
+    let rest := skipn nvars stk in
+    match code_offsets with
+    | [] => Error "CLOSUREREC: no code offsets"
+    | _ =>
+      (* Build flat closure block: [code0, closinfo0, infix, code1, closinfo1, infix, ..., env_vars]
+         First closure at field 0; subsequent at field 3*i (with infix header before each).
+         For nfuncs=1, no infix headers. *)
+      let closinfo := Val_int 0 in
+      let infix_hdr := Val_block Infix_tag [] in
+      let fix build_closure_fields (i : nat) (offsets : list Z) : list value :=
+        match offsets with
+        | [] => vars
+        | ofs :: rest_ofs =>
+          if Nat.eqb i 0 then
+            Val_int ofs :: closinfo :: build_closure_fields 1%nat rest_ofs
+          else
+            infix_hdr :: Val_int ofs :: closinfo :: build_closure_fields (S i) rest_ofs
+        end in
+      let fields := build_closure_fields 0%nat code_offsets in
+      let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+      let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+      (* Each closure i is at field offset 3*i (for i>0) or 0 (for i=0).
+         Closure 0 = Val_closure(addr, 0), Closure 1 = Val_closure(addr, 3), etc. *)
+      let closure_at (i : nat) : value :=
+        if Nat.eqb i 0 then Val_closure addr 0%nat
+        else Val_closure addr (3 * i) in
+      (* Push closures: closure 0 pushed first (bottom), closure nfuncs-1 last (top).
+         OCaml: *--sp = closure_0, then *--sp = closure_1, ..., *--sp = closure_{nf-1}.
+         Result: sp[0] = closure_{nf-1}, sp[nf-1] = closure_0. *)
+      let fix push_closures (i : nat) (stk : list value) : list value :=
+        match i with
+        | O => stk
+        | S i' =>
+          let stk' := push_closures i' stk in
+          closure_at i' :: stk'
+        end in
+      let new_stack := push_closures nfuncs rest in
+      Step (st s' pc' (closure_at 0%nat) new_stack s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    end
 
   | OFFSETCLOSURE ofs =>
-    if Z.eqb ofs 0 then
-      Step (st s pc' s.(env) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
-    else Error "OFFSETCLOSURE: non-zero offset not yet supported"
+    match s.(env) with
+    | Val_closure addr base_ofs =>
+      let new_ofs := Z.to_nat (Z.of_nat base_ofs + ofs) in
+      let clos := Val_closure addr new_ofs in
+      Step (st s pc' clos s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_block t _ =>
+      if Z.eqb ofs 0 then
+        Step (st s pc' s.(env) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
+      else Error "OFFSETCLOSURE: non-zero offset on non-closure env"
+    | _ => Error "OFFSETCLOSURE: invalid env"
+    end
 
   | PUSHOFFSETCLOSURE ofs =>
     let new_stack := s.(accu) :: s.(stack) in
-    if Z.eqb ofs 0 then
-      Step (st s pc' s.(env) new_stack s.(env) s.(extra_args) s.(global) s.(trap_stack))
-    else Error "PUSHOFFSETCLOSURE: non-zero offset not yet supported"
+    match s.(env) with
+    | Val_closure addr base_ofs =>
+      let new_ofs := Z.to_nat (Z.of_nat base_ofs + ofs) in
+      let clos := Val_closure addr new_ofs in
+      Step (st s pc' clos new_stack s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_block t _ =>
+      if Z.eqb ofs 0 then
+        Step (st s pc' s.(env) new_stack s.(env) s.(extra_args) s.(global) s.(trap_stack))
+      else Error "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"
+    | _ => Error "PUSHOFFSETCLOSURE: invalid env"
+    end
 
   | GETGLOBAL n =>
     match nth_error s.(global) n with
@@ -289,11 +365,13 @@ Definition step (code : list instruction) (s : state) : step_result :=
     Step (st s pc' val_unit s.(stack) s.(env) s.(extra_args) new_global s.(trap_stack))
 
   | ATOM t =>
-    Step (st s pc' (Val_block t []) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    let '(s', ptr) := heap_alloc s t [] in
+    Step (st s' pc' ptr s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
 
   | PUSHATOM t =>
     let new_stack := s.(accu) :: s.(stack) in
-    Step (st s pc' (Val_block t []) new_stack s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    let '(s', ptr) := heap_alloc s t [] in
+    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_stack))
 
   | MAKEBLOCK t size =>
     let fields := s.(accu) :: firstn (Nat.sub size 1) s.(stack) in
@@ -346,13 +424,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
           end
         | None => Error "SETFIELD: dangling pointer"
         end
-      | Val_block _ fields =>
-        (* Inline block: mutation doesn't propagate (legacy behavior) *)
-        match set_nth fields n newval with
-        | Some _ => Step (st s pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
-        | None => Error "SETFIELD: access failed"
-        end
-      | _ => Error "SETFIELD: not a block"
+      | _ => Error "SETFIELD: not a mutable block"
       end
     | _ => Error "SETFIELD: stack underflow"
     end
@@ -377,14 +449,53 @@ Definition step (code : list instruction) (s : state) : step_result :=
 
   | SETVECTITEM =>
     match s.(stack) with
-    | Val_int _ :: _ :: rest =>
-      Step (st s pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_int idx :: newval :: rest =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          match set_nth fields (Z.to_nat idx) newval with
+          | Some new_fields =>
+            let new_hp := heap_update s.(hp) addr new_fields in
+            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_stack) new_hp s.(next_addr))
+          | None => Error "SETVECTITEM: index out of bounds"
+          end
+        | None => Error "SETVECTITEM: dangling pointer"
+        end
+      | _ => Error "SETVECTITEM: not a heap block"
+      end
     | _ => Error "SETVECTITEM: stack underflow"
     end
 
-  | GETBYTESCHAR => Error "GETBYTESCHAR: not yet supported"
-  | SETBYTESCHAR => Error "SETBYTESCHAR: not yet supported"
-  | GETSTRINGCHAR => Error "GETSTRINGCHAR: not yet supported"
+  | GETBYTESCHAR | GETSTRINGCHAR =>
+    match s.(stack) with
+    | Val_int idx :: rest =>
+      match field_or_heap s s.(accu) (Z.to_nat idx) with
+      | Some (Val_int c) => Step (st s pc' (Val_int c) rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
+      | _ => Error "GETSTRINGCHAR: index out of bounds"
+      end
+    | _ => Error "GETSTRINGCHAR: stack underflow"
+    end
+
+  | SETBYTESCHAR =>
+    match s.(stack) with
+    | Val_int idx :: Val_int newchar :: rest =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          match set_nth fields (Z.to_nat idx) (Val_int newchar) with
+          | Some new_fields =>
+            let new_hp := heap_update s.(hp) addr new_fields in
+            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_stack) new_hp s.(next_addr))
+          | None => Error "SETBYTESCHAR: index out of bounds"
+          end
+        | None => Error "SETBYTESCHAR: dangling pointer"
+        end
+      | _ => Error "SETBYTESCHAR: not a heap bytes"
+      end
+    | _ => Error "SETBYTESCHAR: stack underflow"
+    end
 
   | BRANCH target =>
     Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
@@ -413,7 +524,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
       | Some target => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
       | None => Error "SWITCH: block tag out of range"
       end
-    | Val_ptr addr =>
+    | Val_ptr addr | Val_closure addr _ =>
       match tag_or_heap s s.(accu) with
       | Some t =>
         match nth_error block_targets t with
@@ -544,7 +655,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
 
   | LSRINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.shiftr a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (z_lsr a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
     | _, _ => Error "LSRINT: type error or stack underflow"
     end
 
@@ -605,9 +716,6 @@ Definition step (code : list instruction) (s : state) : step_result :=
         Step (mk_state pc' val_unit s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack) new_hp s.(next_addr))
       | _ => Error "OFFSETREF: not a ref"
       end
-    | Val_block t (Val_int old :: rest) =>
-      (* Inline block: mutation doesn't propagate *)
-      Step (st s pc' val_unit s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
     | _ => Error "OFFSETREF: not a ref"
     end
 
@@ -665,26 +773,26 @@ Definition step (code : list instruction) (s : state) : step_result :=
 
   | ULTINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (a <? b)) rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (z_unsigned a <? z_unsigned b)) rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
     | _, _ => Error "ULTINT: type error or stack underflow"
     end
 
   | UGEINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (a >=? b)) rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (z_unsigned a >=? z_unsigned b)) rest s.(env) s.(extra_args) s.(global) s.(trap_stack))
     | _, _ => Error "UGEINT: type error or stack underflow"
     end
 
   | BULTINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.ltb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_int a => if Z.ltb (z_unsigned n) (z_unsigned a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
                    else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
     | _ => Error "BULTINT: not an integer"
     end
 
   | BUGEINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.geb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
+    | Val_int a => if Z.geb (z_unsigned n) (z_unsigned a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
                    else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack))
     | _ => Error "BUGEINT: not an integer"
     end

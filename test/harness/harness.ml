@@ -63,13 +63,20 @@ let make_handler prims buf =
     | "caml_ml_output_char", [_; Val_int c] ->
       Buffer.add_char buf (Char.chr (c land 0xFF)); Some (Val_int 0)
     | ("caml_ml_output_bytes" | "caml_ml_output"), _ ->
+      let get_chars v = match v with
+        | Val_block (252, chars) -> Some chars
+        | _ -> None in
       (match args with
-       | [_; Val_block (252, chars); Val_int off; Val_int len] ->
-         for i = off to off + len - 1 do
-           match List.nth_opt chars i with
-           | Some (Val_int c) -> Buffer.add_char buf (Char.chr (c land 0xFF))
-           | _ -> ()
-         done; Some (Val_int 0)
+       | [_; sv; Val_int off; Val_int len] ->
+         (match get_chars sv with
+          | Some chars ->
+            for i = off to off + len - 1 do
+              match List.nth_opt chars i with
+              | Some (Val_int c) -> Buffer.add_char buf (Char.chr (c land 0xFF))
+              | _ -> ()
+            done
+          | None -> ());
+         Some (Val_int 0)
        | _ -> Some (Val_int 0))
     | "caml_ml_flush", _ -> Some (Val_int 0)
     | "caml_format_int", [_fmt; Val_int n] ->
@@ -95,6 +102,23 @@ let make_handler prims buf =
       Some (Val_int (if a < b then -1 else if a > b then 1 else 0))
     | "caml_compare", [Val_int a; Val_int b] ->
       Some (Val_int (if a < b then -1 else if a > b then 1 else 0))
+    | "caml_string_concat", [Val_block (252, a); Val_block (252, b)] ->
+      Some (Val_block (252, a @ b))
+    | "caml_string_of_bytes", [v] -> Some v
+    | "caml_bytes_of_string", [v] -> Some v
+    | ("caml_string_get" | "caml_bytes_get"), [Val_block (252, cs); Val_int i] ->
+      (match List.nth_opt cs i with Some v -> Some v | None -> Some (Val_int 0))
+    | ("caml_string_set" | "caml_bytes_set"), _ -> Some (Val_int 0)
+    | "caml_fill_bytes", _ -> Some (Val_int 0)
+    | ("caml_string_length" | "caml_ml_string_length"), _ -> Some (Val_int 0)
+    | "caml_int64_float_of_bits", _ -> Some (Val_int 0)
+    | "caml_sys_const_naked_pointers_checked", _ -> Some (Val_int 0)
+    | "caml_ml_out_channels_list", _ -> Some (Val_int 0)  (* [] = Val_int 0 *)
+    | "caml_obj_tag", [Val_ptr _] -> Some (Val_int 0)
+    | "caml_ml_channel_size", _ -> Some (Val_int 0)
+    | "caml_sys_getenv", _ ->
+      (* Raise Not_found *)
+      Some (Val_int 0)
     | _ ->
       Printf.eprintf "  [ccall] %s (idx=%d, %d args)\n%!" name idx (List.length args);
       Some (Val_int 0)
@@ -212,6 +236,38 @@ let generators = [|
   (* Curried comparison *)
   (fun r -> let a = Random.State.int r 100 in let b = Random.State.int r 100 in
     Printf.sprintf "let () = print_int (compare %d %d); print_newline ()" a b);
+  (* String.length *)
+  (fun r -> let n = Random.State.int r 10 in
+    let s = String.init (n + 1) (fun i -> Char.chr (Char.code 'a' + i mod 26)) in
+    Printf.sprintf "let () = print_int (String.length %S); print_newline ()" s);
+  (* String.get / char access *)
+  (fun r -> let s = "hello" in let i = Random.State.int r (String.length s) in
+    Printf.sprintf "let () = print_int (Char.code (String.get %S %d)); print_newline ()" s i);
+  (* Variant with data *)
+  (fun r -> let n = Random.State.int r 100 in
+    Printf.sprintf "type myopt = None2 | Some2 of int\nlet () = print_int (match Some2 %d with None2 -> 0 | Some2 x -> x); print_newline ()" n);
+  (* Nested match *)
+  (fun r -> let a = Random.State.int r 5 in let b = Random.State.int r 5 in
+    Printf.sprintf "let () = print_int (match %d with 0 -> (match %d with 0 -> 100 | _ -> 200) | _ -> 300); print_newline ()" a b);
+  (* Mutual let binding (sequential) *)
+  (fun r -> let a = Random.State.int r 20 in let b = Random.State.int r 20 in
+    Printf.sprintf "let () = let x = %d in let y = x + %d in print_int (x + y); print_newline ()" a b);
+  (* Array-like: large tuple *)
+  (fun r -> let a = Random.State.int r 100 in let b = Random.State.int r 100 in
+    let c = Random.State.int r 100 in
+    Printf.sprintf "let () = let (a,b,c) = (%d,%d,%d) in print_int (a+b+c); print_newline ()" a b c);
+  (* Bitwise operations *)
+  (fun r -> let a = Random.State.int r 256 in let b = Random.State.int r 256 in
+    Printf.sprintf "let () = print_int (%d land %d); print_newline ()" a b);
+  (* Chained function application *)
+  (fun r -> let n = Random.State.int r 10 in
+    Printf.sprintf "let () = let f x = x + 1 in let g x = x * 2 in print_int (g (f %d)); print_newline ()" n);
+  (* While loop with ref *)
+  (fun r -> let n = Random.State.int r 10 in
+    Printf.sprintf "let () = let r = ref 0 in let i = ref 1 in while !i <= %d do r := !r + !i; i := !i + 1 done; print_int !r; print_newline ()" n);
+  (* Mutual recursion: even/odd *)
+  (fun r -> let n = Random.State.int r 20 in
+    Printf.sprintf "let () = let rec even n = if n = 0 then true else odd (n-1) and odd n = if n = 0 then false else even (n-1) in print_int (if even %d then 1 else 0); print_newline ()" n);
 |]
 
 (* === Main === *)
@@ -246,26 +302,3 @@ let () =
     done);
   Printf.printf "\n=== Results: %d pass, %d fail, %d skip ===\n" !pass !fail !skip;
   if !fail > 0 then exit 1
-
-(* Trace mode: run with step-by-step output *)
-let trace_run exe_file max_steps =
-  let data = Loader.read_file exe_file in
-  let sections = Loader.parse_sections data in
-  let code = Loader.load_bytecode_from_sections data sections in
-  let globals = Array.to_list (load_globals data sections) in
-  let prims = load_prims data sections in
-  let buf = Buffer.create 256 in
-  let handler = make_handler prims buf in
-  Printf.printf "Loaded %d instructions, %d globals\n%!" (List.length code) (List.length globals);
-  let s = ref (initial_state globals) in
-  for i = 0 to max_steps - 1 do
-    Printf.printf "Step %d: pc=%d stack=%d\n%!" i !s.pc (List.length !s.stack);
-    match step code !s with
-    | Step s' -> s := s'
-    | Halt _ -> Printf.printf "  HALTED\n%!"; exit 0
-    | Error msg -> Printf.printf "  ERROR: %s\n%!" (string_of_chars msg); exit 1
-    | CCall_request (idx, args, cont) ->
-      (match handler idx args with
-       | Some v -> s := set_accu cont v
-       | None -> Printf.printf "  CCALL FAILED\n%!"; exit 1)
-  done

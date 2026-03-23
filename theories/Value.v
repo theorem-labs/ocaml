@@ -6,13 +6,12 @@ Import ListNotations.
 Inductive value : Type :=
   | Val_int : Z -> value
   | Val_block : nat -> list value -> value
-  | Val_ptr : nat -> value.  (* heap pointer for mutable blocks *)
+  | Val_ptr : nat -> value  (* heap pointer for mutable blocks *)
+  | Val_closure : nat -> nat -> value.  (* heap addr, field offset within block *)
 
 Definition Closure_tag    := 247.
-Definition Object_tag     := 248.
 Definition Infix_tag      := 249.
 Definition String_tag     := 252.
-Definition Double_tag     := 253.
 
 Definition val_unit  : value := Val_int 0.
 Definition val_true  : value := Val_int 1.
@@ -24,24 +23,6 @@ Definition val_bool (b : bool) : value :=
 Definition is_int (v : value) : bool :=
   match v with Val_int _ => true | _ => false end.
 
-Definition int_val (v : value) : option Z :=
-  match v with Val_int n => Some n | _ => None end.
-
-Definition tag (v : value) : option nat :=
-  match v with Val_block t _ => Some t | _ => None end.
-
-Definition field (v : value) (n : nat) : option value :=
-  match v with
-  | Val_block _ fields => nth_error fields n
-  | _ => None
-  end.
-
-Definition block_size (v : value) : option nat :=
-  match v with
-  | Val_block _ fields => Some (length fields)
-  | _ => None
-  end.
-
 Fixpoint set_nth {A : Type} (l : list A) (n : nat) (x : A) : option (list A) :=
   match l, n with
   | [], _ => None
@@ -51,25 +32,6 @@ Fixpoint set_nth {A : Type} (l : list A) (n : nat) (x : A) : option (list A) :=
     | Some rest' => Some (h :: rest')
     | None => None
     end
-  end.
-
-Definition set_field (v : value) (n : nat) (x : value) : option value :=
-  match v with
-  | Val_block t fields =>
-    match set_nth fields n x with
-    | Some fields' => Some (Val_block t fields')
-    | None => None
-    end
-  | _ => None
-  end.
-
-Definition closure_code (v : value) : option Z :=
-  match v with
-  | Val_block t fields =>
-    if Nat.eqb t Closure_tag then
-      match fields with Val_int pc :: _ => Some pc | _ => None end
-    else None
-  | _ => None
   end.
 
 Fixpoint value_eqb (v1 v2 : value) : bool :=
@@ -84,5 +46,6 @@ Fixpoint value_eqb (v1 v2 : value) : bool :=
       | _, _ => false
       end) fs1 fs2
   | Val_ptr a1, Val_ptr a2 => Nat.eqb a1 a2
+  | Val_closure a1 o1, Val_closure a2 o2 => Nat.eqb a1 a2 && Nat.eqb o1 o2
   | _, _ => false
   end.

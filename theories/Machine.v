@@ -14,7 +14,7 @@ Record trap_frame : Type := mk_trap_frame {
 (* Heap: maps addresses (nat) to (tag, fields) pairs.
    Used for mutable blocks (refs, arrays). Closures and immutable
    blocks remain as inline Val_block values. *)
-Definition heap := list (nat * list value).  (* addr -> (tag, fields) *)
+Definition heap := list (nat * (nat * list value)).  (* addr -> (tag, fields) *)
 
 Record state : Type := mk_state {
   pc         : Z;
@@ -39,60 +39,29 @@ Inductive run_result : Type :=
   | Run_error   : string -> run_result
   | Out_of_fuel : state -> run_result.
 
-(* State update helpers - pass through heap fields *)
-Definition set_pc (s : state) (v : Z) : state :=
-  mk_state v s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack) s.(hp) s.(next_addr).
-
 Definition set_accu (s : state) (v : value) : state :=
   mk_state s.(pc) v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack) s.(hp) s.(next_addr).
-
-Definition set_stack (s : state) (v : list value) : state :=
-  mk_state s.(pc) s.(accu) v s.(env) s.(extra_args) s.(global) s.(trap_stack) s.(hp) s.(next_addr).
-
-Definition set_env (s : state) (v : value) : state :=
-  mk_state s.(pc) s.(accu) s.(stack) v s.(extra_args) s.(global) s.(trap_stack) s.(hp) s.(next_addr).
-
-Definition set_extra_args (s : state) (v : nat) : state :=
-  mk_state s.(pc) s.(accu) s.(stack) s.(env) v s.(global) s.(trap_stack) s.(hp) s.(next_addr).
-
-Definition set_global (s : state) (v : list value) : state :=
-  mk_state s.(pc) s.(accu) s.(stack) s.(env) s.(extra_args) v s.(trap_stack) s.(hp) s.(next_addr).
-
-Definition set_trap_stack (s : state) (v : list trap_frame) : state :=
-  mk_state s.(pc) s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) v s.(hp) s.(next_addr).
-
-Definition advance_pc (s : state) : state :=
-  set_pc s (s.(pc) + 1)%Z.
-
-Definition push_stack (s : state) (v : value) : state :=
-  set_stack s (v :: s.(stack)).
-
-Definition pop_stack (s : state) (n : nat) : state :=
-  set_stack s (skipn n s.(stack)).
-
-Definition stack_nth (s : state) (n : nat) : option value :=
-  nth_error s.(stack) n.
 
 (* Heap operations *)
 Fixpoint heap_lookup (h : heap) (addr : nat) : option (nat * list value) :=
   match h with
   | [] => None
-  | (a, fs) :: rest =>
-    if Nat.eqb a addr then Some (a, fs) else heap_lookup rest addr
+  | (a, (t, fs)) :: rest =>
+    if Nat.eqb a addr then Some (t, fs) else heap_lookup rest addr
   end.
 
 Definition heap_alloc (s : state) (tag : nat) (fields : list value) : state * value :=
   let addr := s.(next_addr) in
   let s' := mk_state s.(pc) s.(accu) s.(stack) s.(env) s.(extra_args) s.(global)
-              s.(trap_stack) ((addr, fields) :: s.(hp)) (S addr) in
+              s.(trap_stack) ((addr, (tag, fields)) :: s.(hp)) (S addr) in
   (s', Val_ptr addr).
 
 Fixpoint heap_update (h : heap) (addr : nat) (fields : list value) : heap :=
   match h with
   | [] => []
-  | (a, fs) :: rest =>
-    if Nat.eqb a addr then (a, fields) :: rest
-    else (a, fs) :: heap_update rest addr fields
+  | (a, (t, fs)) :: rest =>
+    if Nat.eqb a addr then (a, (t, fields)) :: rest
+    else (a, (t, fs)) :: heap_update rest addr fields
   end.
 
 (* Get field from either inline block or heap pointer *)
@@ -104,6 +73,11 @@ Definition field_or_heap (s : state) (v : value) (n : nat) : option value :=
     | Some (_, fields) => nth_error fields n
     | None => None
     end
+  | Val_closure addr ofs =>
+    match heap_lookup s.(hp) addr with
+    | Some (_, fields) => nth_error fields (ofs + n)
+    | None => None
+    end
   | _ => None
   end.
 
@@ -111,7 +85,7 @@ Definition field_or_heap (s : state) (v : value) (n : nat) : option value :=
 Definition tag_or_heap (s : state) (v : value) : option nat :=
   match v with
   | Val_block t _ => Some t
-  | Val_ptr addr =>
+  | Val_ptr addr | Val_closure addr _ =>
     match heap_lookup s.(hp) addr with
     | Some (t, _) => Some t
     | None => None
