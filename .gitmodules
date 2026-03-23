@@ -1,0 +1,7 @@
+[submodule "system-ocaml-compiler"]
+	path = system-ocaml-compiler
+	url = https://github.com/ocaml/ocaml
+	branch = 4.14
+[submodule "camlboot"]
+	path = camlboot
+	url = https://github.com/Ekdohibs/camlboot.git
