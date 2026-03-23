@@ -6,7 +6,8 @@ From Stdlib Require Import ZArith PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Import Ascii.
-From OCamlInterp.Trusted Require Import Value Bytecode Machine Interp Loader IO.
+From OCamlInterp.Trusted Require Import Value Bytecode Machine Interp IO.
+From OCamlInterp.Untrusted Require Import Loader.
 Open Scope Z_scope.
 Open Scope bool_scope.
 

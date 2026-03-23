@@ -23,8 +23,8 @@
 
 From Stdlib Require Import ZArith PeanoNat Bool List Lia.
 Import ListNotations.
-From OCamlInterp.Trusted Require Import Bytecode Loader.
-From OCamlInterp.Untrusted Require Import Encode.
+From OCamlInterp.Trusted Require Import Bytecode Encode.
+From OCamlInterp.Untrusted Require Import Loader.
 Open Scope Z_scope.
 Open Scope nat_scope.
 
