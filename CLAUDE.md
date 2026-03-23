@@ -4,10 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Formally verified OCaml compiler in Rocq (Coq). The correctness theorem:
-`forall source, interpret(source) = (interpret-bytecode . compile)(source)`
+Formally verified OCaml compiler in Rocq (Coq). The end goal is a verified OCaml compiler that can bootstrap itself and eventually verify `ocamlc`. See the Roadmap section for the full plan.
 
-Code is split into **trusted** (must be correct for verification to be meaningful) and **untrusted** (validated by PBT or proofs). Trusted code is kept maximally simple.
+The core correctness theorem: `forall source, interpret(source) = (interpret-bytecode . compile)(source)`
 
 ## Build Commands
 
@@ -60,6 +59,43 @@ PBT suites validate each layer: bytecode interp vs ocamlrun, parser round-trip, 
 ### Extraction flow
 
 Rocq theories are built with dune, then `coqc` extracts `Interp.v` (and its dependencies) to `interp_extracted.ml`. This extracted file is compiled as a regular OCaml module alongside the test harness. The extraction step uses `-R _build/default/theories OCamlInterp` to find compiled `.vo` files.
+
+## Named Components
+
+| Name | Type | Description |
+|------|------|-------------|
+| `ocamlc` | System program | OCaml source to bytecode (reference compiler) |
+| `ocamlrun` | System program | OCaml bytecode to syscalls (reference runtime) |
+| `compile` | Rocq code | OCaml source to bytecode (our compiler) |
+| `interpret-bytecode` | Rocq code | OCaml bytecode to interaction tree of syscalls |
+| `interpret` | Rocq code | OCaml source to interaction tree of syscalls |
+| `lex-parse` | Rocq code | OCaml source to AST |
+| `extract` | Rocq -> OCaml | Rocq source to OCaml source (Coq extraction) |
+| `process` | Syscalls -> fn | Converts syscall interaction trees to executable functions |
+
+## Trust Model
+
+Three trust levels:
+- **Trusted**: Must be correct for verification to hold. Kept maximally simple. Includes `interpret-bytecode`, `pretty-printer`, and the correctness theorem statement.
+- **Untrusted**: Validated by PBT and eventually formal proofs. Includes `compile`, `lex-parse`, `interpret`, `SourceInterp.v`.
+- **Trusted-ish**: Ongoing PBT/proof obligations that grow as scope expands. Includes cross-validation of `ocamlc` vs `compile`, bootstrapping proofs, and Rocq self-verification steps.
+
+## Roadmap
+
+1. **[Trusted] Bytecode interpreter** -- AST + pretty-printer + interpreter for OCaml bytecode (~150 instructions, ~1500 LoC). PBT harness verifies `ocamlrun` and `interpret-bytecode` agree.
+2. **[Untrusted] Lexer/parser** -- `lex-parse` processes OCaml source into AST. **[Trusted]** `pretty-printer` goes in reverse direction.
+3. **[Untrusted] Compiler + source interpreter** -- `compile` (using `lex-parse`) and `interpret`.
+4. **[Trusted] Correctness theorem** -- `forall source, interpret(source) = (interpret-bytecode . compile)(source)`. Proof evolves with `compile`/`interpret`. RL penalty for `interpret` length, amplified if no distinguishing program is found between previous `interpret` and `ocamlrun . ocamlc`.
+5. **[Trusted-ish] PBT: `ocamlc` vs `compile`** -- Verify identical/equivalent bytecode on infinite families of syntax trees.
+6. **[Trusted-ish] Rocq self-verification** -- As each Rocq source file comes into scope, add it to the PBT suite for `ocamlc` vs `compile`.
+7. **[Trusted-ish] OCaml compiler in OCaml (bootstrapping)** -- As OCaml extraction comes into scope, prove:
+   - `compile` = `process . interpret . extract(compile src)`
+   - `interpret-bytecode` = `process . interpret . extract(interpret-bytecode src)`
+   - `interpret` = `process . interpret . extract(interpret src)`
+8. **[Trusted-ish] Verify `ocamlc`** -- As `ocamlc` source comes into scope, prove `compile` = `process . interpret(ocamlc src)`.
+9. **Hardening** -- Dockerfile and graders for all tasks, hardened against exploits that modify testing infrastructure.
+
+Dates on roadmap items refer to when infrastructure/trusted parts are finished, not the task itself.
 
 ## Key Design Decisions
 
