@@ -164,18 +164,21 @@ Qed.
 (* Main roundtrip theorem                                              *)
 (* ================================================================== *)
 
+Definition decode (data : list Z) : list instruction :=
+  decode_bytecode data 0 (List.length data).
+
 Theorem decode_encode_inverse :
   forall code,
     well_formed code = true ->
-    decode_bytecode (encode_bytecode code) 0
-                    (List.length (encode_bytecode code)) = code.
+    decode (encode_bytecode code) = code.
 Proof.
   (* Proof strategy:
-     1. Show that decode_raw on (encode_bytecode code) at offset 0
+     1. Unfold decode to decode_bytecode with offset=0, length=length.
+     2. Show that decode_raw on (encode_bytecode code) at offset 0
         produces raw_instrs with correct opcodes and operand values.
-     2. Show that resolve_one recovers the original instruction for
+     3. Show that resolve_one recovers the original instruction for
         each raw_instr, using offset map consistency.
-     3. Induction on the instruction list.
+     4. Induction on the instruction list.
 
      The full proof involves ~100 opcode cases but each follows the
      same pattern: read_u32_le/read_i32_le invert encode_word_le,
