@@ -57,8 +57,34 @@ Definition bytecode_behavior (fuel : nat) (code : list instruction)
    rates: the source interpreter uses 1 fuel per AST node, while the bytecode
    interpreter uses 1 fuel per instruction. So we cannot use the same fuel
    parameter for both sides. Instead, we state: if the source interpreter
-   terminates normally, there exists enough bytecode fuel to match the trace. *)
+   terminates normally, there exists enough bytecode fuel such that the
+   compiled bytecode terminates normally with the same output trace. *)
 
+Definition compiler_correct (prog : program) : Prop :=
+  forall (src_fuel : nat),
+    match interpret src_fuel prog with
+    | {| trace := src_trace; result := Term_normal _ |} =>
+      exists (bc_fuel : nat),
+        let bc := bytecode_behavior bc_fuel (compile_program prog) [] in
+        bc.(trace) = src_trace /\
+        match bc.(result) with
+        | Term_normal _ => True
+        | _ => False
+        end
+    | _ => True
+    end.
+
+Theorem compiler_correctness :
+  forall (prog : program), compiler_correct prog.
+Proof.
+  (* This proof is the main deliverable of the formal verification effort.
+     It requires showing that for every source-level execution that terminates
+     normally, the compiled bytecode also terminates normally and produces the
+     same output trace when run with sufficient fuel. *)
+Admitted.
+
+(* Weaker variant: only requires trace agreement, not bytecode termination.
+   Useful as an intermediate proof target. *)
 Definition traces_agree (prog : program) : Prop :=
   forall (src_fuel : nat),
     match interpret src_fuel prog with
@@ -68,14 +94,17 @@ Definition traces_agree (prog : program) : Prop :=
     | _ => True
     end.
 
-Theorem compiler_correctness :
-  forall (prog : program), traces_agree prog.
+Lemma correctness_implies_traces_agree :
+  forall prog, compiler_correct prog -> traces_agree prog.
 Proof.
-  (* This proof is the main deliverable of the formal verification effort.
-     It requires showing that for every source-level execution that terminates
-     normally, the compiled bytecode produces the same output trace when run
-     with sufficient fuel. *)
-Admitted.
+  unfold compiler_correct, traces_agree.
+  intros prog H src_fuel.
+  specialize (H src_fuel).
+  destruct (interpret src_fuel prog) as [t r].
+  destruct r; auto.
+  destruct H as [bc_fuel [Htrace _]].
+  exists bc_fuel. exact Htrace.
+Qed.
 
 (* The bytecode interpreter's step function is deterministic. *)
 Lemma step_deterministic :
