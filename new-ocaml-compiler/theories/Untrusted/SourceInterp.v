@@ -9,7 +9,8 @@
 From Stdlib Require Import ZArith Bool PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String.
-From OCamlInterp Require Import Value Syntax Observable.
+From OCamlInterp.Trusted Require Import Value.
+From OCamlInterp.SemiTrusted Require Import Syntax Observable.
 Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope list_scope.

@@ -5,7 +5,7 @@
 From Stdlib Require Import ZArith Bool PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String.
-From OCamlInterp Require Import Value Bytecode Machine.
+From OCamlInterp.Trusted Require Import Value Bytecode Machine.
 Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope list_scope.

@@ -4,7 +4,7 @@
 
 From Stdlib Require Import ZArith PeanoNat Bool.
 From Stdlib Require Import List. Import ListNotations.
-From OCamlInterp Require Import Bytecode.
+From OCamlInterp.Trusted Require Import Bytecode.
 Open Scope Z_scope.
 
 (* ------------------------------------------------------------------ *)

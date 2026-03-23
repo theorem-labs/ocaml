@@ -2,7 +2,7 @@
 
 From Stdlib Require Import ZArith Strings.String Strings.Ascii.
 From Stdlib Require Import List. Import ListNotations.
-From OCamlInterp Require Import Syntax.
+From OCamlInterp.SemiTrusted Require Import Syntax.
 Open Scope string_scope.
 
 Fixpoint nat_to_string_aux (fuel n : nat) (acc : string) : string :=

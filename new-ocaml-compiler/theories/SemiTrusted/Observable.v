@@ -8,7 +8,7 @@
 
 From Stdlib Require Import ZArith Strings.String.
 From Stdlib Require Import List. Import ListNotations.
-From OCamlInterp Require Import Value.
+From OCamlInterp.Trusted Require Import Value.
 Open Scope string_scope.
 
 (* An output event: a character written to stdout *)

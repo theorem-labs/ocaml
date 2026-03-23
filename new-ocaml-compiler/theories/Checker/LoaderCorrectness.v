@@ -23,7 +23,8 @@
 
 From Stdlib Require Import ZArith PeanoNat Bool List Lia.
 Import ListNotations.
-From OCamlInterp Require Import Bytecode Loader Encode.
+From OCamlInterp.Trusted Require Import Bytecode Loader.
+From OCamlInterp.Checker Require Import Encode LoaderCorrectnessInterface.
 Open Scope Z_scope.
 Open Scope nat_scope.
 
@@ -286,3 +287,28 @@ Proof.
   intros code Hwf.
   exact (encode_decode_roundtrip code Hwf).
 Qed.
+
+(* ================================================================== *)
+(* Verify this file satisfies the LoaderCorrectnessInterface          *)
+(* ================================================================== *)
+
+Module VerifyInterface <: LoaderCorrectnessInterface.
+  Definition z_fits_i32 := z_fits_i32.
+  Definition z_fits_u32 := z_fits_u32.
+  Definition nat_fits_i32 := nat_fits_i32.
+  Definition valid_target := valid_target.
+  Definition all_valid_targets := all_valid_targets.
+  Definition wf_instr := wf_instr.
+  Definition well_formed := well_formed.
+  Lemma well_formed_unfold : forall code,
+    well_formed code <-> Forall (wf_instr (List.length code)) code.
+  Proof. intros. unfold well_formed. split; auto. Qed.
+  Definition read_u32_le_encode_word_le := read_u32_le_encode_word_le.
+  Definition read_i32_le_encode_word_le := read_i32_le_encode_word_le.
+  Definition total_word_size := total_word_size.
+  Definition total_byte_size := total_byte_size.
+  Definition encode_bytecode_length := encode_bytecode_length.
+  Definition decode_encoded := decode_encoded.
+  Definition encode_decode_roundtrip := encode_decode_roundtrip.
+  Definition decode_encode_inverse := decode_encode_inverse.
+End VerifyInterface.

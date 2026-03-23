@@ -14,7 +14,7 @@
      (each byte 0..255). *)
 
 From Stdlib Require Import ZArith List PeanoNat.
-From OCamlInterp Require Import Bytecode.
+From OCamlInterp.Trusted Require Import Bytecode.
 Import ListNotations.
 Open Scope nat_scope.
 Open Scope list_scope.

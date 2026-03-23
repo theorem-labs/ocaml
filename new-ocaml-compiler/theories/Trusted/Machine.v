@@ -2,7 +2,7 @@
 
 From Stdlib Require Import ZArith Strings.String.
 From Stdlib Require Import List. Import ListNotations.
-From OCamlInterp Require Import Value Bytecode.
+From OCamlInterp.Trusted Require Import Value Bytecode.
 
 Record trap_frame : Type := mk_trap_frame {
   trap_pc         : Z;

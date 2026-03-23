@@ -9,9 +9,11 @@ From Stdlib Require Import ExtrOcamlNatInt.
 From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
 
-From OCamlInterp Require Import Value Bytecode Machine Interp Syntax PrettyPrint
-                                Observable SourceInterp Compile Correctness Encode Loader
-                                IO Main.
+From OCamlInterp.Trusted Require Import Value Bytecode Machine Interp Loader IO Main.
+From OCamlInterp.SemiTrusted Require Import Syntax PrettyPrint Observable.
+From OCamlInterp.Untrusted Require Import SourceInterp Compile.
+From OCamlInterp.Checker Require Import Encode.
+From OCamlInterp Require Import Correctness.
 
 Extraction "Interp_extracted.ml"
   (* Value *)

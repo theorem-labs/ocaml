@@ -1,0 +1,4 @@
+(coq.theory
+ (name OCamlInterp.Trusted)
+ (theories Stdlib))
+
