@@ -12,18 +12,6 @@ Module Type LoaderCorrectnessSpec.
   (* Decoder (provided by Untrusted) *)
   Parameter decode_bytecode : list Z -> nat -> nat -> list instruction.
 
-  (* Byte-level read functions (provided by Untrusted) *)
-  Parameter read_u32_le : list Z -> nat -> Z.
-  Parameter read_i32_le : list Z -> nat -> Z.
-
-  Axiom read_u32_le_encode_word_le : forall v,
-    (0 <= v < 4294967296)%Z ->
-    read_u32_le (encode_word_le v) 0 = v.
-
-  Axiom read_i32_le_encode_word_le : forall v,
-    z_fits_i32b v = true ->
-    read_i32_le (encode_word_le v) 0 = v.
-
   (* Main roundtrip theorem: decoding encoded bytecode recovers the original *)
   Axiom decode_encode_inverse : forall code,
     well_formed code = true ->
