@@ -1,7 +1,7 @@
 # Progress Report: OCaml Formal Verification Project
 
 ## Project Goal
-Formally verify an OCaml compiler in Rocq (Coq). The correctness theorem is:
+Formally verify an OCaml compiler in Rocq. The correctness theorem is:
 `forall source, interpret(source) = (interpret-bytecode . compile)(source)`
 
 ## Architecture Overview

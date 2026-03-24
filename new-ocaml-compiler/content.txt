@@ -22,4 +22,3 @@
     3. Also `interpret` and `process∘interpret∘extract(interpret src)`
 8. [Trusted-ish] To formally verify `ocamlc`: as `ocamlc` comes into scope, require a proof that `compile` and `process∘interpret(ocamlc src)` behave the same
 9. Set up a Dockerfile and graders for all of these tasks, harden against exploits that involve modifying the testing infra
-[Dates are for when the infrastructure/trusted parts for the task is finished, not the actual task]
