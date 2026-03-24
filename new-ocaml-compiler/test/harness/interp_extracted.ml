@@ -1716,14 +1716,11 @@ type instruction =
 | RESUMETERM of int
 | REPERFORMTERM of int
 
-type trap_frame = { trap_pc : int; trap_sp_offset : int; trap_env : value;
-                    trap_extra_args : int }
-
 type heap = (int * (int * value list)) list
 
 type state = { pc : int; accu : value; stack : value list; env : value;
-               extra_args : int; global : value list;
-               trap_stack : trap_frame list; hp : heap; next_addr : int }
+               extra_args : int; global : value list; trap_sp : int;
+               hp : heap; next_addr : int }
 
 type step_result =
 | Step of state
@@ -1740,7 +1737,7 @@ type run_result =
 
 let set_accu s v =
   { pc = s.pc; accu = v; stack = s.stack; env = s.env; extra_args =
-    s.extra_args; global = s.global; trap_stack = s.trap_stack; hp = s.hp;
+    s.extra_args; global = s.global; trap_sp = s.trap_sp; hp = s.hp;
     next_addr = s.next_addr }
 
 (** val heap_lookup : heap -> int -> (int * value list) option **)
@@ -1756,8 +1753,8 @@ let rec heap_lookup h addr =
 let heap_alloc s tag fields =
   let addr = s.next_addr in
   let s' = { pc = s.pc; accu = s.accu; stack = s.stack; env = s.env;
-    extra_args = s.extra_args; global = s.global; trap_stack = s.trap_stack;
-    hp = ((addr, (tag, fields)) :: s.hp); next_addr = (Stdlib.Int.succ addr) }
+    extra_args = s.extra_args; global = s.global; trap_sp = s.trap_sp; hp =
+    ((addr, (tag, fields)) :: s.hp); next_addr = (Stdlib.Int.succ addr) }
   in
   (s', (Val_ptr addr))
 
@@ -1816,7 +1813,7 @@ let size_or_heap s = function
 
 let initial_state global_data =
   { pc = 0; accu = val_unit; stack = []; env = val_unit; extra_args = 0;
-    global = global_data; trap_stack = []; hp = []; next_addr = 0 }
+    global = global_data; trap_sp = 0; hp = []; next_addr = 0 }
 
 (** val word_bits : int **)
 
@@ -1863,12 +1860,12 @@ let get_code_ptr_s s = function
 | _ -> None
 
 (** val st :
-    state -> int -> value -> value list -> value -> int -> value list ->
-    trap_frame list -> state **)
+    state -> int -> value -> value list -> value -> int -> value list -> int
+    -> state **)
 
-let st s pc0 accu0 stack0 env1 ea glob ts =
+let st s pc0 accu0 stack0 env1 ea glob tsp =
   { pc = pc0; accu = accu0; stack = stack0; env = env1; extra_args = ea;
-    global = glob; trap_stack = ts; hp = s.hp; next_addr = s.next_addr }
+    global = glob; trap_sp = tsp; hp = s.hp; next_addr = s.next_addr }
 
 (** val step : instruction list -> state -> step_result **)
 
@@ -1880,39 +1877,39 @@ let step code s =
      | ACC n0 ->
        (match nth_error s.stack n0 with
         | Some v ->
-          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
         | None ->
           Error
             ('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))
      | PUSH ->
        Step
          (st s pc' s.accu (s.accu :: s.stack) s.env s.extra_args s.global
-           s.trap_stack)
+           s.trap_sp)
      | PUSHACC n0 ->
        let new_stack = s.accu :: s.stack in
        (match nth_error new_stack n0 with
         | Some v ->
-          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
+          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_sp)
         | None ->
           Error
             ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))
      | POP n0 ->
        Step
          (st s pc' s.accu (skipn n0 s.stack) s.env s.extra_args s.global
-           s.trap_stack)
+           s.trap_sp)
      | ASSIGN n0 ->
        (match set_nth s.stack n0 s.accu with
         | Some new_stack ->
           Step
             (st s pc' val_unit new_stack s.env s.extra_args s.global
-              s.trap_stack)
+              s.trap_sp)
         | None ->
           Error
             ('A'::('S'::('S'::('I'::('G'::('N'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))
      | ENVACC n0 ->
        (match field_or_heap s s.env n0 with
         | Some v ->
-          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
         | None ->
           Error
             ('E'::('N'::('V'::('A'::('C'::('C'::(':'::(' '::('e'::('n'::('v'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))
@@ -1920,7 +1917,7 @@ let step code s =
        let new_stack = s.accu :: s.stack in
        (match field_or_heap s s.env n0 with
         | Some v ->
-          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
+          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_sp)
         | None ->
           Error
             ('P'::('U'::('S'::('H'::('E'::('N'::('V'::('A'::('C'::('C'::(':'::(' '::('e'::('n'::('v'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))))
@@ -1928,13 +1925,13 @@ let step code s =
        let frame = (Val_int ret_addr) :: (s.env :: ((Val_int
          (Z.of_nat s.extra_args)) :: s.stack))
        in
-       Step (st s pc' s.accu frame s.env s.extra_args s.global s.trap_stack)
+       Step (st s pc' s.accu frame s.env s.extra_args s.global s.trap_sp)
      | APPLY n0 ->
        (match get_code_ptr_s s s.accu with
         | Some target_pc ->
           Step
             (st s target_pc s.accu s.stack s.accu
-              (Nat.sub n0 (Stdlib.Int.succ 0)) s.global s.trap_stack)
+              (Nat.sub n0 (Stdlib.Int.succ 0)) s.global s.trap_sp)
         | None ->
           Error
             ('A'::('P'::('P'::('L'::('Y'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))
@@ -1950,7 +1947,7 @@ let step code s =
                (Z.of_nat s.extra_args)) :: rest)))
              in
              Step
-             (st s target_pc s.accu new_stack s.accu 0 s.global s.trap_stack)
+             (st s target_pc s.accu new_stack s.accu 0 s.global s.trap_sp)
            | None ->
              Error
                ('A'::('P'::('P'::('L'::('Y'::('1'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))
@@ -1973,7 +1970,7 @@ let step code s =
                 in
                 Step
                 (st s target_pc s.accu new_stack s.accu (Stdlib.Int.succ 0)
-                  s.global s.trap_stack)
+                  s.global s.trap_sp)
               | None ->
                 Error
                   ('A'::('P'::('P'::('L'::('Y'::('2'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[]))))))))))))))))))))))))))))))))
@@ -2001,7 +1998,7 @@ let step code s =
                    in
                    Step
                    (st s target_pc s.accu new_stack s.accu (Stdlib.Int.succ
-                     (Stdlib.Int.succ 0)) s.global s.trap_stack)
+                     (Stdlib.Int.succ 0)) s.global s.trap_sp)
                  | None ->
                    Error
                      ('A'::('P'::('P'::('L'::('Y'::('3'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))))
@@ -2013,7 +2010,7 @@ let step code s =
           Step
             (st s target_pc s.accu (app args base) s.accu
               (Nat.add s.extra_args (Nat.sub nargs (Stdlib.Int.succ 0)))
-              s.global s.trap_stack)
+              s.global s.trap_sp)
         | None ->
           Error
             ('A'::('P'::('P'::('T'::('E'::('R'::('M'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))
@@ -2028,7 +2025,7 @@ let step code s =
            | Some target_pc ->
              Step
                (st s target_pc s.accu (arg1 :: base) s.accu s.extra_args
-                 s.global s.trap_stack)
+                 s.global s.trap_sp)
            | None ->
              Error
                ('A'::('P'::('P'::('T'::('E'::('R'::('M'::('1'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))))
@@ -2049,7 +2046,7 @@ let step code s =
                 Step
                   (st s target_pc s.accu (arg1 :: (arg2 :: base)) s.accu
                     (Nat.add s.extra_args (Stdlib.Int.succ 0)) s.global
-                    s.trap_stack)
+                    s.trap_sp)
               | None ->
                 Error
                   ('A'::('P'::('P'::('T'::('E'::('R'::('M'::('2'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[]))))))))))))))))))))))))))))))))))
@@ -2077,7 +2074,7 @@ let step code s =
                        (arg1 :: (arg2 :: (arg3 :: base))) s.accu
                        (Nat.add s.extra_args (Stdlib.Int.succ
                          (Stdlib.Int.succ 0)))
-                       s.global s.trap_stack)
+                       s.global s.trap_sp)
                  | None ->
                    Error
                      ('A'::('P'::('P'::('T'::('E'::('R'::('M'::('3'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))))))))))
@@ -2089,7 +2086,7 @@ let step code s =
                Step
                  (st s target_pc s.accu stk s.accu
                    (Nat.sub s.extra_args (Stdlib.Int.succ 0)) s.global
-                   s.trap_stack)
+                   s.trap_sp)
              | None ->
                Error
                  ('R'::('E'::('T'::('U'::('R'::('N'::(':'::(' '::('a'::('c'::('c'::('u'::(' '::('i'::('s'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[]))))))))))))))))))))))))))))))
@@ -2114,7 +2111,7 @@ let step code s =
                          | Val_int saved_ea ->
                            Step
                              (st s ret_pc s.accu rest saved_env
-                               (Z.to_nat saved_ea) s.global s.trap_stack)
+                               (Z.to_nat saved_ea) s.global s.trap_sp)
                          | _ ->
                            Error
                              ('R'::('E'::('T'::('U'::('R'::('N'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))))))
@@ -2137,7 +2134,7 @@ let step code s =
           | Some saved_env ->
             Step
               (st s pc' s.accu new_stack saved_env
-                (Nat.add s.extra_args num_args) s.global s.trap_stack)
+                (Nat.add s.extra_args num_args) s.global s.trap_sp)
           | None ->
             Error
               ('R'::('E'::('S'::('T'::('A'::('R'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('c'::('l'::('o'::('s'::('u'::('r'::('e'::[])))))))))))))))))))))))))))
@@ -2166,7 +2163,7 @@ let step code s =
        if (<=) required s.extra_args
        then Step
               (st s pc' s.accu s.stack s.env (Nat.sub s.extra_args required)
-                s.global s.trap_stack)
+                s.global s.trap_sp)
        else let num_args = Stdlib.Int.succ s.extra_args in
             let saved_args = firstn num_args s.stack in
             let rest_stack = skipn num_args s.stack in
@@ -2200,7 +2197,7 @@ let step code s =
                          | Val_int saved_ea ->
                            Step
                              (st s' ret_pc closure rest saved_env
-                               (Z.to_nat saved_ea) s.global s.trap_stack)
+                               (Z.to_nat saved_ea) s.global s.trap_sp)
                          | _ ->
                            Error
                              ('G'::('R'::('A'::('B'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))))
@@ -2218,7 +2215,7 @@ let step code s =
                   | Val_ptr a -> a
                   | _ -> 0 in
        let closure = Val_closure (addr, 0) in
-       Step (st s' pc' closure rest s.env s.extra_args s.global s.trap_stack)
+       Step (st s' pc' closure rest s.env s.extra_args s.global s.trap_sp)
      | CLOSUREREC (nfuncs, nvars, code_offsets) ->
        let stk = if Nat.ltb 0 nvars then s.accu :: s.stack else s.stack in
        let vars = firstn nvars stk in
@@ -2267,21 +2264,21 @@ let step code s =
           let new_stack = push_closures nfuncs rest in
           Step
           (st s' pc' (closure_at 0) new_stack s.env s.extra_args s.global
-            s.trap_stack))
+            s.trap_sp))
      | OFFSETCLOSURE ofs ->
        (match s.env with
         | Val_block (_, _) ->
           if Z.eqb ofs 0
           then Step
                  (st s pc' s.env s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Error
                  ('O'::('F'::('F'::('S'::('E'::('T'::('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('n'::('o'::('n'::('-'::('z'::('e'::('r'::('o'::(' '::('o'::('f'::('f'::('s'::('e'::('t'::(' '::('o'::('n'::(' '::('n'::('o'::('n'::('-'::('c'::('l'::('o'::('s'::('u'::('r'::('e'::(' '::('e'::('n'::('v'::[])))))))))))))))))))))))))))))))))))))))))))))))))
         | Val_closure (addr, base_ofs) ->
           let new_ofs = Z.to_nat (Z.add (Z.of_nat base_ofs) ofs) in
-          let clos = Val_closure (addr, new_ofs) in
           Step
-          (st s pc' clos s.stack s.env s.extra_args s.global s.trap_stack)
+          (st s pc' (Val_closure (addr, new_ofs)) s.stack s.env s.extra_args
+            s.global s.trap_sp)
         | _ ->
           Error
             ('O'::('F'::('F'::('S'::('E'::('T'::('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('i'::('n'::('v'::('a'::('l'::('i'::('d'::(' '::('e'::('n'::('v'::[])))))))))))))))))))))))))))
@@ -2292,21 +2289,21 @@ let step code s =
           if Z.eqb ofs 0
           then Step
                  (st s pc' s.env new_stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Error
                  ('P'::('U'::('S'::('H'::('O'::('F'::('F'::('S'::('E'::('T'::('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('n'::('o'::('n'::('-'::('z'::('e'::('r'::('o'::(' '::('o'::('f'::('f'::('s'::('e'::('t'::(' '::('o'::('n'::(' '::('n'::('o'::('n'::('-'::('c'::('l'::('o'::('s'::('u'::('r'::('e'::(' '::('e'::('n'::('v'::[])))))))))))))))))))))))))))))))))))))))))))))))))))))
         | Val_closure (addr, base_ofs) ->
           let new_ofs = Z.to_nat (Z.add (Z.of_nat base_ofs) ofs) in
-          let clos = Val_closure (addr, new_ofs) in
           Step
-          (st s pc' clos new_stack s.env s.extra_args s.global s.trap_stack)
+          (st s pc' (Val_closure (addr, new_ofs)) new_stack s.env
+            s.extra_args s.global s.trap_sp)
         | _ ->
           Error
             ('P'::('U'::('S'::('H'::('O'::('F'::('F'::('S'::('E'::('T'::('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('i'::('n'::('v'::('a'::('l'::('i'::('d'::(' '::('e'::('n'::('v'::[])))))))))))))))))))))))))))))))
      | GETGLOBAL n0 ->
        (match nth_error s.global n0 with
         | Some v ->
-          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
         | None ->
           Error
             ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))
@@ -2314,7 +2311,7 @@ let step code s =
        let new_stack = s.accu :: s.stack in
        (match nth_error s.global n0 with
         | Some v ->
-          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
+          Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_sp)
         | None ->
           Error
             ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
@@ -2323,8 +2320,7 @@ let step code s =
         | Some glob ->
           (match field_or_heap s glob p with
            | Some v ->
-             Step
-               (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
+             Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
            | None ->
              Error
                ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('f'::('i'::('e'::('l'::('d'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))
@@ -2337,8 +2333,7 @@ let step code s =
         | Some glob ->
           (match field_or_heap s glob p with
            | Some v ->
-             Step
-               (st s pc' v new_stack s.env s.extra_args s.global s.trap_stack)
+             Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_sp)
            | None ->
              Error
                ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('f'::('i'::('e'::('l'::('d'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))))))
@@ -2352,24 +2347,24 @@ let step code s =
          | None -> s.global
        in
        Step
-       (st s pc' val_unit s.stack s.env s.extra_args new_global s.trap_stack)
+       (st s pc' val_unit s.stack s.env s.extra_args new_global s.trap_sp)
      | ATOM t ->
        let (s', ptr) = heap_alloc s t [] in
-       Step (st s' pc' ptr s.stack s.env s.extra_args s.global s.trap_stack)
+       Step (st s' pc' ptr s.stack s.env s.extra_args s.global s.trap_sp)
      | PUSHATOM t ->
        let new_stack = s.accu :: s.stack in
        let (s', ptr) = heap_alloc s t [] in
-       Step (st s' pc' ptr new_stack s.env s.extra_args s.global s.trap_stack)
+       Step (st s' pc' ptr new_stack s.env s.extra_args s.global s.trap_sp)
      | MAKEBLOCK (t, size) ->
        let fields =
          s.accu :: (firstn (Nat.sub size (Stdlib.Int.succ 0)) s.stack)
        in
        let new_stack = skipn (Nat.sub size (Stdlib.Int.succ 0)) s.stack in
        let (s', ptr) = heap_alloc s t fields in
-       Step (st s' pc' ptr new_stack s.env s.extra_args s.global s.trap_stack)
+       Step (st s' pc' ptr new_stack s.env s.extra_args s.global s.trap_sp)
      | MAKEBLOCK1 t ->
        let (s', ptr) = heap_alloc s t (s.accu :: []) in
-       Step (st s' pc' ptr s.stack s.env s.extra_args s.global s.trap_stack)
+       Step (st s' pc' ptr s.stack s.env s.extra_args s.global s.trap_sp)
      | MAKEBLOCK2 t ->
        (match s.stack with
         | [] ->
@@ -2377,7 +2372,7 @@ let step code s =
             ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('2'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
         | v1 :: rest ->
           let (s', ptr) = heap_alloc s t (s.accu :: (v1 :: [])) in
-          Step (st s' pc' ptr rest s.env s.extra_args s.global s.trap_stack))
+          Step (st s' pc' ptr rest s.env s.extra_args s.global s.trap_sp))
      | MAKEBLOCK3 t ->
        (match s.stack with
         | [] ->
@@ -2390,15 +2385,14 @@ let step code s =
                ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('3'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
            | v2 :: rest ->
              let (s', ptr) = heap_alloc s t (s.accu :: (v1 :: (v2 :: []))) in
-             Step
-             (st s' pc' ptr rest s.env s.extra_args s.global s.trap_stack)))
+             Step (st s' pc' ptr rest s.env s.extra_args s.global s.trap_sp)))
      | MAKEFLOATBLOCK _ ->
        Error
          ('M'::('A'::('K'::('E'::('F'::('L'::('O'::('A'::('T'::('B'::('L'::('O'::('C'::('K'::(':'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))))
      | GETFIELD n0 ->
        (match field_or_heap s s.accu n0 with
         | Some v ->
-          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_stack)
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
         | None ->
           Error
             ('G'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))
@@ -2421,8 +2415,7 @@ let step code s =
                    let new_hp = heap_update s.hp addr new_fields in
                    Step { pc = pc'; accu = val_unit; stack = rest; env =
                    s.env; extra_args = s.extra_args; global = s.global;
-                   trap_stack = s.trap_stack; hp = new_hp; next_addr =
-                   s.next_addr }
+                   trap_sp = s.trap_sp; hp = new_hp; next_addr = s.next_addr }
                  | None ->
                    Error
                      ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))))))))))))))))
@@ -2440,7 +2433,7 @@ let step code s =
         | Some n0 ->
           Step
             (st s pc' (Val_int (Z.of_nat n0)) s.stack s.env s.extra_args
-              s.global s.trap_stack)
+              s.global s.trap_sp)
         | None ->
           Error
             ('V'::('E'::('C'::('T'::('L'::('E'::('N'::('G'::('T'::('H'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('b'::('l'::('o'::('c'::('k'::[]))))))))))))))))))))))))
@@ -2454,8 +2447,7 @@ let step code s =
            | Val_int idx ->
              (match field_or_heap s s.accu (Z.to_nat idx) with
               | Some v0 ->
-                Step
-                  (st s pc' v0 rest s.env s.extra_args s.global s.trap_stack)
+                Step (st s pc' v0 rest s.env s.extra_args s.global s.trap_sp)
               | None ->
                 Error
                   ('G'::('E'::('T'::('V'::('E'::('C'::('T'::('I'::('T'::('E'::('M'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))
@@ -2485,7 +2477,7 @@ let step code s =
                          let new_hp = heap_update s.hp addr new_fields in
                          Step { pc = pc'; accu = val_unit; stack = rest;
                          env = s.env; extra_args = s.extra_args; global =
-                         s.global; trap_stack = s.trap_stack; hp = new_hp;
+                         s.global; trap_sp = s.trap_sp; hp = new_hp;
                          next_addr = s.next_addr }
                        | None ->
                          Error
@@ -2513,13 +2505,13 @@ let step code s =
                  | Val_int c ->
                    Step
                      (st s pc' (Val_int c) rest s.env s.extra_args s.global
-                       s.trap_stack)
+                       s.trap_sp)
                  | _ ->
                    Error
-                     ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+                     ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::(' '::('o'::('r'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('h'::('a'::('r'::[])))))))))))))))))))))))))))))))))))))))))))))))))
               | None ->
                 Error
-                  ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+                  ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::(' '::('o'::('r'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('h'::('a'::('r'::[])))))))))))))))))))))))))))))))))))))))))))))))))
            | _ ->
              Error
                ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))
@@ -2549,7 +2541,7 @@ let step code s =
                             let new_hp = heap_update s.hp addr new_fields in
                             Step { pc = pc'; accu = val_unit; stack = rest;
                             env = s.env; extra_args = s.extra_args; global =
-                            s.global; trap_stack = s.trap_stack; hp = new_hp;
+                            s.global; trap_sp = s.trap_sp; hp = new_hp;
                             next_addr = s.next_addr }
                           | None ->
                             Error
@@ -2580,54 +2572,48 @@ let step code s =
                  | Val_int c ->
                    Step
                      (st s pc' (Val_int c) rest s.env s.extra_args s.global
-                       s.trap_stack)
+                       s.trap_sp)
                  | _ ->
                    Error
-                     ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+                     ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::(' '::('o'::('r'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('h'::('a'::('r'::[])))))))))))))))))))))))))))))))))))))))))))))))))
               | None ->
                 Error
-                  ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+                  ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::(' '::('o'::('r'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('c'::('h'::('a'::('r'::[])))))))))))))))))))))))))))))))))))))))))))))))))
            | _ ->
              Error
                ('G'::('E'::('T'::('S'::('T'::('R'::('I'::('N'::('G'::('C'::('H'::('A'::('R'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))
      | BRANCH target ->
-       Step
-         (st s target s.accu s.stack s.env s.extra_args s.global s.trap_stack)
+       Step (st s target s.accu s.stack s.env s.extra_args s.global s.trap_sp)
      | BRANCHIF target ->
        (match s.accu with
         | Val_int z0 ->
           ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
              (fun _ -> Step
-             (st s pc' s.accu s.stack s.env s.extra_args s.global
-               s.trap_stack))
+             (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_sp))
              (fun _ -> Step
              (st s target s.accu s.stack s.env s.extra_args s.global
-               s.trap_stack))
+               s.trap_sp))
              (fun _ -> Step
              (st s target s.accu s.stack s.env s.extra_args s.global
-               s.trap_stack))
+               s.trap_sp))
              z0)
         | _ ->
           Step
-            (st s target s.accu s.stack s.env s.extra_args s.global
-              s.trap_stack))
+            (st s target s.accu s.stack s.env s.extra_args s.global s.trap_sp))
      | BRANCHIFNOT target ->
        (match s.accu with
         | Val_int z0 ->
           ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
              (fun _ -> Step
              (st s target s.accu s.stack s.env s.extra_args s.global
-               s.trap_stack))
+               s.trap_sp))
              (fun _ -> Step
-             (st s pc' s.accu s.stack s.env s.extra_args s.global
-               s.trap_stack))
+             (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_sp))
              (fun _ -> Step
-             (st s pc' s.accu s.stack s.env s.extra_args s.global
-               s.trap_stack))
+             (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_sp))
              z0)
         | _ ->
-          Step
-            (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_stack))
+          Step (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_sp))
      | SWITCH (_, _, const_targets, block_targets) ->
        (match s.accu with
         | Val_int n0 ->
@@ -2635,7 +2621,7 @@ let step code s =
            | Some target ->
              Step
                (st s target s.accu s.stack s.env s.extra_args s.global
-                 s.trap_stack)
+                 s.trap_sp)
            | None ->
              Error
                ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('c'::('o'::('n'::('s'::('t'::('a'::('n'::('t'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('r'::('a'::('n'::('g'::('e'::[]))))))))))))))))))))))))))))))))))))
@@ -2644,7 +2630,7 @@ let step code s =
            | Some target ->
              Step
                (st s target s.accu s.stack s.env s.extra_args s.global
-                 s.trap_stack)
+                 s.trap_sp)
            | None ->
              Error
                ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('b'::('l'::('o'::('c'::('k'::(' '::('t'::('a'::('g'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('r'::('a'::('n'::('g'::('e'::[])))))))))))))))))))))))))))))))
@@ -2655,7 +2641,7 @@ let step code s =
               | Some target ->
                 Step
                   (st s target s.accu s.stack s.env s.extra_args s.global
-                    s.trap_stack)
+                    s.trap_sp)
               | None ->
                 Error
                   ('S'::('W'::('I'::('T'::('C'::('H'::(':'::(' '::('b'::('l'::('o'::('c'::('k'::(' '::('t'::('a'::('g'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('r'::('a'::('n'::('g'::('e'::[])))))))))))))))))))))))))))))))
@@ -2667,224 +2653,214 @@ let step code s =
         | Val_int z0 ->
           ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
              (fun _ -> Step
-             (st s pc' val_true s.stack s.env s.extra_args s.global
-               s.trap_stack))
+             (st s pc' val_true s.stack s.env s.extra_args s.global s.trap_sp))
              (fun _ -> Step
              (st s pc' val_false s.stack s.env s.extra_args s.global
-               s.trap_stack))
+               s.trap_sp))
              (fun _ -> Step
              (st s pc' val_false s.stack s.env s.extra_args s.global
-               s.trap_stack))
+               s.trap_sp))
              z0)
         | _ ->
           Step
-            (st s pc' val_false s.stack s.env s.extra_args s.global
-              s.trap_stack))
+            (st s pc' val_false s.stack s.env s.extra_args s.global s.trap_sp))
      | PUSHTRAP handler_pc ->
-       let trap_frame0 = (Val_int handler_pc) :: ((Val_int
-         0) :: (s.env :: ((Val_int (Z.of_nat s.extra_args)) :: s.stack)))
+       let prev_tsp = Val_int (Z.of_nat s.trap_sp) in
+       let new_stack = (Val_int
+         handler_pc) :: (prev_tsp :: (s.env :: ((Val_int
+         (Z.of_nat s.extra_args)) :: s.stack)))
        in
-       let tf = { trap_pc = handler_pc; trap_sp_offset =
-         (length trap_frame0); trap_env = s.env; trap_extra_args =
-         s.extra_args }
-       in
-       Step
-       (st s pc' s.accu trap_frame0 s.env s.extra_args s.global
-         (tf :: s.trap_stack))
+       let new_tsp = length new_stack in
+       Step (st s pc' s.accu new_stack s.env s.extra_args s.global new_tsp)
      | POPTRAP ->
-       (match s.trap_stack with
+       (match s.stack with
         | [] ->
           Error
-            ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('n'::('o'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))
-        | _ :: rest ->
-          Step
-            (st s pc' s.accu
-              (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                (Stdlib.Int.succ 0)))) s.stack)
-              s.env s.extra_args s.global rest))
+            ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+        | _ :: l ->
+          (match l with
+           | [] ->
+             Error
+               ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+           | v0 :: l0 ->
+             (match v0 with
+              | Val_int prev_tsp ->
+                (match l0 with
+                 | [] ->
+                   Error
+                     ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+                 | _ :: l1 ->
+                   (match l1 with
+                    | [] ->
+                      Error
+                        ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+                    | _ :: rest ->
+                      Step
+                        (st s pc' s.accu rest s.env s.extra_args s.global
+                          (Z.to_nat prev_tsp))))
+              | _ ->
+                Error
+                  ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))))
      | RAISE ->
-       (match s.trap_stack with
-        | [] ->
-          Error
-            ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
-        | tf :: rest ->
-          let stack_depth = tf.trap_sp_offset in
-          let restored = skipn (Nat.sub (length s.stack) stack_depth) s.stack
-          in
-          (match restored with
-           | [] ->
-             Step
-               (st s tf.trap_pc s.accu
-                 (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                   (Stdlib.Int.succ 0)))) restored)
-                 tf.trap_env tf.trap_extra_args s.global rest)
-           | _ :: l ->
-             (match l with
-              | [] ->
-                Step
-                  (st s tf.trap_pc s.accu
-                    (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                      (Stdlib.Int.succ 0)))) restored)
-                    tf.trap_env tf.trap_extra_args s.global rest)
-              | _ :: l0 ->
-                (match l0 with
-                 | [] ->
-                   Step
-                     (st s tf.trap_pc s.accu
-                       (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                         (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
-                       tf.trap_env tf.trap_extra_args s.global rest)
-                 | saved_env :: l1 ->
-                   (match l1 with
-                    | [] ->
-                      Step
-                        (st s tf.trap_pc s.accu
-                          (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                            (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
-                          tf.trap_env tf.trap_extra_args s.global rest)
-                    | v1 :: real_stack ->
-                      (match v1 with
-                       | Val_int saved_ea ->
-                         Step
-                           (st s tf.trap_pc s.accu real_stack saved_env
-                             (Z.to_nat saved_ea) s.global rest)
-                       | _ ->
-                         Step
-                           (st s tf.trap_pc s.accu
-                             (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                               (Stdlib.Int.succ (Stdlib.Int.succ 0))))
-                               restored)
-                             tf.trap_env tf.trap_extra_args s.global rest)))))))
+       if (=) s.trap_sp 0
+       then Error
+              ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
+       else let k = Nat.sub (length s.stack) s.trap_sp in
+            let frame_top = skipn k s.stack in
+            (match frame_top with
+             | [] ->
+               Error
+                 ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+             | v :: l ->
+               (match v with
+                | Val_int handler_pc ->
+                  (match l with
+                   | [] ->
+                     Error
+                       ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                   | v0 :: l0 ->
+                     (match v0 with
+                      | Val_int prev_tsp ->
+                        (match l0 with
+                         | [] ->
+                           Error
+                             ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                         | saved_env :: l1 ->
+                           (match l1 with
+                            | [] ->
+                              Error
+                                ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                            | v1 :: rest ->
+                              (match v1 with
+                               | Val_int saved_ea ->
+                                 Step { pc = handler_pc; accu = s.accu;
+                                   stack = rest; env = saved_env;
+                                   extra_args = (Z.to_nat saved_ea); global =
+                                   s.global; trap_sp = (Z.to_nat prev_tsp);
+                                   hp = s.hp; next_addr = s.next_addr }
+                               | _ ->
+                                 Error
+                                   ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
+                      | _ ->
+                        Error
+                          ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+                | _ ->
+                  Error
+                    ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
      | RERAISE ->
-       (match s.trap_stack with
-        | [] ->
-          Error
-            ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
-        | tf :: rest ->
-          let stack_depth = tf.trap_sp_offset in
-          let restored = skipn (Nat.sub (length s.stack) stack_depth) s.stack
-          in
-          (match restored with
-           | [] ->
-             Step
-               (st s tf.trap_pc s.accu
-                 (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                   (Stdlib.Int.succ 0)))) restored)
-                 tf.trap_env tf.trap_extra_args s.global rest)
-           | _ :: l ->
-             (match l with
-              | [] ->
-                Step
-                  (st s tf.trap_pc s.accu
-                    (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                      (Stdlib.Int.succ 0)))) restored)
-                    tf.trap_env tf.trap_extra_args s.global rest)
-              | _ :: l0 ->
-                (match l0 with
-                 | [] ->
-                   Step
-                     (st s tf.trap_pc s.accu
-                       (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                         (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
-                       tf.trap_env tf.trap_extra_args s.global rest)
-                 | saved_env :: l1 ->
-                   (match l1 with
-                    | [] ->
-                      Step
-                        (st s tf.trap_pc s.accu
-                          (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                            (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
-                          tf.trap_env tf.trap_extra_args s.global rest)
-                    | v1 :: real_stack ->
-                      (match v1 with
-                       | Val_int saved_ea ->
-                         Step
-                           (st s tf.trap_pc s.accu real_stack saved_env
-                             (Z.to_nat saved_ea) s.global rest)
-                       | _ ->
-                         Step
-                           (st s tf.trap_pc s.accu
-                             (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                               (Stdlib.Int.succ (Stdlib.Int.succ 0))))
-                               restored)
-                             tf.trap_env tf.trap_extra_args s.global rest)))))))
+       if (=) s.trap_sp 0
+       then Error
+              ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
+       else let k = Nat.sub (length s.stack) s.trap_sp in
+            let frame_top = skipn k s.stack in
+            (match frame_top with
+             | [] ->
+               Error
+                 ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+             | v :: l ->
+               (match v with
+                | Val_int handler_pc ->
+                  (match l with
+                   | [] ->
+                     Error
+                       ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                   | v0 :: l0 ->
+                     (match v0 with
+                      | Val_int prev_tsp ->
+                        (match l0 with
+                         | [] ->
+                           Error
+                             ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                         | saved_env :: l1 ->
+                           (match l1 with
+                            | [] ->
+                              Error
+                                ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                            | v1 :: rest ->
+                              (match v1 with
+                               | Val_int saved_ea ->
+                                 Step { pc = handler_pc; accu = s.accu;
+                                   stack = rest; env = saved_env;
+                                   extra_args = (Z.to_nat saved_ea); global =
+                                   s.global; trap_sp = (Z.to_nat prev_tsp);
+                                   hp = s.hp; next_addr = s.next_addr }
+                               | _ ->
+                                 Error
+                                   ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
+                      | _ ->
+                        Error
+                          ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+                | _ ->
+                  Error
+                    ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
      | RAISE_NOTRACE ->
-       (match s.trap_stack with
-        | [] ->
-          Error
-            ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
-        | tf :: rest ->
-          let stack_depth = tf.trap_sp_offset in
-          let restored = skipn (Nat.sub (length s.stack) stack_depth) s.stack
-          in
-          (match restored with
-           | [] ->
-             Step
-               (st s tf.trap_pc s.accu
-                 (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                   (Stdlib.Int.succ 0)))) restored)
-                 tf.trap_env tf.trap_extra_args s.global rest)
-           | _ :: l ->
-             (match l with
-              | [] ->
-                Step
-                  (st s tf.trap_pc s.accu
-                    (skipn (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                      (Stdlib.Int.succ 0)))) restored)
-                    tf.trap_env tf.trap_extra_args s.global rest)
-              | _ :: l0 ->
-                (match l0 with
-                 | [] ->
-                   Step
-                     (st s tf.trap_pc s.accu
-                       (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                         (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
-                       tf.trap_env tf.trap_extra_args s.global rest)
-                 | saved_env :: l1 ->
-                   (match l1 with
-                    | [] ->
-                      Step
-                        (st s tf.trap_pc s.accu
-                          (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                            (Stdlib.Int.succ (Stdlib.Int.succ 0)))) restored)
-                          tf.trap_env tf.trap_extra_args s.global rest)
-                    | v1 :: real_stack ->
-                      (match v1 with
-                       | Val_int saved_ea ->
-                         Step
-                           (st s tf.trap_pc s.accu real_stack saved_env
-                             (Z.to_nat saved_ea) s.global rest)
-                       | _ ->
-                         Step
-                           (st s tf.trap_pc s.accu
-                             (skipn (Stdlib.Int.succ (Stdlib.Int.succ
-                               (Stdlib.Int.succ (Stdlib.Int.succ 0))))
-                               restored)
-                             tf.trap_env tf.trap_extra_args s.global rest)))))))
+       if (=) s.trap_sp 0
+       then Error
+              ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
+       else let k = Nat.sub (length s.stack) s.trap_sp in
+            let frame_top = skipn k s.stack in
+            (match frame_top with
+             | [] ->
+               Error
+                 ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+             | v :: l ->
+               (match v with
+                | Val_int handler_pc ->
+                  (match l with
+                   | [] ->
+                     Error
+                       ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                   | v0 :: l0 ->
+                     (match v0 with
+                      | Val_int prev_tsp ->
+                        (match l0 with
+                         | [] ->
+                           Error
+                             ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                         | saved_env :: l1 ->
+                           (match l1 with
+                            | [] ->
+                              Error
+                                ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                            | v1 :: rest ->
+                              (match v1 with
+                               | Val_int saved_ea ->
+                                 Step { pc = handler_pc; accu = s.accu;
+                                   stack = rest; env = saved_env;
+                                   extra_args = (Z.to_nat saved_ea); global =
+                                   s.global; trap_sp = (Z.to_nat prev_tsp);
+                                   hp = s.hp; next_addr = s.next_addr }
+                               | _ ->
+                                 Error
+                                   ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
+                      | _ ->
+                        Error
+                          ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+                | _ ->
+                  Error
+                    ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
      | C_CALL (nargs, prim_idx) ->
        let args =
          s.accu :: (firstn (Nat.sub nargs (Stdlib.Int.succ 0)) s.stack)
        in
        let new_stack = skipn (Nat.sub nargs (Stdlib.Int.succ 0)) s.stack in
        let cont =
-         st s pc' val_unit new_stack s.env s.extra_args s.global s.trap_stack
+         st s pc' val_unit new_stack s.env s.extra_args s.global s.trap_sp
        in
        CCall_request (prim_idx, args, cont)
      | CONSTINT n0 ->
        Step
-         (st s pc' (Val_int n0) s.stack s.env s.extra_args s.global
-           s.trap_stack)
+         (st s pc' (Val_int n0) s.stack s.env s.extra_args s.global s.trap_sp)
      | PUSHCONSTINT n0 ->
        let new_stack = s.accu :: s.stack in
        Step
-       (st s pc' (Val_int n0) new_stack s.env s.extra_args s.global
-         s.trap_stack)
+       (st s pc' (Val_int n0) new_stack s.env s.extra_args s.global s.trap_sp)
      | NEGINT ->
        (match s.accu with
         | Val_int n0 ->
           Step
             (st s pc' (Val_int (Z.opp n0)) s.stack s.env s.extra_args
-              s.global s.trap_stack)
+              s.global s.trap_sp)
         | _ ->
           Error
             ('N'::('E'::('G'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
@@ -2900,7 +2876,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.add a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('A'::('D'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -2919,7 +2895,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.sub a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('S'::('U'::('B'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -2938,7 +2914,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.mul a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('M'::('U'::('L'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -2960,7 +2936,7 @@ let step code s =
                        ('D'::('I'::('V'::('I'::('N'::('T'::(':'::(' '::('d'::('i'::('v'::('i'::('s'::('i'::('o'::('n'::(' '::('b'::('y'::(' '::('z'::('e'::('r'::('o'::[]))))))))))))))))))))))))
                 else Step
                        (st s pc' (Val_int (Z.quot a b)) rest s.env
-                         s.extra_args s.global s.trap_stack)
+                         s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('D'::('I'::('V'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -2982,7 +2958,7 @@ let step code s =
                        ('M'::('O'::('D'::('I'::('N'::('T'::(':'::(' '::('d'::('i'::('v'::('i'::('s'::('i'::('o'::('n'::(' '::('b'::('y'::(' '::('z'::('e'::('r'::('o'::[]))))))))))))))))))))))))
                 else Step
                        (st s pc' (Val_int (Z.rem a b)) rest s.env
-                         s.extra_args s.global s.trap_stack)
+                         s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('M'::('O'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3001,7 +2977,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.coq_land a b)) rest s.env
-                    s.extra_args s.global s.trap_stack)
+                    s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('A'::('N'::('D'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3020,7 +2996,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.coq_lor a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('O'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
@@ -3039,7 +3015,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.coq_lxor a b)) rest s.env
-                    s.extra_args s.global s.trap_stack)
+                    s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('X'::('O'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3058,7 +3034,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.shiftl a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('L'::('S'::('L'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3077,7 +3053,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (z_lsr a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('L'::('S'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3096,7 +3072,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (Val_int (Z.shiftr a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('A'::('S'::('R'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3111,7 +3087,7 @@ let step code s =
         | b :: rest ->
           Step
             (st s pc' (if value_eqb s.accu b then val_true else val_false)
-              rest s.env s.extra_args s.global s.trap_stack))
+              rest s.env s.extra_args s.global s.trap_sp))
      | NEQ ->
        (match s.stack with
         | [] ->
@@ -3120,7 +3096,7 @@ let step code s =
         | b :: rest ->
           Step
             (st s pc' (if value_eqb s.accu b then val_false else val_true)
-              rest s.env s.extra_args s.global s.trap_stack))
+              rest s.env s.extra_args s.global s.trap_sp))
      | LTINT ->
        (match s.accu with
         | Val_int a ->
@@ -3133,7 +3109,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (val_bool (Z.ltb a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('L'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
@@ -3152,7 +3128,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (val_bool (Z.leb a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('L'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
@@ -3171,7 +3147,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (val_bool (Z.gtb a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('G'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
@@ -3190,7 +3166,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (val_bool (Z.geb a b)) rest s.env s.extra_args
-                    s.global s.trap_stack)
+                    s.global s.trap_sp)
               | _ ->
                 Error
                   ('G'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))))))))))
@@ -3202,7 +3178,7 @@ let step code s =
         | Val_int a ->
           Step
             (st s pc' (Val_int (Z.add a n0)) s.stack s.env s.extra_args
-              s.global s.trap_stack)
+              s.global s.trap_sp)
         | _ ->
           Error
             ('O'::('F'::('F'::('S'::('E'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))))
@@ -3224,8 +3200,7 @@ let step code s =
                    in
                    Step { pc = pc'; accu = val_unit; stack = s.stack; env =
                    s.env; extra_args = s.extra_args; global = s.global;
-                   trap_stack = s.trap_stack; hp = new_hp; next_addr =
-                   s.next_addr }
+                   trap_sp = s.trap_sp; hp = new_hp; next_addr = s.next_addr }
                  | _ ->
                    Error
                      ('O'::('F'::('F'::('S'::('E'::('T'::('R'::('E'::('F'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('r'::('e'::('f'::[]))))))))))))))))))))))
@@ -3238,7 +3213,7 @@ let step code s =
      | ISINT ->
        Step
          (st s pc' (if is_int s.accu then val_true else val_false) s.stack
-           s.env s.extra_args s.global s.trap_stack)
+           s.env s.extra_args s.global s.trap_sp)
      | GETMETHOD ->
        Error
          ('G'::('E'::('T'::('M'::('E'::('T'::('H'::('O'::('D'::(':'::(' '::('O'::('O'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))
@@ -3254,10 +3229,10 @@ let step code s =
           if Z.eqb a n0
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('E'::('Q'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))
@@ -3267,10 +3242,10 @@ let step code s =
           if Z.eqb a n0
           then Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('N'::('E'::('Q'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))
@@ -3280,10 +3255,10 @@ let step code s =
           if Z.ltb n0 a
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
@@ -3293,10 +3268,10 @@ let step code s =
           if Z.leb n0 a
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('L'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
@@ -3306,10 +3281,10 @@ let step code s =
           if Z.gtb n0 a
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('G'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
@@ -3319,10 +3294,10 @@ let step code s =
           if Z.geb n0 a
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
@@ -3338,7 +3313,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (val_bool (Z.ltb (z_unsigned a) (z_unsigned b)))
-                    rest s.env s.extra_args s.global s.trap_stack)
+                    rest s.env s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3357,7 +3332,7 @@ let step code s =
               | Val_int b ->
                 Step
                   (st s pc' (val_bool (Z.geb (z_unsigned a) (z_unsigned b)))
-                    rest s.env s.extra_args s.global s.trap_stack)
+                    rest s.env s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3370,10 +3345,10 @@ let step code s =
           if Z.ltb (z_unsigned n0) (z_unsigned a)
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))
@@ -3383,10 +3358,10 @@ let step code s =
           if Z.geb (z_unsigned n0) (z_unsigned a)
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
           else Step
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
-                   s.trap_stack)
+                   s.trap_sp)
         | _ ->
           Error
             ('B'::('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))
@@ -3404,7 +3379,7 @@ let step code s =
        Error
          ('R'::('E'::('P'::('E'::('R'::('F'::('O'::('R'::('M'::('T'::('E'::('R'::('M'::(':'::(' '::('e'::('f'::('f'::('e'::('c'::('t'::('s'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))
      | _ ->
-       Step (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_stack))
+       Step (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_sp))
   | None ->
     Error
       ('p'::('c'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))
@@ -3433,1598 +3408,6 @@ let rec run fuel code s handle_ccall =
 
 let run_pure fuel code global_data =
   run fuel code (initial_state global_data) (fun _ _ -> None)
-
-type ident = char list
-
-type binop =
-| Op_add
-| Op_sub
-| Op_mul
-| Op_div
-| Op_mod
-| Op_eq
-| Op_neq
-| Op_lt
-| Op_le
-| Op_gt
-| Op_ge
-| Op_and
-| Op_or
-
-type unop =
-| Op_neg
-| Op_not
-
-type pattern =
-| Pat_var of ident
-| Pat_int of int
-| Pat_bool of bool
-| Pat_unit
-| Pat_tuple of pattern list
-| Pat_constr of ident * pattern option
-| Pat_wild
-
-type type_expr =
-| Ty_int
-| Ty_bool
-| Ty_unit
-| Ty_arrow of type_expr * type_expr
-| Ty_tuple of type_expr list
-| Ty_constr of ident * type_expr list
-
-type expr =
-| Exp_int of int
-| Exp_bool of bool
-| Exp_unit
-| Exp_var of ident
-| Exp_binop of binop * expr * expr
-| Exp_unop of unop * expr
-| Exp_if of expr * expr * expr
-| Exp_let of ident * expr * expr
-| Exp_letrec of ident * expr * expr
-| Exp_fun of ident * expr
-| Exp_app of expr * expr
-| Exp_tuple of expr list
-| Exp_constr of ident * expr option
-| Exp_match of expr * (pattern * expr) list
-| Exp_seq of expr * expr
-
-type decl =
-| Decl_let of ident * expr
-| Decl_letrec of ident * expr
-| Decl_type of ident * ident list * type_def
-| Decl_expr of expr
-and type_def =
-| Td_variant of (ident * type_expr option) list
-| Td_alias of type_expr
-
-type program = decl list
-
-(** val nat_to_string_aux : int -> int -> char list -> char list **)
-
-let rec nat_to_string_aux fuel n0 acc =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> acc)
-    (fun fuel' ->
-    let digit =
-      (ascii_of_nat
-        (add (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ 0))))))))))))))))))))))))))))))))))))))))))))))))
-          (Nat.modulo n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-            (Stdlib.Int.succ 0)))))))))))))::[]
-    in
-    let rest =
-      Nat.div n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))))))))))
-    in
-    if (=) rest 0
-    then append digit acc
-    else nat_to_string_aux fuel' rest (append digit acc))
-    fuel
-
-(** val nat_to_string : int -> char list **)
-
-let nat_to_string n0 =
-  if (=) n0 0
-  then '0'::[]
-  else nat_to_string_aux (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ 0)))))))))))))))))))) n0 []
-
-(** val z_to_string : int -> char list **)
-
-let z_to_string z0 =
-  (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-    (fun _ -> '0'::[])
-    (fun p -> nat_to_string (Coq_Pos.to_nat p))
-    (fun p ->
-    append ('('::('-'::[]))
-      (append (nat_to_string (Coq_Pos.to_nat p)) (')'::[])))
-    z0
-
-(** val intercalate : char list -> char list list -> char list **)
-
-let rec intercalate sep = function
-| [] -> []
-| x :: rest ->
-  (match rest with
-   | [] -> x
-   | _ :: _ -> append x (append sep (intercalate sep rest)))
-
-(** val pp_binop : binop -> char list **)
-
-let pp_binop = function
-| Op_add -> ' '::('+'::(' '::[]))
-| Op_sub -> ' '::('-'::(' '::[]))
-| Op_mul -> ' '::('*'::(' '::[]))
-| Op_div -> ' '::('/'::(' '::[]))
-| Op_mod -> ' '::('m'::('o'::('d'::(' '::[]))))
-| Op_eq -> ' '::('='::(' '::[]))
-| Op_neq -> ' '::('<'::('>'::(' '::[])))
-| Op_lt -> ' '::('<'::(' '::[]))
-| Op_le -> ' '::('<'::('='::(' '::[])))
-| Op_gt -> ' '::('>'::(' '::[]))
-| Op_ge -> ' '::('>'::('='::(' '::[])))
-| Op_and -> ' '::('&'::('&'::(' '::[])))
-| Op_or -> ' '::('|'::('|'::(' '::[])))
-
-(** val pp_pattern : pattern -> char list **)
-
-let rec pp_pattern = function
-| Pat_var x -> x
-| Pat_int n0 -> z_to_string n0
-| Pat_bool b ->
-  if b
-  then 't'::('r'::('u'::('e'::[])))
-  else 'f'::('a'::('l'::('s'::('e'::[]))))
-| Pat_unit -> '('::(')'::[])
-| Pat_tuple ps ->
-  append ('('::[])
-    (append (intercalate (','::(' '::[])) (map pp_pattern ps)) (')'::[]))
-| Pat_constr (c, o) ->
-  (match o with
-   | Some p0 ->
-     append ('('::[])
-       (append c (append (' '::[]) (append (pp_pattern p0) (')'::[]))))
-   | None -> c)
-| Pat_wild -> '_'::[]
-
-(** val pp_type_expr : type_expr -> char list **)
-
-let rec pp_type_expr = function
-| Ty_int -> 'i'::('n'::('t'::[]))
-| Ty_bool -> 'b'::('o'::('o'::('l'::[])))
-| Ty_unit -> 'u'::('n'::('i'::('t'::[])))
-| Ty_arrow (t1, t2) ->
-  append ('('::[])
-    (append (pp_type_expr t1)
-      (append (' '::('-'::('>'::(' '::[]))))
-        (append (pp_type_expr t2) (')'::[]))))
-| Ty_tuple ts ->
-  append ('('::[])
-    (append (intercalate (' '::('*'::(' '::[]))) (map pp_type_expr ts))
-      (')'::[]))
-| Ty_constr (name, args) ->
-  (match args with
-   | [] -> name
-   | t0 :: l ->
-     (match l with
-      | [] ->
-        append ('('::[])
-          (append (pp_type_expr t0)
-            (append (' '::[]) (append name (')'::[]))))
-      | _ :: _ ->
-        append ('('::('('::[]))
-          (append (intercalate (','::(' '::[])) (map pp_type_expr args))
-            (append (')'::(' '::[])) (append name (')'::[]))))))
-
-(** val pp_expr : expr -> char list **)
-
-let rec pp_expr = function
-| Exp_int n0 -> z_to_string n0
-| Exp_bool b ->
-  if b
-  then 't'::('r'::('u'::('e'::[])))
-  else 'f'::('a'::('l'::('s'::('e'::[]))))
-| Exp_unit -> '('::(')'::[])
-| Exp_var x -> x
-| Exp_binop (op, e1, e2) ->
-  append ('('::[])
-    (append (pp_expr e1)
-      (append (pp_binop op) (append (pp_expr e2) (')'::[]))))
-| Exp_unop (u, e0) ->
-  (match u with
-   | Op_neg -> append ('('::('-'::(' '::[]))) (append (pp_expr e0) (')'::[]))
-   | Op_not ->
-     append ('('::('n'::('o'::('t'::(' '::[])))))
-       (append (pp_expr e0) (')'::[])))
-| Exp_if (e1, e2, e3) ->
-  append ('('::('i'::('f'::(' '::[]))))
-    (append (pp_expr e1)
-      (append (' '::('t'::('h'::('e'::('n'::(' '::[]))))))
-        (append (pp_expr e2)
-          (append (' '::('e'::('l'::('s'::('e'::(' '::[]))))))
-            (append (pp_expr e3) (')'::[]))))))
-| Exp_let (x, e1, e2) ->
-  append ('('::('l'::('e'::('t'::(' '::[])))))
-    (append x
-      (append (' '::('='::(' '::[])))
-        (append (pp_expr e1)
-          (append (' '::('i'::('n'::(' '::[]))))
-            (append (pp_expr e2) (')'::[]))))))
-| Exp_letrec (f, e1, e2) ->
-  append ('('::('l'::('e'::('t'::(' '::('r'::('e'::('c'::(' '::[])))))))))
-    (append f
-      (append (' '::('='::(' '::[])))
-        (append (pp_expr e1)
-          (append (' '::('i'::('n'::(' '::[]))))
-            (append (pp_expr e2) (')'::[]))))))
-| Exp_fun (x, body) ->
-  append ('('::('f'::('u'::('n'::(' '::[])))))
-    (append x
-      (append (' '::('-'::('>'::(' '::[]))))
-        (append (pp_expr body) (')'::[]))))
-| Exp_app (f, arg) ->
-  append ('('::[])
-    (append (pp_expr f) (append (' '::[]) (append (pp_expr arg) (')'::[]))))
-| Exp_tuple es ->
-  append ('('::[])
-    (append (intercalate (','::(' '::[])) (map pp_expr es)) (')'::[]))
-| Exp_constr (c, o) ->
-  (match o with
-   | Some e0 ->
-     append ('('::[])
-       (append c (append (' '::[]) (append (pp_expr e0) (')'::[]))))
-   | None -> c)
-| Exp_match (e0, cases) ->
-  let pp_case = fun c ->
-    let (p, body) = c in
-    append ('|'::(' '::[]))
-      (append (pp_pattern p)
-        (append (' '::('-'::('>'::(' '::[])))) (pp_expr body)))
-  in
-  append ('('::('m'::('a'::('t'::('c'::('h'::(' '::[])))))))
-    (append (pp_expr e0)
-      (append (' '::('w'::('i'::('t'::('h'::(' '::[]))))))
-        (append (intercalate (' '::[]) (map pp_case cases)) (')'::[]))))
-| Exp_seq (e1, e2) ->
-  append ('('::[])
-    (append (pp_expr e1)
-      (append (';'::(' '::[])) (append (pp_expr e2) (')'::[]))))
-
-(** val pp_type_def : type_def -> char list **)
-
-let pp_type_def = function
-| Td_variant constrs ->
-  intercalate (' '::('|'::(' '::[])))
-    (map (fun cd ->
-      let (name, y) = cd in
-      (match y with
-       | Some t ->
-         append name (append (' '::('o'::('f'::(' '::[])))) (pp_type_expr t))
-       | None -> name))
-      constrs)
-| Td_alias t -> pp_type_expr t
-
-(** val pp_decl : decl -> char list **)
-
-let pp_decl = function
-| Decl_let (x, e) ->
-  append ('l'::('e'::('t'::(' '::[]))))
-    (append x (append (' '::('='::(' '::[]))) (pp_expr e)))
-| Decl_letrec (f, e) ->
-  append ('l'::('e'::('t'::(' '::('r'::('e'::('c'::(' '::[]))))))))
-    (append f (append (' '::('='::(' '::[]))) (pp_expr e)))
-| Decl_type (name, params, td) ->
-  let params_str =
-    match params with
-    | [] -> []
-    | p :: l ->
-      (match l with
-       | [] -> append ('\''::[]) (append p (' '::[]))
-       | _ :: _ ->
-         append ('('::[])
-           (append
-             (intercalate (','::(' '::[]))
-               (map (fun p0 -> append ('\''::[]) p0) params))
-             (')'::(' '::[]))))
-  in
-  append ('t'::('y'::('p'::('e'::(' '::[])))))
-    (append params_str
-      (append name (append (' '::('='::(' '::[]))) (pp_type_def td))))
-| Decl_expr e -> pp_expr e
-
-(** val pp_program : program -> char list **)
-
-let pp_program prog =
-  intercalate ('\n'::[])
-    (map (fun d -> append (pp_decl d) (';'::(';'::[]))) prog)
-
-type event = int
-  (* singleton inductive, whose constructor was Out_char *)
-
-type termination =
-| Term_normal of value
-| Term_error of char list
-| Term_timeout
-
-type behavior = { trace : event list; result : termination }
-
-type builtin =
-| Bi_print_int
-| Bi_print_string
-| Bi_print_newline
-| Bi_print_char
-| Bi_compare
-| Bi_fst
-| Bi_snd
-
-type svalue =
-| SVal_int of int
-| SVal_bool of bool
-| SVal_unit
-| SVal_tuple of svalue list
-| SVal_constr of ident * svalue option
-| SVal_closure of ident * expr * env0
-| SVal_recclosure of ident * ident * expr * env0
-| SVal_builtin of builtin
-and env0 =
-| Env_nil
-| Env_cons of ident * svalue * env0
-
-(** val env_lookup : env0 -> ident -> svalue option **)
-
-let rec env_lookup e x =
-  match e with
-  | Env_nil -> None
-  | Env_cons (y, v, rest) -> if eqb0 x y then Some v else env_lookup rest x
-
-(** val env_extend : env0 -> ident -> svalue -> env0 **)
-
-let env_extend e x v =
-  Env_cons (x, v, e)
-
-(** val env_append : env0 -> env0 -> env0 **)
-
-let rec env_append e1 e2 =
-  match e1 with
-  | Env_nil -> e2
-  | Env_cons (x, v, rest) -> Env_cons (x, v, (env_append rest e2))
-
-(** val match_pattern : pattern -> svalue -> env0 option **)
-
-let rec match_pattern p v =
-  match p with
-  | Pat_var x -> Some (Env_cons (x, v, Env_nil))
-  | Pat_int n0 ->
-    (match v with
-     | SVal_int m -> if Z.eqb n0 m then Some Env_nil else None
-     | _ -> None)
-  | Pat_bool b ->
-    (match v with
-     | SVal_bool c -> if eqb b c then Some Env_nil else None
-     | _ -> None)
-  | Pat_unit -> (match v with
-                 | SVal_unit -> Some Env_nil
-                 | _ -> None)
-  | Pat_tuple ps ->
-    (match v with
-     | SVal_tuple vs ->
-       if (=) (length ps) (length vs)
-       then let rec match_list ps0 vs0 =
-              match ps0 with
-              | [] -> (match vs0 with
-                       | [] -> Some Env_nil
-                       | _ :: _ -> None)
-              | p1 :: pr ->
-                (match vs0 with
-                 | [] -> None
-                 | v1 :: vr ->
-                   (match match_pattern p1 v1 with
-                    | Some e1 ->
-                      (match match_list pr vr with
-                       | Some e2 -> Some (env_append e1 e2)
-                       | None -> None)
-                    | None -> None))
-            in match_list ps vs
-       else None
-     | _ -> None)
-  | Pat_constr (c, o) ->
-    (match o with
-     | Some p' ->
-       (match v with
-        | SVal_constr (d, o0) ->
-          (match o0 with
-           | Some v' -> if eqb0 c d then match_pattern p' v' else None
-           | None -> None)
-        | _ -> None)
-     | None ->
-       (match v with
-        | SVal_constr (d, o0) ->
-          (match o0 with
-           | Some _ -> None
-           | None -> if eqb0 c d then Some Env_nil else None)
-        | _ -> None))
-  | Pat_wild -> Some Env_nil
-
-(** val try_cases :
-    (pattern * expr) list -> svalue -> (expr * env0) option **)
-
-let rec try_cases cases v =
-  match cases with
-  | [] -> None
-  | p0 :: rest ->
-    let (p, body) = p0 in
-    (match match_pattern p v with
-     | Some bindings -> Some (body, bindings)
-     | None -> try_cases rest v)
-
-type eval_result =
-| Eval_ok of svalue * event list
-| Eval_err of char list * event list
-| Eval_timeout of event list
-
-(** val eval_binop : binop -> svalue -> svalue -> svalue option **)
-
-let eval_binop op v1 v2 =
-  match op with
-  | Op_add ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_int (Z.add a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_sub ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_int (Z.sub a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_mul ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_int (Z.mul a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_div ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b ->
-          if Z.eqb b 0 then None else Some (SVal_int (Z.quot a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_mod ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b ->
-          if Z.eqb b 0 then None else Some (SVal_int (Z.rem a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_eq ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (Z.eqb a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_neq ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (negb (Z.eqb a b)))
-        | _ -> None)
-     | _ -> None)
-  | Op_lt ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (Z.ltb a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_le ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (Z.leb a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_gt ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (Z.gtb a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_ge ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (Z.geb a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_and ->
-    (match v1 with
-     | SVal_bool a ->
-       (match v2 with
-        | SVal_bool b -> Some (SVal_bool ((&&) a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_or ->
-    (match v1 with
-     | SVal_bool a ->
-       (match v2 with
-        | SVal_bool b -> Some (SVal_bool ((||) a b))
-        | _ -> None)
-     | _ -> None)
-
-(** val eval_unop : unop -> svalue -> svalue option **)
-
-let eval_unop op v =
-  match op with
-  | Op_neg ->
-    (match v with
-     | SVal_int n0 -> Some (SVal_int (Z.opp n0))
-     | _ -> None)
-  | Op_not ->
-    (match v with
-     | SVal_bool b -> Some (SVal_bool (negb b))
-     | _ -> None)
-
-(** val nat_to_events_aux : int -> int -> event list -> event list **)
-
-let rec nat_to_events_aux fuel n0 acc =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> acc)
-    (fun fuel' ->
-    let digit =
-      Z.of_nat
-        (add (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-          (Stdlib.Int.succ 0))))))))))))))))))))))))))))))))))))))))))))))))
-          (Nat.modulo n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-            (Stdlib.Int.succ 0))))))))))))
-    in
-    let rest =
-      Nat.div n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))))))))))
-    in
-    if (=) rest 0
-    then digit :: acc
-    else nat_to_events_aux fuel' rest (digit :: acc))
-    fuel
-
-(** val z_to_events : int -> event list **)
-
-let z_to_events z0 =
-  (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-    (fun _ -> ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-    ((fun p->1+2*p) 1))))) :: [])
-    (fun p ->
-    nat_to_events_aux (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ 0)))))))))))))))))))) (Coq_Pos.to_nat p) [])
-    (fun p -> ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-    ((fun p->2*p)
-    1))))) :: (nat_to_events_aux (Stdlib.Int.succ (Stdlib.Int.succ
-                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                0)))))))))))))))))))) (Coq_Pos.to_nat p) []))
-    z0
-
-(** val apply_builtin :
-    builtin -> svalue -> event list -> (svalue * event list) option **)
-
-let apply_builtin b arg out =
-  match b with
-  | Bi_print_int ->
-    (match arg with
-     | SVal_int n0 -> Some (SVal_unit, (app (rev (z_to_events n0)) out))
-     | _ -> None)
-  | Bi_print_newline ->
-    (match arg with
-     | SVal_unit ->
-       Some (SVal_unit, (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-         1))) :: out))
-     | _ -> None)
-  | Bi_print_char ->
-    (match arg with
-     | SVal_int c -> Some (SVal_unit, (c :: out))
-     | _ -> None)
-  | Bi_fst ->
-    (match arg with
-     | SVal_tuple l -> (match l with
-                        | [] -> None
-                        | a :: _ -> Some (a, out))
-     | _ -> None)
-  | Bi_snd ->
-    (match arg with
-     | SVal_tuple l ->
-       (match l with
-        | [] -> None
-        | _ :: l0 -> (match l0 with
-                      | [] -> None
-                      | b0 :: _ -> Some (b0, out)))
-     | _ -> None)
-  | _ -> None
-
-(** val stdlib_env : env0 **)
-
-let stdlib_env =
-  Env_cons
-    (('p'::('r'::('i'::('n'::('t'::('_'::('i'::('n'::('t'::[]))))))))),
-    (SVal_builtin Bi_print_int), (Env_cons
-    (('p'::('r'::('i'::('n'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[])))))))))))),
-    (SVal_builtin Bi_print_string), (Env_cons
-    (('p'::('r'::('i'::('n'::('t'::('_'::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[]))))))))))))),
-    (SVal_builtin Bi_print_newline), (Env_cons
-    (('p'::('r'::('i'::('n'::('t'::('_'::('c'::('h'::('a'::('r'::[])))))))))),
-    (SVal_builtin Bi_print_char), (Env_cons
-    (('c'::('o'::('m'::('p'::('a'::('r'::('e'::[]))))))), (SVal_builtin
-    Bi_compare), (Env_cons (('f'::('s'::('t'::[]))), (SVal_builtin Bi_fst),
-    (Env_cons (('s'::('n'::('d'::[]))), (SVal_builtin Bi_snd),
-    Env_nil)))))))))))))
-
-(** val eval : int -> expr -> env0 -> event list -> eval_result **)
-
-let rec eval fuel e env1 out =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> Eval_timeout out)
-    (fun fuel' ->
-    match e with
-    | Exp_int n0 -> Eval_ok ((SVal_int n0), out)
-    | Exp_bool b -> Eval_ok ((SVal_bool b), out)
-    | Exp_unit -> Eval_ok (SVal_unit, out)
-    | Exp_var x ->
-      (match env_lookup env1 x with
-       | Some v -> Eval_ok (v, out)
-       | None ->
-         Eval_err
-           (('u'::('n'::('b'::('o'::('u'::('n'::('d'::(' '::('v'::('a'::('r'::('i'::('a'::('b'::('l'::('e'::[])))))))))))))))),
-           out))
-    | Exp_binop (op, e1, e2) ->
-      (match eval fuel' e1 env1 out with
-       | Eval_ok (v1, out1) ->
-         (match eval fuel' e2 env1 out1 with
-          | Eval_ok (v2, out2) ->
-            (match eval_binop op v1 v2 with
-             | Some v -> Eval_ok (v, out2)
-             | None ->
-               Eval_err
-                 (('b'::('i'::('n'::('o'::('p'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::[])))))))))))))))),
-                 out2))
-          | x -> x)
-       | x -> x)
-    | Exp_unop (op, e1) ->
-      (match eval fuel' e1 env1 out with
-       | Eval_ok (v1, out1) ->
-         (match eval_unop op v1 with
-          | Some v -> Eval_ok (v, out1)
-          | None ->
-            Eval_err
-              (('u'::('n'::('o'::('p'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::[]))))))))))))))),
-              out1))
-       | x -> x)
-    | Exp_if (cond, then_e, else_e) ->
-      (match eval fuel' cond env1 out with
-       | Eval_ok (s, out1) ->
-         (match s with
-          | SVal_bool b ->
-            if b
-            then eval fuel' then_e env1 out1
-            else eval fuel' else_e env1 out1
-          | _ ->
-            Eval_err
-              (('i'::('f'::(':'::(' '::('n'::('o'::('n'::('-'::('b'::('o'::('o'::('l'::(' '::('c'::('o'::('n'::('d'::('i'::('t'::('i'::('o'::('n'::[])))))))))))))))))))))),
-              out1))
-       | x -> x)
-    | Exp_let (x, e1, e2) ->
-      (match eval fuel' e1 env1 out with
-       | Eval_ok (v1, out1) -> eval fuel' e2 (env_extend env1 x v1) out1
-       | x0 -> x0)
-    | Exp_letrec (f, e1, e2) ->
-      (match e1 with
-       | Exp_fun (param, body) ->
-         let clos = SVal_recclosure (f, param, body, env1) in
-         eval fuel' e2 (env_extend env1 f clos) out
-       | _ ->
-         (match eval fuel' e1 env1 out with
-          | Eval_ok (v1, out1) -> eval fuel' e2 (env_extend env1 f v1) out1
-          | x -> x))
-    | Exp_fun (x, body) -> Eval_ok ((SVal_closure (x, body, env1)), out)
-    | Exp_app (func, arg) ->
-      (match eval fuel' func env1 out with
-       | Eval_ok (fv, out1) ->
-         (match eval fuel' arg env1 out1 with
-          | Eval_ok (av, out2) ->
-            (match fv with
-             | SVal_closure (param, body, cenv) ->
-               eval fuel' body (env_extend cenv param av) out2
-             | SVal_recclosure (name, param, body, cenv) ->
-               let cenv' = env_extend cenv name fv in
-               eval fuel' body (env_extend cenv' param av) out2
-             | SVal_builtin b ->
-               (match apply_builtin b av out2 with
-                | Some p -> let (rv, out3) = p in Eval_ok (rv, out3)
-                | None ->
-                  Eval_err
-                    (('b'::('u'::('i'::('l'::('t'::('i'::('n'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::[])))))))))))))))))),
-                    out2))
-             | _ ->
-               Eval_err
-                 (('a'::('p'::('p'::('l'::('i'::('c'::('a'::('t'::('i'::('o'::('n'::(' '::('o'::('f'::(' '::('n'::('o'::('n'::('-'::('f'::('u'::('n'::('c'::('t'::('i'::('o'::('n'::[]))))))))))))))))))))))))))),
-                 out2))
-          | x -> x)
-       | x -> x)
-    | Exp_tuple es ->
-      let rec eval_list fuel0 es0 acc out0 =
-        match es0 with
-        | [] -> Eval_ok ((SVal_tuple (rev acc)), out0)
-        | e1 :: rest ->
-          (match eval fuel0 e1 env1 out0 with
-           | Eval_ok (v, out1) -> eval_list fuel0 rest (v :: acc) out1
-           | x -> x)
-      in eval_list fuel' es [] out
-    | Exp_constr (c, o) ->
-      (match o with
-       | Some e1 ->
-         (match eval fuel' e1 env1 out with
-          | Eval_ok (v, out1) -> Eval_ok ((SVal_constr (c, (Some v))), out1)
-          | x -> x)
-       | None -> Eval_ok ((SVal_constr (c, None)), out))
-    | Exp_match (scrut, cases) ->
-      (match eval fuel' scrut env1 out with
-       | Eval_ok (sv, out1) ->
-         (match try_cases cases sv with
-          | Some p ->
-            let (body, bindings) = p in
-            eval fuel' body (env_append bindings env1) out1
-          | None ->
-            Eval_err
-              (('m'::('a'::('t'::('c'::('h'::(' '::('f'::('a'::('i'::('l'::('u'::('r'::('e'::[]))))))))))))),
-              out1))
-       | x -> x)
-    | Exp_seq (e1, e2) ->
-      (match eval fuel' e1 env1 out with
-       | Eval_ok (_, out1) -> eval fuel' e2 env1 out1
-       | x -> x))
-    fuel
-
-(** val eval_program : int -> program -> env0 -> event list -> eval_result **)
-
-let rec eval_program fuel prog env1 out =
-  match prog with
-  | [] -> Eval_ok (SVal_unit, out)
-  | d :: rest ->
-    (match d with
-     | Decl_let (x, e) ->
-       (match eval fuel e env1 out with
-        | Eval_ok (v, out') ->
-          eval_program fuel rest (env_extend env1 x v) out'
-        | x0 -> x0)
-     | Decl_letrec (f, e) ->
-       (match e with
-        | Exp_fun (param, body) ->
-          let clos = SVal_recclosure (f, param, body, env1) in
-          eval_program fuel rest (env_extend env1 f clos) out
-        | _ ->
-          (match eval fuel e env1 out with
-           | Eval_ok (v, out') ->
-             eval_program fuel rest (env_extend env1 f v) out'
-           | x -> x))
-     | Decl_type (_, _, _) -> eval_program fuel rest env1 out
-     | Decl_expr e ->
-       (match eval fuel e env1 out with
-        | Eval_ok (_, out') -> eval_program fuel rest env1 out'
-        | x -> x))
-
-(** val interpret : int -> program -> behavior **)
-
-let interpret fuel prog =
-  match eval_program fuel prog stdlib_env [] with
-  | Eval_ok (_, out) ->
-    { trace = (rev out); result = (Term_normal (Val_int 0)) }
-  | Eval_err (msg, out) -> { trace = (rev out); result = (Term_error msg) }
-  | Eval_timeout out -> { trace = (rev out); result = Term_timeout }
-
-type var_loc =
-| Loc_stack of int
-| Loc_env of int
-| Loc_self
-
-type comp_env = (ident * var_loc) list
-
-(** val comp_lookup : comp_env -> ident -> var_loc option **)
-
-let rec comp_lookup ce x =
-  match ce with
-  | [] -> None
-  | p :: rest ->
-    let (y, loc) = p in if eqb0 x y then Some loc else comp_lookup rest x
-
-(** val shift0 : comp_env -> int -> comp_env **)
-
-let rec shift0 ce n0 =
-  match ce with
-  | [] -> []
-  | entry :: rest ->
-    let (x, v) = entry in
-    (match v with
-     | Loc_stack pos -> (x, (Loc_stack (add pos n0))) :: (shift0 rest n0)
-     | _ -> entry :: (shift0 rest n0))
-
-(** val is_builtin : ident -> int option **)
-
-let is_builtin x =
-  if eqb0 x ('p'::('r'::('i'::('n'::('t'::('_'::('i'::('n'::('t'::[])))))))))
-  then Some 0
-  else if eqb0 x
-            ('p'::('r'::('i'::('n'::('t'::('_'::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[])))))))))))))
-       then Some (Stdlib.Int.succ 0)
-       else if eqb0 x
-                 ('p'::('r'::('i'::('n'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))
-            then Some (Stdlib.Int.succ (Stdlib.Int.succ 0))
-            else None
-
-(** val is_inline_builtin : ident -> instruction list option **)
-
-let is_inline_builtin x =
-  if eqb0 x ('f'::('s'::('t'::[])))
-  then Some ((GETFIELD 0) :: [])
-  else if eqb0 x ('s'::('n'::('d'::[])))
-       then Some ((GETFIELD (Stdlib.Int.succ 0)) :: [])
-       else None
-
-(** val mem_ident : ident -> ident list -> bool **)
-
-let rec mem_ident x = function
-| [] -> false
-| y :: r -> if eqb0 x y then true else mem_ident x r
-
-(** val remove_ident : ident -> ident list -> ident list **)
-
-let rec remove_ident x = function
-| [] -> []
-| y :: r -> if eqb0 x y then remove_ident x r else y :: (remove_ident x r)
-
-(** val dedup_acc : ident list -> ident list -> ident list **)
-
-let rec dedup_acc seen = function
-| [] -> []
-| x :: r ->
-  if mem_ident x seen
-  then dedup_acc seen r
-  else x :: (dedup_acc (x :: seen) r)
-
-(** val dedup : ident list -> ident list **)
-
-let dedup l =
-  dedup_acc [] l
-
-(** val pat_vars : pattern -> ident list **)
-
-let rec pat_vars = function
-| Pat_var x -> x :: []
-| Pat_tuple ps ->
-  let rec pv_list = function
-  | [] -> []
-  | p1 :: r -> app (pat_vars p1) (pv_list r)
-  in pv_list ps
-| Pat_constr (_, o) -> (match o with
-                        | Some p' -> pat_vars p'
-                        | None -> [])
-| _ -> []
-
-(** val remove_many : ident list -> ident list -> ident list **)
-
-let remove_many xs l =
-  fold_left (fun acc x -> remove_ident x acc) xs l
-
-(** val free_vars : expr -> ident list **)
-
-let rec free_vars = function
-| Exp_var x -> x :: []
-| Exp_binop (_, e1, e2) -> app (free_vars e1) (free_vars e2)
-| Exp_unop (_, e1) -> free_vars e1
-| Exp_if (c, t, e0) -> app (free_vars c) (app (free_vars t) (free_vars e0))
-| Exp_let (x, e1, e2) -> app (free_vars e1) (remove_ident x (free_vars e2))
-| Exp_letrec (f, e1, e2) ->
-  app (remove_ident f (free_vars e1)) (remove_ident f (free_vars e2))
-| Exp_fun (x, body) -> remove_ident x (free_vars body)
-| Exp_app (e1, e2) -> app (free_vars e1) (free_vars e2)
-| Exp_tuple es ->
-  let rec fv_list = function
-  | [] -> []
-  | e1 :: r -> app (free_vars e1) (fv_list r)
-  in fv_list es
-| Exp_constr (_, o) -> (match o with
-                        | Some e1 -> free_vars e1
-                        | None -> [])
-| Exp_match (scrut, cases) ->
-  app (free_vars scrut)
-    (let rec fv_cases = function
-     | [] -> []
-     | y :: r ->
-       let (p, b) = y in
-       app (remove_many (pat_vars p) (free_vars b)) (fv_cases r)
-     in fv_cases cases)
-| Exp_seq (e1, e2) -> app (free_vars e1) (free_vars e2)
-| _ -> []
-
-(** val closure_vars : ident list -> expr -> comp_env -> ident list **)
-
-let closure_vars params body ce =
-  let fvs = remove_many params (free_vars body) in
-  let fvs' = dedup fvs in
-  filter (fun x ->
-    match comp_lookup ce x with
-    | Some _ -> true
-    | None -> false) fvs'
-
-(** val make_fv_env : int -> ident list -> comp_env **)
-
-let rec make_fv_env i = function
-| [] -> []
-| x :: rest ->
-  (x, (Loc_env
-    (add (Stdlib.Int.succ (Stdlib.Int.succ 0)) i))) :: (make_fv_env
-                                                         (Stdlib.Int.succ i)
-                                                         rest)
-
-(** val make_body_env : ident -> ident list -> comp_env **)
-
-let make_body_env param fvs =
-  (param, (Loc_stack 0)) :: (make_fv_env 0 fvs)
-
-(** val make_rec_body_env : ident -> ident -> ident list -> comp_env **)
-
-let make_rec_body_env param fname fvs =
-  (param, (Loc_stack 0)) :: ((fname, Loc_self) :: (make_fv_env 0 fvs))
-
-(** val compile_push_fvs :
-    ident list -> comp_env -> int -> instruction list **)
-
-let rec compile_push_fvs fvs ce pushed =
-  match fvs with
-  | [] -> []
-  | x :: rest ->
-    (match rest with
-     | [] ->
-       let ce' = shift0 ce pushed in
-       (match comp_lookup ce' x with
-        | Some v ->
-          (match v with
-           | Loc_stack n0 -> (ACC n0) :: []
-           | Loc_env n0 -> (ENVACC n0) :: []
-           | Loc_self -> (OFFSETCLOSURE 0) :: [])
-        | None -> (CONSTINT 0) :: [])
-     | _ :: _ ->
-       let ce' = shift0 ce pushed in
-       let load =
-         match comp_lookup ce' x with
-         | Some v ->
-           (match v with
-            | Loc_stack n0 -> (ACC n0) :: []
-            | Loc_env n0 -> (ENVACC n0) :: []
-            | Loc_self -> (OFFSETCLOSURE 0) :: [])
-         | None -> (CONSTINT 0) :: []
-       in
-       app load
-         (app (PUSH :: [])
-           (compile_push_fvs rest ce (Stdlib.Int.succ pushed))))
-
-(** val compile_expr : int -> expr -> comp_env -> int -> instruction list **)
-
-let rec compile_expr fuel e ce base =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> STOP :: [])
-    (fun fuel' ->
-    match e with
-    | Exp_int n0 -> (CONSTINT n0) :: []
-    | Exp_bool b -> if b then (CONSTINT 1) :: [] else (CONSTINT 0) :: []
-    | Exp_unit -> (CONSTINT 0) :: []
-    | Exp_var x ->
-      (match comp_lookup ce x with
-       | Some v ->
-         (match v with
-          | Loc_stack n0 -> (ACC n0) :: []
-          | Loc_env n0 -> (ENVACC n0) :: []
-          | Loc_self -> (OFFSETCLOSURE 0) :: [])
-       | None -> (CONSTINT 0) :: [])
-    | Exp_binop (op, e1, e2) ->
-      let c2 = compile_expr fuel' e2 ce base in
-      let c1 =
-        compile_expr fuel' e1 (shift0 ce (Stdlib.Int.succ 0))
-          (add (add base (length c2)) (Stdlib.Int.succ 0))
-      in
-      let op_instr =
-        match op with
-        | Op_add -> ADDINT
-        | Op_sub -> SUBINT
-        | Op_mul -> MULINT
-        | Op_div -> DIVINT
-        | Op_mod -> MODINT
-        | Op_eq -> EQ
-        | Op_neq -> NEQ
-        | Op_lt -> LTINT
-        | Op_le -> LEINT
-        | Op_gt -> GTINT
-        | Op_ge -> GEINT
-        | Op_and -> ANDINT
-        | Op_or -> ORINT
-      in
-      app c2 (app (PUSH :: []) (app c1 (op_instr :: [])))
-    | Exp_unop (u, e1) ->
-      (match u with
-       | Op_neg -> app (compile_expr fuel' e1 ce base) (NEGINT :: [])
-       | Op_not -> app (compile_expr fuel' e1 ce base) (BOOLNOT :: []))
-    | Exp_if (cond, then_e, else_e) ->
-      let cc = compile_expr fuel' cond ce base in
-      let cc_len = length cc in
-      let ct =
-        compile_expr fuel' then_e ce
-          (add (add base cc_len) (Stdlib.Int.succ 0))
-      in
-      let ct_len = length ct in
-      let else_base =
-        add (add (add (add base cc_len) (Stdlib.Int.succ 0)) ct_len)
-          (Stdlib.Int.succ 0)
-      in
-      let ce_code = compile_expr fuel' else_e ce else_base in
-      let ce_len = length ce_code in
-      app cc
-        (app ((BRANCHIFNOT (Z.of_nat else_base)) :: [])
-          (app ct
-            (app ((BRANCH (Z.of_nat (add else_base ce_len))) :: []) ce_code)))
-    | Exp_let (x, e1, e2) ->
-      let c1 = compile_expr fuel' e1 ce base in
-      let c1_len = length c1 in
-      let c2 =
-        compile_expr fuel' e2 ((x, (Loc_stack
-          0)) :: (shift0 ce (Stdlib.Int.succ 0)))
-          (add (add base c1_len) (Stdlib.Int.succ 0))
-      in
-      app c1 (app (PUSH :: []) (app c2 ((POP (Stdlib.Int.succ 0)) :: [])))
-    | Exp_letrec (f, e1, e2) ->
-      (match e1 with
-       | Exp_fun (param, body) ->
-         let fvs = closure_vars (f :: (param :: [])) body ce in
-         let nvars = length fvs in
-         let body_env = make_rec_body_env param f fvs in
-         let body_code =
-           compile_expr fuel' body body_env (add base (Stdlib.Int.succ 0))
-         in
-         let body_instrs = app body_code ((RETURN (Stdlib.Int.succ 0)) :: [])
-         in
-         let body_len = length body_instrs in
-         let push_code = compile_push_fvs (rev fvs) ce 0 in
-         let body_start = Z.of_nat (add base (Stdlib.Int.succ 0)) in
-         let branch_target =
-           Z.of_nat (add (add base (Stdlib.Int.succ 0)) body_len)
-         in
-         let cr_pos =
-           add (add (add base (Stdlib.Int.succ 0)) body_len)
-             (length push_code)
-         in
-         let c2 =
-           compile_expr fuel' e2 ((f, (Loc_stack
-             0)) :: (shift0 ce (Stdlib.Int.succ 0)))
-             (add cr_pos (Stdlib.Int.succ 0))
-         in
-         app ((BRANCH branch_target) :: [])
-           (app body_instrs
-             (app push_code
-               (app ((CLOSUREREC ((Stdlib.Int.succ 0), nvars,
-                 (body_start :: []))) :: [])
-                 (app c2 ((POP (Stdlib.Int.succ 0)) :: [])))))
-       | _ ->
-         let c1 = compile_expr fuel' e1 ce base in
-         let c1_len = length c1 in
-         let c2 =
-           compile_expr fuel' e2 ((f, (Loc_stack
-             0)) :: (shift0 ce (Stdlib.Int.succ 0)))
-             (add (add base c1_len) (Stdlib.Int.succ 0))
-         in
-         app c1 (app (PUSH :: []) (app c2 ((POP (Stdlib.Int.succ 0)) :: []))))
-    | Exp_fun (param, body) ->
-      let fvs = closure_vars (param :: []) body ce in
-      let nvars = length fvs in
-      let body_env = make_body_env param fvs in
-      let body_code =
-        compile_expr fuel' body body_env (add base (Stdlib.Int.succ 0))
-      in
-      let body_instrs = app body_code ((RETURN (Stdlib.Int.succ 0)) :: []) in
-      let body_len = length body_instrs in
-      let push_code = compile_push_fvs (rev fvs) ce 0 in
-      let body_start = Z.of_nat (add base (Stdlib.Int.succ 0)) in
-      let branch_target =
-        Z.of_nat (add (add base (Stdlib.Int.succ 0)) body_len)
-      in
-      app ((BRANCH branch_target) :: [])
-        (app body_instrs
-          (app push_code ((CLOSURE (nvars, body_start)) :: [])))
-    | Exp_app (func, arg) ->
-      (match func with
-       | Exp_var fname ->
-         (match is_builtin fname with
-          | Some prim_idx ->
-            app (compile_expr fuel' arg ce base) ((C_CALL ((Stdlib.Int.succ
-              0), prim_idx)) :: [])
-          | None ->
-            (match is_inline_builtin fname with
-             | Some instrs -> app (compile_expr fuel' arg ce base) instrs
-             | None ->
-               let ca = compile_expr fuel' arg ce base in
-               let ca_len = length ca in
-               let cf =
-                 compile_expr fuel' func (shift0 ce (Stdlib.Int.succ 0))
-                   (add (add base ca_len) (Stdlib.Int.succ 0))
-               in
-               app ca (app (PUSH :: []) (app cf (APPLY1 :: [])))))
-       | _ ->
-         let ca = compile_expr fuel' arg ce base in
-         let ca_len = length ca in
-         let cf =
-           compile_expr fuel' func (shift0 ce (Stdlib.Int.succ 0))
-             (add (add base ca_len) (Stdlib.Int.succ 0))
-         in
-         app ca (app (PUSH :: []) (app cf (APPLY1 :: []))))
-    | Exp_tuple es ->
-      (match es with
-       | [] -> (ATOM 0) :: []
-       | e1 :: l ->
-         (match l with
-          | [] -> app (compile_expr fuel' e1 ce base) ((MAKEBLOCK1 0) :: [])
-          | e2 :: l0 ->
-            (match l0 with
-             | [] ->
-               let c2 = compile_expr fuel' e2 ce base in
-               let c1 =
-                 compile_expr fuel' e1 (shift0 ce (Stdlib.Int.succ 0))
-                   (add (add base (length c2)) (Stdlib.Int.succ 0))
-               in
-               app c2 (app (PUSH :: []) (app c1 ((MAKEBLOCK2 0) :: [])))
-             | e3 :: l1 ->
-               (match l1 with
-                | [] ->
-                  let c3 = compile_expr fuel' e3 ce base in
-                  let c3_len = length c3 in
-                  let c2 =
-                    compile_expr fuel' e2 (shift0 ce (Stdlib.Int.succ 0))
-                      (add (add base c3_len) (Stdlib.Int.succ 0))
-                  in
-                  let c2_len = length c2 in
-                  let c1 =
-                    compile_expr fuel' e1
-                      (shift0 ce (Stdlib.Int.succ (Stdlib.Int.succ 0)))
-                      (add
-                        (add (add (add base c3_len) (Stdlib.Int.succ 0))
-                          c2_len)
-                        (Stdlib.Int.succ 0))
-                  in
-                  app c3
-                    (app (PUSH :: [])
-                      (app c2
-                        (app (PUSH :: []) (app c1 ((MAKEBLOCK3 0) :: [])))))
-                | _ :: _ -> (CONSTINT 0) :: []))))
-    | Exp_constr (_, o) ->
-      (match o with
-       | Some e1 -> app (compile_expr fuel' e1 ce base) ((MAKEBLOCK1 0) :: [])
-       | None -> (CONSTINT 0) :: [])
-    | Exp_match (scrut, cases) ->
-      let cs = compile_expr fuel' scrut ce base in
-      let cs_len = length cs in
-      let scrut_ce = shift0 ce (Stdlib.Int.succ 0) in
-      let cases_base = add (add base cs_len) (Stdlib.Int.succ 0) in
-      let cases_code =
-        let rec compile_cases cl b =
-          match cl with
-          | [] -> []
-          | p :: rest ->
-            let (pat, body) = p in
-            let body_ce =
-              match pat with
-              | Pat_var x -> (x, (Loc_stack 0)) :: scrut_ce
-              | _ -> scrut_ce
-            in
-            let irrefutable =
-              match pat with
-              | Pat_var _ -> true
-              | Pat_unit -> true
-              | Pat_wild -> true
-              | _ -> false
-            in
-            if irrefutable
-            then compile_expr fuel' body body_ce b
-            else (match rest with
-                  | [] -> compile_expr fuel' body body_ce b
-                  | _ :: _ ->
-                    let test =
-                      match pat with
-                      | Pat_var _ -> []
-                      | Pat_int n0 ->
-                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
-                      | Pat_bool b0 ->
-                        if b0
-                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
-                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
-                      | _ -> []
-                    in
-                    let tl = length test in
-                    let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                    let bc = compile_expr fuel' body body_ce bs in
-                    let bl = length bc in
-                    let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                    let rc = compile_cases rest ns in
-                    let rl = length rc in
-                    let ep = add ns rl in
-                    app test
-                      (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                        (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
-        in compile_cases cases cases_base
-      in
-      app cs
-        (app (PUSH :: []) (app cases_code ((POP (Stdlib.Int.succ 0)) :: [])))
-    | Exp_seq (e1, e2) ->
-      let c1 = compile_expr fuel' e1 ce base in
-      let c2 = compile_expr fuel' e2 ce (add base (length c1)) in app c1 c2)
-    fuel
-
-(** val compile_decls :
-    int -> decl list -> comp_env -> int -> instruction list **)
-
-let rec compile_decls fuel decls ce base =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> STOP :: [])
-    (fun fuel' ->
-    match decls with
-    | [] -> STOP :: []
-    | d :: rest ->
-      (match d with
-       | Decl_let (x, e) ->
-         let c = compile_expr fuel' e ce base in
-         let c_len = length c in
-         app c
-           (app (PUSH :: [])
-             (compile_decls fuel' rest ((x, (Loc_stack
-               0)) :: (shift0 ce (Stdlib.Int.succ 0)))
-               (add (add base c_len) (Stdlib.Int.succ 0))))
-       | Decl_letrec (f, e) ->
-         (match e with
-          | Exp_fun (param, body) ->
-            let fvs = closure_vars (f :: (param :: [])) body ce in
-            let nvars = length fvs in
-            let body_env = make_rec_body_env param f fvs in
-            let body_code =
-              compile_expr fuel' body body_env (add base (Stdlib.Int.succ 0))
-            in
-            let body_instrs =
-              app body_code ((RETURN (Stdlib.Int.succ 0)) :: [])
-            in
-            let body_len = length body_instrs in
-            let push_code = compile_push_fvs (rev fvs) ce 0 in
-            let body_start = Z.of_nat (add base (Stdlib.Int.succ 0)) in
-            let branch_target =
-              Z.of_nat (add (add base (Stdlib.Int.succ 0)) body_len)
-            in
-            let cr_pos =
-              add (add (add base (Stdlib.Int.succ 0)) body_len)
-                (length push_code)
-            in
-            let rest_code =
-              compile_decls fuel' rest ((f, (Loc_stack
-                0)) :: (shift0 ce (Stdlib.Int.succ 0)))
-                (add cr_pos (Stdlib.Int.succ 0))
-            in
-            app ((BRANCH branch_target) :: [])
-              (app body_instrs
-                (app push_code
-                  (app ((CLOSUREREC ((Stdlib.Int.succ 0), nvars,
-                    (body_start :: []))) :: []) rest_code)))
-          | _ -> compile_decls fuel' ((Decl_let (f, e)) :: rest) ce base)
-       | Decl_type (_, _, _) -> compile_decls fuel' rest ce base
-       | Decl_expr e ->
-         let c = compile_expr fuel' e ce base in
-         app c (compile_decls fuel' rest ce (add base (length c)))))
-    fuel
-
-(** val compile_program : program -> instruction list **)
-
-let compile_program prog =
-  compile_decls (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ
-    0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-    prog [] 0
 
 (** val instr_word_size : instruction -> int **)
 
@@ -5516,6 +3899,107 @@ let rec encode_instrs omap idx = function
 
 let encode_bytecode code =
   let omap = offset_map code in encode_instrs omap 0 code
+
+type byte_string = bytes
+
+(** val read_file : int list -> byte_string **)
+
+let read_file = 
+  fun cs ->
+    let buf = Buffer.create 256 in
+    let rec to_chars = function
+      | [] -> ()
+      | c :: rest -> Buffer.add_char buf (Char.chr c); to_chars rest
+    in
+    to_chars cs;
+    let filename = Buffer.contents buf in
+    let ic = open_in_bin filename in
+    let n = in_channel_length ic in
+    let data = Bytes.create n in
+    really_input ic data 0 n;
+    close_in ic;
+    data
+
+
+(** val byte_string_to_list : byte_string -> int list **)
+
+let byte_string_to_list = 
+  fun bs ->
+    let n = Bytes.length bs in
+    let rec build i acc =
+      if i < 0 then acc
+      else build (i - 1) (Char.code (Bytes.get bs i) :: acc)
+    in
+    build (n - 1) []
+
+
+(** val byte_string_length : byte_string -> int **)
+
+let byte_string_length = 
+  fun bs -> Bytes.length bs
+
+
+(** val sys_argv : int list list **)
+
+let sys_argv = 
+  let argv = Array.to_list Sys.argv in
+  List.map (fun s ->
+    let n = String.length s in
+    let rec build i acc =
+      if i < 0 then acc
+      else build (i - 1) (Char.code s.[i] :: acc)
+    in
+    build (n - 1) []
+  ) argv
+
+
+(** val unmarshal_globals : byte_string -> int -> int -> int list list **)
+
+let unmarshal_globals = 
+  fun bs ofs len ->
+    let sub = Bytes.sub bs ofs len in
+    let obj : Obj.t = Marshal.from_bytes sub 0 in
+    let arr : Obj.t array = Obj.obj obj in
+    let rec obj_to_encoding (o : Obj.t) : int list =
+      if Obj.is_int o then [0; (Obj.obj o : int)]
+      else
+        let tag = Obj.tag o in
+        if tag = Obj.string_tag then
+          let s : string = Obj.obj o in
+          let n = String.length s in
+          let rec chars i acc =
+            if i < 0 then acc
+            else chars (i - 1) (Char.code s.[i] :: acc)
+          in
+          2 :: n :: chars (n - 1) []
+        else if tag < Obj.no_scan_tag then
+          let size = Obj.size o in
+          let fields = List.concat_map (fun i ->
+            obj_to_encoding (Obj.field o i)
+          ) (List.init size Fun.id) in
+          1 :: tag :: size :: fields
+        else
+          [1; tag; 0]
+    in
+    Array.to_list (Array.map obj_to_encoding arr)
+
+
+(** val load_primitives : byte_string -> int -> int -> int list list **)
+
+let load_primitives = 
+  fun bs ofs len ->
+    let raw = Bytes.sub_string bs ofs len in
+    let prims = List.filter (fun s -> String.length s > 0)
+                  (String.split_on_char '\000' raw) in
+    List.map (fun s ->
+      let n = String.length s in
+      let rec build i acc =
+        if i < 0 then acc
+        else build (i - 1) (Char.code s.[i] :: acc)
+      in
+      build (n - 1) []
+    ) prims
+
 
 (** val byte_at : int list -> int -> int **)
 
@@ -8674,107 +7158,6 @@ let load_code_section data data_len =
    | Some s -> Some (decode_bytecode data s.sec_offset s.sec_length)
    | None -> None)
 
-type byte_string = bytes
-
-(** val read_file : int list -> byte_string **)
-
-let read_file = 
-  fun cs ->
-    let buf = Buffer.create 256 in
-    let rec to_chars = function
-      | [] -> ()
-      | c :: rest -> Buffer.add_char buf (Char.chr c); to_chars rest
-    in
-    to_chars cs;
-    let filename = Buffer.contents buf in
-    let ic = open_in_bin filename in
-    let n = in_channel_length ic in
-    let data = Bytes.create n in
-    really_input ic data 0 n;
-    close_in ic;
-    data
-
-
-(** val byte_string_to_list : byte_string -> int list **)
-
-let byte_string_to_list = 
-  fun bs ->
-    let n = Bytes.length bs in
-    let rec build i acc =
-      if i < 0 then acc
-      else build (i - 1) (Char.code (Bytes.get bs i) :: acc)
-    in
-    build (n - 1) []
-
-
-(** val byte_string_length : byte_string -> int **)
-
-let byte_string_length = 
-  fun bs -> Bytes.length bs
-
-
-(** val sys_argv : int list list **)
-
-let sys_argv = 
-  let argv = Array.to_list Sys.argv in
-  List.map (fun s ->
-    let n = String.length s in
-    let rec build i acc =
-      if i < 0 then acc
-      else build (i - 1) (Char.code s.[i] :: acc)
-    in
-    build (n - 1) []
-  ) argv
-
-
-(** val unmarshal_globals : byte_string -> int -> int -> int list list **)
-
-let unmarshal_globals = 
-  fun bs ofs len ->
-    let sub = Bytes.sub bs ofs len in
-    let obj : Obj.t = Marshal.from_bytes sub 0 in
-    let arr : Obj.t array = Obj.obj obj in
-    let rec obj_to_encoding (o : Obj.t) : int list =
-      if Obj.is_int o then [0; (Obj.obj o : int)]
-      else
-        let tag = Obj.tag o in
-        if tag = Obj.string_tag then
-          let s : string = Obj.obj o in
-          let n = String.length s in
-          let rec chars i acc =
-            if i < 0 then acc
-            else chars (i - 1) (Char.code s.[i] :: acc)
-          in
-          2 :: n :: chars (n - 1) []
-        else if tag < Obj.no_scan_tag then
-          let size = Obj.size o in
-          let fields = List.concat_map (fun i ->
-            obj_to_encoding (Obj.field o i)
-          ) (List.init size Fun.id) in
-          1 :: tag :: size :: fields
-        else
-          [1; tag; 0]
-    in
-    Array.to_list (Array.map obj_to_encoding arr)
-
-
-(** val load_primitives : byte_string -> int -> int -> int list list **)
-
-let load_primitives = 
-  fun bs ofs len ->
-    let raw = Bytes.sub_string bs ofs len in
-    let prims = List.filter (fun s -> String.length s > 0)
-                  (String.split_on_char '\000' raw) in
-    List.map (fun s ->
-      let n = String.length s in
-      let rec build i acc =
-        if i < 0 then acc
-        else build (i - 1) (Char.code s.[i] :: acc)
-      in
-      build (n - 1) []
-    ) prims
-
-
 (** val decode_value_aux : int list -> int -> value * int list **)
 
 let rec decode_value_aux data fuel =
@@ -9766,3 +8149,1595 @@ let main =
         | _ -> 1)
      | None -> 1)
   | None -> 1
+
+type event = int
+  (* singleton inductive, whose constructor was Out_char *)
+
+type termination =
+| Term_normal of value
+| Term_error of char list
+| Term_timeout
+
+type behavior = { trace : event list; result : termination }
+
+type ident = char list
+
+type binop =
+| Op_add
+| Op_sub
+| Op_mul
+| Op_div
+| Op_mod
+| Op_eq
+| Op_neq
+| Op_lt
+| Op_le
+| Op_gt
+| Op_ge
+| Op_and
+| Op_or
+
+type unop =
+| Op_neg
+| Op_not
+
+type pattern =
+| Pat_var of ident
+| Pat_int of int
+| Pat_bool of bool
+| Pat_unit
+| Pat_tuple of pattern list
+| Pat_constr of ident * pattern option
+| Pat_wild
+
+type type_expr =
+| Ty_int
+| Ty_bool
+| Ty_unit
+| Ty_arrow of type_expr * type_expr
+| Ty_tuple of type_expr list
+| Ty_constr of ident * type_expr list
+
+type expr =
+| Exp_int of int
+| Exp_bool of bool
+| Exp_unit
+| Exp_var of ident
+| Exp_binop of binop * expr * expr
+| Exp_unop of unop * expr
+| Exp_if of expr * expr * expr
+| Exp_let of ident * expr * expr
+| Exp_letrec of ident * expr * expr
+| Exp_fun of ident * expr
+| Exp_app of expr * expr
+| Exp_tuple of expr list
+| Exp_constr of ident * expr option
+| Exp_match of expr * (pattern * expr) list
+| Exp_seq of expr * expr
+
+type decl =
+| Decl_let of ident * expr
+| Decl_letrec of ident * expr
+| Decl_type of ident * ident list * type_def
+| Decl_expr of expr
+and type_def =
+| Td_variant of (ident * type_expr option) list
+| Td_alias of type_expr
+
+type program = decl list
+
+(** val nat_to_string_aux : int -> int -> char list -> char list **)
+
+let rec nat_to_string_aux fuel n0 acc =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> acc)
+    (fun fuel' ->
+    let digit =
+      (ascii_of_nat
+        (add (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ 0))))))))))))))))))))))))))))))))))))))))))))))))
+          (Nat.modulo n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ 0)))))))))))))::[]
+    in
+    let rest =
+      Nat.div n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))))))))))
+    in
+    if (=) rest 0
+    then append digit acc
+    else nat_to_string_aux fuel' rest (append digit acc))
+    fuel
+
+(** val nat_to_string : int -> char list **)
+
+let nat_to_string n0 =
+  if (=) n0 0
+  then '0'::[]
+  else nat_to_string_aux (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+         (Stdlib.Int.succ 0)))))))))))))))))))) n0 []
+
+(** val z_to_string : int -> char list **)
+
+let z_to_string z0 =
+  (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+    (fun _ -> '0'::[])
+    (fun p -> nat_to_string (Coq_Pos.to_nat p))
+    (fun p ->
+    append ('('::('-'::[]))
+      (append (nat_to_string (Coq_Pos.to_nat p)) (')'::[])))
+    z0
+
+(** val intercalate : char list -> char list list -> char list **)
+
+let rec intercalate sep = function
+| [] -> []
+| x :: rest ->
+  (match rest with
+   | [] -> x
+   | _ :: _ -> append x (append sep (intercalate sep rest)))
+
+(** val pp_binop : binop -> char list **)
+
+let pp_binop = function
+| Op_add -> ' '::('+'::(' '::[]))
+| Op_sub -> ' '::('-'::(' '::[]))
+| Op_mul -> ' '::('*'::(' '::[]))
+| Op_div -> ' '::('/'::(' '::[]))
+| Op_mod -> ' '::('m'::('o'::('d'::(' '::[]))))
+| Op_eq -> ' '::('='::(' '::[]))
+| Op_neq -> ' '::('<'::('>'::(' '::[])))
+| Op_lt -> ' '::('<'::(' '::[]))
+| Op_le -> ' '::('<'::('='::(' '::[])))
+| Op_gt -> ' '::('>'::(' '::[]))
+| Op_ge -> ' '::('>'::('='::(' '::[])))
+| Op_and -> ' '::('&'::('&'::(' '::[])))
+| Op_or -> ' '::('|'::('|'::(' '::[])))
+
+(** val pp_pattern : pattern -> char list **)
+
+let rec pp_pattern = function
+| Pat_var x -> x
+| Pat_int n0 -> z_to_string n0
+| Pat_bool b ->
+  if b
+  then 't'::('r'::('u'::('e'::[])))
+  else 'f'::('a'::('l'::('s'::('e'::[]))))
+| Pat_unit -> '('::(')'::[])
+| Pat_tuple ps ->
+  append ('('::[])
+    (append (intercalate (','::(' '::[])) (map pp_pattern ps)) (')'::[]))
+| Pat_constr (c, o) ->
+  (match o with
+   | Some p0 ->
+     append ('('::[])
+       (append c (append (' '::[]) (append (pp_pattern p0) (')'::[]))))
+   | None -> c)
+| Pat_wild -> '_'::[]
+
+(** val pp_type_expr : type_expr -> char list **)
+
+let rec pp_type_expr = function
+| Ty_int -> 'i'::('n'::('t'::[]))
+| Ty_bool -> 'b'::('o'::('o'::('l'::[])))
+| Ty_unit -> 'u'::('n'::('i'::('t'::[])))
+| Ty_arrow (t1, t2) ->
+  append ('('::[])
+    (append (pp_type_expr t1)
+      (append (' '::('-'::('>'::(' '::[]))))
+        (append (pp_type_expr t2) (')'::[]))))
+| Ty_tuple ts ->
+  append ('('::[])
+    (append (intercalate (' '::('*'::(' '::[]))) (map pp_type_expr ts))
+      (')'::[]))
+| Ty_constr (name, args) ->
+  (match args with
+   | [] -> name
+   | t0 :: l ->
+     (match l with
+      | [] ->
+        append ('('::[])
+          (append (pp_type_expr t0)
+            (append (' '::[]) (append name (')'::[]))))
+      | _ :: _ ->
+        append ('('::('('::[]))
+          (append (intercalate (','::(' '::[])) (map pp_type_expr args))
+            (append (')'::(' '::[])) (append name (')'::[]))))))
+
+(** val pp_expr : expr -> char list **)
+
+let rec pp_expr = function
+| Exp_int n0 -> z_to_string n0
+| Exp_bool b ->
+  if b
+  then 't'::('r'::('u'::('e'::[])))
+  else 'f'::('a'::('l'::('s'::('e'::[]))))
+| Exp_unit -> '('::(')'::[])
+| Exp_var x -> x
+| Exp_binop (op, e1, e2) ->
+  append ('('::[])
+    (append (pp_expr e1)
+      (append (pp_binop op) (append (pp_expr e2) (')'::[]))))
+| Exp_unop (u, e0) ->
+  (match u with
+   | Op_neg -> append ('('::('-'::(' '::[]))) (append (pp_expr e0) (')'::[]))
+   | Op_not ->
+     append ('('::('n'::('o'::('t'::(' '::[])))))
+       (append (pp_expr e0) (')'::[])))
+| Exp_if (e1, e2, e3) ->
+  append ('('::('i'::('f'::(' '::[]))))
+    (append (pp_expr e1)
+      (append (' '::('t'::('h'::('e'::('n'::(' '::[]))))))
+        (append (pp_expr e2)
+          (append (' '::('e'::('l'::('s'::('e'::(' '::[]))))))
+            (append (pp_expr e3) (')'::[]))))))
+| Exp_let (x, e1, e2) ->
+  append ('('::('l'::('e'::('t'::(' '::[])))))
+    (append x
+      (append (' '::('='::(' '::[])))
+        (append (pp_expr e1)
+          (append (' '::('i'::('n'::(' '::[]))))
+            (append (pp_expr e2) (')'::[]))))))
+| Exp_letrec (f, e1, e2) ->
+  append ('('::('l'::('e'::('t'::(' '::('r'::('e'::('c'::(' '::[])))))))))
+    (append f
+      (append (' '::('='::(' '::[])))
+        (append (pp_expr e1)
+          (append (' '::('i'::('n'::(' '::[]))))
+            (append (pp_expr e2) (')'::[]))))))
+| Exp_fun (x, body) ->
+  append ('('::('f'::('u'::('n'::(' '::[])))))
+    (append x
+      (append (' '::('-'::('>'::(' '::[]))))
+        (append (pp_expr body) (')'::[]))))
+| Exp_app (f, arg) ->
+  append ('('::[])
+    (append (pp_expr f) (append (' '::[]) (append (pp_expr arg) (')'::[]))))
+| Exp_tuple es ->
+  append ('('::[])
+    (append (intercalate (','::(' '::[])) (map pp_expr es)) (')'::[]))
+| Exp_constr (c, o) ->
+  (match o with
+   | Some e0 ->
+     append ('('::[])
+       (append c (append (' '::[]) (append (pp_expr e0) (')'::[]))))
+   | None -> c)
+| Exp_match (e0, cases) ->
+  let pp_case = fun c ->
+    let (p, body) = c in
+    append ('|'::(' '::[]))
+      (append (pp_pattern p)
+        (append (' '::('-'::('>'::(' '::[])))) (pp_expr body)))
+  in
+  append ('('::('m'::('a'::('t'::('c'::('h'::(' '::[])))))))
+    (append (pp_expr e0)
+      (append (' '::('w'::('i'::('t'::('h'::(' '::[]))))))
+        (append (intercalate (' '::[]) (map pp_case cases)) (')'::[]))))
+| Exp_seq (e1, e2) ->
+  append ('('::[])
+    (append (pp_expr e1)
+      (append (';'::(' '::[])) (append (pp_expr e2) (')'::[]))))
+
+(** val pp_type_def : type_def -> char list **)
+
+let pp_type_def = function
+| Td_variant constrs ->
+  intercalate (' '::('|'::(' '::[])))
+    (map (fun cd ->
+      let (name, y) = cd in
+      (match y with
+       | Some t ->
+         append name (append (' '::('o'::('f'::(' '::[])))) (pp_type_expr t))
+       | None -> name))
+      constrs)
+| Td_alias t -> pp_type_expr t
+
+(** val pp_decl : decl -> char list **)
+
+let pp_decl = function
+| Decl_let (x, e) ->
+  append ('l'::('e'::('t'::(' '::[]))))
+    (append x (append (' '::('='::(' '::[]))) (pp_expr e)))
+| Decl_letrec (f, e) ->
+  append ('l'::('e'::('t'::(' '::('r'::('e'::('c'::(' '::[]))))))))
+    (append f (append (' '::('='::(' '::[]))) (pp_expr e)))
+| Decl_type (name, params, td) ->
+  let params_str =
+    match params with
+    | [] -> []
+    | p :: l ->
+      (match l with
+       | [] -> append ('\''::[]) (append p (' '::[]))
+       | _ :: _ ->
+         append ('('::[])
+           (append
+             (intercalate (','::(' '::[]))
+               (map (fun p0 -> append ('\''::[]) p0) params))
+             (')'::(' '::[]))))
+  in
+  append ('t'::('y'::('p'::('e'::(' '::[])))))
+    (append params_str
+      (append name (append (' '::('='::(' '::[]))) (pp_type_def td))))
+| Decl_expr e -> pp_expr e
+
+(** val pp_program : program -> char list **)
+
+let pp_program prog =
+  intercalate ('\n'::[])
+    (map (fun d -> append (pp_decl d) (';'::(';'::[]))) prog)
+
+type builtin =
+| Bi_print_int
+| Bi_print_string
+| Bi_print_newline
+| Bi_print_char
+| Bi_compare
+| Bi_fst
+| Bi_snd
+
+type svalue =
+| SVal_int of int
+| SVal_bool of bool
+| SVal_unit
+| SVal_tuple of svalue list
+| SVal_constr of ident * svalue option
+| SVal_closure of ident * expr * env0
+| SVal_recclosure of ident * ident * expr * env0
+| SVal_builtin of builtin
+and env0 =
+| Env_nil
+| Env_cons of ident * svalue * env0
+
+(** val env_lookup : env0 -> ident -> svalue option **)
+
+let rec env_lookup e x =
+  match e with
+  | Env_nil -> None
+  | Env_cons (y, v, rest) -> if eqb0 x y then Some v else env_lookup rest x
+
+(** val env_extend : env0 -> ident -> svalue -> env0 **)
+
+let env_extend e x v =
+  Env_cons (x, v, e)
+
+(** val env_append : env0 -> env0 -> env0 **)
+
+let rec env_append e1 e2 =
+  match e1 with
+  | Env_nil -> e2
+  | Env_cons (x, v, rest) -> Env_cons (x, v, (env_append rest e2))
+
+(** val match_pattern : pattern -> svalue -> env0 option **)
+
+let rec match_pattern p v =
+  match p with
+  | Pat_var x -> Some (Env_cons (x, v, Env_nil))
+  | Pat_int n0 ->
+    (match v with
+     | SVal_int m -> if Z.eqb n0 m then Some Env_nil else None
+     | _ -> None)
+  | Pat_bool b ->
+    (match v with
+     | SVal_bool c -> if eqb b c then Some Env_nil else None
+     | _ -> None)
+  | Pat_unit -> (match v with
+                 | SVal_unit -> Some Env_nil
+                 | _ -> None)
+  | Pat_tuple ps ->
+    (match v with
+     | SVal_tuple vs ->
+       if (=) (length ps) (length vs)
+       then let rec match_list ps0 vs0 =
+              match ps0 with
+              | [] -> (match vs0 with
+                       | [] -> Some Env_nil
+                       | _ :: _ -> None)
+              | p1 :: pr ->
+                (match vs0 with
+                 | [] -> None
+                 | v1 :: vr ->
+                   (match match_pattern p1 v1 with
+                    | Some e1 ->
+                      (match match_list pr vr with
+                       | Some e2 -> Some (env_append e1 e2)
+                       | None -> None)
+                    | None -> None))
+            in match_list ps vs
+       else None
+     | _ -> None)
+  | Pat_constr (c, o) ->
+    (match o with
+     | Some p' ->
+       (match v with
+        | SVal_constr (d, o0) ->
+          (match o0 with
+           | Some v' -> if eqb0 c d then match_pattern p' v' else None
+           | None -> None)
+        | _ -> None)
+     | None ->
+       (match v with
+        | SVal_constr (d, o0) ->
+          (match o0 with
+           | Some _ -> None
+           | None -> if eqb0 c d then Some Env_nil else None)
+        | _ -> None))
+  | Pat_wild -> Some Env_nil
+
+(** val try_cases :
+    (pattern * expr) list -> svalue -> (expr * env0) option **)
+
+let rec try_cases cases v =
+  match cases with
+  | [] -> None
+  | p0 :: rest ->
+    let (p, body) = p0 in
+    (match match_pattern p v with
+     | Some bindings -> Some (body, bindings)
+     | None -> try_cases rest v)
+
+type eval_result =
+| Eval_ok of svalue * event list
+| Eval_err of char list * event list
+| Eval_timeout of event list
+
+(** val eval_binop : binop -> svalue -> svalue -> svalue option **)
+
+let eval_binop op v1 v2 =
+  match op with
+  | Op_add ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_int (Z.add a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_sub ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_int (Z.sub a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_mul ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_int (Z.mul a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_div ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b ->
+          if Z.eqb b 0 then None else Some (SVal_int (Z.quot a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_mod ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b ->
+          if Z.eqb b 0 then None else Some (SVal_int (Z.rem a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_eq ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (Z.eqb a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_neq ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (negb (Z.eqb a b)))
+        | _ -> None)
+     | _ -> None)
+  | Op_lt ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (Z.ltb a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_le ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (Z.leb a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_gt ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (Z.gtb a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_ge ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (Z.geb a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_and ->
+    (match v1 with
+     | SVal_bool a ->
+       (match v2 with
+        | SVal_bool b -> Some (SVal_bool ((&&) a b))
+        | _ -> None)
+     | _ -> None)
+  | Op_or ->
+    (match v1 with
+     | SVal_bool a ->
+       (match v2 with
+        | SVal_bool b -> Some (SVal_bool ((||) a b))
+        | _ -> None)
+     | _ -> None)
+
+(** val eval_unop : unop -> svalue -> svalue option **)
+
+let eval_unop op v =
+  match op with
+  | Op_neg ->
+    (match v with
+     | SVal_int n0 -> Some (SVal_int (Z.opp n0))
+     | _ -> None)
+  | Op_not ->
+    (match v with
+     | SVal_bool b -> Some (SVal_bool (negb b))
+     | _ -> None)
+
+(** val nat_to_events_aux : int -> int -> event list -> event list **)
+
+let rec nat_to_events_aux fuel n0 acc =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> acc)
+    (fun fuel' ->
+    let digit =
+      Z.of_nat
+        (add (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+          (Stdlib.Int.succ 0))))))))))))))))))))))))))))))))))))))))))))))))
+          (Nat.modulo n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ 0))))))))))))
+    in
+    let rest =
+      Nat.div n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))))))))))
+    in
+    if (=) rest 0
+    then digit :: acc
+    else nat_to_events_aux fuel' rest (digit :: acc))
+    fuel
+
+(** val z_to_events : int -> event list **)
+
+let z_to_events z0 =
+  (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+    (fun _ -> ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+    ((fun p->1+2*p) 1))))) :: [])
+    (fun p ->
+    nat_to_events_aux (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ 0)))))))))))))))))))) (Coq_Pos.to_nat p) [])
+    (fun p -> ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->2*p)
+    1))))) :: (nat_to_events_aux (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                0)))))))))))))))))))) (Coq_Pos.to_nat p) []))
+    z0
+
+(** val apply_builtin :
+    builtin -> svalue -> event list -> (svalue * event list) option **)
+
+let apply_builtin b arg out =
+  match b with
+  | Bi_print_int ->
+    (match arg with
+     | SVal_int n0 -> Some (SVal_unit, (app (rev (z_to_events n0)) out))
+     | _ -> None)
+  | Bi_print_newline ->
+    (match arg with
+     | SVal_unit ->
+       Some (SVal_unit, (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+         1))) :: out))
+     | _ -> None)
+  | Bi_print_char ->
+    (match arg with
+     | SVal_int c -> Some (SVal_unit, (c :: out))
+     | _ -> None)
+  | Bi_fst ->
+    (match arg with
+     | SVal_tuple l -> (match l with
+                        | [] -> None
+                        | a :: _ -> Some (a, out))
+     | _ -> None)
+  | Bi_snd ->
+    (match arg with
+     | SVal_tuple l ->
+       (match l with
+        | [] -> None
+        | _ :: l0 -> (match l0 with
+                      | [] -> None
+                      | b0 :: _ -> Some (b0, out)))
+     | _ -> None)
+  | _ -> None
+
+(** val stdlib_env : env0 **)
+
+let stdlib_env =
+  Env_cons
+    (('p'::('r'::('i'::('n'::('t'::('_'::('i'::('n'::('t'::[]))))))))),
+    (SVal_builtin Bi_print_int), (Env_cons
+    (('p'::('r'::('i'::('n'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[])))))))))))),
+    (SVal_builtin Bi_print_string), (Env_cons
+    (('p'::('r'::('i'::('n'::('t'::('_'::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[]))))))))))))),
+    (SVal_builtin Bi_print_newline), (Env_cons
+    (('p'::('r'::('i'::('n'::('t'::('_'::('c'::('h'::('a'::('r'::[])))))))))),
+    (SVal_builtin Bi_print_char), (Env_cons
+    (('c'::('o'::('m'::('p'::('a'::('r'::('e'::[]))))))), (SVal_builtin
+    Bi_compare), (Env_cons (('f'::('s'::('t'::[]))), (SVal_builtin Bi_fst),
+    (Env_cons (('s'::('n'::('d'::[]))), (SVal_builtin Bi_snd),
+    Env_nil)))))))))))))
+
+(** val eval : int -> expr -> env0 -> event list -> eval_result **)
+
+let rec eval fuel e env1 out =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> Eval_timeout out)
+    (fun fuel' ->
+    match e with
+    | Exp_int n0 -> Eval_ok ((SVal_int n0), out)
+    | Exp_bool b -> Eval_ok ((SVal_bool b), out)
+    | Exp_unit -> Eval_ok (SVal_unit, out)
+    | Exp_var x ->
+      (match env_lookup env1 x with
+       | Some v -> Eval_ok (v, out)
+       | None ->
+         Eval_err
+           (('u'::('n'::('b'::('o'::('u'::('n'::('d'::(' '::('v'::('a'::('r'::('i'::('a'::('b'::('l'::('e'::[])))))))))))))))),
+           out))
+    | Exp_binop (op, e1, e2) ->
+      (match eval fuel' e1 env1 out with
+       | Eval_ok (v1, out1) ->
+         (match eval fuel' e2 env1 out1 with
+          | Eval_ok (v2, out2) ->
+            (match eval_binop op v1 v2 with
+             | Some v -> Eval_ok (v, out2)
+             | None ->
+               Eval_err
+                 (('b'::('i'::('n'::('o'::('p'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::[])))))))))))))))),
+                 out2))
+          | x -> x)
+       | x -> x)
+    | Exp_unop (op, e1) ->
+      (match eval fuel' e1 env1 out with
+       | Eval_ok (v1, out1) ->
+         (match eval_unop op v1 with
+          | Some v -> Eval_ok (v, out1)
+          | None ->
+            Eval_err
+              (('u'::('n'::('o'::('p'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::[]))))))))))))))),
+              out1))
+       | x -> x)
+    | Exp_if (cond, then_e, else_e) ->
+      (match eval fuel' cond env1 out with
+       | Eval_ok (s, out1) ->
+         (match s with
+          | SVal_bool b ->
+            if b
+            then eval fuel' then_e env1 out1
+            else eval fuel' else_e env1 out1
+          | _ ->
+            Eval_err
+              (('i'::('f'::(':'::(' '::('n'::('o'::('n'::('-'::('b'::('o'::('o'::('l'::(' '::('c'::('o'::('n'::('d'::('i'::('t'::('i'::('o'::('n'::[])))))))))))))))))))))),
+              out1))
+       | x -> x)
+    | Exp_let (x, e1, e2) ->
+      (match eval fuel' e1 env1 out with
+       | Eval_ok (v1, out1) -> eval fuel' e2 (env_extend env1 x v1) out1
+       | x0 -> x0)
+    | Exp_letrec (f, e1, e2) ->
+      (match e1 with
+       | Exp_fun (param, body) ->
+         let clos = SVal_recclosure (f, param, body, env1) in
+         eval fuel' e2 (env_extend env1 f clos) out
+       | _ ->
+         (match eval fuel' e1 env1 out with
+          | Eval_ok (v1, out1) -> eval fuel' e2 (env_extend env1 f v1) out1
+          | x -> x))
+    | Exp_fun (x, body) -> Eval_ok ((SVal_closure (x, body, env1)), out)
+    | Exp_app (func, arg) ->
+      (match eval fuel' func env1 out with
+       | Eval_ok (fv, out1) ->
+         (match eval fuel' arg env1 out1 with
+          | Eval_ok (av, out2) ->
+            (match fv with
+             | SVal_closure (param, body, cenv) ->
+               eval fuel' body (env_extend cenv param av) out2
+             | SVal_recclosure (name, param, body, cenv) ->
+               let cenv' = env_extend cenv name fv in
+               eval fuel' body (env_extend cenv' param av) out2
+             | SVal_builtin b ->
+               (match apply_builtin b av out2 with
+                | Some p -> let (rv, out3) = p in Eval_ok (rv, out3)
+                | None ->
+                  Eval_err
+                    (('b'::('u'::('i'::('l'::('t'::('i'::('n'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::[])))))))))))))))))),
+                    out2))
+             | _ ->
+               Eval_err
+                 (('a'::('p'::('p'::('l'::('i'::('c'::('a'::('t'::('i'::('o'::('n'::(' '::('o'::('f'::(' '::('n'::('o'::('n'::('-'::('f'::('u'::('n'::('c'::('t'::('i'::('o'::('n'::[]))))))))))))))))))))))))))),
+                 out2))
+          | x -> x)
+       | x -> x)
+    | Exp_tuple es ->
+      let rec eval_list fuel0 es0 acc out0 =
+        match es0 with
+        | [] -> Eval_ok ((SVal_tuple (rev acc)), out0)
+        | e1 :: rest ->
+          (match eval fuel0 e1 env1 out0 with
+           | Eval_ok (v, out1) -> eval_list fuel0 rest (v :: acc) out1
+           | x -> x)
+      in eval_list fuel' es [] out
+    | Exp_constr (c, o) ->
+      (match o with
+       | Some e1 ->
+         (match eval fuel' e1 env1 out with
+          | Eval_ok (v, out1) -> Eval_ok ((SVal_constr (c, (Some v))), out1)
+          | x -> x)
+       | None -> Eval_ok ((SVal_constr (c, None)), out))
+    | Exp_match (scrut, cases) ->
+      (match eval fuel' scrut env1 out with
+       | Eval_ok (sv, out1) ->
+         (match try_cases cases sv with
+          | Some p ->
+            let (body, bindings) = p in
+            eval fuel' body (env_append bindings env1) out1
+          | None ->
+            Eval_err
+              (('m'::('a'::('t'::('c'::('h'::(' '::('f'::('a'::('i'::('l'::('u'::('r'::('e'::[]))))))))))))),
+              out1))
+       | x -> x)
+    | Exp_seq (e1, e2) ->
+      (match eval fuel' e1 env1 out with
+       | Eval_ok (_, out1) -> eval fuel' e2 env1 out1
+       | x -> x))
+    fuel
+
+(** val eval_program : int -> program -> env0 -> event list -> eval_result **)
+
+let rec eval_program fuel prog env1 out =
+  match prog with
+  | [] -> Eval_ok (SVal_unit, out)
+  | d :: rest ->
+    (match d with
+     | Decl_let (x, e) ->
+       (match eval fuel e env1 out with
+        | Eval_ok (v, out') ->
+          eval_program fuel rest (env_extend env1 x v) out'
+        | x0 -> x0)
+     | Decl_letrec (f, e) ->
+       (match e with
+        | Exp_fun (param, body) ->
+          let clos = SVal_recclosure (f, param, body, env1) in
+          eval_program fuel rest (env_extend env1 f clos) out
+        | _ ->
+          (match eval fuel e env1 out with
+           | Eval_ok (v, out') ->
+             eval_program fuel rest (env_extend env1 f v) out'
+           | x -> x))
+     | Decl_type (_, _, _) -> eval_program fuel rest env1 out
+     | Decl_expr e ->
+       (match eval fuel e env1 out with
+        | Eval_ok (_, out') -> eval_program fuel rest env1 out'
+        | x -> x))
+
+(** val interpret : int -> program -> behavior **)
+
+let interpret fuel prog =
+  match eval_program fuel prog stdlib_env [] with
+  | Eval_ok (_, out) ->
+    { trace = (rev out); result = (Term_normal (Val_int 0)) }
+  | Eval_err (msg, out) -> { trace = (rev out); result = (Term_error msg) }
+  | Eval_timeout out -> { trace = (rev out); result = Term_timeout }
+
+type var_loc =
+| Loc_stack of int
+| Loc_env of int
+| Loc_self
+
+type comp_env = (ident * var_loc) list
+
+(** val comp_lookup : comp_env -> ident -> var_loc option **)
+
+let rec comp_lookup ce x =
+  match ce with
+  | [] -> None
+  | p :: rest ->
+    let (y, loc) = p in if eqb0 x y then Some loc else comp_lookup rest x
+
+(** val shift0 : comp_env -> int -> comp_env **)
+
+let rec shift0 ce n0 =
+  match ce with
+  | [] -> []
+  | entry :: rest ->
+    let (x, v) = entry in
+    (match v with
+     | Loc_stack pos -> (x, (Loc_stack (add pos n0))) :: (shift0 rest n0)
+     | _ -> entry :: (shift0 rest n0))
+
+(** val is_builtin : ident -> int option **)
+
+let is_builtin x =
+  if eqb0 x ('p'::('r'::('i'::('n'::('t'::('_'::('i'::('n'::('t'::[])))))))))
+  then Some 0
+  else if eqb0 x
+            ('p'::('r'::('i'::('n'::('t'::('_'::('n'::('e'::('w'::('l'::('i'::('n'::('e'::[])))))))))))))
+       then Some (Stdlib.Int.succ 0)
+       else if eqb0 x
+                 ('p'::('r'::('i'::('n'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))
+            then Some (Stdlib.Int.succ (Stdlib.Int.succ 0))
+            else None
+
+(** val is_inline_builtin : ident -> instruction list option **)
+
+let is_inline_builtin x =
+  if eqb0 x ('f'::('s'::('t'::[])))
+  then Some ((GETFIELD 0) :: [])
+  else if eqb0 x ('s'::('n'::('d'::[])))
+       then Some ((GETFIELD (Stdlib.Int.succ 0)) :: [])
+       else None
+
+(** val mem_ident : ident -> ident list -> bool **)
+
+let rec mem_ident x = function
+| [] -> false
+| y :: r -> if eqb0 x y then true else mem_ident x r
+
+(** val remove_ident : ident -> ident list -> ident list **)
+
+let rec remove_ident x = function
+| [] -> []
+| y :: r -> if eqb0 x y then remove_ident x r else y :: (remove_ident x r)
+
+(** val dedup_acc : ident list -> ident list -> ident list **)
+
+let rec dedup_acc seen = function
+| [] -> []
+| x :: r ->
+  if mem_ident x seen
+  then dedup_acc seen r
+  else x :: (dedup_acc (x :: seen) r)
+
+(** val dedup : ident list -> ident list **)
+
+let dedup l =
+  dedup_acc [] l
+
+(** val pat_vars : pattern -> ident list **)
+
+let rec pat_vars = function
+| Pat_var x -> x :: []
+| Pat_tuple ps ->
+  let rec pv_list = function
+  | [] -> []
+  | p1 :: r -> app (pat_vars p1) (pv_list r)
+  in pv_list ps
+| Pat_constr (_, o) -> (match o with
+                        | Some p' -> pat_vars p'
+                        | None -> [])
+| _ -> []
+
+(** val remove_many : ident list -> ident list -> ident list **)
+
+let remove_many xs l =
+  fold_left (fun acc x -> remove_ident x acc) xs l
+
+(** val free_vars : expr -> ident list **)
+
+let rec free_vars = function
+| Exp_var x -> x :: []
+| Exp_binop (_, e1, e2) -> app (free_vars e1) (free_vars e2)
+| Exp_unop (_, e1) -> free_vars e1
+| Exp_if (c, t, e0) -> app (free_vars c) (app (free_vars t) (free_vars e0))
+| Exp_let (x, e1, e2) -> app (free_vars e1) (remove_ident x (free_vars e2))
+| Exp_letrec (f, e1, e2) ->
+  app (remove_ident f (free_vars e1)) (remove_ident f (free_vars e2))
+| Exp_fun (x, body) -> remove_ident x (free_vars body)
+| Exp_app (e1, e2) -> app (free_vars e1) (free_vars e2)
+| Exp_tuple es ->
+  let rec fv_list = function
+  | [] -> []
+  | e1 :: r -> app (free_vars e1) (fv_list r)
+  in fv_list es
+| Exp_constr (_, o) -> (match o with
+                        | Some e1 -> free_vars e1
+                        | None -> [])
+| Exp_match (scrut, cases) ->
+  app (free_vars scrut)
+    (let rec fv_cases = function
+     | [] -> []
+     | y :: r ->
+       let (p, b) = y in
+       app (remove_many (pat_vars p) (free_vars b)) (fv_cases r)
+     in fv_cases cases)
+| Exp_seq (e1, e2) -> app (free_vars e1) (free_vars e2)
+| _ -> []
+
+(** val closure_vars : ident list -> expr -> comp_env -> ident list **)
+
+let closure_vars params body ce =
+  let fvs = remove_many params (free_vars body) in
+  let fvs' = dedup fvs in
+  filter (fun x ->
+    match comp_lookup ce x with
+    | Some _ -> true
+    | None -> false) fvs'
+
+(** val make_fv_env : int -> ident list -> comp_env **)
+
+let rec make_fv_env i = function
+| [] -> []
+| x :: rest ->
+  (x, (Loc_env
+    (add (Stdlib.Int.succ (Stdlib.Int.succ 0)) i))) :: (make_fv_env
+                                                         (Stdlib.Int.succ i)
+                                                         rest)
+
+(** val make_body_env : ident -> ident list -> comp_env **)
+
+let make_body_env param fvs =
+  (param, (Loc_stack 0)) :: (make_fv_env 0 fvs)
+
+(** val make_rec_body_env : ident -> ident -> ident list -> comp_env **)
+
+let make_rec_body_env param fname fvs =
+  (param, (Loc_stack 0)) :: ((fname, Loc_self) :: (make_fv_env 0 fvs))
+
+(** val compile_push_fvs :
+    ident list -> comp_env -> int -> instruction list **)
+
+let rec compile_push_fvs fvs ce pushed =
+  match fvs with
+  | [] -> []
+  | x :: rest ->
+    (match rest with
+     | [] ->
+       let ce' = shift0 ce pushed in
+       (match comp_lookup ce' x with
+        | Some v ->
+          (match v with
+           | Loc_stack n0 -> (ACC n0) :: []
+           | Loc_env n0 -> (ENVACC n0) :: []
+           | Loc_self -> (OFFSETCLOSURE 0) :: [])
+        | None -> (CONSTINT 0) :: [])
+     | _ :: _ ->
+       let ce' = shift0 ce pushed in
+       let load =
+         match comp_lookup ce' x with
+         | Some v ->
+           (match v with
+            | Loc_stack n0 -> (ACC n0) :: []
+            | Loc_env n0 -> (ENVACC n0) :: []
+            | Loc_self -> (OFFSETCLOSURE 0) :: [])
+         | None -> (CONSTINT 0) :: []
+       in
+       app load
+         (app (PUSH :: [])
+           (compile_push_fvs rest ce (Stdlib.Int.succ pushed))))
+
+(** val compile_expr : int -> expr -> comp_env -> int -> instruction list **)
+
+let rec compile_expr fuel e ce base =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> STOP :: [])
+    (fun fuel' ->
+    match e with
+    | Exp_int n0 -> (CONSTINT n0) :: []
+    | Exp_bool b -> if b then (CONSTINT 1) :: [] else (CONSTINT 0) :: []
+    | Exp_unit -> (CONSTINT 0) :: []
+    | Exp_var x ->
+      (match comp_lookup ce x with
+       | Some v ->
+         (match v with
+          | Loc_stack n0 -> (ACC n0) :: []
+          | Loc_env n0 -> (ENVACC n0) :: []
+          | Loc_self -> (OFFSETCLOSURE 0) :: [])
+       | None -> (CONSTINT 0) :: [])
+    | Exp_binop (op, e1, e2) ->
+      let c2 = compile_expr fuel' e2 ce base in
+      let c1 =
+        compile_expr fuel' e1 (shift0 ce (Stdlib.Int.succ 0))
+          (add (add base (length c2)) (Stdlib.Int.succ 0))
+      in
+      let op_instr =
+        match op with
+        | Op_add -> ADDINT
+        | Op_sub -> SUBINT
+        | Op_mul -> MULINT
+        | Op_div -> DIVINT
+        | Op_mod -> MODINT
+        | Op_eq -> EQ
+        | Op_neq -> NEQ
+        | Op_lt -> LTINT
+        | Op_le -> LEINT
+        | Op_gt -> GTINT
+        | Op_ge -> GEINT
+        | Op_and -> ANDINT
+        | Op_or -> ORINT
+      in
+      app c2 (app (PUSH :: []) (app c1 (op_instr :: [])))
+    | Exp_unop (u, e1) ->
+      (match u with
+       | Op_neg -> app (compile_expr fuel' e1 ce base) (NEGINT :: [])
+       | Op_not -> app (compile_expr fuel' e1 ce base) (BOOLNOT :: []))
+    | Exp_if (cond, then_e, else_e) ->
+      let cc = compile_expr fuel' cond ce base in
+      let cc_len = length cc in
+      let ct =
+        compile_expr fuel' then_e ce
+          (add (add base cc_len) (Stdlib.Int.succ 0))
+      in
+      let ct_len = length ct in
+      let else_base =
+        add (add (add (add base cc_len) (Stdlib.Int.succ 0)) ct_len)
+          (Stdlib.Int.succ 0)
+      in
+      let ce_code = compile_expr fuel' else_e ce else_base in
+      let ce_len = length ce_code in
+      app cc
+        (app ((BRANCHIFNOT (Z.of_nat else_base)) :: [])
+          (app ct
+            (app ((BRANCH (Z.of_nat (add else_base ce_len))) :: []) ce_code)))
+    | Exp_let (x, e1, e2) ->
+      let c1 = compile_expr fuel' e1 ce base in
+      let c1_len = length c1 in
+      let c2 =
+        compile_expr fuel' e2 ((x, (Loc_stack
+          0)) :: (shift0 ce (Stdlib.Int.succ 0)))
+          (add (add base c1_len) (Stdlib.Int.succ 0))
+      in
+      app c1 (app (PUSH :: []) (app c2 ((POP (Stdlib.Int.succ 0)) :: [])))
+    | Exp_letrec (f, e1, e2) ->
+      (match e1 with
+       | Exp_fun (param, body) ->
+         let fvs = closure_vars (f :: (param :: [])) body ce in
+         let nvars = length fvs in
+         let body_env = make_rec_body_env param f fvs in
+         let body_code =
+           compile_expr fuel' body body_env (add base (Stdlib.Int.succ 0))
+         in
+         let body_instrs = app body_code ((RETURN (Stdlib.Int.succ 0)) :: [])
+         in
+         let body_len = length body_instrs in
+         let push_code = compile_push_fvs (rev fvs) ce 0 in
+         let body_start = Z.of_nat (add base (Stdlib.Int.succ 0)) in
+         let branch_target =
+           Z.of_nat (add (add base (Stdlib.Int.succ 0)) body_len)
+         in
+         let cr_pos =
+           add (add (add base (Stdlib.Int.succ 0)) body_len)
+             (length push_code)
+         in
+         let c2 =
+           compile_expr fuel' e2 ((f, (Loc_stack
+             0)) :: (shift0 ce (Stdlib.Int.succ 0)))
+             (add cr_pos (Stdlib.Int.succ 0))
+         in
+         app ((BRANCH branch_target) :: [])
+           (app body_instrs
+             (app push_code
+               (app ((CLOSUREREC ((Stdlib.Int.succ 0), nvars,
+                 (body_start :: []))) :: [])
+                 (app c2 ((POP (Stdlib.Int.succ 0)) :: [])))))
+       | _ ->
+         let c1 = compile_expr fuel' e1 ce base in
+         let c1_len = length c1 in
+         let c2 =
+           compile_expr fuel' e2 ((f, (Loc_stack
+             0)) :: (shift0 ce (Stdlib.Int.succ 0)))
+             (add (add base c1_len) (Stdlib.Int.succ 0))
+         in
+         app c1 (app (PUSH :: []) (app c2 ((POP (Stdlib.Int.succ 0)) :: []))))
+    | Exp_fun (param, body) ->
+      let fvs = closure_vars (param :: []) body ce in
+      let nvars = length fvs in
+      let body_env = make_body_env param fvs in
+      let body_code =
+        compile_expr fuel' body body_env (add base (Stdlib.Int.succ 0))
+      in
+      let body_instrs = app body_code ((RETURN (Stdlib.Int.succ 0)) :: []) in
+      let body_len = length body_instrs in
+      let push_code = compile_push_fvs (rev fvs) ce 0 in
+      let body_start = Z.of_nat (add base (Stdlib.Int.succ 0)) in
+      let branch_target =
+        Z.of_nat (add (add base (Stdlib.Int.succ 0)) body_len)
+      in
+      app ((BRANCH branch_target) :: [])
+        (app body_instrs
+          (app push_code ((CLOSURE (nvars, body_start)) :: [])))
+    | Exp_app (func, arg) ->
+      (match func with
+       | Exp_var fname ->
+         (match is_builtin fname with
+          | Some prim_idx ->
+            app (compile_expr fuel' arg ce base) ((C_CALL ((Stdlib.Int.succ
+              0), prim_idx)) :: [])
+          | None ->
+            (match is_inline_builtin fname with
+             | Some instrs -> app (compile_expr fuel' arg ce base) instrs
+             | None ->
+               let ca = compile_expr fuel' arg ce base in
+               let ca_len = length ca in
+               let cf =
+                 compile_expr fuel' func (shift0 ce (Stdlib.Int.succ 0))
+                   (add (add base ca_len) (Stdlib.Int.succ 0))
+               in
+               app ca (app (PUSH :: []) (app cf (APPLY1 :: [])))))
+       | _ ->
+         let ca = compile_expr fuel' arg ce base in
+         let ca_len = length ca in
+         let cf =
+           compile_expr fuel' func (shift0 ce (Stdlib.Int.succ 0))
+             (add (add base ca_len) (Stdlib.Int.succ 0))
+         in
+         app ca (app (PUSH :: []) (app cf (APPLY1 :: []))))
+    | Exp_tuple es ->
+      (match es with
+       | [] -> (ATOM 0) :: []
+       | e1 :: l ->
+         (match l with
+          | [] -> app (compile_expr fuel' e1 ce base) ((MAKEBLOCK1 0) :: [])
+          | e2 :: l0 ->
+            (match l0 with
+             | [] ->
+               let c2 = compile_expr fuel' e2 ce base in
+               let c1 =
+                 compile_expr fuel' e1 (shift0 ce (Stdlib.Int.succ 0))
+                   (add (add base (length c2)) (Stdlib.Int.succ 0))
+               in
+               app c2 (app (PUSH :: []) (app c1 ((MAKEBLOCK2 0) :: [])))
+             | e3 :: l1 ->
+               (match l1 with
+                | [] ->
+                  let c3 = compile_expr fuel' e3 ce base in
+                  let c3_len = length c3 in
+                  let c2 =
+                    compile_expr fuel' e2 (shift0 ce (Stdlib.Int.succ 0))
+                      (add (add base c3_len) (Stdlib.Int.succ 0))
+                  in
+                  let c2_len = length c2 in
+                  let c1 =
+                    compile_expr fuel' e1
+                      (shift0 ce (Stdlib.Int.succ (Stdlib.Int.succ 0)))
+                      (add
+                        (add (add (add base c3_len) (Stdlib.Int.succ 0))
+                          c2_len)
+                        (Stdlib.Int.succ 0))
+                  in
+                  app c3
+                    (app (PUSH :: [])
+                      (app c2
+                        (app (PUSH :: []) (app c1 ((MAKEBLOCK3 0) :: [])))))
+                | _ :: _ -> (CONSTINT 0) :: []))))
+    | Exp_constr (_, o) ->
+      (match o with
+       | Some e1 -> app (compile_expr fuel' e1 ce base) ((MAKEBLOCK1 0) :: [])
+       | None -> (CONSTINT 0) :: [])
+    | Exp_match (scrut, cases) ->
+      let cs = compile_expr fuel' scrut ce base in
+      let cs_len = length cs in
+      let scrut_ce = shift0 ce (Stdlib.Int.succ 0) in
+      let cases_base = add (add base cs_len) (Stdlib.Int.succ 0) in
+      let cases_code =
+        let rec compile_cases cl b =
+          match cl with
+          | [] -> []
+          | p :: rest ->
+            let (pat, body) = p in
+            let body_ce =
+              match pat with
+              | Pat_var x -> (x, (Loc_stack 0)) :: scrut_ce
+              | _ -> scrut_ce
+            in
+            let irrefutable =
+              match pat with
+              | Pat_var _ -> true
+              | Pat_unit -> true
+              | Pat_wild -> true
+              | _ -> false
+            in
+            if irrefutable
+            then compile_expr fuel' body body_ce b
+            else (match rest with
+                  | [] -> compile_expr fuel' body body_ce b
+                  | _ :: _ ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    let tl = length test in
+                    let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                    let bc = compile_expr fuel' body body_ce bs in
+                    let bl = length bc in
+                    let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                    let rc = compile_cases rest ns in
+                    let rl = length rc in
+                    let ep = add ns rl in
+                    app test
+                      (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                        (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
+        in compile_cases cases cases_base
+      in
+      app cs
+        (app (PUSH :: []) (app cases_code ((POP (Stdlib.Int.succ 0)) :: [])))
+    | Exp_seq (e1, e2) ->
+      let c1 = compile_expr fuel' e1 ce base in
+      let c2 = compile_expr fuel' e2 ce (add base (length c1)) in app c1 c2)
+    fuel
+
+(** val compile_decls :
+    int -> decl list -> comp_env -> int -> instruction list **)
+
+let rec compile_decls fuel decls ce base =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> STOP :: [])
+    (fun fuel' ->
+    match decls with
+    | [] -> STOP :: []
+    | d :: rest ->
+      (match d with
+       | Decl_let (x, e) ->
+         let c = compile_expr fuel' e ce base in
+         let c_len = length c in
+         app c
+           (app (PUSH :: [])
+             (compile_decls fuel' rest ((x, (Loc_stack
+               0)) :: (shift0 ce (Stdlib.Int.succ 0)))
+               (add (add base c_len) (Stdlib.Int.succ 0))))
+       | Decl_letrec (f, e) ->
+         (match e with
+          | Exp_fun (param, body) ->
+            let fvs = closure_vars (f :: (param :: [])) body ce in
+            let nvars = length fvs in
+            let body_env = make_rec_body_env param f fvs in
+            let body_code =
+              compile_expr fuel' body body_env (add base (Stdlib.Int.succ 0))
+            in
+            let body_instrs =
+              app body_code ((RETURN (Stdlib.Int.succ 0)) :: [])
+            in
+            let body_len = length body_instrs in
+            let push_code = compile_push_fvs (rev fvs) ce 0 in
+            let body_start = Z.of_nat (add base (Stdlib.Int.succ 0)) in
+            let branch_target =
+              Z.of_nat (add (add base (Stdlib.Int.succ 0)) body_len)
+            in
+            let cr_pos =
+              add (add (add base (Stdlib.Int.succ 0)) body_len)
+                (length push_code)
+            in
+            let rest_code =
+              compile_decls fuel' rest ((f, (Loc_stack
+                0)) :: (shift0 ce (Stdlib.Int.succ 0)))
+                (add cr_pos (Stdlib.Int.succ 0))
+            in
+            app ((BRANCH branch_target) :: [])
+              (app body_instrs
+                (app push_code
+                  (app ((CLOSUREREC ((Stdlib.Int.succ 0), nvars,
+                    (body_start :: []))) :: []) rest_code)))
+          | _ -> compile_decls fuel' ((Decl_let (f, e)) :: rest) ce base)
+       | Decl_type (_, _, _) -> compile_decls fuel' rest ce base
+       | Decl_expr e ->
+         let c = compile_expr fuel' e ce base in
+         app c (compile_decls fuel' rest ce (add base (length c)))))
+    fuel
+
+(** val compile_program : program -> instruction list **)
+
+let compile_program prog =
+  compile_decls (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ
+    0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+    prog [] 0

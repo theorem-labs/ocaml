@@ -82,7 +82,7 @@ Three trust levels:
 
 ## Roadmap
 
-1. **[Trusted] Bytecode interpreter** -- AST + pretty-printer + interpreter for OCaml bytecode (~150 instructions, ~1500 LoC). PBT harness verifies `ocamlrun` and `interpret-bytecode` agree.
+1. **[Trusted] Bytecode interpreter** -- AST + pretty-printer + interpreter for OCaml bytecode (~150 instructions, ~1500 LoC). PBT harness verifies `ocamlrun` and `interpret-bytecode` agree. Based on semantics in https://cadmium.x9c.fr/distrib/caml-instructions.pdf.
 2. **[Untrusted] Lexer/parser** -- `lex-parse` processes OCaml source into AST. **[Trusted]** `pretty-printer` goes in reverse direction.
 3. **[Untrusted] Compiler + source interpreter** -- `compile` (using `lex-parse`) and `interpret`.
 4. **[Trusted] Correctness theorem** -- `forall source, interpret(source) = (interpret-bytecode . compile)(source)`. Proof evolves with `compile`/`interpret`. RL penalty for `interpret` length, amplified if no distinguishing program is found between previous `interpret` and `ocamlrun . ocamlc`.

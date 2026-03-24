@@ -4,18 +4,16 @@ From Stdlib Require Import ZArith Strings.String.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Trusted.Bytecode Require Import Value AST.
 
-Record trap_frame : Type := mk_trap_frame {
-  trap_pc         : Z;
-  trap_sp_offset  : nat;
-  trap_env        : value;
-  trap_extra_args : nat;
-}.
-
 (* Heap: maps addresses (nat) to (tag, fields) pairs.
-   Used for mutable blocks (refs, arrays). Closures and immutable
-   blocks remain as inline Val_block values. *)
+   Used for mutable blocks (refs, arrays, closures). *)
 Definition heap := list (nat * (nat * list value)).  (* addr -> (tag, fields) *)
 
+(* Machine state.
+   trap_sp : nat — stack depth (length of stack) at the time the current
+   outermost active PUSHTRAP pushed its trap frame.  Zero means no handler.
+   The trap frame lives on the main stack at positions
+     (length stack - trap_sp) .. (length stack - trap_sp + 3)
+   from the top. *)
 Record state : Type := mk_state {
   pc         : Z;
   accu       : value;
@@ -23,7 +21,7 @@ Record state : Type := mk_state {
   env        : value;
   extra_args : nat;
   global     : list value;
-  trap_stack : list trap_frame;
+  trap_sp    : nat;            (* trap-stack pointer: stack depth at last PUSHTRAP *)
   hp         : heap;           (* mutable heap *)
   next_addr  : nat;            (* next free heap address *)
 }.
@@ -40,7 +38,7 @@ Inductive run_result : Type :=
   | Out_of_fuel : state -> run_result.
 
 Definition set_accu (s : state) (v : value) : state :=
-  mk_state s.(pc) v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack) s.(hp) s.(next_addr).
+  mk_state s.(pc) v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp) s.(hp) s.(next_addr).
 
 (* Heap operations *)
 Fixpoint heap_lookup (h : heap) (addr : nat) : option (nat * list value) :=
@@ -53,7 +51,7 @@ Fixpoint heap_lookup (h : heap) (addr : nat) : option (nat * list value) :=
 Definition heap_alloc (s : state) (tag : nat) (fields : list value) : state * value :=
   let addr := s.(next_addr) in
   let s' := mk_state s.(pc) s.(accu) s.(stack) s.(env) s.(extra_args) s.(global)
-              s.(trap_stack) ((addr, (tag, fields)) :: s.(hp)) (S addr) in
+              s.(trap_sp) ((addr, (tag, fields)) :: s.(hp)) (S addr) in
   (s', Val_ptr addr).
 
 Fixpoint heap_update (h : heap) (addr : nat) (fields : list value) : heap :=
@@ -106,4 +104,4 @@ Definition size_or_heap (s : state) (v : value) : option nat :=
   end.
 
 Definition initial_state (global_data : list value) : state :=
-  mk_state 0%Z val_unit [] val_unit 0 global_data [] [] 0.
+  mk_state 0%Z val_unit [] val_unit 0 global_data 0 [] 0.
