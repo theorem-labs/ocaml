@@ -3925,107 +3925,6 @@ let rec encode_instrs omap idx = function
 let encode_bytecode code =
   let omap = offset_map code in encode_instrs omap 0 code
 
-type byte_string = bytes
-
-(** val read_file : int list -> byte_string **)
-
-let read_file = 
-  fun cs ->
-    let buf = Buffer.create 256 in
-    let rec to_chars = function
-      | [] -> ()
-      | c :: rest -> Buffer.add_char buf (Char.chr c); to_chars rest
-    in
-    to_chars cs;
-    let filename = Buffer.contents buf in
-    let ic = open_in_bin filename in
-    let n = in_channel_length ic in
-    let data = Bytes.create n in
-    really_input ic data 0 n;
-    close_in ic;
-    data
-
-
-(** val byte_string_to_list : byte_string -> int list **)
-
-let byte_string_to_list = 
-  fun bs ->
-    let n = Bytes.length bs in
-    let rec build i acc =
-      if i < 0 then acc
-      else build (i - 1) (Char.code (Bytes.get bs i) :: acc)
-    in
-    build (n - 1) []
-
-
-(** val byte_string_length : byte_string -> int **)
-
-let byte_string_length = 
-  fun bs -> Bytes.length bs
-
-
-(** val sys_argv : int list list **)
-
-let sys_argv = 
-  let argv = Array.to_list Sys.argv in
-  List.map (fun s ->
-    let n = String.length s in
-    let rec build i acc =
-      if i < 0 then acc
-      else build (i - 1) (Char.code s.[i] :: acc)
-    in
-    build (n - 1) []
-  ) argv
-
-
-(** val unmarshal_globals : byte_string -> int -> int -> int list list **)
-
-let unmarshal_globals = 
-  fun bs ofs len ->
-    let sub = Bytes.sub bs ofs len in
-    let obj : Obj.t = Marshal.from_bytes sub 0 in
-    let arr : Obj.t array = Obj.obj obj in
-    let rec obj_to_encoding (o : Obj.t) : int list =
-      if Obj.is_int o then [0; (Obj.obj o : int)]
-      else
-        let tag = Obj.tag o in
-        if tag = Obj.string_tag then
-          let s : string = Obj.obj o in
-          let n = String.length s in
-          let rec chars i acc =
-            if i < 0 then acc
-            else chars (i - 1) (Char.code s.[i] :: acc)
-          in
-          2 :: n :: chars (n - 1) []
-        else if tag < Obj.no_scan_tag then
-          let size = Obj.size o in
-          let fields = List.concat_map (fun i ->
-            obj_to_encoding (Obj.field o i)
-          ) (List.init size Fun.id) in
-          1 :: tag :: size :: fields
-        else
-          [1; tag; 0]
-    in
-    Array.to_list (Array.map obj_to_encoding arr)
-
-
-(** val load_primitives : byte_string -> int -> int -> int list list **)
-
-let load_primitives = 
-  fun bs ofs len ->
-    let raw = Bytes.sub_string bs ofs len in
-    let prims = List.filter (fun s -> String.length s > 0)
-                  (String.split_on_char '\000' raw) in
-    List.map (fun s ->
-      let n = String.length s in
-      let rec build i acc =
-        if i < 0 then acc
-        else build (i - 1) (Char.code s.[i] :: acc)
-      in
-      build (n - 1) []
-    ) prims
-
-
 (** val byte_at : int list -> int -> int **)
 
 let rec byte_at data off =
@@ -7182,6 +7081,107 @@ let load_code_section data data_len =
   (match find_section secs cODE_name with
    | Some s -> Some (decode_bytecode data s.sec_offset s.sec_length)
    | None -> None)
+
+type byte_string = bytes
+
+(** val read_file : int list -> byte_string **)
+
+let read_file = 
+  fun cs ->
+    let buf = Buffer.create 256 in
+    let rec to_chars = function
+      | [] -> ()
+      | c :: rest -> Buffer.add_char buf (Char.chr c); to_chars rest
+    in
+    to_chars cs;
+    let filename = Buffer.contents buf in
+    let ic = open_in_bin filename in
+    let n = in_channel_length ic in
+    let data = Bytes.create n in
+    really_input ic data 0 n;
+    close_in ic;
+    data
+
+
+(** val byte_string_to_list : byte_string -> int list **)
+
+let byte_string_to_list = 
+  fun bs ->
+    let n = Bytes.length bs in
+    let rec build i acc =
+      if i < 0 then acc
+      else build (i - 1) (Char.code (Bytes.get bs i) :: acc)
+    in
+    build (n - 1) []
+
+
+(** val byte_string_length : byte_string -> int **)
+
+let byte_string_length = 
+  fun bs -> Bytes.length bs
+
+
+(** val sys_argv : int list list **)
+
+let sys_argv = 
+  let argv = Array.to_list Sys.argv in
+  List.map (fun s ->
+    let n = String.length s in
+    let rec build i acc =
+      if i < 0 then acc
+      else build (i - 1) (Char.code s.[i] :: acc)
+    in
+    build (n - 1) []
+  ) argv
+
+
+(** val unmarshal_globals : byte_string -> int -> int -> int list list **)
+
+let unmarshal_globals = 
+  fun bs ofs len ->
+    let sub = Bytes.sub bs ofs len in
+    let obj : Obj.t = Marshal.from_bytes sub 0 in
+    let arr : Obj.t array = Obj.obj obj in
+    let rec obj_to_encoding (o : Obj.t) : int list =
+      if Obj.is_int o then [0; (Obj.obj o : int)]
+      else
+        let tag = Obj.tag o in
+        if tag = Obj.string_tag then
+          let s : string = Obj.obj o in
+          let n = String.length s in
+          let rec chars i acc =
+            if i < 0 then acc
+            else chars (i - 1) (Char.code s.[i] :: acc)
+          in
+          2 :: n :: chars (n - 1) []
+        else if tag < Obj.no_scan_tag then
+          let size = Obj.size o in
+          let fields = List.concat_map (fun i ->
+            obj_to_encoding (Obj.field o i)
+          ) (List.init size Fun.id) in
+          1 :: tag :: size :: fields
+        else
+          [1; tag; 0]
+    in
+    Array.to_list (Array.map obj_to_encoding arr)
+
+
+(** val load_primitives : byte_string -> int -> int -> int list list **)
+
+let load_primitives = 
+  fun bs ofs len ->
+    let raw = Bytes.sub_string bs ofs len in
+    let prims = List.filter (fun s -> String.length s > 0)
+                  (String.split_on_char '\000' raw) in
+    List.map (fun s ->
+      let n = String.length s in
+      let rec build i acc =
+        if i < 0 then acc
+        else build (i - 1) (Char.code s.[i] :: acc)
+      in
+      build (n - 1) []
+    ) prims
+
 
 (** val decode_value_aux : int list -> int -> value * int list **)
 

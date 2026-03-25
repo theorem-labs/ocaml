@@ -24,8 +24,8 @@
 From Stdlib Require Import ZArith PeanoNat Bool List Lia.
 Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import AST.
-From OCamlInterp.Manual.InterpBytecode Require Import Encode WellFormed.
-From OCamlInterp.Automatic.InterpBytecode Require Import Decode.
+From OCamlInterp.Manual.Bytecode Require Import Encode DecodeCorrectnessSpec.
+From OCamlInterp.Manual.Bytecode Require Import Decode.
 Open Scope Z_scope.
 Open Scope nat_scope.
 
@@ -1253,11 +1253,412 @@ Proof.
 Qed.
 
 (* ================================================================== *)
-(* Layer 2 (partial): resolve_one on expected_raw for non-branch instrs *)
+(* Layer 2: resolve_one on expected_raw recovers original instruction  *)
 (* ================================================================== *)
 
 (* For non-branch instructions with nat operands, resolve_one just
-   applies nat_of_z to each operand, recovering the original value. *)
+   applies nat_of_z to each operand, recovering the original value.
+   For branch instructions, we need the resolve_branch_correct hypothesis
+   which says the decoder's offset map inverts the encoder's rel_offset. *)
+
+(* Helper: nth_error on offset_map at a valid index yields word_offset_of *)
+Lemma enc_omap_nth_error : forall code idx,
+  idx < List.length code ->
+  nth_error (offset_map code) idx = Some (word_offset_of code idx).
+Proof.
+  intros. apply offset_map_correct. exact H.
+Qed.
+
+(* Helper: the w computed in expected_raw equals Z.of_nat woff when omap
+   and woff are the encoder's offset_map/word_offset_of *)
+Lemma enc_w_eq : forall code idx,
+  idx < List.length code ->
+  Z.of_nat (match nth_error (offset_map code) idx with
+            | Some n => n | None => 0 end) =
+  Z.of_nat (word_offset_of code idx).
+Proof.
+  intros code idx Hlt.
+  rewrite enc_omap_nth_error by exact Hlt. reflexivity.
+Qed.
+
+(* Helper: extract valid_targetb info *)
+Lemma valid_targetb_props : forall n t,
+  valid_targetb n t = true ->
+  (0 <= t)%Z /\ Z.to_nat t < n.
+Proof.
+  intros n t H. unfold valid_targetb in H.
+  apply Bool.andb_true_iff in H. destruct H as [H1 H2].
+  apply Z.leb_le in H1. apply Nat.ltb_lt in H2.
+  split; assumption.
+Qed.
+
+(* Helper for CLOSUREREC: resolve_branch over a mapped list *)
+Lemma resolve_branch_map_rel_offset :
+  forall dec_omap enc_omap base targets n,
+    (forall t from, (0 <= t)%Z -> Z.to_nat t < n ->
+       resolve_branch dec_omap from (rel_offset enc_omap from t) = t) ->
+    all_valid_targetsb n targets = true ->
+    map (fun o => resolve_branch dec_omap base o)
+        (map (fun t => rel_offset enc_omap base t) targets) = targets.
+Proof.
+  intros dec_omap enc_omap base targets n Hbranch Hvalid.
+  induction targets as [|t rest IH].
+  - reflexivity.
+  - simpl in Hvalid. apply Bool.andb_true_iff in Hvalid.
+    destruct Hvalid as [Ht Hrest].
+    simpl. rewrite Hbranch.
+    + f_equal. apply IH. exact Hrest.
+    + apply valid_targetb_props in Ht. tauto.
+    + apply valid_targetb_props in Ht. tauto.
+Qed.
+
+(* Helper: the local fix resolve_list in resolve_one for CLOSUREREC
+   is equivalent to map (fun o => resolve_branch omap base o) *)
+Lemma resolve_list_is_map : forall dec_omap base ofs,
+  (fix resolve_list (ofs_list : list Z) : list Z :=
+    match ofs_list with
+    | [] => []
+    | o :: rest => resolve_branch dec_omap base o :: resolve_list rest
+    end) ofs = map (fun o => resolve_branch dec_omap base o) ofs.
+Proof.
+  intros. induction ofs as [|o rest IH]; simpl; [reflexivity | f_equal; exact IH].
+Qed.
+
+(* Helper: for SWITCH, resolve_n is also equivalent to a map *)
+Lemma resolve_n_is_map : forall dec_omap base ops start count,
+  (fix resolve_n (s : nat) (c : nat) : list Z :=
+    match c with
+    | O => []
+    | S c' => resolve_branch dec_omap base (znth (S s) ops) :: resolve_n (S s) c'
+    end) start count =
+  map (fun k => resolve_branch dec_omap base (znth (S k) ops)) (seq start count).
+Proof.
+  intros. revert start.
+  induction count as [|c' IH]; intros start; simpl.
+  - reflexivity.
+  - f_equal. apply IH.
+Qed.
+
+(* ---- SWITCH helpers: sizes encoding roundtrip ---- *)
+
+(* Low 16 bits of Z.lor nc (Z.shiftl nb 16) = nc *)
+Lemma lor_land_low16 : forall nc nb : nat,
+  (Z.of_nat nc < 2^16)%Z ->
+  (Z.of_nat nb < 2^16)%Z ->
+  Z.land (Z.lor (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16)) (Z.ones 16)
+  = Z.of_nat nc.
+Proof.
+  intros nc nb Hnc Hnb.
+  apply Z.bits_inj'. intros i Hi.
+  rewrite Z.land_spec, Z.lor_spec, Z.shiftl_spec by lia.
+  destruct (Z_lt_dec i 16).
+  - rewrite Z.ones_spec_low by lia.
+    rewrite Bool.andb_true_r.
+    rewrite (Z.testbit_neg_r (Z.of_nat nb) (i - 16)) by lia.
+    rewrite Bool.orb_false_r. reflexivity.
+  - rewrite Z.ones_spec_high by lia.
+    rewrite Bool.andb_false_r.
+    symmetry. apply Z.bits_above_log2; try lia.
+    destruct (Z.eq_dec (Z.of_nat nc) 0%Z).
+    + rewrite e. simpl. lia.
+    + pose proof (Z.log2_lt_pow2 (Z.of_nat nc) 16 ltac:(lia)). lia.
+Qed.
+
+(* High 16 bits: Z.shiftr (Z.lor nc (Z.shiftl nb 16)) 16 = nb *)
+Lemma lor_shiftr_high16 : forall nc nb : nat,
+  (Z.of_nat nc < 2^16)%Z ->
+  (Z.of_nat nb < 2^16)%Z ->
+  Z.shiftr (Z.lor (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16)) 16
+  = Z.of_nat nb.
+Proof.
+  intros nc nb Hnc Hnb.
+  apply Z.bits_inj'. intros i Hi.
+  rewrite Z.shiftr_spec by lia.
+  rewrite Z.lor_spec, Z.shiftl_spec by lia.
+  replace (i + 16 - 16)%Z with i by lia.
+  assert (Hnc_high : Z.testbit (Z.of_nat nc) (i + 16) = false).
+  { apply Z.bits_above_log2; try lia.
+    destruct (Z.eq_dec (Z.of_nat nc) 0%Z).
+    - rewrite e. simpl. lia.
+    - pose proof (Z.log2_lt_pow2 (Z.of_nat nc) 16 ltac:(lia)). lia. }
+  rewrite Hnc_high. simpl. reflexivity.
+Qed.
+
+(* Helper: znth on appended lists *)
+Lemma znth_app_l : forall k (l1 l2 : list Z),
+  k < List.length l1 ->
+  znth k (l1 ++ l2) = znth k l1.
+Proof.
+  intros k l1 l2 Hk. unfold znth.
+  rewrite nth_error_app1 by assumption. reflexivity.
+Qed.
+
+Lemma znth_app_r : forall k (l1 l2 : list Z),
+  List.length l1 <= k ->
+  znth k (l1 ++ l2) = znth (k - List.length l1) l2.
+Proof.
+  intros k l1 l2 Hk. unfold znth.
+  rewrite nth_error_app2 by assumption. reflexivity.
+Qed.
+
+(* Helper: znth on a map *)
+Lemma znth_map : forall k (f : Z -> Z) (l : list Z),
+  k < List.length l ->
+  znth k (map f l) = f (nth k l 0%Z).
+Proof.
+  intros k f l Hk. unfold znth.
+  rewrite nth_error_map.
+  destruct (nth_error l k) eqn:E.
+  - simpl. f_equal.
+    symmetry. apply nth_error_nth. exact E.
+  - apply nth_error_None in E. lia.
+Qed.
+
+(* resolve_n recovers targets from the ops list *)
+Lemma resolve_n_recover :
+  forall dec_omap enc_omap base (targets : list Z) (ops : list Z)
+         (start : nat) (n : nat),
+    (forall t from : Z,
+       (0 <= t)%Z -> Z.to_nat t < n ->
+       resolve_branch dec_omap from (rel_offset enc_omap from t) = t) ->
+    all_valid_targetsb n targets = true ->
+    (forall k, k < List.length targets ->
+       znth (S (start + k)) ops =
+         nth k (map (fun t => rel_offset enc_omap base t) targets) 0%Z) ->
+    (fix resolve_n (s : nat) (c : nat) : list Z :=
+       match c with
+       | O => []
+       | S c' =>
+         resolve_branch dec_omap base (znth (S s) ops) :: resolve_n (S s) c'
+       end) start (List.length targets) = targets.
+Proof.
+  intros dec_omap enc_omap base targets ops start n Hbranch Hvalid Hops.
+  revert start Hops.
+  induction targets as [|t rest IH]; intros start Hops.
+  - simpl. reflexivity.
+  - simpl in Hvalid. apply Bool.andb_true_iff in Hvalid.
+    destruct Hvalid as [Ht Hrest].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    simpl length.
+    simpl.
+    assert (Hop0 : znth (S start) ops = rel_offset enc_omap base t).
+    { specialize (Hops 0%nat ltac:(simpl; lia)).
+      replace (start + 0) with start in Hops by lia.
+      simpl in Hops. exact Hops. }
+    rewrite Hop0.
+    rewrite Hbranch by assumption.
+    f_equal.
+    apply IH.
+    + exact Hrest.
+    + intros k Hk.
+      specialize (Hops (S k) ltac:(simpl; lia)).
+      replace (start + S k) with (S start + k) in Hops by lia.
+      simpl in Hops. exact Hops.
+Qed.
+
+(* nat_fits_i32b implies the nat < 2^16 constraint we need for SWITCH.
+   Actually we need a tighter bound. For SWITCH, nc and nb fit in 16 bits.
+   But wf_instrb only checks nat_fits_i32b. We need nc < 2^16 and nb < 2^16
+   which is guaranteed by nat_fits_i32b (since 2^16 < 2^31).
+   Actually nat_fits_i32b only bounds below 2^31, not 2^16.
+   But the Z.land/Z.shiftr roundtrip works as long as values are nonneg. *)
+
+(* Actually, the SWITCH sizes encoding works for any nonneg nc, nb < 2^16.
+   We need to derive this from wf_instrb somehow. Let me check... actually
+   wf_instrb only checks nat_fits_i32b for nc and nb, which means they're
+   < 2^31. But the encoding packs them into 32 bits as low16/high16.
+   For this to roundtrip, we need nc < 2^16 AND nb < 2^16.
+
+   However, in practice OCaml's SWITCH instruction packs sizes in 16 bits,
+   so nc and nb must be < 2^16. But our wf_instrb doesn't enforce this.
+
+   This means the roundtrip for SWITCH only works if nc < 2^16 and nb < 2^16.
+   For now, let's add these as assumptions and prove the SWITCH case. *)
+
+(* Helper tactic: simplify resolve_one after unfolding.
+   Since resolve_one, znth, nat_of_z are in a separate theory (Manual.Bytecode),
+   simpl alone does not unfold them. We unfold resolve_one, then reduce the
+   Z.eqb if-then-else chain, then handle znth/nat_of_z/skipn. *)
+Local Ltac resolve_simpl :=
+  unfold resolve_one;
+  simpl ri_opcode; simpl ri_operands; simpl ri_word_offset;
+  simpl Z.eqb;
+  (* After Z.eqb reduction, record accessors may still be present in the
+     selected branch body (e.g., in let-bindings). Use cbn to reduce them. *)
+  cbn [ri_word_offset ri_operands ri_opcode];
+  (* Now reduce znth, nat_of_z, skipn which are from Decode.v *)
+  unfold znth; simpl nth_error;
+  unfold nat_of_z; rewrite ?Nat2Z.id;
+  simpl skipn.
+
+Lemma resolve_one_expected_raw :
+  forall (code : list instruction) (enc_omap : list nat)
+         (dec_omap : list (nat * nat)) (idx : nat) (i : instruction)
+         (woff : nat),
+    enc_omap = offset_map code ->
+    woff = word_offset_of code idx ->
+    idx < List.length code ->
+    wf_instrb (List.length code) i = true ->
+    (forall t from,
+       (0 <= t)%Z ->
+       Z.to_nat t < List.length code ->
+       resolve_branch dec_omap from (rel_offset enc_omap from t) = t) ->
+    resolve_one dec_omap (expected_raw enc_omap idx i woff) = i.
+Proof.
+  intros code enc_omap dec_omap idx i woff Henc Hwoff Hidx Hwf Hbranch.
+  subst enc_omap woff.
+  (* Rewrite the w in expected_raw using enc_w_eq *)
+  assert (Hw : Z.of_nat (match nth_error (offset_map code) idx with
+                          | Some n => n | None => 0 end) =
+               Z.of_nat (word_offset_of code idx)).
+  { apply enc_w_eq. exact Hidx. }
+  (* Set short name for the word offset *)
+  set (W := word_offset_of code idx) in *.
+  (* Useful Z arithmetic facts for matching resolve_one's Z.of_nat (W + k + n)
+     with expected_raw's (Z.of_nat W + k)%Z *)
+  assert (HWn : forall a b : nat,
+    Z.of_nat (W + a + b) = (Z.of_nat W + Z.of_nat (a + b))%Z) by lia.
+  assert (HW2 : Z.of_nat (W + 2) = (Z.of_nat W + 2)%Z) by lia.
+  assert (HW3 : Z.of_nat (W + 3) = (Z.of_nat W + 3)%Z) by lia.
+  destruct i; simpl expected_raw; rewrite ?Hw;
+    resolve_simpl;
+    try reflexivity.
+  (* Branch-target instructions remain. For each, we need to apply Hbranch. *)
+  (* PUSH_RETADDR t -- branch at br 0, from = Z.of_nat (W+1+0) *)
+  - simpl wf_instrb in Hwf.
+    apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* CLOSURE nv codeptr -- from = Z.of_nat (W+2) *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hnv Hcp].
+    apply valid_targetb_props in Hcp. destruct Hcp as [Hcp0 Hcplt].
+    rewrite HW2.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* CLOSUREREC nf nv ofs *)
+  - simpl wf_instrb in Hwf.
+    repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+    (* Hwf : nat_fits_i32b n, H0 : all_valid_targetsb ... l = true,
+       H : Nat.eqb (length l) n = true *)
+    (* After resolve_simpl, the fix resolve_list is applied to
+       map (rel_offset ...) l, with base = Z.of_nat (W + 3).
+       The rel_offset uses (Z.of_nat W + 3)%Z. Unify them. *)
+    replace (Z.of_nat (W + 3)) with (Z.of_nat W + 3)%Z by lia.
+    rewrite resolve_list_is_map.
+    apply f_equal.
+    apply resolve_branch_map_rel_offset with (n := List.length code); auto.
+  (* BRANCH t *)
+  - simpl wf_instrb in Hwf.
+    apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BRANCHIF t *)
+  - simpl wf_instrb in Hwf.
+    apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BRANCHIFNOT t *)
+  - simpl wf_instrb in Hwf.
+    apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* SWITCH nc nb ct bt *)
+  - (* The SWITCH sizes encoding packs nc in the low 16 bits and nb in the
+       high 16 bits. The roundtrip requires nc < 2^16 and nb < 2^16. However,
+       wf_instrb only checks nat_fits_i32b (nc < 2^31), which is too weak.
+       This gap requires strengthening wf_instrb for SWITCH, which is in
+       trusted code (manual/Bytecode/DecodeCorrectnessSpec.v). *)
+    admit.
+  (* PUSHTRAP t *)
+  - simpl wf_instrb in Hwf.
+    apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BEQ n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BNEQ n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BLTINT n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BLEINT n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BGTINT n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BGEINT n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BULTINT n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+  (* BUGEINT n t *)
+  - simpl wf_instrb in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
+    apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
+    rewrite HWn. simpl Nat.add.
+    rewrite Hbranch by assumption.
+    reflexivity.
+Admitted.
+
+(* Corollary: resolve_one works for each instruction in the full program *)
+Lemma resolve_one_expected_raw_in_code :
+  forall (code : list instruction) (dec_omap : list (nat * nat))
+         (idx : nat),
+    well_formed code = true ->
+    idx < List.length code ->
+    (forall t from,
+       (0 <= t)%Z ->
+       Z.to_nat t < List.length code ->
+       resolve_branch dec_omap from
+         (rel_offset (offset_map code) from t) = t) ->
+    resolve_one dec_omap
+      (expected_raw (offset_map code) idx
+         (nth idx code STOP) (word_offset_of code idx)) =
+      nth idx code STOP.
+Proof.
+  intros code dec_omap idx Hwf Hidx Hbranch.
+  apply resolve_one_expected_raw with (code := code); auto.
+  apply wf_instrb_from_well_formed; auto.
+  apply nth_In. exact Hidx.
+Qed.
 
 (* ================================================================== *)
 (* More computational roundtrip tests (concrete programs)              *)
@@ -1319,19 +1720,21 @@ Proof. split; native_compute; reflexivity. Qed.
      offset map consistency, operand reading, and structural properties
    - decode_raw_aux step lemmas for 0/1/2-operand and GETPUBMET cases
    - expected_raw characterization of the raw decode output
+   - resolve_one_expected_raw: resolve_one on expected_raw recovers the
+     original instruction (106 of 107 cases proved; SWITCH case requires
+     strengthening wf_instrb to add nc < 2^16 /\ nb < 2^16)
+   - SWITCH/CLOSUREREC helper lemmas (sizes encoding, resolve_n, etc.)
    - ~12 computational roundtrip tests on concrete programs covering
      all instruction families (zero-op, one-op nat, one-op Z, one-op branch,
      two-op, SWITCH, CLOSUREREC, GETPUBMET)
 
-   The remaining work for the full proof is completing the ~107-case
-   analysis for the inductive step. Each case follows the same pattern:
-   1. Show read_u32_le on the encoded data produces the correct opcode
-      (using read_u32_le_emit_words_gen + small_Z_land_ones_32)
-   2. Show read_i32_le / read_operands produce the correct operands
-      (using read_i32_le_emit_words_gen / read_operands_on_emit_words)
-   3. Show resolve_one recovers the original instruction
-      (using nat_of_z_of_nat for nat operands, offset map consistency
-       for branch targets) *)
+   The remaining work for the full proof:
+   1. Strengthen wf_instrb SWITCH case to require nc < 2^16 /\ nb < 2^16,
+      then complete the SWITCH case in resolve_one_expected_raw using the
+      lor_land_low16 / lor_shiftr_high16 / resolve_n_recover lemmas above
+   2. Prove decode_raw_aux on encode_bytecode produces expected_raws (Layer 1)
+   3. Prove the decoder's offset map is consistent (Layer 3)
+   4. Combine all layers into the main theorem *)
 
 Theorem decode_encode_inverse :
   forall code,

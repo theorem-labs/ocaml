@@ -8,14 +8,14 @@ build:
 
 COQC_FLAGS = \
   -R _build/default/manual/Utils OCamlInterp.Manual.Utils \
-  -R _build/default/manual/InterpBytecode OCamlInterp.Manual.InterpBytecode \
+  -R _build/default/manual/Bytecode OCamlInterp.Manual.Bytecode \
   -R _build/default/manual/Correctness OCamlInterp.Manual.Correctness \
   -R _build/default/manual/Checker OCamlInterp.Manual.Checker \
   -R _build/default/semi-auto/Compile/LexParse OCamlInterp.SemiAutomatic.Compile.LexParse \
   -R _build/default/semi-auto/Interpret OCamlInterp.SemiAutomatic.Interpret \
   -R _build/default/automatic/theories/Compile OCamlInterp.Automatic.Compile \
   -R _build/default/automatic/theories/Correctness OCamlInterp.Automatic.Correctness \
-  -R _build/default/automatic/theories/InterpBytecode OCamlInterp.Automatic.InterpBytecode
+  -R _build/default/automatic/theories/Bytecode OCamlInterp.Automatic.Bytecode
 
 extract: build
 	coqc $(COQC_FLAGS) Extract.v -output-directory /tmp
@@ -24,15 +24,15 @@ extract: build
 
 test: extract
 	dune build \
-		automatic/test/interpret-bytecode-pbt/harness.exe \
-		automatic/test/interpret-bytecode-pbt/manual_test.exe \
+		automatic/test/bytecode-pbt/harness.exe \
+		automatic/test/bytecode-pbt/manual_test.exe \
 		automatic/test/compile-pbt/roundtrip_test.exe \
 		automatic/test/interpret-pbt/source_interp_test.exe \
 		automatic/test/compile-pbt/compile_test.exe \
 		automatic/test/compile-pbt/bytecode_equiv_test.exe
-	dune exec automatic/test/interpret-bytecode-pbt/manual_test.exe
+	dune exec automatic/test/bytecode-pbt/manual_test.exe
 	@echo "--- Bytecode PBT (QCheck) ---"
-	dune exec automatic/test/interpret-bytecode-pbt/harness.exe
+	dune exec automatic/test/bytecode-pbt/harness.exe
 	@echo "--- Parser Round-trip PBT (QCheck) ---"
 	dune exec automatic/test/compile-pbt/roundtrip_test.exe
 	@echo "--- Source Interpreter PBT (QCheck) ---"
@@ -43,12 +43,12 @@ test: extract
 	dune exec automatic/test/compile-pbt/bytecode_equiv_test.exe
 
 testsuite: extract
-	dune build automatic/test/interpret-bytecode-pbt/ocaml_testsuite_runner.exe
-	dune exec automatic/test/interpret-bytecode-pbt/ocaml_testsuite_runner.exe -- automatic/test/ocaml-testsuite/basic
+	dune build automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe
+	dune exec automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe -- automatic/test/ocaml-testsuite/basic
 
 testsuite-all: extract
-	dune build automatic/test/interpret-bytecode-pbt/ocaml_testsuite_runner.exe
-	dune exec automatic/test/interpret-bytecode-pbt/ocaml_testsuite_runner.exe -- \
+	dune build automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe
+	dune exec automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe -- \
 		automatic/test/ocaml-testsuite/basic \
 		automatic/test/ocaml-testsuite/basic-more \
 		automatic/test/ocaml-testsuite/basic-modules \

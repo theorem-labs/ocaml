@@ -6,7 +6,8 @@
 From Stdlib Require Import ZArith PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Value AST.
-From OCamlInterp.Manual.InterpBytecode Require Import Machine Interp.
+From OCamlInterp.Manual.Utils Require Import Machine.
+From OCamlInterp.Manual.Bytecode Require Import Interp.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
 

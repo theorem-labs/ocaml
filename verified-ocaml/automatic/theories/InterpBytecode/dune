@@ -1,3 +1,0 @@
-(coq.theory
- (name OCamlInterp.Automatic.InterpBytecode)
- (theories Stdlib OCamlInterp.Manual.Utils OCamlInterp.Manual.InterpBytecode))

@@ -100,23 +100,23 @@ PBT results: **1000/1000 pass, 0 fail, 0 skip across 10 seeds**
 ### Loader in Rocq
 **Status: Complete**
 
-- `theories/InterpBytecode/Loader.v`: bytecode decoder ported from OCaml to Rocq
+- `theories/Bytecode/Loader.v`: bytecode decoder ported from OCaml to Rocq
   - Section table parsing, two-pass decode with branch target resolution
   - All 153 opcodes handled
-- `theories/InterpBytecode/Encode.v`: bytecode encoder (inverse of Loader)
+- `theories/Bytecode/Encode.v`: bytecode encoder (inverse of Loader)
   - Two-pass encoding with offset maps, always uses general opcode forms
-- `theories/InterpBytecode/LoaderCorrectnessProofs.v`: roundtrip proof
+- `theories/Bytecode/LoaderCorrectnessProofs.v`: roundtrip proof
   - Well-formedness predicate, sub-lemmas proved
   - Main theorem `decode_encode_inverse` Admitted
-- `theories/InterpBytecode/LoaderCorrectnessSpec.v`: Module Type for roundtrip
+- `theories/Bytecode/LoaderCorrectnessSpec.v`: Module Type for roundtrip
 - `theories/Checker/LoaderCorrectnessChecker.v`: `Module Check <: LoaderCorrectnessSpec`
 
 ### Extract Constant IO Wrapper
 **Status: Complete**
 
-- `theories/InterpBytecode/IO.v`: opaque axioms with Extract Constant for file I/O,
+- `theories/Bytecode/IO.v`: opaque axioms with Extract Constant for file I/O,
   Marshal, command-line args (following fiat-crypto pattern)
-- `theories/InterpBytecode/Main.v`: standalone entry point with pure Rocq C-call
+- `theories/Bytecode/Main.v`: standalone entry point with pure Rocq C-call
   handler (~30 primitives), globals decoding, interpreter run loop
 
 ### QCheck Migration
@@ -129,7 +129,7 @@ Uses `qcheck-core` and `qcheck-core.runner`.
 **Status: Infrastructure complete, partially passing**
 
 - `test/ocaml-testsuite` symlinked to system-ocaml test suite
-- `test/interpret-bytecode-pbt/ocaml_testsuite_runner.ml`: runs .ml files through ocamlc + our interpreter
+- `test/bytecode-pbt/ocaml_testsuite_runner.ml`: runs .ml files through ocamlc + our interpreter
 - Results on `basic/`: 10/39 pass, 24 fail (mostly GETFIELD errors), 5 skip
 - `make testsuite` and `make testsuite-all` Makefile targets
 
@@ -173,7 +173,7 @@ theories/
     Value.v                     Value representation
     Observable.v                Observable behavior type
     Syntax.v                    OCaml source AST subset
-  InterpBytecode/
+  Bytecode/
     Machine.v                   Machine state + heap model
     Interp.v                    Step function + run loop (~800 LoC)
     Encode.v                    Bytecode encoder (instruction list -> byte list)
@@ -202,7 +202,7 @@ test/
     interp_extracted.ml         Extracted OCaml from Rocq (generated, do not edit)
     test_common.ml              Shared test utilities
     loader.ml                   Bytecode file loader
-  interpret-bytecode-pbt/
+  bytecode-pbt/
     harness.ml                  Bytecode PBT (QCheck, Part 1.1)
     manual_test.ml              Hand-written bytecode tests
     ocaml_testsuite_runner.ml   OCaml test suite runner

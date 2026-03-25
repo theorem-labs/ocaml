@@ -10,15 +10,15 @@ From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
 
 From OCamlInterp.Manual.Utils Require Import Value AST.
-From OCamlInterp.Manual.InterpBytecode Require Import Machine Interp Encode.
-From OCamlInterp.Manual.InterpBytecode Require Import IO.
-From OCamlInterp.Automatic.InterpBytecode Require Import Main.
+From OCamlInterp.Manual.Bytecode Require Import Interp Encode.
+From OCamlInterp.Manual.Utils Require Import Machine.
+From OCamlInterp.Automatic.Bytecode Require Import Main.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
 From OCamlInterp.SemiAutomatic.Compile.LexParse Require Import PrettyPrint.
 From OCamlInterp.SemiAutomatic.Interpret Require Import SourceInterp.
 From OCamlInterp.Automatic.Compile Require Import Compile.
-From OCamlInterp.Automatic.InterpBytecode Require Import Decode.
+From OCamlInterp.Manual.Bytecode Require Import Decode.
 From OCamlInterp.Automatic.Correctness Require Import CorrectnessProofs.
 
 Extraction "Interp_extracted.ml"

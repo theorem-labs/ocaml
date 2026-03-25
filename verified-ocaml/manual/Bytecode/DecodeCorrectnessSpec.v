@@ -1,11 +1,18 @@
-(* WellFormed.v - [TRUSTED] Decidable well-formedness check for bytecode.
-   Branch targets must be valid instruction indices and integer operands
-   must fit in 32 bits. Returns bool so it can be computed. *)
+(* DecodeCorrectnessSpec.v - [TRUSTED] Module Type specifying the contract
+   for the encode/decode roundtrip, plus the well-formedness predicate that
+   serves as its precondition. The encoder (Trusted) produces bytes;
+   the decoder (Untrusted) must invert it. The theorem statement is trusted;
+   the proof is untrusted and checked in Checker. *)
 
 From Stdlib Require Import ZArith PeanoNat Bool List.
 Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import AST.
+From OCamlInterp.Manual.Bytecode Require Import Encode.
 Open Scope Z_scope.
+
+(* ------------------------------------------------------------------ *)
+(* Well-formedness predicate                                           *)
+(* ------------------------------------------------------------------ *)
 
 Definition z_fits_i32b (z : Z) : bool :=
   Z.leb (-2147483648) z && Z.leb z 2147483647.
@@ -65,3 +72,19 @@ Definition wf_instrb (n : nat) (i : instruction) : bool :=
 Definition well_formed (code : list instruction) : bool :=
   let n := List.length code in
   forallb (wf_instrb n) code.
+
+(* ------------------------------------------------------------------ *)
+(* Roundtrip spec                                                      *)
+(* ------------------------------------------------------------------ *)
+
+Module Type DecodeCorrectnessSpec.
+
+  (* Decoder (provided by Untrusted): takes raw bytes, returns instructions *)
+  Parameter decode : list Z -> list instruction.
+
+  (* Main roundtrip theorem: decoding encoded bytecode recovers the original *)
+  Axiom decode_encode_inverse : forall code,
+    well_formed code = true ->
+    decode (encode_bytecode code) = code.
+
+End DecodeCorrectnessSpec.
