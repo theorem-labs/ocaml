@@ -1,0 +1,4 @@
+(executables
+ (names harness runner)
+ (libraries unix pbt_common)
+ (flags (:standard -w -a)))

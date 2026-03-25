@@ -1,0 +1,4 @@
+(executable
+ (name harness)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (flags (:standard -w -a)))

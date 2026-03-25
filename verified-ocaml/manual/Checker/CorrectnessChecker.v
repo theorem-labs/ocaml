@@ -1,13 +1,13 @@
 (* CorrectnessChecker.v - Checker: verifies that the untrusted compiler,
    source interpreter, and correctness proofs satisfy the trusted
-   CorrectnessSpec. *)
+   CompileSpec. *)
 
-From OCamlInterp.Manual.Correctness Require Import CorrectnessSpec.
-From OCamlInterp.SemiAutomatic.Interpret Require Import SourceInterp.
+From OCamlInterp.Manual.Compile Require Import CompileSpec.
+From OCamlInterp.SemiAutomatic.Interpret Require Import Interpret.
 From OCamlInterp.Automatic.Compile Require Import Compile.
-From OCamlInterp.Automatic.Correctness Require Import CorrectnessProofs.
+From OCamlInterp.Automatic.Compile Require Import CompileProof.
 
-Module Check <: CorrectnessSpec.
+Module Check <: CompileSpec.
   Definition compile_program := compile_program.
   Definition interpret := interpret.
   Definition compiler_correct := compiler_correct.

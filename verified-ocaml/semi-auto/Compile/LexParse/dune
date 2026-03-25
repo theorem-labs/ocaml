@@ -1,3 +1,0 @@
-(coq.theory
- (name OCamlInterp.SemiAutomatic.Compile.LexParse)
- (theories Stdlib OCamlInterp.Manual.Utils))

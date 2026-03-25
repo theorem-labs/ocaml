@@ -1,4 +1,0 @@
-(executables
- (names harness manual_test ocaml_testsuite_runner trace)
- (libraries unix qcheck-core qcheck-core.runner pbt_common)
- (flags (:standard -w -a)))

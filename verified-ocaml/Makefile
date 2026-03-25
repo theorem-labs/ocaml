@@ -1,4 +1,4 @@
-.PHONY: all build extract test testsuite clean
+.PHONY: all build extract test clean
 
 all: build extract test
 
@@ -9,55 +9,41 @@ build:
 COQC_FLAGS = \
   -R _build/default/manual/Utils OCamlInterp.Manual.Utils \
   -R _build/default/manual/Bytecode OCamlInterp.Manual.Bytecode \
-  -R _build/default/manual/Correctness OCamlInterp.Manual.Correctness \
   -R _build/default/manual/Checker OCamlInterp.Manual.Checker \
-  -R _build/default/semi-auto/Compile/LexParse OCamlInterp.SemiAutomatic.Compile.LexParse \
+  -R _build/default/semi-auto/LexParse OCamlInterp.SemiAutomatic.LexParse \
   -R _build/default/semi-auto/Interpret OCamlInterp.SemiAutomatic.Interpret \
-  -R _build/default/automatic/theories/Compile OCamlInterp.Automatic.Compile \
-  -R _build/default/automatic/theories/Correctness OCamlInterp.Automatic.Correctness \
-  -R _build/default/automatic/theories/Bytecode OCamlInterp.Automatic.Bytecode
+  -R _build/default/automatic/Compile OCamlInterp.Automatic.Compile \
+  -R _build/default/automatic/theories/Bytecode OCamlInterp.Automatic.Bytecode \
+  -R _build/default/automatic/LexParse OCamlInterp.Automatic.LexParse \
+  -R _build/default/manual/theories/LexParse OCamlInterp.Manual.LexParse \
+  -R _build/default/manual/theories/Compile OCamlInterp.Manual.Compile
 
 extract: build
 	coqc $(COQC_FLAGS) Extract.v -output-directory /tmp
-	cp /tmp/Interp_extracted.ml automatic/test/common/interp_extracted.ml
+	cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml
 	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
 
 test: extract
 	dune build \
-		automatic/test/bytecode-pbt/harness.exe \
-		automatic/test/bytecode-pbt/manual_test.exe \
-		automatic/test/compile-pbt/roundtrip_test.exe \
-		automatic/test/interpret-pbt/source_interp_test.exe \
-		automatic/test/compile-pbt/compile_test.exe \
-		automatic/test/compile-pbt/bytecode_equiv_test.exe
-	dune exec automatic/test/bytecode-pbt/manual_test.exe
-	@echo "--- Bytecode PBT (QCheck) ---"
-	dune exec automatic/test/bytecode-pbt/harness.exe
+		manual/test/bytecode-pbt/harness.exe \
+		manual/test/bytecode-pbt/runner.exe \
+		manual/test/compile-pbt/roundtrip_test.exe \
+		manual/test/interpret-pbt/source_interp_test.exe \
+		manual/test/compile-pbt/compile_test.exe \
+		manual/test/compile-pbt/bytecode_equiv_test.exe \
+		manual/test/Compile/harness.exe
+	@echo "--- Bytecode PBT: Main.v pipeline vs ocamlrun (QCheck) ---"
+	dune exec manual/test/bytecode-pbt/harness.exe
 	@echo "--- Parser Round-trip PBT (QCheck) ---"
-	dune exec automatic/test/compile-pbt/roundtrip_test.exe
+	dune exec manual/test/compile-pbt/roundtrip_test.exe
 	@echo "--- Source Interpreter PBT (QCheck) ---"
-	dune exec automatic/test/interpret-pbt/source_interp_test.exe
+	dune exec manual/test/interpret-pbt/source_interp_test.exe
 	@echo "--- Compiler PBT (QCheck) ---"
-	dune exec automatic/test/compile-pbt/compile_test.exe
+	dune exec manual/test/compile-pbt/compile_test.exe
 	@echo "--- Bytecode Equivalence PBT (QCheck) ---"
-	dune exec automatic/test/compile-pbt/bytecode_equiv_test.exe
-
-testsuite: extract
-	dune build automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe
-	dune exec automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe -- automatic/test/ocaml-testsuite/basic
-
-testsuite-all: extract
-	dune build automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe
-	dune exec automatic/test/bytecode-pbt/ocaml_testsuite_runner.exe -- \
-		automatic/test/ocaml-testsuite/basic \
-		automatic/test/ocaml-testsuite/basic-more \
-		automatic/test/ocaml-testsuite/basic-modules \
-		automatic/test/ocaml-testsuite/basic-multdef \
-		automatic/test/ocaml-testsuite/basic-private \
-		automatic/test/ocaml-testsuite/basic-float \
-		automatic/test/ocaml-testsuite/basic-io \
-		automatic/test/ocaml-testsuite/basic-io-2 \
-		automatic/test/ocaml-testsuite/basic-manyargs
+	dune exec manual/test/compile-pbt/bytecode_equiv_test.exe
+	@echo "--- Compile vs ocamlc PBT (QCheck) ---"
+	dune exec manual/test/Compile/harness.exe
 
 clean:
 	dune clean
