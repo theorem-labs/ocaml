@@ -5,3 +5,6 @@
 [submodule "camlboot"]
 	path = camlboot
 	url = https://github.com/Ekdohibs/camlboot.git
+[submodule "efftester"]
+	path = efftester
+	url = https://github.com/jmid/efftester
