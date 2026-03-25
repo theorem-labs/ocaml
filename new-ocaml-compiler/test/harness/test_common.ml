@@ -104,7 +104,7 @@ let load_globals data sections =
    are kept as Val_block (they're logically immutable or small).
    Regular blocks (tag 0..246, 250) are heap-allocated so they can be mutated. *)
 let heap_allocate_globals globals =
-  let heap : (int * (int * value list)) list ref = ref [] in
+  let heap : (int, int * value list) Hashtbl.t = Hashtbl.create 1024 in
   let next_addr = ref 0 in
   let rec go v =
     match v with
@@ -114,7 +114,7 @@ let heap_allocate_globals globals =
       let fields' = List.map go fields in
       let addr = !next_addr in
       incr next_addr;
-      heap := (addr, (tag, fields')) :: !heap;
+      Hashtbl.add heap addr (tag, fields');
       Val_ptr addr
     | Val_block (tag, fields) ->
       (* Immutable: 248=exn desc, 252=string, 253=float, 1001/1002/1003=boxed int *)
@@ -122,7 +122,7 @@ let heap_allocate_globals globals =
     | other -> other
   in
   let globals' = Array.map go globals in
-  (Array.to_list globals', !heap, !next_addr)
+  (globals', heap, !next_addr)
 
 let load_prims data sections =
   match Loader.find_section sections "PRIM" with
@@ -302,7 +302,7 @@ let resolve_string heap v =
    heap_ref and next_addr_ref are updated before each call;
    handlers may also write new allocations back to heap_ref/next_addr_ref. *)
 let make_handler ?(raw_globals=[||]) prims buf =
-  let heap_ref = ref [] in
+  let heap_ref : (int, int * value list) Hashtbl.t ref = ref (Hashtbl.create 1) in
   let next_addr_ref = ref 0 in
   (* Build a lookup table from exception name -> descriptor Val_block(248,...).
      Searches raw_globals for Val_block(248, [Val_block(252, chars); slot]) entries. *)
@@ -331,12 +331,12 @@ let make_handler ?(raw_globals=[||]) prims buf =
   let heap_alloc_local tag fields =
     let addr = !next_addr_ref in
     next_addr_ref := addr + 1;
-    heap_ref := (addr, (tag, fields)) :: !heap_ref;
+    Hashtbl.add !heap_ref addr (tag, fields);
     Val_ptr addr
   in
   (* Update fields of an existing heap object. *)
   let heap_update_local addr new_fields =
-    heap_ref := heap_update !heap_ref addr new_fields
+    ignore (heap_update !heap_ref addr new_fields)
   in
   (* Resolve a value as a char list (string content):
      Val_block(252,...) or Val_ptr pointing to a tag-252 heap block. *)
@@ -593,10 +593,11 @@ let make_handler ?(raw_globals=[||]) prims buf =
        | Val_ptr addr ->
          (match src_fields with
           | Some new_fs ->
-            heap_ref := List.map (fun (a, (t, old_fs)) ->
-              if a = addr then (a, (src_tag, new_fs @ List.filteri (fun i _ -> i >= List.length new_fs) old_fs))
-              else (a, (t, old_fs))
-            ) !heap_ref
+            (match Hashtbl.find_opt !heap_ref addr with
+             | Some (_old_t, old_fs) ->
+               Hashtbl.replace !heap_ref addr
+                 (src_tag, new_fs @ List.filteri (fun i _ -> i >= List.length new_fs) old_fs)
+             | None -> ())
           | None -> ())
        | _ -> ());
       Some (Val_int 0)
@@ -604,10 +605,10 @@ let make_handler ?(raw_globals=[||]) prims buf =
       (* Forward pointer: update block to become a forward (tag 250) pointing to v *)
       (match blk with
        | Val_ptr addr ->
-         heap_ref := List.map (fun (a, (t, fs)) ->
-           if a = addr then (a, (250, [v] @ List.filteri (fun i _ -> i >= 1) fs))
-           else (a, (t, fs))
-         ) !heap_ref
+         (match Hashtbl.find_opt !heap_ref addr with
+          | Some (_, fs) ->
+            Hashtbl.replace !heap_ref addr (250, [v] @ List.filteri (fun i _ -> i >= 1) fs)
+          | None -> ())
        | _ -> ());
       Some (Val_int 0)
     (* --- Object/Obj module --- *)
@@ -1529,7 +1530,7 @@ let make_handler ?(raw_globals=[||]) prims buf =
 
 (* Run our compiled bytecode through our interpreter *)
 let run_our_compiler prog =
-  let code = compile_program prog in
+  let code = Array.of_list (compile_program prog) in
   let buf = Buffer.create 64 in
   let handler idx args =
     match idx, args with
@@ -1542,7 +1543,7 @@ let run_our_compiler prog =
       Some (Val_int 0)
     | _ -> Some (Val_int 0)
   in
-  let s = ref (initial_state []) in
+  let s = ref (initial_state [||]) in
   let remaining = ref 1000000 in
   let result = ref None in
   let rec loop () =
@@ -1568,7 +1569,7 @@ let run_our_compiler prog =
 let run_ocamlc_bytecode exe_file =
   let data = Loader.read_file exe_file in
   let sections = Loader.parse_sections data in
-  let code = Loader.load_bytecode_from_sections data sections in
+  let code = Array.of_list (Loader.load_bytecode_from_sections data sections) in
   let raw_globals = load_globals data sections in
   let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
   let prims = load_prims data sections in

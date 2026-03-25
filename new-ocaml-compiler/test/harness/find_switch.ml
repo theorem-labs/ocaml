@@ -4,7 +4,7 @@ open Interp_extracted
 let () =
   let data = Loader.read_file Sys.argv.(1) in
   let sections = Loader.parse_sections data in
-  let code = Loader.load_bytecode_from_sections data sections in
+  let code = Array.of_list (Loader.load_bytecode_from_sections data sections) in
   let raw_globals = Test_common.load_globals data sections in
   let prims = Test_common.load_prims data sections in
   let (globals, init_heap, init_next_addr) = Test_common.heap_allocate_globals raw_globals in

@@ -1506,10 +1506,10 @@ type instruction =
 | RESUMETERM of int
 | REPERFORMTERM of int
 
-type heap = (int * (int * value list)) list
+type heap = (int, int * value list) Hashtbl.t
 
 type state = { pc : int; accu : value; stack : value list; env : value;
-               extra_args : int; global : value list; trap_sp : int;
+               extra_args : int; global : value array; trap_sp : int;
                hp : heap; next_addr : int }
 
 type step_result =
@@ -1532,33 +1532,26 @@ let set_accu s v =
 
 (** val heap_lookup : heap -> int -> (int * value list) option **)
 
-let rec heap_lookup h addr =
-  match h with
-  | [] -> None
-  | p :: rest ->
-    let (a, p0) = p in if (=) a addr then Some p0 else heap_lookup rest addr
+let heap_lookup h addr = Hashtbl.find_opt h addr
 
 (** val heap_alloc : state -> int -> value list -> state * value **)
 
 let heap_alloc s tag fields =
   let addr = s.next_addr in
+  Hashtbl.add s.hp addr (tag, fields);
   let s' = { pc = s.pc; accu = s.accu; stack = s.stack; env = s.env;
     extra_args = s.extra_args; global = s.global; trap_sp = s.trap_sp; hp =
-    ((addr, (tag, fields)) :: s.hp); next_addr = (Stdlib.Int.succ addr) }
+    s.hp; next_addr = (Stdlib.Int.succ addr) }
   in
   (s', (Val_ptr addr))
 
 (** val heap_update : heap -> int -> value list -> heap **)
 
-let rec heap_update h addr fields =
-  match h with
-  | [] -> []
-  | p :: rest ->
-    let (a, p0) = p in
-    let (t, fs) = p0 in
-    if (=) a addr
-    then (a, (t, fields)) :: rest
-    else (a, (t, fs)) :: (heap_update rest addr fields)
+let heap_update h addr fields =
+  (match Hashtbl.find_opt h addr with
+   | Some (t, _) -> Hashtbl.replace h addr (t, fields)
+   | None -> ());
+  h
 
 (** val field_or_heap : state -> value -> int -> value option **)
 
@@ -1599,11 +1592,11 @@ let size_or_heap s = function
    | None -> None)
 | _ -> None
 
-(** val initial_state : value list -> state **)
+(** val initial_state : value array -> state **)
 
 let initial_state global_data =
   { pc = 0; accu = val_unit; stack = []; env = val_unit; extra_args = 0;
-    global = global_data; trap_sp = 0; hp = []; next_addr = 0 }
+    global = global_data; trap_sp = 0; hp = Hashtbl.create 1024; next_addr = 0 }
 
 (** val z_lsr : int -> int -> int **)
 
@@ -1642,7 +1635,7 @@ let get_code_ptr_s s = function
 | _ -> None
 
 (** val st :
-    state -> int -> value -> value list -> value -> int -> value list -> int
+    state -> int -> value -> value list -> value -> int -> value array -> int
     -> state **)
 
 let st s pc0 accu0 stack0 env1 ea glob tsp =
@@ -1867,10 +1860,11 @@ let do_raise exn s =
              Error
                ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
 
-(** val step : instruction list -> state -> step_result **)
+(** val step : instruction array -> state -> step_result **)
 
 let step code s =
-  match nth_error code (Z.to_nat s.pc) with
+  let pc_nat = Z.to_nat s.pc in
+  match (if pc_nat >= 0 && pc_nat < Array.length code then Some code.(pc_nat) else None) with
   | Some instr ->
     let pc' = Z.add s.pc 1 in
     (match instr with
@@ -2301,53 +2295,58 @@ let step code s =
           Error
             ('P'::('U'::('S'::('H'::('O'::('F'::('F'::('S'::('E'::('T'::('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('i'::('n'::('v'::('a'::('l'::('i'::('d'::(' '::('e'::('n'::('v'::[])))))))))))))))))))))))))))))))
      | GETGLOBAL n0 ->
-       (match nth_error s.global n0 with
+       let gval = if n0 >= 0 && n0 < Array.length s.global then Some s.global.(n0) else None in
+       (match gval with
         | Some v ->
           Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
         | None ->
-          Error
-            ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))
+          Error (List.init (String.length "GETGLOBAL: index out of bounds")
+            (fun i -> "GETGLOBAL: index out of bounds".[i]))
+       )
      | PUSHGETGLOBAL n0 ->
        let new_stack = s.accu :: s.stack in
-       (match nth_error s.global n0 with
+       let gval = if n0 >= 0 && n0 < Array.length s.global then Some s.global.(n0) else None in
+       (match gval with
         | Some v ->
           Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_sp)
         | None ->
-          Error
-            ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+          Error (List.init (String.length "PUSHGETGLOBAL: index out of bounds")
+            (fun i -> "PUSHGETGLOBAL: index out of bounds".[i]))
+       )
      | GETGLOBALFIELD (n0, p) ->
-       (match nth_error s.global n0 with
+       let gval = if n0 >= 0 && n0 < Array.length s.global then Some s.global.(n0) else None in
+       (match gval with
         | Some glob ->
           (match field_or_heap s glob p with
            | Some v ->
              Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
            | None ->
-             Error
-               ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('f'::('i'::('e'::('l'::('d'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))
+             Error (List.init (String.length "GETGLOBALFIELD: field access failed")
+               (fun i -> "GETGLOBALFIELD: field access failed".[i]))
+          )
         | None ->
-          Error
-            ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))))))))))))))))))))))
+          Error (List.init (String.length "GETGLOBALFIELD: index out of bounds")
+            (fun i -> "GETGLOBALFIELD: index out of bounds".[i]))
+       )
      | PUSHGETGLOBALFIELD (n0, p) ->
        let new_stack = s.accu :: s.stack in
-       (match nth_error s.global n0 with
+       let gval = if n0 >= 0 && n0 < Array.length s.global then Some s.global.(n0) else None in
+       (match gval with
         | Some glob ->
           (match field_or_heap s glob p with
            | Some v ->
              Step (st s pc' v new_stack s.env s.extra_args s.global s.trap_sp)
            | None ->
-             Error
-               ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('f'::('i'::('e'::('l'::('d'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))))))
+             Error (List.init (String.length "PUSHGETGLOBALFIELD: field access failed")
+               (fun i -> "PUSHGETGLOBALFIELD: field access failed".[i]))
+          )
         | None ->
-          Error
-            ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))))))))))))))))))))))))))
+          Error (List.init (String.length "PUSHGETGLOBALFIELD: index out of bounds")
+            (fun i -> "PUSHGETGLOBALFIELD: index out of bounds".[i]))
+       )
      | SETGLOBAL n0 ->
-       let new_global =
-         match set_nth s.global n0 s.accu with
-         | Some g -> g
-         | None -> s.global
-       in
-       Step
-       (st s pc' val_unit s.stack s.env s.extra_args new_global s.trap_sp)
+       if n0 >= 0 && n0 < Array.length s.global then s.global.(n0) <- s.accu;
+       Step (st s pc' val_unit s.stack s.env s.extra_args s.global s.trap_sp)
      | ATOM t ->
        let (s', ptr) = heap_alloc s t [] in
        Step (st s' pc' ptr s.stack s.env s.extra_args s.global s.trap_sp)
@@ -3454,7 +3453,7 @@ let step code s =
       ('p'::('c'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))
 
 (** val run :
-    int -> instruction list -> state -> (int -> value list -> value option)
+    int -> instruction array -> state -> (int -> value list -> value option)
     -> run_result **)
 
 let rec run fuel code s handle_ccall =
@@ -3475,8 +3474,8 @@ let rec run fuel code s handle_ccall =
 
 (** val run_pure : int -> instruction list -> value list -> run_result **)
 
-let run_pure fuel code global_data =
-  run fuel code (initial_state global_data) (fun _ _ -> None)
+let run_pure fuel code_list global_data =
+  run fuel (Array.of_list code_list) (initial_state (Array.of_list global_data)) (fun _ _ -> None)
 
 (** val instr_word_size : instruction -> int **)
 

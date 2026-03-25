@@ -29,7 +29,7 @@ let rec obj_to_value (obj : Obj.t) : value =
 let () =
   let data = Loader.read_file Sys.argv.(1) in
   let sections = Loader.parse_sections data in
-  let code = Loader.load_bytecode_from_sections data sections in
+  let code = Array.of_list (Loader.load_bytecode_from_sections data sections) in
   let globals = match Loader.find_section sections "DATA" with
     | None -> [||]
     | Some s ->
@@ -40,7 +40,7 @@ let () =
     | Some s ->
       let raw = Bytes.sub_string data s.offset s.length in
       Array.of_list (List.filter (fun s -> String.length s > 0) (String.split_on_char '\000' raw)) in
-  Printf.printf "Code: %d instrs, Globals: %d, Prims: %d\n%!" (List.length code) (Array.length globals) (Array.length prims);
+  Printf.printf "Code: %d instrs, Globals: %d, Prims: %d\n%!" (Array.length code) (Array.length globals) (Array.length prims);
   (* Show first few globals *)
   for i = 0 to min 5 (Array.length globals - 1) do
     Printf.printf "  global[%d] = %s\n%!" i (show_value globals.(i))
@@ -59,7 +59,7 @@ let () =
       Printf.eprintf "    [ccall failed] %s\n%!" name);
     result
   in
-  let s = ref (initial_state (Array.to_list globals)) in
+  let s = ref (initial_state globals) in
   let max = try int_of_string Sys.argv.(2) with _ -> 30 in
   (* If max is very large (>1M), run silently until error or halt *)
   let silent = max > 1000 in
@@ -68,7 +68,7 @@ let () =
   let i = ref 0 in
   while !i < max do
     incr i;
-    let instr_str = match List.nth_opt code !s.pc with
+    let instr_str = match (let pc = !s.pc in if pc >= 0 && pc < Array.length code then Some code.(pc) else None) with
       | Some (ACC n) -> Printf.sprintf "ACC %d" n
       | Some PUSH -> "PUSH"
       | Some (PUSHACC n) -> Printf.sprintf "PUSHACC %d" n
@@ -129,7 +129,7 @@ let () =
       | Some RERAISE -> "RERAISE"
       | Some RAISE_NOTRACE -> "RAISE_NOTRACE"
       | Some _ -> "other"
-      | None -> Printf.sprintf "OUT_OF_BOUNDS(pc=%d,len=%d)" !s.pc (List.length code)
+      | None -> Printf.sprintf "OUT_OF_BOUNDS(pc=%d,len=%d)" !s.pc (Array.length code)
     in
     let cur_trap = !s.trap_sp in
     if cur_trap <> !prev_trap_sp then begin

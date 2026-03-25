@@ -162,7 +162,7 @@ exception Clean_exit
 let run_our_interp exe_file =
   let data = Loader.read_file exe_file in
   let sections = Loader.parse_sections data in
-  let code = Loader.load_bytecode_from_sections data sections in
+  let code = Array.of_list (Loader.load_bytecode_from_sections data sections) in
   let raw_globals = load_globals data sections in
   let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
   let prims = load_prims data sections in
@@ -216,7 +216,7 @@ let run_our_interp exe_file =
        | None -> false
        | Some target_pc ->
          let stop_pc = ref (-1) in
-         List.iteri (fun i instr -> if instr = STOP && !stop_pc = -1 then stop_pc := i) code;
+         Array.iteri (fun i instr -> if instr = STOP && !stop_pc = -1 then stop_pc := i) code;
          if !stop_pc = -1 then false
          else begin
            (* Set up as 2-arg call: stack=[exn; dummy_bt; ret_pc; saved_env; saved_ea; ...] *)
