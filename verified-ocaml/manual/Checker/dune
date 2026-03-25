@@ -1,0 +1,10 @@
+(coq.theory
+ (name OCamlInterp.Manual.Checker)
+ (theories Stdlib
+  OCamlInterp.Manual.Utils
+  OCamlInterp.Manual.InterpBytecode
+  OCamlInterp.Manual.Correctness
+  OCamlInterp.SemiAutomatic.Interpret
+  OCamlInterp.Automatic.Compile
+  OCamlInterp.Automatic.Correctness
+  OCamlInterp.Automatic.InterpBytecode))

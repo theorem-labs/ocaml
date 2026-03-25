@@ -1,0 +1,5 @@
+(executables
+ (names compile_test bytecode_equiv_test roundtrip_test)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (flags (:standard -w -a))
+ (modules compile_test bytecode_equiv_test roundtrip_test lexer parser))

@@ -1,0 +1,7 @@
+- [x] Move Loader.ml to Rocq
+- [x] Implement Bytecode -> bytes in Rocq
+- [/] Prove that Loader inverts Bytecode -> bytes (theorem stated + sub-lemmas, main roundtrip Admitted)
+- [x] Have a thin wrapper using Extract Constant (cf https://github.com/mit-plv/fiat-crypto/blob/master/src/StandaloneOCamlMain.v) for dealing with runtime / file reading / etc
+- [x] move make_handler and similar to Rocq, using the same Extraction dance
+- [x] use qcheck or the equivalent of pytest in OCaml for PBTs
+- [/] symlink the test-suite of system-ocaml and test bytecode interpreter against ocamlrun on everything in the ocaml compiler test-suite (infra done, 10/39 pass on basic/, most failures are GETFIELD interpreter limitation)

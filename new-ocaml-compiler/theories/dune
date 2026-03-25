@@ -1,3 +1,0 @@
-(coq.theory
- (name OCamlInterp)
- (theories Stdlib OCamlInterp.Trusted.Bytecode OCamlInterp.Trusted OCamlInterp.SemiTrusted OCamlInterp.Untrusted))

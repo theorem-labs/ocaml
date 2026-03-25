@@ -1,0 +1,4 @@
+(executables
+ (names source_interp_test)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (flags (:standard -w -a)))
