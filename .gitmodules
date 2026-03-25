@@ -8,3 +8,6 @@
 [submodule "efftester"]
 	path = efftester
 	url = https://github.com/jmid/efftester
+[submodule "osiris"]
+	path = osiris
+	url = https://gitlab.aliens-lyon.fr/verislo/osiris.git
