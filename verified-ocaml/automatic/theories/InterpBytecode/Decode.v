@@ -1,4 +1,4 @@
-(* Loader.v - [TRUSTED] Bytecode decoder.
+(* Decode.v - Bytecode decoder.
    Ports the decoding logic from test/common/loader.ml to Rocq.
    Works on (list Z) raw bytes, producing (list instruction). *)
 

@@ -9,7 +9,7 @@ From Stdlib Require Import Ascii.
 From OCamlInterp.Manual.Utils Require Import Value AST.
 From OCamlInterp.Manual.InterpBytecode Require Import Machine Interp.
 From OCamlInterp.Manual.InterpBytecode Require Import IO.
-From OCamlInterp.Manual.InterpBytecode Require Import Loader.
+From OCamlInterp.Automatic.InterpBytecode Require Import Decode.
 Open Scope Z_scope.
 Open Scope bool_scope.
 
