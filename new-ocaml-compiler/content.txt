@@ -7,7 +7,7 @@
 * `extract` : Rocq source -> OCaml source
 * `process` : syscalls -> function
 
-1. [Trusted] `interpret-bytecode` Write an AST + pretty-printer + interpreter for OCaml bytecode; ~150 instructions, ~1500 LoC
+1. [Trusted] `interpret-bytecode` Write an AST + pretty-printer + interpreter for OCaml bytecode; ~150 instructions, ~1500 LoC  http://cadmium.x9c.fr/distrib/caml-instructions.pdf
     1. PBT harness to verify that `ocamlrun` and `interpret-bytecode` do the same thing
 2. [Untrusted] `lex-parse` Process OCaml source into AST + [Trusted] `pretty-printer` reverse direction
 3. [Untrusted] `compile` (using `lex-parse) and `interpret`

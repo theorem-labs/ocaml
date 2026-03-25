@@ -530,42 +530,6 @@ module Pos =
 
 module Coq_Pos =
  struct
-  (** val succ : int -> int **)
-
-  let rec succ = Stdlib.Int.succ
-
-  (** val add : int -> int -> int **)
-
-  let rec add = (+)
-
-  (** val add_carry : int -> int -> int **)
-
-  and add_carry x y =
-    (fun f2p1 f2p f1 p ->
-  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
-      (fun p ->
-      (fun f2p1 f2p f1 p ->
-  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
-        (fun q -> (fun p->1+2*p) (add_carry p q))
-        (fun q -> (fun p->2*p) (add_carry p q))
-        (fun _ -> (fun p->1+2*p) (succ p))
-        y)
-      (fun p ->
-      (fun f2p1 f2p f1 p ->
-  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
-        (fun q -> (fun p->2*p) (add_carry p q))
-        (fun q -> (fun p->1+2*p) (add p q))
-        (fun _ -> (fun p->2*p) (succ p))
-        y)
-      (fun _ ->
-      (fun f2p1 f2p f1 p ->
-  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
-        (fun q -> (fun p->1+2*p) (succ q))
-        (fun q -> (fun p->2*p) (succ q))
-        (fun _ -> (fun p->1+2*p) 1)
-        y)
-      x
-
   (** val pred_double : int -> int **)
 
   let rec pred_double x =
@@ -586,10 +550,6 @@ module Coq_Pos =
       (fun _ -> 0)
       x
 
-  (** val mul : int -> int -> int **)
-
-  let rec mul = ( * )
-
   (** val iter_op : ('a1 -> 'a1 -> 'a1) -> int -> 'a1 -> 'a1 **)
 
   let rec iter_op op p a =
@@ -603,7 +563,7 @@ module Coq_Pos =
   (** val to_nat : int -> int **)
 
   let to_nat x =
-    iter_op Coq__1.add x (Stdlib.Int.succ 0)
+    iter_op add x (Stdlib.Int.succ 0)
 
   (** val testbit : int -> int -> bool **)
 
@@ -768,28 +728,12 @@ module N =
 
 module Coq_N =
  struct
-  (** val add : int -> int -> int **)
-
-  let add = (+)
-
-  (** val mul : int -> int -> int **)
-
-  let mul = ( * )
-
   (** val testbit : int -> int -> bool **)
 
   let testbit a n0 =
     (fun f0 fp n -> if n=0 then f0 () else fp n)
       (fun _ -> false)
       (fun p -> Coq_Pos.testbit p n0)
-      a
-
-  (** val to_nat : int -> int **)
-
-  let to_nat a =
-    (fun f0 fp n -> if n=0 then f0 () else fp n)
-      (fun _ -> 0)
-      (fun p -> Pos.to_nat p)
       a
 
   (** val of_nat : int -> int **)
@@ -936,67 +880,6 @@ module Z =
   (** val of_N : int -> int **)
 
   let of_N = fun p -> p
-
-  (** val pos_div_eucl : int -> int -> int * int **)
-
-  let rec pos_div_eucl a b =
-    (fun f2p1 f2p f1 p ->
-  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
-      (fun a' ->
-      let (q, r) = pos_div_eucl a' b in
-      let r' = add (mul ((fun p->2*p) 1) r) 1 in
-      if ltb r' b
-      then ((mul ((fun p->2*p) 1) q), r')
-      else ((add (mul ((fun p->2*p) 1) q) 1), (sub r' b)))
-      (fun a' ->
-      let (q, r) = pos_div_eucl a' b in
-      let r' = mul ((fun p->2*p) 1) r in
-      if ltb r' b
-      then ((mul ((fun p->2*p) 1) q), r')
-      else ((add (mul ((fun p->2*p) 1) q) 1), (sub r' b)))
-      (fun _ -> if leb ((fun p->2*p) 1) b then (0, 1) else (1, 0))
-      a
-
-  (** val div_eucl : int -> int -> int * int **)
-
-  let div_eucl a b =
-    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-      (fun _ -> (0, 0))
-      (fun a' ->
-      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-        (fun _ -> (0, a))
-        (fun _ -> pos_div_eucl a' b)
-        (fun b' ->
-        let (q, r) = pos_div_eucl a' b' in
-        ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-           (fun _ -> ((opp q), 0))
-           (fun _ -> ((opp (add q 1)), (add b r)))
-           (fun _ -> ((opp (add q 1)), (add b r)))
-           r))
-        b)
-      (fun a' ->
-      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-        (fun _ -> (0, a))
-        (fun _ ->
-        let (q, r) = pos_div_eucl a' b in
-        ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-           (fun _ -> ((opp q), 0))
-           (fun _ -> ((opp (add q 1)), (sub b r)))
-           (fun _ -> ((opp (add q 1)), (sub b r)))
-           r))
-        (fun b' -> let (q, r) = pos_div_eucl a' b' in (q, (opp r)))
-        b)
-      a
-
-  (** val div : int -> int -> int **)
-
-  let div a b =
-    let (q, _) = div_eucl a b in q
-
-  (** val modulo : int -> int -> int **)
-
-  let modulo a b =
-    let (_, r) = div_eucl a b in r
 
   (** val quotrem : int -> int -> int * int **)
 
@@ -1290,31 +1173,6 @@ let ascii_of_N n0 =
 let ascii_of_nat a =
   ascii_of_N (Coq_N.of_nat a)
 
-(** val n_of_digits : bool list -> int **)
-
-let rec n_of_digits = function
-| [] -> 0
-| b :: l' ->
-  Coq_N.add (if b then 1 else 0) (Coq_N.mul ((fun p->2*p) 1) (n_of_digits l'))
-
-(** val n_of_ascii : char -> int **)
-
-let n_of_ascii a =
-  (* If this appears, you're using Ascii internals. Please don't *)
- (fun f c ->
-  let n = Char.code c in
-  let h i = (n land (1 lsl i)) <> 0 in
-  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
-    (fun a0 a1 a2 a3 a4 a5 a6 a7 ->
-    n_of_digits
-      (a0 :: (a1 :: (a2 :: (a3 :: (a4 :: (a5 :: (a6 :: (a7 :: [])))))))))
-    a
-
-(** val nat_of_ascii : char -> int **)
-
-let nat_of_ascii a =
-  Coq_N.to_nat (n_of_ascii a)
-
 (** val eqb0 : char list -> char list -> bool **)
 
 let rec eqb0 s1 s2 =
@@ -1474,74 +1332,6 @@ let infix_tag =
     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
     (Stdlib.Int.succ
     0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-
-(** val string_tag : int **)
-
-let string_tag =
-  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
 
 (** val val_unit : value **)
 
@@ -1815,21 +1605,13 @@ let initial_state global_data =
   { pc = 0; accu = val_unit; stack = []; env = val_unit; extra_args = 0;
     global = global_data; trap_sp = 0; hp = []; next_addr = 0 }
 
-(** val word_bits : int **)
-
-let word_bits =
-  ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-    ((fun p->1+2*p) 1)))))
-
-(** val z_unsigned : int -> int **)
-
-let z_unsigned a =
-  Z.coq_land a (Z.ones word_bits)
-
 (** val z_lsr : int -> int -> int **)
 
-let z_lsr a b =
-  Z.shiftr (z_unsigned a) b
+let z_lsr = fun a b -> a lsr b
+
+(** val z_flip_sign : int -> int **)
+
+let z_flip_sign = fun a -> a lxor min_int
 
 (** val get_code_ptr_from : value list -> int -> int option **)
 
@@ -1866,6 +1648,224 @@ let get_code_ptr_s s = function
 let st s pc0 accu0 stack0 env1 ea glob tsp =
   { pc = pc0; accu = accu0; stack = stack0; env = env1; extra_args = ea;
     global = glob; trap_sp = tsp; hp = s.hp; next_addr = s.next_addr }
+
+(** val make_exn_string : int list -> value **)
+
+let make_exn_string chars =
+  Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ
+    0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
+    (map (fun x -> Val_int x) chars))
+
+(** val div_by_zero_exn : value **)
+
+let div_by_zero_exn =
+  Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ
+    0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
+    ((make_exn_string (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1)))))) :: (((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1)))))) :: (((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       1)))))) :: []))))))))))))))))) :: ((Val_int
+    ((~-) ((fun p->2*p) ((fun p->1+2*p) 1)))) :: [])))
+
+(** val do_raise : value -> state -> step_result **)
+
+let do_raise exn s =
+  if (=) s.trap_sp 0
+  then Error
+         ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
+  else let k = Nat.sub (length s.stack) s.trap_sp in
+       let frame_top = skipn k s.stack in
+       (match frame_top with
+        | [] ->
+          Error
+            ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+        | v :: l ->
+          (match v with
+           | Val_int handler_pc ->
+             (match l with
+              | [] ->
+                Error
+                  ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+              | v0 :: l0 ->
+                (match v0 with
+                 | Val_int prev_tsp ->
+                   (match l0 with
+                    | [] ->
+                      Error
+                        ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                    | saved_env :: l1 ->
+                      (match l1 with
+                       | [] ->
+                         Error
+                           ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
+                       | v1 :: rest ->
+                         (match v1 with
+                          | Val_int saved_ea ->
+                            Step { pc = handler_pc; accu = exn; stack = rest;
+                              env = saved_env; extra_args =
+                              (Z.to_nat saved_ea); global = s.global;
+                              trap_sp = (Z.to_nat prev_tsp); hp = s.hp;
+                              next_addr = s.next_addr }
+                          | _ ->
+                            Error
+                              ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
+                 | _ ->
+                   Error
+                     ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+           | _ ->
+             Error
+               ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
 
 (** val step : instruction list -> state -> step_result **)
 
@@ -2386,9 +2386,101 @@ let step code s =
            | v2 :: rest ->
              let (s', ptr) = heap_alloc s t (s.accu :: (v1 :: (v2 :: []))) in
              Step (st s' pc' ptr rest s.env s.extra_args s.global s.trap_sp)))
-     | MAKEFLOATBLOCK _ ->
-       Error
-         ('M'::('A'::('K'::('E'::('F'::('L'::('O'::('A'::('T'::('B'::('L'::('O'::('C'::('K'::(':'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))))
+     | MAKEFLOATBLOCK n0 ->
+       let fields =
+         s.accu :: (firstn (Nat.sub n0 (Stdlib.Int.succ 0)) s.stack)
+       in
+       let new_stack = skipn (Nat.sub n0 (Stdlib.Int.succ 0)) s.stack in
+       let (s', ptr) =
+         heap_alloc s (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ
+           0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+           fields
+       in
+       Step (st s' pc' ptr new_stack s.env s.extra_args s.global s.trap_sp)
      | GETFIELD n0 ->
        (match field_or_heap s s.accu n0 with
         | Some v ->
@@ -2396,9 +2488,13 @@ let step code s =
         | None ->
           Error
             ('G'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))
-     | GETFLOATFIELD _ ->
-       Error
-         ('G'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))
+     | GETFLOATFIELD n0 ->
+       (match field_or_heap s s.accu n0 with
+        | Some v ->
+          Step (st s pc' v s.stack s.env s.extra_args s.global s.trap_sp)
+        | None ->
+          Error
+            ('G'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[])))))))))))))))))))))))))))))
      | SETFIELD n0 ->
        (match s.stack with
         | [] ->
@@ -2425,9 +2521,32 @@ let step code s =
            | _ ->
              Error
                ('S'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('m'::('u'::('t'::('a'::('b'::('l'::('e'::(' '::('b'::('l'::('o'::('c'::('k'::[])))))))))))))))))))))))))))))))
-     | SETFLOATFIELD _ ->
-       Error
-         ('S'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))
+     | SETFLOATFIELD n0 ->
+       (match s.stack with
+        | [] ->
+          Error
+            ('S'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))))))
+        | arr_val :: rest ->
+          (match arr_val with
+           | Val_ptr addr ->
+             (match heap_lookup s.hp addr with
+              | Some p ->
+                let (_, fields) = p in
+                (match set_nth fields n0 s.accu with
+                 | Some new_fields ->
+                   let new_hp = heap_update s.hp addr new_fields in
+                   Step { pc = pc'; accu = val_unit; stack = rest; env =
+                   s.env; extra_args = s.extra_args; global = s.global;
+                   trap_sp = s.trap_sp; hp = new_hp; next_addr = s.next_addr }
+                 | None ->
+                   Error
+                     ('S'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+              | None ->
+                Error
+                  ('S'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('d'::('a'::('n'::('g'::('l'::('i'::('n'::('g'::(' '::('p'::('o'::('i'::('n'::('t'::('e'::('r'::[]))))))))))))))))))))))))))))))))
+           | _ ->
+             Error
+               ('S'::('E'::('T'::('F'::('L'::('O'::('A'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::(' '::('h'::('e'::('a'::('p'::(' '::('f'::('l'::('o'::('a'::('t'::(' '::('a'::('r'::('r'::('a'::('y'::[])))))))))))))))))))))))))))))))))))))))
      | VECTLENGTH ->
        (match size_or_heap s s.accu with
         | Some n0 ->
@@ -2701,144 +2820,9 @@ let step code s =
               | _ ->
                 Error
                   ('P'::('O'::('P'::('T'::('R'::('A'::('P'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))))
-     | RAISE ->
-       if (=) s.trap_sp 0
-       then Error
-              ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
-       else let k = Nat.sub (length s.stack) s.trap_sp in
-            let frame_top = skipn k s.stack in
-            (match frame_top with
-             | [] ->
-               Error
-                 ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-             | v :: l ->
-               (match v with
-                | Val_int handler_pc ->
-                  (match l with
-                   | [] ->
-                     Error
-                       ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                   | v0 :: l0 ->
-                     (match v0 with
-                      | Val_int prev_tsp ->
-                        (match l0 with
-                         | [] ->
-                           Error
-                             ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                         | saved_env :: l1 ->
-                           (match l1 with
-                            | [] ->
-                              Error
-                                ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                            | v1 :: rest ->
-                              (match v1 with
-                               | Val_int saved_ea ->
-                                 Step { pc = handler_pc; accu = s.accu;
-                                   stack = rest; env = saved_env;
-                                   extra_args = (Z.to_nat saved_ea); global =
-                                   s.global; trap_sp = (Z.to_nat prev_tsp);
-                                   hp = s.hp; next_addr = s.next_addr }
-                               | _ ->
-                                 Error
-                                   ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
-                      | _ ->
-                        Error
-                          ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
-                | _ ->
-                  Error
-                    ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
-     | RERAISE ->
-       if (=) s.trap_sp 0
-       then Error
-              ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
-       else let k = Nat.sub (length s.stack) s.trap_sp in
-            let frame_top = skipn k s.stack in
-            (match frame_top with
-             | [] ->
-               Error
-                 ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-             | v :: l ->
-               (match v with
-                | Val_int handler_pc ->
-                  (match l with
-                   | [] ->
-                     Error
-                       ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                   | v0 :: l0 ->
-                     (match v0 with
-                      | Val_int prev_tsp ->
-                        (match l0 with
-                         | [] ->
-                           Error
-                             ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                         | saved_env :: l1 ->
-                           (match l1 with
-                            | [] ->
-                              Error
-                                ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                            | v1 :: rest ->
-                              (match v1 with
-                               | Val_int saved_ea ->
-                                 Step { pc = handler_pc; accu = s.accu;
-                                   stack = rest; env = saved_env;
-                                   extra_args = (Z.to_nat saved_ea); global =
-                                   s.global; trap_sp = (Z.to_nat prev_tsp);
-                                   hp = s.hp; next_addr = s.next_addr }
-                               | _ ->
-                                 Error
-                                   ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
-                      | _ ->
-                        Error
-                          ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
-                | _ ->
-                  Error
-                    ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
-     | RAISE_NOTRACE ->
-       if (=) s.trap_sp 0
-       then Error
-              ('u'::('n'::('h'::('a'::('n'::('d'::('l'::('e'::('d'::(' '::('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::[])))))))))))))))))))
-       else let k = Nat.sub (length s.stack) s.trap_sp in
-            let frame_top = skipn k s.stack in
-            (match frame_top with
-             | [] ->
-               Error
-                 ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-             | v :: l ->
-               (match v with
-                | Val_int handler_pc ->
-                  (match l with
-                   | [] ->
-                     Error
-                       ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                   | v0 :: l0 ->
-                     (match v0 with
-                      | Val_int prev_tsp ->
-                        (match l0 with
-                         | [] ->
-                           Error
-                             ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                         | saved_env :: l1 ->
-                           (match l1 with
-                            | [] ->
-                              Error
-                                ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))
-                            | v1 :: rest ->
-                              (match v1 with
-                               | Val_int saved_ea ->
-                                 Step { pc = handler_pc; accu = s.accu;
-                                   stack = rest; env = saved_env;
-                                   extra_args = (Z.to_nat saved_ea); global =
-                                   s.global; trap_sp = (Z.to_nat prev_tsp);
-                                   hp = s.hp; next_addr = s.next_addr }
-                               | _ ->
-                                 Error
-                                   ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[]))))))))))))))))))))))))))))))
-                      | _ ->
-                        Error
-                          ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
-                | _ ->
-                  Error
-                    ('R'::('A'::('I'::('S'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('t'::('r'::('a'::('p'::(' '::('f'::('r'::('a'::('m'::('e'::[])))))))))))))))))))))))))))))
+     | RAISE -> do_raise s.accu s
+     | RERAISE -> do_raise s.accu s
+     | RAISE_NOTRACE -> do_raise s.accu s
      | C_CALL (nargs, prim_idx) ->
        let args =
          s.accu :: (firstn (Nat.sub nargs (Stdlib.Int.succ 0)) s.stack)
@@ -2932,8 +2916,7 @@ let step code s =
              (match v with
               | Val_int b ->
                 if Z.eqb b 0
-                then Error
-                       ('D'::('I'::('V'::('I'::('N'::('T'::(':'::(' '::('d'::('i'::('v'::('i'::('s'::('i'::('o'::('n'::(' '::('b'::('y'::(' '::('z'::('e'::('r'::('o'::[]))))))))))))))))))))))))
+                then do_raise div_by_zero_exn s
                 else Step
                        (st s pc' (Val_int (Z.quot a b)) rest s.env
                          s.extra_args s.global s.trap_sp)
@@ -2954,8 +2937,7 @@ let step code s =
              (match v with
               | Val_int b ->
                 if Z.eqb b 0
-                then Error
-                       ('M'::('O'::('D'::('I'::('N'::('T'::(':'::(' '::('d'::('i'::('v'::('i'::('s'::('i'::('o'::('n'::(' '::('b'::('y'::(' '::('z'::('e'::('r'::('o'::[]))))))))))))))))))))))))
+                then do_raise div_by_zero_exn s
                 else Step
                        (st s pc' (Val_int (Z.rem a b)) rest s.env
                          s.extra_args s.global s.trap_sp)
@@ -3215,14 +3197,100 @@ let step code s =
          (st s pc' (if is_int s.accu then val_true else val_false) s.stack
            s.env s.extra_args s.global s.trap_sp)
      | GETMETHOD ->
-       Error
-         ('G'::('E'::('T'::('M'::('E'::('T'::('H'::('O'::('D'::(':'::(' '::('O'::('O'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))
-     | GETPUBMET _ ->
-       Error
-         ('G'::('E'::('T'::('P'::('U'::('B'::('M'::('E'::('T'::(':'::(' '::('O'::('O'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))
+       (match s.stack with
+        | [] ->
+          Error
+            ('G'::('E'::('T'::('M'::('E'::('T'::('H'::('O'::('D'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+        | obj :: _ ->
+          (match field_or_heap s obj 0 with
+           | Some class_tbl ->
+             (match s.accu with
+              | Val_int n0 ->
+                (match field_or_heap s class_tbl (Z.to_nat n0) with
+                 | Some method_fn ->
+                   Step
+                     (st s pc' method_fn s.stack s.env s.extra_args s.global
+                       s.trap_sp)
+                 | None ->
+                   Error
+                     ('G'::('E'::('T'::('M'::('E'::('T'::('H'::('O'::('D'::(':'::(' '::('m'::('e'::('t'::('h'::('o'::('d'::(' '::('n'::('o'::('t'::(' '::('f'::('o'::('u'::('n'::('d'::[]))))))))))))))))))))))))))))
+              | _ ->
+                Error
+                  ('G'::('E'::('T'::('M'::('E'::('T'::('H'::('O'::('D'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::(' '::('i'::('n'::('d'::('e'::('x'::[]))))))))))))))))))))))))))))))))
+           | None ->
+             Error
+               ('G'::('E'::('T'::('M'::('E'::('T'::('H'::('O'::('D'::(':'::(' '::('n'::('o'::(' '::('c'::('l'::('a'::('s'::('s'::(' '::('t'::('a'::('b'::('l'::('e'::[])))))))))))))))))))))))))))
+     | GETPUBMET tag ->
+       let new_stack = s.accu :: s.stack in
+       (match field_or_heap s s.accu 0 with
+        | Some class_tbl ->
+          let fields =
+            match class_tbl with
+            | Val_int _ -> []
+            | Val_block (_, fs) -> fs
+            | Val_ptr addr ->
+              (match heap_lookup s.hp addr with
+               | Some p -> let (_, fs) = p in fs
+               | None -> [])
+            | Val_closure (_, _) -> []
+          in
+          let rec scan = function
+          | [] ->
+            Error
+              ('G'::('E'::('T'::('P'::('U'::('B'::('M'::('E'::('T'::(':'::(' '::('m'::('e'::('t'::('h'::('o'::('d'::(' '::('n'::('o'::('t'::(' '::('f'::('o'::('u'::('n'::('d'::[])))))))))))))))))))))))))))
+          | method_fn :: l ->
+            (match l with
+             | [] ->
+               Error
+                 ('G'::('E'::('T'::('P'::('U'::('B'::('M'::('E'::('T'::(':'::(' '::('m'::('e'::('t'::('h'::('o'::('d'::(' '::('n'::('o'::('t'::(' '::('f'::('o'::('u'::('n'::('d'::[])))))))))))))))))))))))))))
+             | tag_val :: rest ->
+               if value_eqb tag_val (Val_int tag)
+               then Step
+                      (st s pc' method_fn new_stack s.env s.extra_args
+                        s.global s.trap_sp)
+               else scan rest)
+          in scan (skipn (Stdlib.Int.succ (Stdlib.Int.succ 0)) fields)
+        | None ->
+          Error
+            ('G'::('E'::('T'::('P'::('U'::('B'::('M'::('E'::('T'::(':'::(' '::('n'::('o'::(' '::('c'::('l'::('a'::('s'::('s'::(' '::('t'::('a'::('b'::('l'::('e'::[]))))))))))))))))))))))))))
      | GETDYNMET ->
-       Error
-         ('G'::('E'::('T'::('D'::('Y'::('N'::('M'::('E'::('T'::(':'::(' '::('O'::('O'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))
+       (match s.stack with
+        | [] ->
+          Error
+            ('G'::('E'::('T'::('D'::('Y'::('N'::('M'::('E'::('T'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+        | obj :: _ ->
+          let tag = s.accu in
+          (match field_or_heap s obj 0 with
+           | Some class_tbl ->
+             let fields =
+               match class_tbl with
+               | Val_int _ -> []
+               | Val_block (_, fs) -> fs
+               | Val_ptr addr ->
+                 (match heap_lookup s.hp addr with
+                  | Some p -> let (_, fs) = p in fs
+                  | None -> [])
+               | Val_closure (_, _) -> []
+             in
+             let rec scan = function
+             | [] ->
+               Error
+                 ('G'::('E'::('T'::('D'::('Y'::('N'::('M'::('E'::('T'::(':'::(' '::('m'::('e'::('t'::('h'::('o'::('d'::(' '::('n'::('o'::('t'::(' '::('f'::('o'::('u'::('n'::('d'::[])))))))))))))))))))))))))))
+             | method_fn :: l ->
+               (match l with
+                | [] ->
+                  Error
+                    ('G'::('E'::('T'::('D'::('Y'::('N'::('M'::('E'::('T'::(':'::(' '::('m'::('e'::('t'::('h'::('o'::('d'::(' '::('n'::('o'::('t'::(' '::('f'::('o'::('u'::('n'::('d'::[])))))))))))))))))))))))))))
+                | tag_val :: rest ->
+                  if value_eqb tag_val tag
+                  then Step
+                         (st s pc' method_fn s.stack s.env s.extra_args
+                           s.global s.trap_sp)
+                  else scan rest)
+             in scan (skipn (Stdlib.Int.succ (Stdlib.Int.succ 0)) fields)
+           | None ->
+             Error
+               ('G'::('E'::('T'::('D'::('Y'::('N'::('M'::('E'::('T'::(':'::(' '::('n'::('o'::(' '::('c'::('l'::('a'::('s'::('s'::(' '::('t'::('a'::('b'::('l'::('e'::[])))))))))))))))))))))))))))
      | BEQ (n0, target) ->
        (match s.accu with
         | Val_int a ->
@@ -3234,8 +3302,7 @@ let step code s =
                  (st s pc' s.accu s.stack s.env s.extra_args s.global
                    s.trap_sp)
         | _ ->
-          Error
-            ('B'::('E'::('Q'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))
+          Step (st s pc' s.accu s.stack s.env s.extra_args s.global s.trap_sp))
      | BNEQ (n0, target) ->
        (match s.accu with
         | Val_int a ->
@@ -3247,8 +3314,8 @@ let step code s =
                  (st s target s.accu s.stack s.env s.extra_args s.global
                    s.trap_sp)
         | _ ->
-          Error
-            ('B'::('N'::('E'::('Q'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))
+          Step
+            (st s target s.accu s.stack s.env s.extra_args s.global s.trap_sp))
      | BLTINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
@@ -3312,8 +3379,9 @@ let step code s =
              (match v with
               | Val_int b ->
                 Step
-                  (st s pc' (val_bool (Z.ltb (z_unsigned a) (z_unsigned b)))
-                    rest s.env s.extra_args s.global s.trap_sp)
+                  (st s pc'
+                    (val_bool (Z.ltb (z_flip_sign a) (z_flip_sign b))) rest
+                    s.env s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3331,8 +3399,9 @@ let step code s =
              (match v with
               | Val_int b ->
                 Step
-                  (st s pc' (val_bool (Z.geb (z_unsigned a) (z_unsigned b)))
-                    rest s.env s.extra_args s.global s.trap_sp)
+                  (st s pc'
+                    (val_bool (Z.geb (z_flip_sign a) (z_flip_sign b))) rest
+                    s.env s.extra_args s.global s.trap_sp)
               | _ ->
                 Error
                   ('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::(' '::('o'::('r'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))))))))))))))
@@ -3342,7 +3411,7 @@ let step code s =
      | BULTINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
-          if Z.ltb (z_unsigned n0) (z_unsigned a)
+          if Z.ltb (z_flip_sign n0) (z_flip_sign a)
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
                    s.trap_sp)
@@ -3355,7 +3424,7 @@ let step code s =
      | BUGEINT (n0, target) ->
        (match s.accu with
         | Val_int a ->
-          if Z.geb (z_unsigned n0) (z_unsigned a)
+          if Z.geb (z_flip_sign n0) (z_flip_sign a)
           then Step
                  (st s target s.accu s.stack s.env s.extra_args s.global
                    s.trap_sp)
@@ -3899,107 +3968,6 @@ let rec encode_instrs omap idx = function
 
 let encode_bytecode code =
   let omap = offset_map code in encode_instrs omap 0 code
-
-type byte_string = bytes
-
-(** val read_file : int list -> byte_string **)
-
-let read_file = 
-  fun cs ->
-    let buf = Buffer.create 256 in
-    let rec to_chars = function
-      | [] -> ()
-      | c :: rest -> Buffer.add_char buf (Char.chr c); to_chars rest
-    in
-    to_chars cs;
-    let filename = Buffer.contents buf in
-    let ic = open_in_bin filename in
-    let n = in_channel_length ic in
-    let data = Bytes.create n in
-    really_input ic data 0 n;
-    close_in ic;
-    data
-
-
-(** val byte_string_to_list : byte_string -> int list **)
-
-let byte_string_to_list = 
-  fun bs ->
-    let n = Bytes.length bs in
-    let rec build i acc =
-      if i < 0 then acc
-      else build (i - 1) (Char.code (Bytes.get bs i) :: acc)
-    in
-    build (n - 1) []
-
-
-(** val byte_string_length : byte_string -> int **)
-
-let byte_string_length = 
-  fun bs -> Bytes.length bs
-
-
-(** val sys_argv : int list list **)
-
-let sys_argv = 
-  let argv = Array.to_list Sys.argv in
-  List.map (fun s ->
-    let n = String.length s in
-    let rec build i acc =
-      if i < 0 then acc
-      else build (i - 1) (Char.code s.[i] :: acc)
-    in
-    build (n - 1) []
-  ) argv
-
-
-(** val unmarshal_globals : byte_string -> int -> int -> int list list **)
-
-let unmarshal_globals = 
-  fun bs ofs len ->
-    let sub = Bytes.sub bs ofs len in
-    let obj : Obj.t = Marshal.from_bytes sub 0 in
-    let arr : Obj.t array = Obj.obj obj in
-    let rec obj_to_encoding (o : Obj.t) : int list =
-      if Obj.is_int o then [0; (Obj.obj o : int)]
-      else
-        let tag = Obj.tag o in
-        if tag = Obj.string_tag then
-          let s : string = Obj.obj o in
-          let n = String.length s in
-          let rec chars i acc =
-            if i < 0 then acc
-            else chars (i - 1) (Char.code s.[i] :: acc)
-          in
-          2 :: n :: chars (n - 1) []
-        else if tag < Obj.no_scan_tag then
-          let size = Obj.size o in
-          let fields = List.concat_map (fun i ->
-            obj_to_encoding (Obj.field o i)
-          ) (List.init size Fun.id) in
-          1 :: tag :: size :: fields
-        else
-          [1; tag; 0]
-    in
-    Array.to_list (Array.map obj_to_encoding arr)
-
-
-(** val load_primitives : byte_string -> int -> int -> int list list **)
-
-let load_primitives = 
-  fun bs ofs len ->
-    let raw = Bytes.sub_string bs ofs len in
-    let prims = List.filter (fun s -> String.length s > 0)
-                  (String.split_on_char '\000' raw) in
-    List.map (fun s ->
-      let n = String.length s in
-      let rec build i acc =
-        if i < 0 then acc
-        else build (i - 1) (Char.code s.[i] :: acc)
-      in
-      build (n - 1) []
-    ) prims
-
 
 (** val byte_at : int list -> int -> int **)
 
@@ -7157,998 +7125,6 @@ let load_code_section data data_len =
   (match find_section secs cODE_name with
    | Some s -> Some (decode_bytecode data s.sec_offset s.sec_length)
    | None -> None)
-
-(** val decode_value_aux : int list -> int -> value * int list **)
-
-let rec decode_value_aux data fuel =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> ((Val_int 0), data))
-    (fun fuel' ->
-    match data with
-    | [] -> ((Val_int 0), [])
-    | z0 :: l ->
-      ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-         (fun _ ->
-         match l with
-         | [] -> ((Val_int 0), [])
-         | n0 :: rest -> ((Val_int n0), rest))
-         (fun p ->
-         (fun f2p1 f2p f1 p ->
-  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
-           (fun _ -> ((Val_int 0), []))
-           (fun p0 ->
-           (fun f2p1 f2p f1 p ->
-  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
-             (fun _ -> ((Val_int 0), []))
-             (fun _ -> ((Val_int 0), []))
-             (fun _ ->
-             match l with
-             | [] -> ((Val_int 0), [])
-             | len :: rest ->
-               let chars = firstn (Z.to_nat len) rest in
-               let rest' = skipn (Z.to_nat len) rest in
-               ((Val_block (string_tag, (map (fun x -> Val_int x) chars))),
-               rest'))
-             p0)
-           (fun _ ->
-           match l with
-           | [] -> ((Val_int 0), [])
-           | tag :: l0 ->
-             (match l0 with
-              | [] -> ((Val_int 0), [])
-              | size :: rest ->
-                let (fields, rest') =
-                  let rec read_fields r n0 =
-                    (fun fO fS n -> if n=0 then fO () else fS (n-1))
-                      (fun _ -> ([], r))
-                      (fun n' ->
-                      let (v, r') = decode_value_aux r fuel' in
-                      let (vs, r'') = read_fields r' n' in ((v :: vs), r''))
-                      n0
-                  in read_fields rest (Z.to_nat size)
-                in
-                ((Val_block ((Z.to_nat tag), fields)), rest')))
-           p)
-         (fun _ -> ((Val_int 0), []))
-         z0))
-    fuel
-
-(** val decode_value : int list -> value **)
-
-let decode_value data =
-  fst
-    (decode_value_aux data (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ
-      0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-
-(** val decode_globals : int list list -> value list **)
-
-let decode_globals encodings =
-  map decode_value encodings
-
-(** val dATA_name : int **)
-
-let dATA_name =
-  Z.coq_lor
-    (Z.shiftl ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-      ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
-      ((fun p->2*p) ((fun p->1+2*p) 1)))))
-    (Z.coq_lor
-      (Z.shiftl ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-        ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
-        ((fun p->2*p) ((fun p->2*p) 1)))))
-      (Z.coq_lor
-        (Z.shiftl ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-          ((fun p->1+2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
-          ((fun p->2*p) 1))))
-        ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-        ((fun p->2*p) ((fun p->2*p) 1))))))))
-
-(** val pRIM_name : int **)
-
-let pRIM_name =
-  Z.coq_lor
-    (Z.shiftl ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-      ((fun p->1+2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
-      ((fun p->2*p) ((fun p->1+2*p) 1)))))
-    (Z.coq_lor
-      (Z.shiftl ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-        ((fun p->1+2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
-        ((fun p->2*p) ((fun p->2*p) 1)))))
-      (Z.coq_lor
-        (Z.shiftl ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-          ((fun p->2*p) ((fun p->2*p) 1)))))) ((fun p->2*p) ((fun p->2*p)
-          ((fun p->2*p) 1))))
-        ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-        ((fun p->2*p) ((fun p->2*p) 1))))))))
-
-(** val list_z_eqb : int list -> int list -> bool **)
-
-let rec list_z_eqb a b =
-  match a with
-  | [] -> (match b with
-           | [] -> true
-           | _ :: _ -> false)
-  | x :: xs ->
-    (match b with
-     | [] -> false
-     | y :: ys -> (&&) (Z.eqb x y) (list_z_eqb xs ys))
-
-(** val str_to_codes : char list -> int list **)
-
-let rec str_to_codes = function
-| [] -> []
-| c::rest -> (Z.of_nat (nat_of_ascii c)) :: (str_to_codes rest)
-
-(** val z_to_string_aux : int -> int -> int list -> int list **)
-
-let rec z_to_string_aux n0 fuel acc =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> acc)
-    (fun fuel' ->
-    if Z.eqb n0 0
-    then (match acc with
-          | [] ->
-            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-              ((fun p->1+2*p) 1))))) :: []
-          | _ :: _ -> acc)
-    else z_to_string_aux
-           (Z.div n0 ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) 1)))) fuel'
-           ((Z.add
-              (Z.modulo n0 ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) 1))))
-              ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-              ((fun p->1+2*p) 1)))))) :: acc))
-    fuel
-
-(** val z_to_string_codes : int -> int list **)
-
-let z_to_string_codes n0 =
-  if Z.ltb n0 0
-  then ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-         ((fun p->2*p)
-         1))))) :: (z_to_string_aux (Z.opp n0) (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-                     (Stdlib.Int.succ (Stdlib.Int.succ
-                     0)))))))))))))))))))))))))))))) [])
-  else z_to_string_aux n0 (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-         0)))))))))))))))))))))))))))))) []
-
-(** val mk_zeros : int -> value list **)
-
-let rec mk_zeros n0 =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> [])
-    (fun n' -> (Val_int 0) :: (mk_zeros n'))
-    n0
-
-(** val handle_output_char : value list -> value option **)
-
-let handle_output_char _ =
-  Some (Val_int 0)
-
-(** val handle_output_bytes : value list -> value option **)
-
-let handle_output_bytes _ =
-  Some (Val_int 0)
-
-(** val handle_format_int : value list -> value option **)
-
-let handle_format_int = function
-| [] -> Some (Val_int 0)
-| _ :: l ->
-  (match l with
-   | [] -> Some (Val_int 0)
-   | v0 :: _ ->
-     (match v0 with
-      | Val_int n0 ->
-        Some (Val_block (string_tag,
-          (map (fun x -> Val_int x) (z_to_string_codes n0))))
-      | _ -> Some (Val_int 0)))
-
-(** val handle_open_descriptor : value list -> value option **)
-
-let handle_open_descriptor = function
-| [] ->
-  Some (Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
-    ((Val_int 0) :: [])))
-| v :: _ ->
-  (match v with
-   | Val_int fd ->
-     Some (Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
-       ((Val_int fd) :: [])))
-   | _ ->
-     Some (Val_block ((Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-       0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
-       ((Val_int 0) :: []))))
-
-(** val handle_obj_tag : value list -> value option **)
-
-let handle_obj_tag = function
-| [] -> Some (Val_int 0)
-| v :: _ ->
-  (match v with
-   | Val_int _ ->
-     Some (Val_int ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) 1))))))))))
-   | Val_block (t, _) -> Some (Val_int (Z.of_nat t))
-   | _ -> Some (Val_int 0))
-
-(** val handle_string_length : value list -> value option **)
-
-let handle_string_length = function
-| [] -> Some (Val_int 0)
-| v :: _ ->
-  (match v with
-   | Val_block (_, cs) -> Some (Val_int (Z.of_nat (length cs)))
-   | _ -> Some (Val_int 0))
-
-(** val handle_create_bytes : value list -> value option **)
-
-let handle_create_bytes = function
-| [] -> Some (Val_int 0)
-| v :: _ ->
-  (match v with
-   | Val_int n0 -> Some (Val_block (string_tag, (mk_zeros (Z.to_nat n0))))
-   | _ -> Some (Val_int 0))
-
-(** val handle_string_equal : value list -> value option **)
-
-let handle_string_equal = function
-| [] -> Some (Val_int 0)
-| v :: l ->
-  (match v with
-   | Val_block (_, a) ->
-     (match l with
-      | [] -> Some (Val_int 0)
-      | v0 :: _ ->
-        (match v0 with
-         | Val_block (_, b) ->
-           let veqb =
-             let rec veqb l1 l2 =
-               match l1 with
-               | [] -> (match l2 with
-                        | [] -> true
-                        | _ :: _ -> false)
-               | v1 :: r1 ->
-                 (match v1 with
-                  | Val_int x ->
-                    (match l2 with
-                     | [] -> false
-                     | v2 :: r2 ->
-                       (match v2 with
-                        | Val_int y -> (&&) (Z.eqb x y) (veqb r1 r2)
-                        | _ -> false))
-                  | _ -> false)
-             in veqb
-           in
-           Some (Val_int (if veqb a b then 1 else 0))
-         | _ -> Some (Val_int 0)))
-   | _ -> Some (Val_int 0))
-
-(** val handle_int_compare : value list -> value option **)
-
-let handle_int_compare = function
-| [] -> Some (Val_int 0)
-| v :: l ->
-  (match v with
-   | Val_int a ->
-     (match l with
-      | [] -> Some (Val_int 0)
-      | v0 :: _ ->
-        (match v0 with
-         | Val_int b ->
-           Some (Val_int
-             (if Z.ltb a b then (~-) 1 else if Z.ltb b a then 1 else 0))
-         | _ -> Some (Val_int 0)))
-   | _ -> Some (Val_int 0))
-
-(** val handle_string_concat : value list -> value option **)
-
-let handle_string_concat = function
-| [] -> Some (Val_int 0)
-| v :: l ->
-  (match v with
-   | Val_block (_, a) ->
-     (match l with
-      | [] -> Some (Val_int 0)
-      | v0 :: _ ->
-        (match v0 with
-         | Val_block (_, b) -> Some (Val_block (string_tag, (app a b)))
-         | _ -> Some (Val_int 0)))
-   | _ -> Some (Val_int 0))
-
-(** val handle_identity : value list -> value option **)
-
-let handle_identity = function
-| [] -> Some (Val_int 0)
-| v :: _ -> Some v
-
-(** val handle_string_get : value list -> value option **)
-
-let handle_string_get = function
-| [] -> Some (Val_int 0)
-| v :: l ->
-  (match v with
-   | Val_block (_, cs) ->
-     (match l with
-      | [] -> Some (Val_int 0)
-      | v0 :: _ ->
-        (match v0 with
-         | Val_int i ->
-           (match nth_error cs (Z.to_nat i) with
-            | Some v1 -> Some v1
-            | None -> Some (Val_int 0))
-         | _ -> Some (Val_int 0)))
-   | _ -> Some (Val_int 0))
-
-(** val make_ccall_handler :
-    int list list -> int -> value list -> value option **)
-
-let make_ccall_handler prims idx args =
-  let name = match nth_error prims idx with
-             | Some n0 -> n0
-             | None -> [] in
-  if list_z_eqb name
-       (str_to_codes
-         ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('u'::('t'::('p'::('u'::('t'::('_'::('c'::('h'::('a'::('r'::[]))))))))))))))))))))
-  then handle_output_char args
-  else if (||)
-            (list_z_eqb name
-              (str_to_codes
-                ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('u'::('t'::('p'::('u'::('t'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))))))
-            (list_z_eqb name
-              (str_to_codes
-                ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('u'::('t'::('p'::('u'::('t'::[]))))))))))))))))
-       then handle_output_bytes args
-       else if list_z_eqb name
-                 (str_to_codes
-                   ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('f'::('l'::('u'::('s'::('h'::[]))))))))))))))
-            then Some (Val_int 0)
-            else if list_z_eqb name
-                      (str_to_codes
-                        ('c'::('a'::('m'::('l'::('_'::('f'::('o'::('r'::('m'::('a'::('t'::('_'::('i'::('n'::('t'::[]))))))))))))))))
-                 then handle_format_int args
-                 else if list_z_eqb name
-                           (str_to_codes
-                             ('c'::('a'::('m'::('l'::('_'::('r'::('e'::('g'::('i'::('s'::('t'::('e'::('r'::('_'::('n'::('a'::('m'::('e'::('d'::('_'::('v'::('a'::('l'::('u'::('e'::[]))))))))))))))))))))))))))
-                      then Some (Val_int 0)
-                      else if list_z_eqb name
-                                (str_to_codes
-                                  ('c'::('a'::('m'::('l'::('_'::('f'::('r'::('e'::('s'::('h'::('_'::('o'::('o'::('_'::('i'::('d'::[])))))))))))))))))
-                           then Some (Val_int 0)
-                           else if (||)
-                                     (list_z_eqb name
-                                       (str_to_codes
-                                         ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('p'::('e'::('n'::('_'::('d'::('e'::('s'::('c'::('r'::('i'::('p'::('t'::('o'::('r'::('_'::('i'::('n'::[]))))))))))))))))))))))))))))
-                                     (list_z_eqb name
-                                       (str_to_codes
-                                         ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('p'::('e'::('n'::('_'::('d'::('e'::('s'::('c'::('r'::('i'::('p'::('t'::('o'::('r'::('_'::('o'::('u'::('t'::[])))))))))))))))))))))))))))))
-                                then handle_open_descriptor args
-                                else if list_z_eqb name
-                                          (str_to_codes
-                                            ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('s'::('e'::('t'::('_'::('c'::('h'::('a'::('n'::('n'::('e'::('l'::('_'::('n'::('a'::('m'::('e'::[])))))))))))))))))))))))))
-                                     then Some (Val_int 0)
-                                     else if list_z_eqb name
-                                               (str_to_codes
-                                                 ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('m'::('a'::('x'::('_'::('w'::('o'::('s'::('i'::('z'::('e'::[]))))))))))))))))))))))))))
-                                          then Some (Val_int
-                                                 (Z.sub
-                                                   (Z.shiftl 1
-                                                     ((fun p->1+2*p)
-                                                     ((fun p->2*p)
-                                                     ((fun p->2*p)
-                                                     ((fun p->1+2*p)
-                                                     ((fun p->1+2*p) 1))))))
-                                                   1))
-                                          else if list_z_eqb name
-                                                    (str_to_codes
-                                                      ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('i'::('n'::('t'::('_'::('s'::('i'::('z'::('e'::[]))))))))))))))))))))))))
-                                               then Some (Val_int
-                                                      ((fun p->1+2*p)
-                                                      ((fun p->1+2*p)
-                                                      ((fun p->1+2*p)
-                                                      ((fun p->1+2*p)
-                                                      ((fun p->1+2*p) 1))))))
-                                               else if list_z_eqb name
-                                                         (str_to_codes
-                                                           ('c'::('a'::('m'::('l'::('_'::('o'::('b'::('j'::('_'::('t'::('a'::('g'::[])))))))))))))
-                                                    then handle_obj_tag args
-                                                    else if (||)
-                                                              (list_z_eqb
-                                                                name
-                                                                (str_to_codes
-                                                                  ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[]))))))))))))))))))))
-                                                              (list_z_eqb
-                                                                name
-                                                                (str_to_codes
-                                                                  ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[])))))))))))))))))))))))
-                                                         then handle_string_length
-                                                                args
-                                                         else if list_z_eqb
-                                                                   name
-                                                                   (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('c'::('r'::('e'::('a'::('t'::('e'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))
-                                                              then handle_create_bytes
-                                                                    args
-                                                              else if 
-                                                                    (||)
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('l'::('i'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))))))))
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('l'::('i'::('t'::('_'::('b'::('y'::('t'::('e'::('s'::[])))))))))))))))))
-                                                                   then 
-                                                                    Some
-                                                                    (Val_int
-                                                                    0)
-                                                                   else 
-                                                                    if 
-                                                                    list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('e'::('q'::('u'::('a'::('l'::[]))))))))))))))))))
-                                                                    then 
-                                                                    handle_string_equal
-                                                                    args
-                                                                    else 
-                                                                    if 
-                                                                    (||)
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('i'::('n'::('t'::('_'::('c'::('o'::('m'::('p'::('a'::('r'::('e'::[]))))))))))))))))))
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('c'::('o'::('m'::('p'::('a'::('r'::('e'::[]))))))))))))))
-                                                                    then 
-                                                                    handle_int_compare
-                                                                    args
-                                                                    else 
-                                                                    if 
-                                                                    list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('c'::('o'::('n'::('c'::('a'::('t'::[])))))))))))))))))))
-                                                                    then 
-                                                                    handle_string_concat
-                                                                    args
-                                                                    else 
-                                                                    if 
-                                                                    (||)
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('o'::('f'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))))))
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('y'::('t'::('e'::('s'::('_'::('o'::('f'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))))))))))))
-                                                                    then 
-                                                                    handle_identity
-                                                                    args
-                                                                    else 
-                                                                    if 
-                                                                    (||)
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('g'::('e'::('t'::[])))))))))))))))))
-                                                                    (list_z_eqb
-                                                                    name
-                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('y'::('t'::('e'::('s'::('_'::('g'::('e'::('t'::[]))))))))))))))))
-                                                                    then 
-                                                                    handle_string_get
-                                                                    args
-                                                                    else 
-                                                                    Some
-                                                                    (Val_int
-                                                                    0)
-
-(** val main : int **)
-
-let main =
-  match nth_error sys_argv (Stdlib.Int.succ 0) with
-  | Some filename_codes ->
-    let raw_bytes = read_file filename_codes in
-    let data = byte_string_to_list raw_bytes in
-    let data_len = Z.to_nat (byte_string_length raw_bytes) in
-    (match load_code_section data data_len with
-     | Some code ->
-       let secs = parse_sections data data_len in
-       let globals =
-         match find_section secs dATA_name with
-         | Some s ->
-           let encodings =
-             unmarshal_globals raw_bytes (Z.of_nat s.sec_offset)
-               (Z.of_nat s.sec_length)
-           in
-           decode_globals encodings
-         | None -> []
-       in
-       let prims =
-         match find_section secs pRIM_name with
-         | Some s ->
-           load_primitives raw_bytes (Z.of_nat s.sec_offset)
-             (Z.of_nat s.sec_length)
-         | None -> []
-       in
-       let handler = make_ccall_handler prims in
-       let init = initial_state globals in
-       let fuel =
-         Z.to_nat ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-           ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-           ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-           ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-           ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-           ((fun p->1+2*p) ((fun p->2*p) 1))))))))))))))))))))))))))
-       in
-       (match run fuel code init handler with
-        | Finished _ -> 0
-        | _ -> 1)
-     | None -> 1)
-  | None -> 1
 
 type event = int
   (* singleton inductive, whose constructor was Out_char *)

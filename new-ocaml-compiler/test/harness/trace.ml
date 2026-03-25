@@ -46,33 +46,28 @@ let () =
     Printf.printf "  global[%d] = %s\n%!" i (show_value globals.(i))
   done;
   let buf = Buffer.create 256 in
-  let handler idx args =
+  let verbose = Array.length Sys.argv > 3 && Sys.argv.(3) = "-v" in
+  let (heap_ref, next_addr_ref, pending_raise_ref, _perform_raise, base_handler, _get_named_value) = Test_common.make_handler ~raw_globals:globals prims buf in
+  let handler idx args cont =
     let name = if idx < Array.length prims then prims.(idx) else "?" in
-    Printf.printf "    C_CALL %s (idx=%d)\n%!" name idx;
-    match name, args with
-    | "caml_ml_output_char", [_; Val_int c] ->
-      Buffer.add_char buf (Char.chr (c land 0xFF)); Some (Val_int 0)
-    | ("caml_ml_output_bytes" | "caml_ml_output"), _ ->
-      (match args with
-       | [_; Val_block (252, chars); Val_int off; Val_int len] ->
-         for i = off to off + len - 1 do
-           match List.nth_opt chars i with
-           | Some (Val_int c) -> Buffer.add_char buf (Char.chr (c land 0xFF))
-           | _ -> () done; Some (Val_int 0)
-       | _ -> Some (Val_int 0))
-    | "caml_register_named_value", _ -> Some (Val_int 0)
-    | "caml_fresh_oo_id", _ -> Some (Val_int 0)
-    | "caml_ml_open_descriptor_in", [Val_int fd] -> Some (Val_block (255, [Val_int fd]))
-    | "caml_ml_open_descriptor_out", [Val_int fd] -> Some (Val_block (255, [Val_int fd]))
-    | "caml_ml_set_channel_name", _ -> Some (Val_int 0)
-    | "caml_sys_const_max_wosize", _ -> Some (Val_int ((1 lsl 57) - 1))
-    | "caml_sys_const_int_size", _ -> Some (Val_int 63)
-    | _ ->
-      Printf.eprintf "    [ccall] %s (idx=%d, %d args)\n%!" name idx (List.length args);
-      Some (Val_int 0) in
+    if verbose then Printf.printf "    C_CALL %s (idx=%d)\n%!" name idx;
+    heap_ref := cont.hp;
+    next_addr_ref := cont.next_addr;
+    pending_raise_ref := None;
+    let result = base_handler idx args in
+    (if verbose && result = None then
+      Printf.eprintf "    [ccall failed] %s\n%!" name);
+    result
+  in
   let s = ref (initial_state (Array.to_list globals)) in
   let max = try int_of_string Sys.argv.(2) with _ -> 30 in
-  for i = 0 to max - 1 do
+  (* If max is very large (>1M), run silently until error or halt *)
+  let silent = max > 1000 in
+  (* Track trap_sp changes *)
+  let prev_trap_sp = ref 0 in
+  let i = ref 0 in
+  while !i < max do
+    incr i;
     let instr_str = match List.nth_opt code !s.pc with
       | Some (ACC n) -> Printf.sprintf "ACC %d" n
       | Some PUSH -> "PUSH"
@@ -113,17 +108,65 @@ let () =
       | Some POPTRAP -> "POPTRAP"
       | Some (APPTERM (n,s)) -> Printf.sprintf "APPTERM(%d,%d)" n s
       | Some (APPTERM1 s) -> Printf.sprintf "APPTERM1 %d" s
+      | Some ULTINT -> "ULTINT"
+      | Some UGEINT -> "UGEINT"
+      | Some (BULTINT (n,t)) -> Printf.sprintf "BULTINT(%d,%d)" (Z.to_nat n) (Z.to_nat t)
+      | Some (BUGEINT (n,t)) -> Printf.sprintf "BUGEINT(%d,%d)" (Z.to_nat n) (Z.to_nat t)
+      | Some (OFFSETINT n) -> Printf.sprintf "OFFSETINT %d" (Z.to_nat n)
+      | Some DIVINT -> "DIVINT"
+      | Some ADDINT -> "ADDINT"
+      | Some SUBINT -> "SUBINT"
+      | Some MULINT -> "MULINT"
+      | Some EQ -> "EQ"
+      | Some NEQ -> "NEQ"
+      | Some LTINT -> "LTINT"
+      | Some GEINT -> "GEINT"
+      | Some GTINT -> "GTINT"
+      | Some LEINT -> "LEINT"
+      | Some ISINT -> "ISINT"
+      | Some NEGINT -> "NEGINT"
+      | Some RAISE -> "RAISE"
+      | Some RERAISE -> "RERAISE"
+      | Some RAISE_NOTRACE -> "RAISE_NOTRACE"
       | Some _ -> "other"
       | None -> Printf.sprintf "OUT_OF_BOUNDS(pc=%d,len=%d)" !s.pc (List.length code)
     in
-    Printf.printf "Step %d: pc=%d [%s] stack=%d accu=%s\n%!" i !s.pc instr_str (List.length !s.stack) (show_value !s.accu);
-    match step code !s with
+    let cur_trap = !s.trap_sp in
+    if cur_trap <> !prev_trap_sp then begin
+      Printf.printf "  [trap_sp: %d -> %d at step %d pc=%d]\n%!" !prev_trap_sp cur_trap !i !s.pc;
+      prev_trap_sp := cur_trap
+    end;
+    if not silent then
+      Printf.printf "Step %d: pc=%d [%s] stack=%d accu=%s trap=%d\n%!" !i !s.pc instr_str (List.length !s.stack) (show_value !s.accu) cur_trap;
+    (match step code !s with
     | Step s' -> s := s'
-    | Halt v -> Printf.printf "  HALT: %s\nOutput: %S\n" (show_value v) (Buffer.contents buf); exit 0
-    | Error msg -> Printf.printf "  ERROR: %s\n" (string_of_chars msg); exit 1
+    | Halt v ->
+      Printf.printf "Step %d: HALT: %s\nOutput: %S\n" !i (show_value v) (Buffer.contents buf); exit 0
+    | Error msg ->
+      Printf.printf "Step %d: pc=%d [%s] ERROR: %s\nAccu: %s\nStack top: %s\ntrap_sp: %d\nstack_len: %d\n"
+        !i !s.pc instr_str (string_of_chars msg)
+        (show_value !s.accu)
+        (match !s.stack with v :: _ -> show_value v | [] -> "empty")
+        !s.trap_sp
+        (List.length !s.stack);
+      exit 1
     | CCall_request (idx, args, cont) ->
-      match handler idx args with
-      | Some v -> s := set_accu cont v
-      | None -> Printf.printf "  CCALL FAILED\n"; exit 1
+      (match handler idx args cont with
+      | Some v ->
+        s := { (set_accu cont v) with
+               hp = !heap_ref; next_addr = !next_addr_ref }
+      | None ->
+        (match !pending_raise_ref with
+         | Some exn ->
+           let cont' = { cont with hp = !heap_ref; next_addr = !next_addr_ref } in
+           (match _perform_raise cont' exn with
+            | Step s' -> s := s'
+            | Halt v -> Printf.printf "Step %d: HALT: %s\nOutput: %S\n" !i (show_value v) (Buffer.contents buf); exit 0
+            | Error msg ->
+              Printf.printf "Step %d: RAISE ERROR: %s\n" !i (string_of_chars msg); exit 1
+            | CCall_request _ -> Printf.printf "Step %d: NESTED CCALL IN RAISE\n" !i; exit 1)
+         | None -> Printf.printf "Step %d: CCALL FAILED\n" !i; exit 1)));
+    if silent && !i mod 100000 = 0 then
+      Printf.eprintf "... %d steps, pc=%d\n%!" !i !s.pc
   done;
   Printf.printf "Stopped after %d steps. Output so far: %S\n" max (Buffer.contents buf)

@@ -20,6 +20,12 @@ Definition word_bits := 63.
 Definition z_unsigned (a : Z) : Z := Z.land a (Z.ones word_bits).
 Definition z_lsr (a b : Z) : Z := Z.shiftr (z_unsigned a) b.
 
+(* XOR with 2^(word_bits-1) flips the sign bit, converting signed↔unsigned order.
+   This works in both Rocq Z arithmetic and extracted OCaml int:
+   in OCaml, (1 lsl 62) = min_int, and (a lxor min_int) gives the unsigned comparison trick.
+   Used to implement BULTINT/BUGEINT/ULTINT/UGEINT with correct unsigned semantics. *)
+Definition z_flip_sign (a : Z) : Z := Z.lxor a (Z.shiftl 1 (word_bits - 1)).
+
 Definition get_code_ptr_from (fields : list value) (ofs : nat) : option Z :=
   match nth_error fields ofs with
   | Some (Val_int pc) => Some pc
@@ -47,6 +53,30 @@ Definition get_code_ptr_s (s : state) (v : value) : option Z :=
 Definition st (s : state) (pc : Z) (accu : value) (stack : list value)
   (env : value) (ea : nat) (glob : list value) (tsp : nat) : state :=
   mk_state pc accu stack env ea glob tsp s.(hp) s.(next_addr).
+
+(* Predefined exception values (tag=248, fields=[name_string, unique_id]).
+   Ids match OCaml runtime: Division_by_zero=-6. *)
+Definition make_exn_string (chars : list Z) : value :=
+  Val_block 252 (List.map Val_int chars).
+
+(* "Division_by_zero" ASCII codes *)
+Definition div_by_zero_exn : value :=
+  Val_block 248 [make_exn_string [68;105;118;105;115;105;111;110;95;98;121;95;122;101;114;111];
+                 Val_int (-6)].
+
+(* Perform the RAISE operation with a given exception value.
+   Mirrors interp.c: sp = trap_sp; pc = handler_pc; env = env; extra_args = ea; sp+=4. *)
+Definition do_raise (exn : value) (s : state) : step_result :=
+  if Nat.eqb s.(trap_sp) 0 then Error "unhandled exception"
+  else
+    let k := Nat.sub (length s.(stack)) s.(trap_sp) in
+    let frame_top := skipn k s.(stack) in
+    match frame_top with
+    | Val_int handler_pc :: Val_int prev_tsp :: saved_env :: Val_int saved_ea :: rest =>
+      Step (mk_state handler_pc exn rest saved_env (Z.to_nat saved_ea) s.(global)
+                     (Z.to_nat prev_tsp) s.(hp) s.(next_addr))
+    | _ => Error "RAISE: malformed trap frame"
+    end.
 
 Definition step (code : list instruction) (s : state) : step_result :=
   match nth_error code (Z.to_nat s.(pc)) with
@@ -407,7 +437,13 @@ Definition step (code : list instruction) (s : state) : step_result :=
     | _ => Error "MAKEBLOCK3: stack underflow"
     end
 
-  | MAKEFLOATBLOCK _ => Error "MAKEFLOATBLOCK: not supported"
+  (* MAKEFLOATBLOCK n: accu=field0, pop (n-1) from stack.
+     Use tag 254 (double array) to hold float fields. *)
+  | MAKEFLOATBLOCK n =>
+    let fields := s.(accu) :: firstn (Nat.sub n 1) s.(stack) in
+    let new_stack := skipn (Nat.sub n 1) s.(stack) in
+    let '(s', ptr) := heap_alloc s 254 fields in
+    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
 
   | GETFIELD n =>
     match field_or_heap s s.(accu) n with
@@ -415,7 +451,12 @@ Definition step (code : list instruction) (s : state) : step_result :=
     | None => Error "GETFIELD: access failed"
     end
 
-  | GETFLOATFIELD _ => Error "GETFLOATFIELD: not supported"
+  (* GETFLOATFIELD n: accu is a float array (tag 254), get field n. *)
+  | GETFLOATFIELD n =>
+    match field_or_heap s s.(accu) n with
+    | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | None => Error "GETFLOATFIELD: access failed"
+    end
 
   | SETFIELD n =>
     match s.(stack) with
@@ -437,7 +478,26 @@ Definition step (code : list instruction) (s : state) : step_result :=
     | _ => Error "SETFIELD: stack underflow"
     end
 
-  | SETFLOATFIELD _ => Error "SETFLOATFIELD: not supported"
+  (* SETFLOATFIELD n: stack top is the float array (tag 254), accu is the new float value. *)
+  | SETFLOATFIELD n =>
+    match s.(stack) with
+    | arr_val :: rest =>
+      match arr_val with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          match set_nth fields n s.(accu) with
+          | Some new_fields =>
+            let new_hp := heap_update s.(hp) addr new_fields in
+            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+          | None => Error "SETFLOATFIELD: index out of bounds"
+          end
+        | None => Error "SETFLOATFIELD: dangling pointer"
+        end
+      | _ => Error "SETFLOATFIELD: not a heap float array"
+      end
+    | _ => Error "SETFLOATFIELD: stack underflow"
+    end
 
   | VECTLENGTH =>
     match size_or_heap s s.(accu) with
@@ -571,16 +631,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
      handler_pc / prev_trap_sp / env / extra_args from the frame, and jump.
      In interp.c: sp = trapsp; pc = Trap_pc(sp); trapsp = sp+link; env=sp[2]; ea=sp[3]; sp+=4. *)
   | RAISE | RERAISE | RAISE_NOTRACE =>
-    if Nat.eqb s.(trap_sp) 0 then Error "unhandled exception"
-    else
-      let k := Nat.sub (length s.(stack)) s.(trap_sp) in
-      let frame_top := skipn k s.(stack) in
-      match frame_top with
-      | Val_int handler_pc :: Val_int prev_tsp :: saved_env :: Val_int saved_ea :: rest =>
-        Step (mk_state handler_pc s.(accu) rest saved_env (Z.to_nat saved_ea) s.(global)
-                       (Z.to_nat prev_tsp) s.(hp) s.(next_addr))
-      | _ => Error "RAISE: malformed trap frame"
-      end
+    do_raise s.(accu) s
 
   | CHECK_SIGNALS =>
     Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
@@ -626,7 +677,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | DIVINT =>
     match s.(accu), s.(stack) with
     | Val_int a, Val_int b :: rest =>
-      if Z.eqb b 0 then Error "DIVINT: division by zero"
+      if Z.eqb b 0 then do_raise div_by_zero_exn s
       else Step (st s pc' (Val_int (Z.quot a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _, _ => Error "DIVINT: type error or stack underflow"
     end
@@ -634,7 +685,7 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | MODINT =>
     match s.(accu), s.(stack) with
     | Val_int a, Val_int b :: rest =>
-      if Z.eqb b 0 then Error "MODINT: division by zero"
+      if Z.eqb b 0 then do_raise div_by_zero_exn s
       else Step (st s pc' (Val_int (Z.rem a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _, _ => Error "MODINT: type error or stack underflow"
     end
@@ -732,9 +783,90 @@ Definition step (code : list instruction) (s : state) : step_result :=
   | ISINT =>
     Step (st s pc' (if is_int s.(accu) then val_true else val_false) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
 
-  | GETMETHOD => Error "GETMETHOD: OO not supported"
-  | GETPUBMET _ => Error "GETPUBMET: OO not supported"
-  | GETDYNMET => Error "GETDYNMET: OO not supported"
+  (* GETMETHOD: accu is the method index, stack top is the object.
+     Look up method at position accu in the object's class table. *)
+  | GETMETHOD =>
+    match s.(stack) with
+    | obj :: _ =>
+      match field_or_heap s obj 0 with
+      | Some class_tbl =>
+        match s.(accu) with
+        | Val_int n =>
+          match field_or_heap s class_tbl (Z.to_nat n) with
+          | Some method_fn => Step (st s pc' method_fn s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+          | None => Error "GETMETHOD: method not found"
+          end
+        | _ => Error "GETMETHOD: not an integer index"
+        end
+      | None => Error "GETMETHOD: no class table"
+      end
+    | _ => Error "GETMETHOD: stack underflow"
+    end
+
+  (* OCaml class table layout (from caml_get_public_method):
+     meths[0] = count (index of last+1 tag slot, always odd).
+     meths[1] = padding (0).
+     meths[2k]   = closure of method k (even indices >= 2).
+     meths[2k+1] = tag    of method k (odd  indices >= 3).
+     The method for tag T is found by scanning pairs (closure, tag) starting
+     after the first two header words. *)
+  | GETPUBMET tag =>
+    let new_stack := s.(accu) :: s.(stack) in
+    match field_or_heap s s.(accu) 0 with
+    | Some class_tbl =>
+      (* collect all fields of class_tbl *)
+      let fields :=
+        match class_tbl with
+        | Val_block _ fs => fs
+        | Val_ptr addr => match heap_lookup s.(hp) addr with Some (_, fs) => fs | None => [] end
+        | _ => []
+        end
+      in
+      (* Linear scan: skip meths[0] (count) and meths[1] (padding),
+         then scan pairs (closure, tag). *)
+      let fix scan (remaining : list value) : step_result :=
+        match remaining with
+        | [] => Error "GETPUBMET: method not found"
+        | _ :: [] => Error "GETPUBMET: method not found"
+        | method_fn :: tag_val :: rest =>
+          if value_eqb tag_val (Val_int tag) then
+            Step (st s pc' method_fn new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+          else scan rest
+        end
+      in scan (skipn 2 fields)
+    | None => Error "GETPUBMET: no class table"
+    end
+
+  (* GETDYNMET: accu is method tag (val), stack top is object. *)
+  | GETDYNMET =>
+    match s.(stack) with
+    | obj :: _ =>
+      let tag := s.(accu) in
+      match field_or_heap s obj 0 with
+      | Some class_tbl =>
+        let fields :=
+          match class_tbl with
+          | Val_block _ fs => fs
+          | Val_ptr addr => match heap_lookup s.(hp) addr with Some (_, fs) => fs | None => [] end
+          | _ => []
+          end
+        in
+        (* Linear scan: skip meths[0] (count) and meths[1] (padding),
+           then scan pairs (closure, tag). *)
+        let fix scan (remaining : list value) : step_result :=
+          match remaining with
+          | [] => Error "GETDYNMET: method not found"
+          | _ :: [] => Error "GETDYNMET: method not found"
+          | method_fn :: tag_val :: rest =>
+            if value_eqb tag_val tag then
+              Step (st s pc' method_fn s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+            else scan rest
+          end
+        in scan (skipn 2 fields)
+      | None => Error "GETDYNMET: no class table"
+      end
+    | _ => Error "GETDYNMET: stack underflow"
+    end
 
   (* B-comparison instructions: the spec says "increments pc by ofs-1 if val CMP accu".
      In interp.c the operand is an absolute instruction index (after decode). *)
@@ -742,14 +874,16 @@ Definition step (code : list instruction) (s : state) : step_result :=
     match s.(accu) with
     | Val_int a => if Z.eqb a n then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
                    else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-    | _ => Error "BEQ: not an integer"
+    (* Non-integer values are never equal to Val_int n, so don't branch *)
+    | _ => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
     end
 
   | BNEQ n target =>
     match s.(accu) with
     | Val_int a => if Z.eqb a n then Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
                    else Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-    | _ => Error "BNEQ: not an integer"
+    (* Non-integer values are never equal to Val_int n, so always branch *)
+    | _ => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
     end
 
   (* B-comparison instructions: semantics is *pc++ CMP Long_val(accu),
@@ -785,26 +919,29 @@ Definition step (code : list instruction) (s : state) : step_result :=
 
   | ULTINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (z_unsigned a <? z_unsigned b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (Z.ltb (z_flip_sign a) (z_flip_sign b))) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _, _ => Error "ULTINT: type error or stack underflow"
     end
 
   | UGEINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (z_unsigned a >=? z_unsigned b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (Z.geb (z_flip_sign a) (z_flip_sign b))) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _, _ => Error "UGEINT: type error or stack underflow"
     end
 
+  (* BULTINT(n, target): branch if n < accu (unsigned). "n is ULT the integer accu."
+     BUGEINT(n, target): branch if n >= accu (unsigned). "n is UGE the integer accu."
+     Like signed B-ops (which use n CMP accu), both use z_flip_sign for unsigned order. *)
   | BULTINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.ltb (z_unsigned n) (z_unsigned a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.ltb (z_flip_sign n) (z_flip_sign a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
                    else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _ => Error "BULTINT: not an integer"
     end
 
   | BUGEINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.geb (z_unsigned n) (z_unsigned a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.geb (z_flip_sign n) (z_flip_sign a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
                    else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _ => Error "BUGEINT: not an integer"
     end
