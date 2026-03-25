@@ -1,9 +1,0 @@
-(coq.theory
- (name OCamlInterp.Manual.Checker)
- (theories Stdlib
-  OCamlInterp.Manual.Utils
-  OCamlInterp.Manual.Bytecode
-  OCamlInterp.Manual.Compile
-  OCamlInterp.SemiAutomatic.Interpret
-  OCamlInterp.Automatic.Compile
-  OCamlInterp.Automatic.Bytecode))

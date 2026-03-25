@@ -22,3 +22,51 @@
     3. Also `interpret` and `process∘interpret∘extract(interpret src)`
 8. [Auto] To formally verify `ocamlc`: as `ocamlc` comes into scope, [Manual] require a proof that `compile` and `process∘interpret(ocamlc src)` behave the same
 9. [Manual] Set up a Dockerfile and graders for all of these tasks, harden against exploits that involve modifying the testing infra
+
+
+Section 1:
+manual/theories/Bytecode:
+IO.v - use os; disk to bytes [ReadFile]
+Encode.v - AST to bytes
+DecodeSpec.v - describes the verification of a proof that Encode.v and Decode.v are the same reversed
+AST.v - contains AST data structure
+Interpret.v - AST to syscalls
+IO.v - use os; syscalls to real world [Output]
+Main.v - creates a pipeline with the first IO.v function, Decoder.v (mentioned later), Interpret.v, and the second IO.v to go from disk to real world
+
+manual/test/bytecode-pbt:
+harness.ml - runs a PBT between Main.v and ocamlrun and confirms that they do the same thing
+
+automatic/Bytecode:
+Decode.v - bytes to AST (reverse of Encode.v)
+DecodeProof.v - proof that matches the DecodeSpec.v specification that Decode.v is correct
+
+Section 2:
+automatic/LexParse/LexParse.v - string to AST
+semi-auto/LexParse/PrettyPrint.v - AST to string
+manual/theories/LexParse/LexParseSpec.v - checks whether LexParseProof.v proves that LexParse.v and PrettyPrint.v round trip
+automatic/LexParse/LexParseProof.v - proof that LexParse.v and PrettyPrint.v round trip
+
+Section 3-5:
+automatic/Compile/Compile.v - compiler (can use LexParse.v if desired)
+semi-auto/Interpret/Interpret.v - interpreter
+manual/theories/Compile/CompileSpec.v - forall source, interpret(source) = (interpret-bytecode∘compile)(source)
+automatic/Compile/CompileProof.v - proof of CompileSpec.v
+manual/test/compile-pbt/harness.ml - runs a PBT between Compile.v and ocamlc
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,5 +1,12 @@
-(executables
- (names compile_test bytecode_equiv_test roundtrip_test)
+(library
+ (name pbt_common)
+ (libraries unix)
+ (flags (:standard -w -a))
+ (wrapped false)
+ (modules interp_extracted))
+
+(executable
+ (name harness)
  (libraries unix qcheck-core qcheck-core.runner pbt_common)
  (flags (:standard -w -a))
- (modules compile_test bytecode_equiv_test roundtrip_test lexer parser))
+ (modules harness))
