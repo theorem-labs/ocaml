@@ -8803,6 +8803,13 @@ let apply_builtin b arg out =
     (match arg with
      | SVal_int n0 -> Some (SVal_unit, (app (rev (z_to_events n0)) out))
      | _ -> None)
+  | Bi_print_string ->
+    (match arg with
+     | SVal_tuple l ->
+       (match l with
+        | [] -> Some (SVal_unit, out)
+        | _ :: _ -> None)
+     | _ -> None)
   | Bi_print_newline ->
     (match arg with
      | SVal_unit ->
@@ -8812,6 +8819,10 @@ let apply_builtin b arg out =
   | Bi_print_char ->
     (match arg with
      | SVal_int c -> Some (SVal_unit, (c :: out))
+     | _ -> None)
+  | Bi_compare ->
+    (match arg with
+     | SVal_int _ -> Some ((SVal_int 0), out)
      | _ -> None)
   | Bi_fst ->
     (match arg with
@@ -8828,7 +8839,6 @@ let apply_builtin b arg out =
                       | [] -> None
                       | b0 :: _ -> Some (b0, out)))
      | _ -> None)
-  | _ -> None
 
 (** val stdlib_env : env0 **)
 

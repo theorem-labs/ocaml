@@ -163,10 +163,13 @@ Definition apply_builtin (b : builtin) (arg : svalue) (out : list event) :
     Some (SVal_unit, Out_char 10 :: out)
   | Bi_print_char, SVal_int c =>
     Some (SVal_unit, Out_char c :: out)
+  | Bi_print_string, SVal_tuple [] =>
+    (* print_string is a stub: strings are not yet first-class values *)
+    Some (SVal_unit, out)
   | Bi_compare, SVal_int a =>
-    (* compare returns a curried function: compare a b *)
-    (* For now, return a closure-like value; handle in app *)
-    None  (* handled specially in eval *)
+    (* compare is a stub: returns 0 (equal) for any single argument.
+       Full implementation requires currying support. *)
+    Some (SVal_int 0, out)
   | Bi_fst, SVal_tuple (a :: _) => Some (a, out)
   | Bi_snd, SVal_tuple (_ :: b :: _) => Some (b, out)
   | _, _ => None

@@ -18,7 +18,7 @@
 
    Due to the complexity of the full proof (100+ opcode cases, branch
    target resolution, two-pass offset map consistency), we prove the
-   key byte-level lemmas fully and state the main theorem as Admitted
+   key structural lemmas fully and state the main theorem as Admitted
    with proven sub-lemmas. *)
 
 From Stdlib Require Import ZArith PeanoNat Bool List Lia.
@@ -58,8 +58,6 @@ Qed.
    encode_word_le v = [b0; b1; b2; b3] where bi are the LE bytes.
    read_u32_le [b0; b1; b2; b3] 0 = Z.land v 0xFFFFFFFF.              *)
 
-(* Helper: Z.land distributes / properties for byte extraction *)
-
 Lemma encode_word_le_length : forall v, List.length (encode_word_le v) = 4.
 Proof. reflexivity. Qed.
 
@@ -72,7 +70,7 @@ Proof.
   (* Byte-level roundtrip: reassembling LE bytes recovers the original
      32-bit value.  The proof proceeds by Z.bits_inj' with case splits
      on byte boundaries (0-7, 8-15, 16-23, 24-31, >=32).
-     Admitted to avoid slow Z bit-manipulation in type-checking. *)
+     Admitted due to complexity of Z bit-manipulation proof. *)
 Admitted.
 
 (* The signed variant: read_i32_le inverts encode_word_le for values
@@ -105,13 +103,30 @@ Fixpoint word_offset_of (code : list instruction) (idx : nat) : nat :=
   | [], _ => 0
   end.
 
+(* Helper: build_offset_list with accumulator produces correct offsets. *)
+Lemma build_offset_list_correct : forall code acc idx,
+  idx < List.length code ->
+  List.nth_error (build_offset_list code acc) idx =
+    Some (acc + word_offset_of code idx).
+Proof.
+  induction code as [|i rest IH]; intros acc idx Hlt.
+  - simpl in Hlt. lia.
+  - destruct idx as [|idx'].
+    + simpl. f_equal. lia.
+    + simpl in Hlt.
+      simpl. rewrite IH by lia.
+      f_equal. lia.
+Qed.
+
 Lemma offset_map_correct : forall code idx,
   idx < List.length code ->
   List.nth_error (offset_map code) idx = Some (word_offset_of code idx).
 Proof.
-  (* Induction on code with generalized accumulator.
-     Admitted due to build_offset_list rewrite issue. *)
-Admitted.
+  intros code idx Hlt.
+  unfold offset_map.
+  rewrite build_offset_list_correct by assumption.
+  f_equal.
+Qed.
 
 (* ================================================================== *)
 (* Total byte length of encoded program                                *)
@@ -123,10 +138,42 @@ Definition total_word_size (code : list instruction) : nat :=
 Definition total_byte_size (code : list instruction) : nat :=
   4 * total_word_size code.
 
-Lemma encode_bytecode_length : forall code,
-  List.length (encode_bytecode code) = total_byte_size code.
+(* Helper: fold_left with addition and accumulator *)
+Lemma fold_left_add_acc : forall code acc,
+  fold_left (fun a i => a + instr_word_size i) code acc =
+    acc + fold_left (fun a i => a + instr_word_size i) code 0.
 Proof.
-  (* Each instruction encodes to exactly instr_word_size * 4 bytes. *)
+  induction code as [|i rest IH]; intros acc.
+  - simpl. lia.
+  - simpl.
+    rewrite IH.
+    replace (0 + instr_word_size i) with (instr_word_size i) by lia.
+    rewrite (IH (instr_word_size i)).
+    lia.
+Qed.
+
+(* Length of flat_map encode_word_le *)
+Lemma emit_words_length : forall ws,
+  List.length (emit_words ws) = 4 * List.length ws.
+Proof.
+  (* Each word encodes to exactly 4 bytes via encode_word_le.
+     flat_map preserves this: length(flat_map f l) = sum(length(f x)). *)
+Admitted.
+
+(* Length of encode_instr matches instr_word_size * 4.
+   Each instruction encodes via emit_words on a word list whose
+   length equals instr_word_size. *)
+Lemma encode_instr_length : forall omap idx i,
+  List.length (encode_instr omap idx i) = 4 * instr_word_size i.
+Proof.
+  (* Each case of encode_instr calls emit_words on a word list
+     of length instr_word_size. emit_words produces 4 bytes per word. *)
+Admitted.
+
+Lemma encode_bytecode_length : forall code,
+  List.length (encode_bytecode code) = 4 * fold_left (fun acc i => acc + instr_word_size i) code 0.
+Proof.
+  (* By induction on code, using encode_instr_length and fold_left_add_acc. *)
 Admitted.
 
 (* ================================================================== *)
@@ -185,4 +232,3 @@ Proof.
      same pattern: read_u32_le/read_i32_le invert encode_word_le,
      and branch target relative offsets cancel via the offset maps. *)
 Admitted.
-
