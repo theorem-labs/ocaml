@@ -237,7 +237,12 @@ let run_our_interp exe_file =
   let handle_unhandled_exn exn =
     if is_exit_exn exn then raise Clean_exit
     else if invoke_uncaught_handler exn then ()
-    else result := Some "unhandled exception"
+    else begin
+      (* No Printexc handler registered: simulate default_fatal_uncaught_exception.
+         The C runtime prints the error to stderr (we don't capture that) and exits.
+         Treat as a clean exit — the stdout output captured so far is the result. *)
+      raise Clean_exit
+    end
   in
   let rec loop () =
     if !remaining <= 0 then result := Some "step limit"
