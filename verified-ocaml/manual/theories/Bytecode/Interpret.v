@@ -501,15 +501,15 @@ Definition step (code : array instruction) (s : state) : step_result :=
     | _ => Error "SETFIELD: stack underflow"
     end
 
-  (* SETFLOATFIELD n: stack top is the float array (tag 254), accu is the new float value. *)
+  (* SETFLOATFIELD n: accu is the float array (tag 254), sp[0] is the new float value. *)
   | SETFLOATFIELD n =>
     match s.(stack) with
-    | arr_val :: rest =>
-      match arr_val with
+    | newval :: rest =>
+      match s.(accu) with
       | Val_ptr addr =>
         match heap_lookup s.(hp) addr with
         | Some (_, fields) =>
-          match set_nth fields n s.(accu) with
+          match set_nth fields n newval with
           | Some new_fields =>
             let new_hp := heap_update s.(hp) addr new_fields in
             Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))

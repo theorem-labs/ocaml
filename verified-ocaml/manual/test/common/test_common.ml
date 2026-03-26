@@ -1526,7 +1526,9 @@ let make_handler ?(raw_globals=[||]) prims buf =
        | None ->
          let failure = exn_desc "Failure" (-5) in
          ccall_raise failure)
-    | _ -> Some (Val_int 0)
+    | _ ->
+      Printf.eprintf "WARNING: unimplemented C-call %S (idx=%d, %d args)\n%!" name idx (List.length args);
+      None
   in
   (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value)
 
@@ -1543,7 +1545,9 @@ let run_our_compiler prog =
     | 1, [_] ->
       Buffer.add_char buf '\n';
       Some (Val_int 0)
-    | _ -> Some (Val_int 0)
+    | _ ->
+      Printf.eprintf "WARNING: unimplemented C-call idx=%d (%d args) in run_our_compiler\n%!" idx (List.length args);
+      None
   in
   let s = ref (initial_state []) in
   let remaining = ref 1000000 in
