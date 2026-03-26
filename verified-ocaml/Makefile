@@ -145,11 +145,11 @@ RUNNER = _build/default/manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
 
 testsuite: extract
 	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
-	ulimit -s unlimited && $(RUNNER) $(TESTSUITE_BASIC)
+	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC)
 
 testsuite-all: extract
 	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
-	ulimit -s unlimited && $(RUNNER) $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
+	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
 
 dashboard: extract
 	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
