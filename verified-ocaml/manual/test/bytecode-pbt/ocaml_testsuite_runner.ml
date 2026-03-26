@@ -5,8 +5,11 @@
    3. Run bytecode through our interpreter to get actual output
    4. Compare outputs
 
-   Usage: ocaml_testsuite_runner.exe [directory ...]
-   If no directories given, runs on test/ocaml-testsuite/basic *)
+   Usage: ocaml_testsuite_runner.exe [--skip-conf FILE] [--dashboard FILE] [directory ...]
+   If no directories given, runs on test/ocaml-testsuite/basic
+
+   --skip-conf FILE   Read skip list from FILE (default: testsuite.conf in project root)
+   --dashboard FILE   Write dashboard results to FILE after running *)
 
 open Test_common
 
@@ -97,7 +100,7 @@ let parse_test_header path =
     let content = Bytes.sub_string buf 0 n in
     (* Find (* TEST ... *) at start of file *)
     let test_start = "(* TEST" in
-    let test_end = "*)" in
+    let _test_end = "*)" in
     if not (String.length content >= String.length test_start &&
             String.sub content 0 (String.length test_start) = test_start) then
       empty_header
@@ -180,13 +183,12 @@ let run_our_interp exe_file =
   let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
   let prims = load_prims data sections in
   let buf = Buffer.create 256 in
-  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value, minor_words_ref, last_next_addr_ref) = make_handler ~raw_globals ~globals_list:globals prims buf in
+  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value) = make_handler ~raw_globals ~globals_list:globals prims buf in
   let open Interp_extracted in
   (* Initialize state with pre-populated heap for mutable global objects *)
   let s = ref { (initial_state globals) with hp = init_heap; next_addr = init_next_addr } in
   heap_ref := init_heap;
   next_addr_ref := init_next_addr;
-  last_next_addr_ref := init_next_addr;
   let remaining = ref step_limit in
   let result = ref None in
   let deadline = Unix.gettimeofday () +. interp_timeout in
@@ -254,7 +256,7 @@ let run_our_interp exe_file =
     else begin
       (* No Printexc handler registered: simulate default_fatal_uncaught_exception.
          The C runtime prints the error to stderr (we don't capture that) and exits.
-         Treat as a clean exit — the stdout output captured so far is the result. *)
+         Treat as a clean exit -- the stdout output captured so far is the result. *)
       raise Clean_exit
     end
   in
@@ -279,22 +281,9 @@ let run_our_interp exe_file =
         | CCall_request (idx, args, cont) ->
           heap_ref := cont.hp;
           next_addr_ref := cont.next_addr;
-          (* Count words allocated by the interpreter (MAKEBLOCK etc.) since last C-call *)
-          let prev_addr = !last_next_addr_ref in
-          let cur_addr = cont.next_addr in
-          if cur_addr > prev_addr then begin
-            for a = prev_addr to cur_addr - 1 do
-              match heap_lookup cont.hp a with
-              | Some (_, fields) ->
-                minor_words_ref := !minor_words_ref +. float_of_int (1 + List.length fields)
-              | None -> ()
-            done
-          end;
-          last_next_addr_ref := cur_addr;
           pending_raise_ref := None;
           (match handler idx args with
            | Some v ->
-             last_next_addr_ref := !next_addr_ref;
              s := { cont with accu = v;
                     hp = !heap_ref; next_addr = !next_addr_ref };
              loop ()
@@ -304,7 +293,6 @@ let run_our_interp exe_file =
                 (* Check for sys_exit sentinel before trying to raise *)
                 if is_exit_exn exn then raise Clean_exit
                 else begin
-                  last_next_addr_ref := !next_addr_ref;
                   let cont' = { cont with hp = !heap_ref; next_addr = !next_addr_ref } in
                   (match perform_raise cont' exn with
                    | Step s' -> s := s'; loop ()
