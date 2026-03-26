@@ -2,6 +2,6 @@
 \begin{rocqcode}[firstnumber=758]
   | NEQ =>
     match s.(stack) with
-    | b :: rest => Step (st s pc' (if value_eqb s.(accu) b then val_false else val_true) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | b :: rest => Step (st s pc' (if value_phys_eqb s.(accu) b then val_false else val_true) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _ => Error "NEQ: stack underflow"
 \end{rocqcode}

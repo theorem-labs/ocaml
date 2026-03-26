@@ -13,6 +13,7 @@ Output:
     snippets/c/<INSTR>.tex      -- C code for each instruction
 """
 
+import json
 import os
 import re
 import sys
@@ -28,9 +29,11 @@ ALT_INTERP_V_PATHS = [
     os.path.join(SCRIPT_DIR, "..", "..", "manual", "theories", "Bytecode", "Interpret.v"),
 ]
 DEFAULT_INTERP_C = os.path.join(SCRIPT_DIR, "interp.c")
+DEFAULT_PDF = os.path.join(SCRIPT_DIR, "caml-instructions.pdf")
 
 ROCQ_OUT = os.path.join(SCRIPT_DIR, "snippets", "rocq")
 C_OUT = os.path.join(SCRIPT_DIR, "snippets", "c")
+PDF_OUT = os.path.join(SCRIPT_DIR, "snippets", "pdf")
 
 # All instructions from AST.v (canonical names, uppercase)
 ALL_INSTRUCTIONS = [
@@ -296,6 +299,160 @@ def write_snippet(outdir, instr_name, start_line, lines, lang):
         f.write(f"\\end{{{env}}}\n")
 
 
+# ── PDF spec snippet extraction ─────────────────────────────────────────────
+
+# Map our canonical instruction names to names used in the PDF.
+# The PDF by Xavier Clerc uses hyphens (e.g. C-CALL1) where OCaml uses
+# underscores; some instructions (RERAISE, RAISE_NOTRACE, GETBYTESCHAR,
+# SETBYTESCHAR) were added after the PDF was written, so we fall back to
+# the closest available entry.  OCaml 5.x effect instructions (PERFORM,
+# RESUME, RESUMETERM, REPERFORMTERM) are not present at all.
+CANONICAL_TO_PDF_NAME = {
+    "ACC": "ACC", "PUSH": "PUSH", "PUSHACC": "PUSHACC", "POP": "POP",
+    "ASSIGN": "ASSIGN", "ENVACC": "ENVACC", "PUSHENVACC": "PUSHENVACC",
+    "OFFSETCLOSURE": "OFFSETCLOSURE", "PUSHOFFSETCLOSURE": "PUSHOFFSETCLOSURE",
+    "PUSH_RETADDR": "PUSH-RETADDR",
+    "APPLY": "APPLY", "APPLY1": "APPLY1", "APPLY2": "APPLY2", "APPLY3": "APPLY3",
+    "APPTERM": "APPTERM", "APPTERM1": "APPTERM1",
+    "APPTERM2": "APPTERM2", "APPTERM3": "APPTERM3",
+    "RETURN": "RETURN", "RESTART": "RESTART", "GRAB": "GRAB",
+    "CLOSURE": "CLOSURE", "CLOSUREREC": "CLOSUREREC",
+    "GETGLOBAL": "GETGLOBAL", "PUSHGETGLOBAL": "PUSHGETGLOBAL",
+    "GETGLOBALFIELD": "GETGLOBALFIELD", "PUSHGETGLOBALFIELD": "PUSHGETGLOBALFIELD",
+    "SETGLOBAL": "SETGLOBAL",
+    "ATOM": "ATOM", "PUSHATOM": "PUSHATOM",
+    "MAKEBLOCK": "MAKEBLOCK", "MAKEBLOCK1": "MAKEBLOCK1",
+    "MAKEBLOCK2": "MAKEBLOCK2", "MAKEBLOCK3": "MAKEBLOCK3",
+    "MAKEFLOATBLOCK": "MAKEFLOATBLOCK",
+    "GETFIELD": "GETFIELD", "GETFLOATFIELD": "GETFLOATFIELD",
+    "SETFIELD": "SETFIELD", "SETFLOATFIELD": "SETFLOATFIELD",
+    "VECTLENGTH": "VECTLENGTH", "GETVECTITEM": "GETVECTITEM",
+    "SETVECTITEM": "SETVECTITEM",
+    "GETSTRINGCHAR": "GETSTRINGCHAR",
+    "GETBYTESCHAR": "GETSTRINGCHAR",   # renamed in OCaml 4.06+
+    "SETBYTESCHAR": "SETSTRINGCHAR",   # renamed in OCaml 4.06+
+    "BRANCH": "BRANCH", "BRANCHIF": "BRANCHIF", "BRANCHIFNOT": "BRANCHIFNOT",
+    "SWITCH": "SWITCH", "BOOLNOT": "BOOLNOT",
+    "PUSHTRAP": "PUSHTRAP", "POPTRAP": "POPTRAP",
+    "RAISE": "RAISE", "RERAISE": "RAISE", "RAISE_NOTRACE": "RAISE",
+    "CHECK_SIGNALS": "CHECK-SIGNALS",
+    "C_CALL": "C-CALL1",
+    "CONSTINT": "CONSTINT", "PUSHCONSTINT": "PUSHCONSTINT",
+    "NEGINT": "NEGINT", "ADDINT": "ADDINT", "SUBINT": "SUBINT",
+    "MULINT": "MULINT", "DIVINT": "DIVINT", "MODINT": "MODINT",
+    "ANDINT": "ANDINT", "ORINT": "ORINT", "XORINT": "XORINT",
+    "LSLINT": "LSLINT", "LSRINT": "LSRINT", "ASRINT": "ASRINT",
+    "EQ": "EQ", "NEQ": "NEQ", "LTINT": "LTINT", "LEINT": "LEINT",
+    "GTINT": "GTINT", "GEINT": "GEINT",
+    "OFFSETINT": "OFFSETINT", "OFFSETREF": "OFFSETREF", "ISINT": "ISINT",
+    "GETMETHOD": "GETMETHOD", "GETPUBMET": "GETPUBMET", "GETDYNMET": "GETDYNMET",
+    "BEQ": "BEQ", "BNEQ": "BNEQ", "BLTINT": "BLTINT", "BLEINT": "BLEINT",
+    "BGTINT": "BGTINT", "BGEINT": "BGEINT",
+    "ULTINT": "ULTINT", "UGEINT": "UGEINT", "BULTINT": "BULTINT",
+    "BUGEINT": "BUGEINT",
+    "STOP": "STOP", "EVENT": "EVENT", "BREAK": "BREAK",
+    # Not in the Clerc PDF (OCaml 5.x multicore effects):
+    # "PERFORM", "RESUME", "RESUMETERM", "REPERFORMTERM"
+}
+
+
+def extract_pdf_snippets(pdf_path, out_dir):
+    """Extract per-instruction cropped PNG images from caml-instructions.pdf.
+
+    Requires PyMuPDF (``import fitz``).  Returns a dict mapping canonical
+    instruction name -> PDF page number (1-indexed).
+    """
+    try:
+        import fitz  # PyMuPDF
+    except ImportError:
+        print("Warning: PyMuPDF not installed, skipping PDF snippet extraction",
+              file=sys.stderr)
+        return {}
+
+    doc = fitz.open(pdf_path)
+
+    # Locate every instruction heading: "NAME (opcode: N)"
+    instr_list = []
+    for page_num in range(len(doc)):
+        page = doc[page_num]
+        for block in page.get_text("dict")["blocks"]:
+            if "lines" not in block:
+                continue
+            for line in block["lines"]:
+                text = "".join(span["text"] for span in line["spans"])
+                m = re.match(r'^([A-Z][A-Z0-9_-]+)\s+\(opcode:\s*(\d+)\)', text)
+                if m:
+                    instr_list.append((m.group(1), page_num, block["bbox"][1],
+                                       int(m.group(2))))
+    instr_list.sort(key=lambda x: (x[1], x[2]))
+
+    # Build per-page instruction lists for boundary detection
+    page_instrs = {}
+    for name, pg, y, opc in instr_list:
+        page_instrs.setdefault(pg, []).append((name, y, opc))
+
+    pdf_lookup = {name: (pg, y, opc) for name, pg, y, opc in instr_list}
+    os.makedirs(out_dir, exist_ok=True)
+
+    ZOOM = 2.5  # ~180 DPI
+    page_mapping = {}
+    pdf_name_mapping = {}
+
+    for canonical, pdf_name in CANONICAL_TO_PDF_NAME.items():
+        if pdf_name not in pdf_lookup:
+            continue
+
+        pg, y_top, _opc = pdf_lookup[pdf_name]
+        page = doc[pg]
+        rect = page.rect
+
+        # Bottom boundary: next instruction on same page, or page bottom
+        y_next = rect.y1
+        for _, y2, _ in page_instrs.get(pg, []):
+            if y2 > y_top + 10:
+                y_next = y2 - 5
+                break
+
+        # Content-aware bottom: find lowest text/image block in region,
+        # ignoring the page-number glyph at the foot of each page.
+        max_content_y = y_top + 30
+        for block in page.get_text("dict")["blocks"]:
+            bbox = block["bbox"]
+            if bbox[1] < y_top - 5 or bbox[1] >= y_next:
+                continue
+            if "lines" in block:
+                text = "".join(
+                    span["text"]
+                    for line in block["lines"]
+                    for span in line["spans"]
+                ).strip()
+                if text.isdigit() and len(text) <= 3:
+                    continue  # page number
+            max_content_y = max(max_content_y, bbox[3])
+
+        y_bottom = min(max_content_y + 12, y_next)
+        clip = fitz.Rect(rect.x0 + 15,
+                         max(y_top - 8, rect.y0),
+                         rect.x1 - 15,
+                         min(y_bottom, rect.y1))
+
+        mat = fitz.Matrix(ZOOM, ZOOM)
+        pix = page.get_pixmap(matrix=mat, clip=clip)
+        pix.save(os.path.join(out_dir, f"{canonical}.png"))
+
+        page_mapping[canonical] = pg + 1
+        pdf_name_mapping[canonical] = pdf_name
+
+    # Persist mappings as JSON for other tooling
+    with open(os.path.join(out_dir, "page_mapping.json"), "w") as f:
+        json.dump(page_mapping, f, indent=2, sort_keys=True)
+    with open(os.path.join(out_dir, "pdf_name_mapping.json"), "w") as f:
+        json.dump(pdf_name_mapping, f, indent=2, sort_keys=True)
+
+    doc.close()
+    return page_mapping
+
+
 def write_lines_tex(snippets_dir, rocq_snippets, c_snippets):
     """Write snippets/lines.tex with \\rocqline{INSTR} and \\cline{INSTR} macros."""
     filepath = os.path.join(snippets_dir, "lines.tex")
@@ -316,6 +473,7 @@ def write_lines_tex(snippets_dir, rocq_snippets, c_snippets):
 def main():
     interp_v = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INTERP_V
     interp_c = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_INTERP_C
+    pdf_path = sys.argv[3] if len(sys.argv) > 3 else DEFAULT_PDF
 
     # Try alternative paths if default doesn't exist
     if not os.path.exists(interp_v):
@@ -338,6 +496,16 @@ def main():
         print(f"Extracting C snippets from {interp_c}")
         c_snippets = extract_c_snippets(interp_c)
 
+    # ── PDF spec snippets ───────────────────────────────────────────────
+    if os.path.exists(pdf_path):
+        print(f"Extracting PDF spec snippets from {pdf_path}")
+        pdf_page_map = extract_pdf_snippets(pdf_path, PDF_OUT)
+        pdf_count = len(pdf_page_map)
+    else:
+        print(f"Warning: {pdf_path} not found, skipping PDF snippets", file=sys.stderr)
+        pdf_page_map = {}
+        pdf_count = 0
+
     rocq_count = 0
     c_count = 0
 
@@ -357,15 +525,20 @@ def main():
 
     print(f"Wrote {rocq_count}/{len(ALL_INSTRUCTIONS)} Rocq snippets to {ROCQ_OUT}")
     print(f"Wrote {c_count}/{len(ALL_INSTRUCTIONS)} C snippets to {C_OUT}")
+    if pdf_count:
+        print(f"Wrote {pdf_count}/{len(ALL_INSTRUCTIONS)} PDF spec snippets to {PDF_OUT}")
     print(f"Wrote snippets/lines.tex with line number macros")
 
     # Report missing
     missing_rocq = [i for i in ALL_INSTRUCTIONS if i not in rocq_snippets]
     missing_c = [i for i in ALL_INSTRUCTIONS if i not in c_snippets]
+    missing_pdf = [i for i in ALL_INSTRUCTIONS if i not in pdf_page_map]
     if missing_rocq:
         print(f"Missing Rocq: {', '.join(missing_rocq)}")
     if missing_c:
         print(f"Missing C: {', '.join(missing_c)}")
+    if missing_pdf:
+        print(f"Missing PDF: {', '.join(missing_pdf)}")
 
 
 if __name__ == "__main__":

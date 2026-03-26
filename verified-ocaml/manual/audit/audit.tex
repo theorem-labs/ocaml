@@ -15,6 +15,7 @@
 \usepackage{fancyhdr}
 \usepackage{titlesec}
 \usepackage{xspace}
+\usepackage{graphicx}
 
 \hypersetup{
   colorlinks=true,
@@ -135,6 +136,23 @@
 \newcommand{\cparagraph}[1]{\paragraph{OCaml \texttt{interp.c} (line \clineno{#1}).}}
 \newcommand{\rocqparagraph}[1]{\paragraph{Rocq \texttt{Interpret.v} (line \rocqline{#1}).}}
 
+% PDF spec excerpt (literal image from caml-instructions.pdf).
+% Usage: \pdfspec{ACC}  -- includes snippets/pdf/ACC.png if present.
+% Falls back to a placeholder note when the image is missing.
+\newcommand{\pdfspec}[1]{%
+  \paragraph{PDF Spec.}\leavevmode\par\noindent
+  \IfFileExists{snippets/pdf/#1.png}{%
+    \includegraphics[width=\linewidth,keepaspectratio]{snippets/pdf/#1.png}%
+  }{%
+    \begin{quote}\itshape
+    [PDF spec excerpt not available for \texttt{#1}.
+     Instruction may have been added after the Clerc specification was
+     published, or the PDF has not been downloaded.  Run
+     \texttt{make fetch-pdf snippets} to regenerate.]
+    \end{quote}%
+  }%
+}
+
 % ─── Document ─────────────────────────────────────────────────────────────────
 \ifinternalaudit
   \title{\textbf{Internal Audit: Rocq Bytecode Interpreter vs.\ OCaml 4.14 \texttt{interp.c}}\\[0.3em]
@@ -178,7 +196,8 @@ soundness risk for the entire verification effort.
 For each of the 107 instruction variants defined in \texttt{AST.v}, we:
 
 \begin{enumerate}
-  \item Paraphrase the PDF specification.
+  \item Show the literal excerpt from the Cadmium PDF specification
+    (per-instruction description, parameters, and stack-evolution diagram).
   \item Extract the exact C code from \texttt{interp.c} (OCaml 4.14.2).
   \item Extract the exact Rocq code from \texttt{Interp.v}.
 \ifinternalaudit
@@ -188,8 +207,15 @@ For each of the 107 instruction variants defined in \texttt{AST.v}, we:
 \fi
 \end{enumerate}
 
-Code snippets are auto-extracted by \texttt{extract\_snippets.py} so
-the document stays current as \texttt{Interp.v} evolves.
+Code snippets and PDF spec images are auto-extracted by
+\texttt{extract\_snippets.py} so the document stays current as
+\texttt{Interp.v} evolves.  PDF excerpts are cropped from
+\texttt{caml-instructions.pdf} by Xavier Clerc (available at
+\url{https://cadmium.x9c.fr/distrib/caml-instructions.pdf}).
+Instructions added after the PDF was published (RERAISE, RAISE\_NOTRACE,
+GETBYTESCHAR, SETBYTESCHAR) fall back to the nearest available entry.
+OCaml~5.x effect instructions (PERFORM, RESUME, RESUMETERM,
+REPERFORMTERM) are not covered by this specification.
 
 \subsection{Scope}
 
@@ -298,14 +324,13 @@ offset within a shared closure block, corresponding to the C pointer arithmetic
 % ─── ACC ──────────────────────────────────────────────────────────────────────
 \instruction{ACC}{acc}
 
-\paragraph{PDF Spec.}
-\texttt{ACC $n$}: Sets \texttt{accu} to \texttt{sp[$n$]}.  The specialized
-variants \texttt{ACC0}--\texttt{ACC7} are optimized forms.
+\pdfspec{ACC}
 
 \cparagraph{ACC}
 \csnippet{ACC}
 
-ocqparagraph{ACC}
+
+ocqparagraph{ACC}
 \rocqsnippet{ACC}
 
 \paragraph{Analysis.}
@@ -322,14 +347,13 @@ out-of-bounds; the C version has undefined behavior (buffer overread).
 % ─── PUSH ─────────────────────────────────────────────────────────────────────
 \instruction{PUSH}{push}
 
-\paragraph{PDF Spec.}
-\texttt{PUSH}: Pushes \texttt{accu} onto the stack (\texttt{*-{}-sp = accu}).
-Same as \texttt{PUSHACC0}.
+\pdfspec{PUSH}
 
 \cparagraph{PUSH}
 \csnippet{PUSH}
 
-ocqparagraph{PUSH}
+
+ocqparagraph{PUSH}
 \rocqsnippet{PUSH}
 
 \ifinternalaudit
@@ -345,15 +369,13 @@ Same as \texttt{PUSHACC0}.
 % ─── PUSHACC ──────────────────────────────────────────────────────────────────
 \instruction{PUSHACC}{pushacc}
 
-\paragraph{PDF Spec.}
-\texttt{PUSHACC $n$}: Push \texttt{accu}, then set \texttt{accu = sp[$n$]}
-(where $n$ counts from the \emph{new} stack top).  Specialized forms
-\texttt{PUSHACC1}--\texttt{PUSHACC7}.
+\pdfspec{PUSHACC}
 
 \cparagraph{PUSHACC}
 \csnippet{PUSHACC}
 
-ocqparagraph{PUSHACC}
+
+ocqparagraph{PUSHACC}
 \rocqsnippet{PUSHACC}
 
 \ifinternalaudit
@@ -372,13 +394,13 @@ which is the same indexing.  Exact match.
 % ─── POP ──────────────────────────────────────────────────────────────────────
 \instruction{POP}{pop}
 
-\paragraph{PDF Spec.}
-\texttt{POP $n$}: Pops $n$ values from the stack (\texttt{sp += $n$}).
+\pdfspec{POP}
 
 \cparagraph{POP}
 \csnippet{POP}
 
-ocqparagraph{POP}
+
+ocqparagraph{POP}
 \rocqsnippet{POP}
 
 \ifinternalaudit
@@ -394,13 +416,13 @@ which is the same indexing.  Exact match.
 % ─── ASSIGN ───────────────────────────────────────────────────────────────────
 \instruction{ASSIGN}{assign}
 
-\paragraph{PDF Spec.}
-\texttt{ASSIGN $n$}: Sets \texttt{sp[$n$] = accu}, then \texttt{accu = ()}.
+\pdfspec{ASSIGN}
 
 \cparagraph{ASSIGN}
 \csnippet{ASSIGN}
 
-ocqparagraph{ASSIGN}
+
+ocqparagraph{ASSIGN}
 \rocqsnippet{ASSIGN}
 
 \ifinternalaudit
@@ -424,14 +446,13 @@ which is undefined behavior in C.  Exact match on valid inputs.
 % ─── ENVACC ───────────────────────────────────────────────────────────────────
 \instruction{ENVACC}{envacc}
 
-\paragraph{PDF Spec.}
-\texttt{ENVACC $n$}: Sets \texttt{accu = Field(env, $n$)}.  Specialized
-variants \texttt{ENVACC1}--\texttt{ENVACC4}.
+\pdfspec{ENVACC}
 
 \cparagraph{ENVACC}
 \csnippet{ENVACC}
 
-ocqparagraph{ENVACC}
+
+ocqparagraph{ENVACC}
 \rocqsnippet{ENVACC}
 
 \ifinternalaudit
@@ -450,13 +471,13 @@ accounting for the offset in closures.  Exact match.
 % ─── PUSHENVACC ───────────────────────────────────────────────────────────────
 \instruction{PUSHENVACC}{pushenvacc}
 
-\paragraph{PDF Spec.}
-\texttt{PUSHENVACC $n$}: Push accu, then set \texttt{accu = Field(env, $n$)}.
+\pdfspec{PUSHENVACC}
 
 \cparagraph{PUSHENVACC}
 \csnippet{PUSHENVACC}
 
-ocqparagraph{PUSHENVACC}
+
+ocqparagraph{PUSHENVACC}
 \rocqsnippet{PUSHENVACC}
 
 \ifinternalaudit
@@ -472,16 +493,13 @@ Same pattern as \texttt{PUSH} + \texttt{ENVACC}.  Exact match.
 % ─── OFFSETCLOSURE ────────────────────────────────────────────────────────────
 \instruction{OFFSETCLOSURE}{offsetclosure}
 
-\paragraph{PDF Spec.}
-\texttt{OFFSETCLOSURE $n$}: Sets \texttt{accu = env + $n$ * sizeof(value)}.
-This navigates within a flat closure block to access a different function
-in a mutually recursive group.  Specialized: \texttt{OFFSETCLOSURE0} ($n=0$),
-\texttt{OFFSETCLOSURE3} ($n=3$), \texttt{OFFSETCLOSUREM3} ($n=-3$).
+\pdfspec{OFFSETCLOSURE}
 
 \cparagraph{OFFSETCLOSURE}
 \csnippet{OFFSETCLOSURE}
 
-ocqparagraph{OFFSETCLOSURE}
+
+ocqparagraph{OFFSETCLOSURE}
 \rocqsnippet{OFFSETCLOSURE}
 
 \ifinternalaudit
@@ -505,13 +523,13 @@ always has a closure in \texttt{env} when \texttt{OFFSETCLOSURE} is executed.
 % ─── PUSHOFFSETCLOSURE ────────────────────────────────────────────────────────
 \instruction{PUSHOFFSETCLOSURE}{pushoffsetclosure}
 
-\paragraph{PDF Spec.}
-\texttt{PUSHOFFSETCLOSURE $n$}: Push accu, then \texttt{OFFSETCLOSURE $n$}.
+\pdfspec{PUSHOFFSETCLOSURE}
 
 \cparagraph{PUSHOFFSETCLOSURE}
 \csnippet{PUSHOFFSETCLOSURE}
 
-ocqparagraph{PUSHOFFSETCLOSURE}
+
+ocqparagraph{PUSHOFFSETCLOSURE}
 \rocqsnippet{PUSHOFFSETCLOSURE}
 
 \ifinternalaudit
@@ -532,14 +550,13 @@ Same as \texttt{PUSH} + \texttt{OFFSETCLOSURE}.  Exact match.
 % ─── PUSH_RETADDR ─────────────────────────────────────────────────────────────
 \instruction{PUSH\_RETADDR}{push_retaddr}
 
-\paragraph{PDF Spec.}
-Pushes a return frame \texttt{[pc+ofs, env, extra\_args]} onto the stack,
-preparing for a multi-argument function call.
+\pdfspec{PUSH_RETADDR}
 
 \cparagraph{PUSHOFFSETCLOSURE}
 \csnippet{PUSH_RETADDR}
 
-ocqparagraph{PUSHOFFSETCLOSURE}
+
+ocqparagraph{PUSHOFFSETCLOSURE}
 \rocqsnippet{PUSH_RETADDR}
 
 \ifinternalaudit
@@ -559,15 +576,13 @@ resolves relative offsets), matching the C \texttt{pc + *pc}.  Exact match.
 % ─── APPLY ────────────────────────────────────────────────────────────────────
 \instruction{APPLY}{apply}
 
-\paragraph{PDF Spec.}
-\texttt{APPLY $n$}: Direct call.  Sets \texttt{extra\_args = $n$ - 1},
-\texttt{pc = Code\_val(accu)}, \texttt{env = accu}.  The $n$ arguments
-are already on the stack (pushed by \texttt{PUSH\_RETADDR} sequence).
+\pdfspec{APPLY}
 
 \cparagraph{APPLY}
 \csnippet{APPLY}
 
-ocqparagraph{APPLY}
+
+ocqparagraph{APPLY}
 \rocqsnippet{APPLY}
 
 \ifinternalaudit
@@ -589,14 +604,13 @@ reallocation, which we skip (no stack overflow in our model).
 % ─── APPLY1 ───────────────────────────────────────────────────────────────────
 \instruction{APPLY1}{apply1}
 
-\paragraph{PDF Spec.}
-\texttt{APPLY1}: Call with 1 argument.  Saves return frame inline:
-\texttt{[arg1, pc, env, extra\_args]}, then jumps to closure.
+\pdfspec{APPLY1}
 
 \cparagraph{APPLY1}
 \csnippet{APPLY1}
 
-ocqparagraph{APPLY1}
+
+ocqparagraph{APPLY1}
 \rocqsnippet{APPLY1}
 
 \ifinternalaudit
@@ -614,13 +628,13 @@ Exact match.  \texttt{extra\_args = 0} in both cases.
 % ─── APPLY2 ───────────────────────────────────────────────────────────────────
 \instruction{APPLY2}{apply2}
 
-\paragraph{PDF Spec.}
-\texttt{APPLY2}: Call with 2 arguments.
+\pdfspec{APPLY2}
 
 \cparagraph{APPLY2}
 \csnippet{APPLY2}
 
-ocqparagraph{APPLY2}
+
+ocqparagraph{APPLY2}
 \rocqsnippet{APPLY2}
 
 \ifinternalaudit
@@ -637,13 +651,13 @@ Exact match.
 % ─── APPLY3 ───────────────────────────────────────────────────────────────────
 \instruction{APPLY3}{apply3}
 
-\paragraph{PDF Spec.}
-\texttt{APPLY3}: Call with 3 arguments.
+\pdfspec{APPLY3}
 
 \cparagraph{APPLY3}
 \csnippet{APPLY3}
 
-ocqparagraph{APPLY3}
+
+ocqparagraph{APPLY3}
 \rocqsnippet{APPLY3}
 
 \ifinternalaudit
@@ -659,15 +673,13 @@ Same pattern with 3 args.  \texttt{extra\_args = 2}.  Exact match.
 % ─── APPTERM ──────────────────────────────────────────────────────────────────
 \instruction{APPTERM}{appterm}
 
-\paragraph{PDF Spec.}
-\texttt{APPTERM $n$ $s$}: Tail call.  Slides the top $n$ stack words down
-over a frame of size $s$, then jumps to the closure in \texttt{accu}.
-\texttt{extra\_args += $n$ - 1}.
+\pdfspec{APPTERM}
 
 \cparagraph{APPTERM}
 \csnippet{APPTERM}
 
-ocqparagraph{APPTERM}
+
+ocqparagraph{APPTERM}
 \rocqsnippet{APPTERM}
 
 \ifinternalaudit
@@ -686,13 +698,13 @@ $slotsize - n$ values.  Exact match.
 % ─── APPTERM1 ─────────────────────────────────────────────────────────────────
 \instruction{APPTERM1}{appterm1}
 
-\paragraph{PDF Spec.}
-\texttt{APPTERM1 $s$}: Tail call with 1 argument.
+\pdfspec{APPTERM1}
 
 \cparagraph{APPTERM1}
 \csnippet{APPTERM1}
 
-ocqparagraph{APPTERM1}
+
+ocqparagraph{APPTERM1}
 \rocqsnippet{APPTERM1}
 
 \ifinternalaudit
@@ -710,13 +722,13 @@ Both keep 1 arg and discard the frame.  \texttt{extra\_args} unchanged.  Exact m
 % ─── APPTERM2 ─────────────────────────────────────────────────────────────────
 \instruction{APPTERM2}{appterm2}
 
-\paragraph{PDF Spec.}
-\texttt{APPTERM2 $s$}: Tail call with 2 arguments.
+\pdfspec{APPTERM2}
 
 \cparagraph{APPTERM2}
 \csnippet{APPTERM2}
 
-ocqparagraph{APPTERM2}
+
+ocqparagraph{APPTERM2}
 \rocqsnippet{APPTERM2}
 
 \ifinternalaudit
@@ -732,13 +744,13 @@ Same pattern, 2 args.  \texttt{extra\_args += 1}.  Exact match.
 % ─── APPTERM3 ─────────────────────────────────────────────────────────────────
 \instruction{APPTERM3}{appterm3}
 
-\paragraph{PDF Spec.}
-\texttt{APPTERM3 $s$}: Tail call with 3 arguments.
+\pdfspec{APPTERM3}
 
 \cparagraph{APPTERM3}
 \csnippet{APPTERM3}
 
-ocqparagraph{APPTERM3}
+
+ocqparagraph{APPTERM3}
 \rocqsnippet{APPTERM3}
 
 \ifinternalaudit
@@ -754,15 +766,13 @@ Same pattern, 3 args.  \texttt{extra\_args += 2}.  Exact match.
 % ─── RETURN ───────────────────────────────────────────────────────────────────
 \instruction{RETURN}{return}
 
-\paragraph{PDF Spec.}
-\texttt{RETURN $n$}: Pop $n$ locals.  If \texttt{extra\_args > 0}, decrement
-and tail-call \texttt{accu}; otherwise restore the return frame
-\texttt{[pc, env, extra\_args]}.
+\pdfspec{RETURN}
 
 \cparagraph{RETURN}
 \csnippet{RETURN}
 
-ocqparagraph{RETURN}
+
+ocqparagraph{RETURN}
 \rocqsnippet{RETURN}
 
 \ifinternalaudit
@@ -792,16 +802,13 @@ which is equivalent.  Exact match.
 % ─── RESTART ──────────────────────────────────────────────────────────────────
 \instruction{RESTART}{restart}
 
-\paragraph{PDF Spec.}
-\texttt{RESTART}: Restores partially applied arguments from the current closure
-environment.  The closure layout is \texttt{[code, closinfo, saved\_env, arg0,
-arg1, ...]}.  Extra args from field 3 onward are pushed back onto the stack,
-and \texttt{env} is restored from field 2.
+\pdfspec{RESTART}
 
 \cparagraph{RESTART}
 \csnippet{RESTART}
 
-ocqparagraph{RESTART}
+
+ocqparagraph{RESTART}
 \rocqsnippet{RESTART}
 
 \ifinternalaudit
@@ -828,15 +835,13 @@ offset adjusts the view.  Functionally equivalent.
 % ─── GRAB ─────────────────────────────────────────────────────────────────────
 \instruction{GRAB}{grab}
 
-\paragraph{PDF Spec.}
-\texttt{GRAB $n$}: If \texttt{extra\_args >= $n$}, consume them and continue.
-Otherwise, build a partial application closure containing the saved arguments
-and return to the caller.
+\pdfspec{GRAB}
 
 \cparagraph{GRAB}
 \csnippet{GRAB}
 
-ocqparagraph{GRAB}
+
+ocqparagraph{GRAB}
 \rocqsnippet{GRAB}
 
 \ifinternalaudit
@@ -879,16 +884,13 @@ Both correctly point to \texttt{RESTART}.
 % ─── CLOSURE ──────────────────────────────────────────────────────────────────
 \instruction{CLOSURE}{closure}
 
-\paragraph{PDF Spec.}
-\texttt{CLOSURE $n$ $ofs$}: Build a closure with $n$ environment variables
-and code pointer at \texttt{pc + $ofs$}.  Layout:
-\texttt{[code\_ptr, closinfo, v0, ..., v\_{n-1}]}.
-If $n > 0$, push \texttt{accu} first (it becomes \texttt{v0}).
+\pdfspec{CLOSURE}
 
 \cparagraph{CLOSURE}
 \csnippet{CLOSURE}
 
-ocqparagraph{CLOSURE}
+
+ocqparagraph{CLOSURE}
 \rocqsnippet{CLOSURE}
 
 \ifinternalaudit
@@ -912,18 +914,13 @@ The code offset is pre-resolved in our model (absolute), matching the C
 % ─── CLOSUREREC ───────────────────────────────────────────────────────────────
 \instruction{CLOSUREREC}{closurerec}
 
-\paragraph{PDF Spec.}
-\texttt{CLOSUREREC $nf$ $nv$ [$ofs_0$, ..., $ofs_{nf-1}$]}: Build a flat
-mutual recursion closure block.  Total size is $3 \times nf - 1 + nv$.
-Layout: \texttt{[code0, ci0, infix1, code1, ci1, ..., v0, ..., v\_{nv-1}]}.
-Each function $i$ is accessed at offset $3i$ from the block start.
-The closures are pushed onto the stack in order, with \texttt{accu} set to
-closure 0.
+\pdfspec{CLOSUREREC}
 
 \cparagraph{CLOSUREREC}
 \csnippet{CLOSUREREC}
 
-ocqparagraph{CLOSUREREC}
+
+ocqparagraph{CLOSUREREC}
 \rocqsnippet{CLOSUREREC}
 
 \ifinternalaudit
@@ -978,13 +975,13 @@ pushing them bottom-up.
 % ─── GETGLOBAL ────────────────────────────────────────────────────────────────
 \instruction{GETGLOBAL}{getglobal}
 
-\paragraph{PDF Spec.}
-\texttt{GETGLOBAL $n$}: Sets \texttt{accu = Field(global\_data, $n$)}.
+\pdfspec{GETGLOBAL}
 
 \cparagraph{GETGLOBAL}
 \csnippet{GETGLOBAL}
 
-ocqparagraph{GETGLOBAL}
+
+ocqparagraph{GETGLOBAL}
 \rocqsnippet{GETGLOBAL}
 
 \ifinternalaudit
@@ -1001,13 +998,13 @@ Rocq: \texttt{nth\_error global $n$}.  Direct correspondence.
 % ─── PUSHGETGLOBAL ────────────────────────────────────────────────────────────
 \instruction{PUSHGETGLOBAL}{pushgetglobal}
 
-\paragraph{PDF Spec.}
-\texttt{PUSHGETGLOBAL $n$}: Push accu, then \texttt{GETGLOBAL $n$}.
+\pdfspec{PUSHGETGLOBAL}
 
 \cparagraph{PUSHGETGLOBAL}
 \csnippet{PUSHGETGLOBAL}
 
-ocqparagraph{PUSHGETGLOBAL}
+
+ocqparagraph{PUSHGETGLOBAL}
 \rocqsnippet{PUSHGETGLOBAL}
 
 \ifinternalaudit
@@ -1023,13 +1020,13 @@ Push + getglobal.  Exact match.
 % ─── GETGLOBALFIELD ───────────────────────────────────────────────────────────
 \instruction{GETGLOBALFIELD}{getglobalfield}
 
-\paragraph{PDF Spec.}
-\texttt{GETGLOBALFIELD $n$ $p$}: \texttt{accu = Field(Field(global\_data, $n$), $p$)}.
+\pdfspec{GETGLOBALFIELD}
 
 \cparagraph{GETGLOBALFIELD}
 \csnippet{GETGLOBALFIELD}
 
-ocqparagraph{GETGLOBALFIELD}
+
+ocqparagraph{GETGLOBALFIELD}
 \rocqsnippet{GETGLOBALFIELD}
 
 \ifinternalaudit
@@ -1046,13 +1043,13 @@ Two-level field access.  Rocq uses \texttt{nth\_error global $n$} then
 % ─── PUSHGETGLOBALFIELD ───────────────────────────────────────────────────────
 \instruction{PUSHGETGLOBALFIELD}{pushgetglobalfield}
 
-\paragraph{PDF Spec.}
-Push accu, then \texttt{GETGLOBALFIELD}.
+\pdfspec{PUSHGETGLOBALFIELD}
 
 \cparagraph{PUSHGETGLOBALFIELD}
 \csnippet{PUSHGETGLOBALFIELD}
 
-ocqparagraph{PUSHGETGLOBALFIELD}
+
+ocqparagraph{PUSHGETGLOBALFIELD}
 \rocqsnippet{PUSHGETGLOBALFIELD}
 
 \ifinternalaudit
@@ -1068,13 +1065,13 @@ Same as push + getglobalfield.  Exact match.
 % ─── SETGLOBAL ────────────────────────────────────────────────────────────────
 \instruction{SETGLOBAL}{setglobal}
 
-\paragraph{PDF Spec.}
-\texttt{SETGLOBAL $n$}: \texttt{Field(global\_data, $n$) = accu; accu = ()}.
+\pdfspec{SETGLOBAL}
 
 \cparagraph{SETGLOBAL}
 \csnippet{SETGLOBAL}
 
-ocqparagraph{SETGLOBAL}
+
+ocqparagraph{SETGLOBAL}
 \rocqsnippet{SETGLOBAL}
 
 \ifinternalaudit
@@ -1098,13 +1095,13 @@ out-of-bounds), but both cases are unreachable with well-formed bytecode.
 % ─── ATOM ─────────────────────────────────────────────────────────────────────
 \instruction{ATOM}{atom}
 
-\paragraph{PDF Spec.}
-\texttt{ATOM $t$}: Sets \texttt{accu} to the atom with tag $t$ (a zero-size block).
+\pdfspec{ATOM}
 
 \cparagraph{ATOM}
 \csnippet{ATOM}
 
-ocqparagraph{ATOM}
+
+ocqparagraph{ATOM}
 \rocqsnippet{ATOM}
 
 \ifinternalaudit
@@ -1124,13 +1121,13 @@ immutable.
 % ─── PUSHATOM ─────────────────────────────────────────────────────────────────
 \instruction{PUSHATOM}{pushatom}
 
-\paragraph{PDF Spec.}
-Push accu, then \texttt{ATOM}.
+\pdfspec{PUSHATOM}
 
 \cparagraph{PUSHATOM}
 \csnippet{PUSHATOM}
 
-ocqparagraph{PUSHATOM}
+
+ocqparagraph{PUSHATOM}
 \rocqsnippet{PUSHATOM}
 
 \ifinternalaudit
@@ -1146,14 +1143,13 @@ Push + atom.  Exact match.
 % ─── MAKEBLOCK ────────────────────────────────────────────────────────────────
 \instruction{MAKEBLOCK}{makeblock}
 
-\paragraph{PDF Spec.}
-\texttt{MAKEBLOCK $s$ $t$}: Allocate a block of size $s$ with tag $t$.
-\texttt{Field(0) = accu}, remaining fields popped from stack.
+\pdfspec{MAKEBLOCK}
 
 \cparagraph{MAKEBLOCK}
 \csnippet{MAKEBLOCK}
 
-ocqparagraph{MAKEBLOCK}
+
+ocqparagraph{MAKEBLOCK}
 \rocqsnippet{MAKEBLOCK}
 
 \ifinternalaudit
@@ -1175,13 +1171,13 @@ Exact match on semantics.
 % ─── MAKEBLOCK1 ───────────────────────────────────────────────────────────────
 \instruction{MAKEBLOCK1}{makeblock1}
 
-\paragraph{PDF Spec.}
-\texttt{MAKEBLOCK1 $t$}: 1-field block.
+\pdfspec{MAKEBLOCK1}
 
 \cparagraph{MAKEBLOCK1}
 \csnippet{MAKEBLOCK1}
 
-ocqparagraph{MAKEBLOCK1}
+
+ocqparagraph{MAKEBLOCK1}
 \rocqsnippet{MAKEBLOCK1}
 
 \ifinternalaudit
@@ -1197,13 +1193,13 @@ Single-field block with accu.  Exact match.
 % ─── MAKEBLOCK2 ───────────────────────────────────────────────────────────────
 \instruction{MAKEBLOCK2}{makeblock2}
 
-\paragraph{PDF Spec.}
-\texttt{MAKEBLOCK2 $t$}: 2-field block.
+\pdfspec{MAKEBLOCK2}
 
 \cparagraph{MAKEBLOCK2}
 \csnippet{MAKEBLOCK2}
 
-ocqparagraph{MAKEBLOCK2}
+
+ocqparagraph{MAKEBLOCK2}
 \rocqsnippet{MAKEBLOCK2}
 
 \ifinternalaudit
@@ -1219,13 +1215,13 @@ Single-field block with accu.  Exact match.
 % ─── MAKEBLOCK3 ───────────────────────────────────────────────────────────────
 \instruction{MAKEBLOCK3}{makeblock3}
 
-\paragraph{PDF Spec.}
-\texttt{MAKEBLOCK3 $t$}: 3-field block.
+\pdfspec{MAKEBLOCK3}
 
 \cparagraph{MAKEBLOCK3}
 \csnippet{MAKEBLOCK3}
 
-ocqparagraph{MAKEBLOCK3}
+
+ocqparagraph{MAKEBLOCK3}
 \rocqsnippet{MAKEBLOCK3}
 
 \ifinternalaudit
@@ -1241,14 +1237,13 @@ Single-field block with accu.  Exact match.
 % ─── MAKEFLOATBLOCK ───────────────────────────────────────────────────────────
 \instruction{MAKEFLOATBLOCK}{makefloatblock}
 
-\paragraph{PDF Spec.}
-\texttt{MAKEFLOATBLOCK $n$}: Allocates a block of $n$ boxed floats with tag
-\texttt{Double\_array\_tag} (254).
+\pdfspec{MAKEFLOATBLOCK}
 
 \cparagraph{MAKEFLOATBLOCK}
 \csnippet{MAKEFLOATBLOCK}
 
-ocqparagraph{MAKEFLOATBLOCK}
+
+ocqparagraph{MAKEFLOATBLOCK}
 \rocqsnippet{MAKEFLOATBLOCK}
 
 \ifinternalaudit
@@ -1276,13 +1271,13 @@ programs but would need revision for float-heavy code.
 % ─── GETFIELD ─────────────────────────────────────────────────────────────────
 \instruction{GETFIELD}{getfield}
 
-\paragraph{PDF Spec.}
-\texttt{GETFIELD $n$}: \texttt{accu = Field(accu, $n$)}.
+\pdfspec{GETFIELD}
 
 \cparagraph{GETFIELD}
 \csnippet{GETFIELD}
 
-ocqparagraph{GETFIELD}
+
+ocqparagraph{GETFIELD}
 \rocqsnippet{GETFIELD}
 
 \ifinternalaudit
@@ -1299,14 +1294,13 @@ Exact match.
 % ─── GETFLOATFIELD ────────────────────────────────────────────────────────────
 \instruction{GETFLOATFIELD}{getfloatfield}
 
-\paragraph{PDF Spec.}
-\texttt{GETFLOATFIELD $n$}: Reads the $n$-th double from a float array block
-and boxes it.
+\pdfspec{GETFLOATFIELD}
 
 \cparagraph{GETFLOATFIELD}
 \csnippet{GETFLOATFIELD}
 
-ocqparagraph{GETFLOATFIELD}
+
+ocqparagraph{GETFLOATFIELD}
 \rocqsnippet{GETFLOATFIELD}
 
 \ifinternalaudit
@@ -1324,14 +1318,13 @@ Same simplification as \texttt{MAKEFLOATBLOCK}.
 % ─── SETFIELD ─────────────────────────────────────────────────────────────────
 \instruction{SETFIELD}{setfield}
 
-\paragraph{PDF Spec.}
-\texttt{SETFIELD $n$}: \texttt{Field(accu, $n$) = sp[0]; sp++; accu = ()}.
-Mutates field $n$ of the block in \texttt{accu} with the value from stack top.
+\pdfspec{SETFIELD}
 
 \cparagraph{SETFIELD}
 \csnippet{SETFIELD}
 
-ocqparagraph{SETFIELD}
+
+ocqparagraph{SETFIELD}
 \rocqsnippet{SETFIELD}
 
 \ifinternalaudit
@@ -1354,14 +1347,13 @@ the block.  This matches the C semantics correctly.
 % ─── SETFLOATFIELD ────────────────────────────────────────────────────────────
 \instruction{SETFLOATFIELD}{setfloatfield}
 
-\paragraph{PDF Spec.}
-\texttt{SETFLOATFIELD $n$}: Stores a float into field $n$ of a float array.
-\texttt{Store\_double\_flat\_field(accu, $n$, Double\_val(*sp)); sp++; accu = ()}.
+\pdfspec{SETFLOATFIELD}
 
 \cparagraph{SETFLOATFIELD}
 \csnippet{SETFLOATFIELD}
 
-\rocqparagraph{SETFLOATFIELD}
+
+\rocqparagraph{SETFLOATFIELD}
 \rocqsnippet{SETFLOATFIELD}
 
 \ifinternalaudit
@@ -1407,14 +1399,13 @@ the same convention.  The inversion in our Rocq code is indeed a bug.
 % ─── VECTLENGTH ───────────────────────────────────────────────────────────────
 \instruction{VECTLENGTH}{vectlength}
 
-\paragraph{PDF Spec.}
-\texttt{VECTLENGTH}: \texttt{accu = Wosize\_val(accu)}.  For double arrays,
-divides by \texttt{Double\_wosize}.
+\pdfspec{VECTLENGTH}
 
 \cparagraph{VECTLENGTH}
 \csnippet{VECTLENGTH}
 
-ocqparagraph{VECTLENGTH}
+
+ocqparagraph{VECTLENGTH}
 \rocqsnippet{VECTLENGTH}
 
 \ifinternalaudit
@@ -1433,13 +1424,13 @@ the count is already correct without division.
 % ─── GETVECTITEM ──────────────────────────────────────────────────────────────
 \instruction{GETVECTITEM}{getvectitem}
 
-\paragraph{PDF Spec.}
-\texttt{GETVECTITEM}: \texttt{accu = Field(accu, Long\_val(sp[0])); sp++}.
+\pdfspec{GETVECTITEM}
 
 \cparagraph{GETVECTITEM}
 \csnippet{GETVECTITEM}
 
-ocqparagraph{GETVECTITEM}
+
+ocqparagraph{GETVECTITEM}
 \rocqsnippet{GETVECTITEM}
 
 \ifinternalaudit
@@ -1455,13 +1446,13 @@ Index from stack top, field access on accu.  Exact match.
 % ─── SETVECTITEM ──────────────────────────────────────────────────────────────
 \instruction{SETVECTITEM}{setvectitem}
 
-\paragraph{PDF Spec.}
-\texttt{SETVECTITEM}: \texttt{Field(accu, Long\_val(sp[0])) = sp[1]; sp+=2; accu = ()}.
+\pdfspec{SETVECTITEM}
 
 \cparagraph{SETVECTITEM}
 \csnippet{SETVECTITEM}
 
-ocqparagraph{SETVECTITEM}
+
+ocqparagraph{SETVECTITEM}
 \rocqsnippet{SETVECTITEM}
 
 \ifinternalaudit
@@ -1479,14 +1470,13 @@ Mutates via \texttt{heap\_update}.  Exact match.
 % ─── GETSTRINGCHAR / GETBYTESCHAR ────────────────────────────────────────────
 \instruction{GETSTRINGCHAR}{getstringchar}
 
-\paragraph{PDF Spec.}
-\texttt{GETSTRINGCHAR}/\texttt{GETBYTESCHAR}:
-\texttt{accu = Val\_int(Byte\_u(accu, Long\_val(sp[0]))); sp++}.
+\pdfspec{GETSTRINGCHAR}
 
 \cparagraph{GETSTRINGCHAR}
 \csnippet{GETSTRINGCHAR}
 
-ocqparagraph{GETSTRINGCHAR}
+
+ocqparagraph{GETSTRINGCHAR}
 \rocqsnippet{GETBYTESCHAR}
 
 \ifinternalaudit
@@ -1509,8 +1499,7 @@ in our code, matching the C implementation.
 % ─── GETBYTESCHAR ─────────────────────────────────────────────────────────────
 \instruction{GETBYTESCHAR}{getbyteschar}
 
-\paragraph{PDF Spec.}
-Same as \texttt{GETSTRINGCHAR}.
+\pdfspec{GETBYTESCHAR}
 
 \ifinternalaudit
 \paragraph{Analysis.}
@@ -1525,13 +1514,13 @@ Combined with \texttt{GETSTRINGCHAR} in both C and Rocq.
 % ─── SETBYTESCHAR ─────────────────────────────────────────────────────────────
 \instruction{SETBYTESCHAR}{setbyteschar}
 
-\paragraph{PDF Spec.}
-\texttt{SETBYTESCHAR}: \texttt{Byte\_u(accu, Long\_val(sp[0])) = Int\_val(sp[1]); sp+=2; accu = ()}.
+\pdfspec{SETBYTESCHAR}
 
 \cparagraph{SETBYTESCHAR}
 \csnippet{SETBYTESCHAR}
 
-ocqparagraph{SETBYTESCHAR}
+
+ocqparagraph{SETBYTESCHAR}
 \rocqsnippet{SETBYTESCHAR}
 
 \ifinternalaudit
@@ -1553,13 +1542,13 @@ list.  Functionally equivalent given our string-as-block-of-ints representation.
 % ─── BRANCH ───────────────────────────────────────────────────────────────────
 \instruction{BRANCH}{branch}
 
-\paragraph{PDF Spec.}
-\texttt{BRANCH $ofs$}: \texttt{pc += $ofs$}.
+\pdfspec{BRANCH}
 
 \cparagraph{BRANCH}
 \csnippet{BRANCH}
 
-ocqparagraph{BRANCH}
+
+ocqparagraph{BRANCH}
 \rocqsnippet{BRANCH}
 
 \ifinternalaudit
@@ -1577,13 +1566,13 @@ Equivalent after loader processing.
 % ─── BRANCHIF ─────────────────────────────────────────────────────────────────
 \instruction{BRANCHIF}{branchif}
 
-\paragraph{PDF Spec.}
-\texttt{BRANCHIF $ofs$}: Branch if \texttt{accu != Val\_false} (i.e., $\neq 0$).
+\pdfspec{BRANCHIF}
 
 \cparagraph{BRANCHIF}
 \csnippet{BRANCHIF}
 
-ocqparagraph{BRANCHIF}
+
+ocqparagraph{BRANCHIF}
 \rocqsnippet{BRANCHIF}
 
 \ifinternalaudit
@@ -1602,13 +1591,13 @@ the branch, matching the C \texttt{Is\_block} behavior.
 % ─── BRANCHIFNOT ──────────────────────────────────────────────────────────────
 \instruction{BRANCHIFNOT}{branchifnot}
 
-\paragraph{PDF Spec.}
-\texttt{BRANCHIFNOT $ofs$}: Branch if \texttt{accu == Val\_false}.
+\pdfspec{BRANCHIFNOT}
 
 \cparagraph{BRANCHIFNOT}
 \csnippet{BRANCHIFNOT}
 
-ocqparagraph{BRANCHIFNOT}
+
+ocqparagraph{BRANCHIFNOT}
 \rocqsnippet{BRANCHIFNOT}
 
 \ifinternalaudit
@@ -1624,16 +1613,13 @@ Dual of \texttt{BRANCHIF}.  Exact match.
 % ─── SWITCH ───────────────────────────────────────────────────────────────────
 \instruction{SWITCH}{switch}
 
-\paragraph{PDF Spec.}
-\texttt{SWITCH}: Dispatches on \texttt{accu}.  The operand word encodes
-\texttt{nc} (number of constant cases, low 16 bits) and \texttt{nb} (number
-of block cases, high 16 bits).  If \texttt{accu} is an integer, jump to
-\texttt{pc[Long\_val(accu)]}.  If a block, jump to \texttt{pc[nc + Tag\_val(accu)]}.
+\pdfspec{SWITCH}
 
 \cparagraph{SWITCH}
 \csnippet{SWITCH}
 
-ocqparagraph{SWITCH}
+
+ocqparagraph{SWITCH}
 \rocqsnippet{SWITCH}
 
 \ifinternalaudit
@@ -1662,13 +1648,13 @@ loader correctly splits at \texttt{nc}.
 % ─── BOOLNOT ──────────────────────────────────────────────────────────────────
 \instruction{BOOLNOT}{boolnot}
 
-\paragraph{PDF Spec.}
-\texttt{BOOLNOT}: \texttt{accu = Val\_not(accu)}.
+\pdfspec{BOOLNOT}
 
 \cparagraph{BOOLNOT}
 \csnippet{BOOLNOT}
 
-ocqparagraph{BOOLNOT}
+
+ocqparagraph{BOOLNOT}
 \rocqsnippet{BOOLNOT}
 
 \ifinternalaudit
@@ -1691,14 +1677,13 @@ Exact match for boolean values.
 % ─── PUSHTRAP ─────────────────────────────────────────────────────────────────
 \instruction{PUSHTRAP}{pushtrap}
 
-\paragraph{PDF Spec.}
-\texttt{PUSHTRAP $ofs$}: Push trap frame \texttt{[handler\_pc, trap\_link,
-env, extra\_args]} and set \texttt{trapsp = sp}.
+\pdfspec{PUSHTRAP}
 
 \cparagraph{PUSHTRAP}
 \csnippet{PUSHTRAP}
 
-ocqparagraph{PUSHTRAP}
+
+ocqparagraph{PUSHTRAP}
 \rocqsnippet{PUSHTRAP}
 
 \ifinternalaudit
@@ -1733,14 +1718,13 @@ Long\_val(Trap\_link\_offset(sp))}, while we directly restore the saved
 % ─── POPTRAP ──────────────────────────────────────────────────────────────────
 \instruction{POPTRAP}{poptrap}
 
-\paragraph{PDF Spec.}
-\texttt{POPTRAP}: Restore \texttt{trapsp} from the trap link and pop the 4-word
-trap frame.
+\pdfspec{POPTRAP}
 
 \cparagraph{POPTRAP}
 \csnippet{POPTRAP}
 
-ocqparagraph{POPTRAP}
+
+ocqparagraph{POPTRAP}
 \rocqsnippet{POPTRAP}
 
 \ifinternalaudit
@@ -1762,14 +1746,13 @@ Exact match modulo signal handling (which is a no-op in our model).
 % ─── RAISE ────────────────────────────────────────────────────────────────────
 \instruction{RAISE}{raise}
 
-\paragraph{PDF Spec.}
-\texttt{RAISE}: Raise the exception in \texttt{accu}.  Restores sp to trapsp,
-extracts handler pc, restores previous trap link, env, and extra\_args.
+\pdfspec{RAISE}
 
 \cparagraph{RAISE}
 \csnippet{RAISE}
 
-ocqparagraph{RAISE}
+
+ocqparagraph{RAISE}
 \rocqsnippet{RAISE}
 
 \ifinternalaudit
@@ -1803,8 +1786,7 @@ exception in callback) via pointer comparison.  Our check
 % ─── RERAISE ──────────────────────────────────────────────────────────────────
 \instruction{RERAISE}{reraise}
 
-\paragraph{PDF Spec.}
-Same as \texttt{RAISE} but with backtrace re-raise semantics.
+\pdfspec{RERAISE}
 
 \ifinternalaudit
 \paragraph{Analysis.}
@@ -1819,8 +1801,7 @@ Same as \texttt{RAISE} in our model (no backtrace).
 % ─── RAISE\_NOTRACE ───────────────────────────────────────────────────────────
 \instruction{RAISE\_NOTRACE}{raise_notrace}
 
-\paragraph{PDF Spec.}
-Same as \texttt{RAISE} but without backtrace recording.
+\pdfspec{RAISE_NOTRACE}
 
 \ifinternalaudit
 \paragraph{Analysis.}
@@ -1840,13 +1821,13 @@ Same as \texttt{RAISE} in our model.
 % ─── CHECK_SIGNALS ────────────────────────────────────────────────────────────
 \instruction{CHECK\_SIGNALS}{check_signals}
 
-\paragraph{PDF Spec.}
-\texttt{CHECK\_SIGNALS}: Process pending signals.
+\pdfspec{CHECK_SIGNALS}
 
 \cparagraph{RERAISE}
 \csnippet{CHECK_SIGNALS}
 
-ocqparagraph{RERAISE}
+
+ocqparagraph{RERAISE}
 \rocqsnippet{CHECK_SIGNALS}
 
 \ifinternalaudit
@@ -1864,15 +1845,13 @@ since we don't model OS signals.
 % ─── C_CALL ───────────────────────────────────────────────────────────────────
 \instruction{C\_CALL}{c_call}
 
-\paragraph{PDF Spec.}
-\texttt{C\_CALL $n$ $p$}: Call C primitive $p$ with $n$ arguments.
-The C code has specialized forms \texttt{C\_CALL1} through \texttt{C\_CALL5}
-and a generic \texttt{C\_CALLN}.
+\pdfspec{C_CALL}
 
 \cparagraph{RERAISE}
 \csnippet{C_CALL}
 
-ocqparagraph{RERAISE}
+
+ocqparagraph{RERAISE}
 \rocqsnippet{C_CALL}
 
 \ifinternalaudit
@@ -1899,14 +1878,13 @@ fulfills these by calling the actual C primitives.
 % ─── CONSTINT ─────────────────────────────────────────────────────────────────
 \instruction{CONSTINT}{constint}
 
-\paragraph{PDF Spec.}
-\texttt{CONSTINT $n$}: \texttt{accu = Val\_int($n$)}.  Specialized:
-\texttt{CONST0}--\texttt{CONST3}.
+\pdfspec{CONSTINT}
 
 \cparagraph{CONSTINT}
 \csnippet{CONSTINT}
 
-ocqparagraph{CONSTINT}
+
+ocqparagraph{CONSTINT}
 \rocqsnippet{CONSTINT}
 
 \ifinternalaudit
@@ -1922,13 +1900,13 @@ Direct assignment.  Exact match.
 % ─── PUSHCONSTINT ─────────────────────────────────────────────────────────────
 \instruction{PUSHCONSTINT}{pushconstint}
 
-\paragraph{PDF Spec.}
-\texttt{PUSHCONSTINT $n$}: Push accu, then \texttt{CONSTINT}.
+\pdfspec{PUSHCONSTINT}
 
 \cparagraph{PUSHCONSTINT}
 \csnippet{PUSHCONSTINT}
 
-ocqparagraph{PUSHCONSTINT}
+
+ocqparagraph{PUSHCONSTINT}
 \rocqsnippet{PUSHCONSTINT}
 
 \ifinternalaudit
@@ -1949,13 +1927,13 @@ Push + constint.  Exact match.
 % ─── NEGINT ───────────────────────────────────────────────────────────────────
 \instruction{NEGINT}{negint}
 
-\paragraph{PDF Spec.}
-\texttt{NEGINT}: \texttt{accu = -accu} (integer negation).
+\pdfspec{NEGINT}
 
 \cparagraph{NEGINT}
 \csnippet{NEGINT}
 
-ocqparagraph{NEGINT}
+
+ocqparagraph{NEGINT}
 \rocqsnippet{NEGINT}
 
 \ifinternalaudit
@@ -1973,13 +1951,13 @@ Rocq: \texttt{Val\_int(-n)}.  Exact match.
 % ─── ADDINT ───────────────────────────────────────────────────────────────────
 \instruction{ADDINT}{addint}
 
-\paragraph{PDF Spec.}
-\texttt{ADDINT}: \texttt{accu = accu + sp[0]; sp++}.
+\pdfspec{ADDINT}
 
 \cparagraph{ADDINT}
 \csnippet{ADDINT}
 
-ocqparagraph{ADDINT}
+
+ocqparagraph{ADDINT}
 \rocqsnippet{ADDINT}
 
 \ifinternalaudit
@@ -1996,13 +1974,13 @@ Rocq: \texttt{Val\_int(a + b)}.  Exact match at the semantic level.
 % ─── SUBINT ───────────────────────────────────────────────────────────────────
 \instruction{SUBINT}{subint}
 
-\paragraph{PDF Spec.}
-\texttt{SUBINT}: \texttt{accu = accu - sp[0]; sp++}.
+\pdfspec{SUBINT}
 
 \cparagraph{SUBINT}
 \csnippet{SUBINT}
 
-ocqparagraph{SUBINT}
+
+ocqparagraph{SUBINT}
 \rocqsnippet{SUBINT}
 
 \ifinternalaudit
@@ -2018,13 +1996,13 @@ C: \texttt{(intnat)accu - (intnat)*sp++ + 1}.  Rocq: \texttt{a - b}.  Exact matc
 % ─── MULINT ───────────────────────────────────────────────────────────────────
 \instruction{MULINT}{mulint}
 
-\paragraph{PDF Spec.}
-\texttt{MULINT}: \texttt{accu = accu * sp[0]; sp++}.
+\pdfspec{MULINT}
 
 \cparagraph{MULINT}
 \csnippet{MULINT}
 
-ocqparagraph{MULINT}
+
+ocqparagraph{MULINT}
 \rocqsnippet{MULINT}
 
 \ifinternalaudit
@@ -2041,14 +2019,13 @@ Exact match.
 % ─── DIVINT ───────────────────────────────────────────────────────────────────
 \instruction{DIVINT}{divint}
 
-\paragraph{PDF Spec.}
-\texttt{DIVINT}: \texttt{accu = accu / sp[0]; sp++}.  Raises
-\texttt{Division\_by\_zero} if divisor is 0.
+\pdfspec{DIVINT}
 
 \cparagraph{DIVINT}
 \csnippet{DIVINT}
 
-ocqparagraph{DIVINT}
+
+ocqparagraph{DIVINT}
 \rocqsnippet{DIVINT}
 
 \ifinternalaudit
@@ -2072,13 +2049,13 @@ Division uses \texttt{Z.quot} (truncation toward zero), matching C's
 % ─── MODINT ───────────────────────────────────────────────────────────────────
 \instruction{MODINT}{modint}
 
-\paragraph{PDF Spec.}
-\texttt{MODINT}: \texttt{accu = accu \% sp[0]; sp++}.  Raises on zero.
+\pdfspec{MODINT}
 
 \cparagraph{MODINT}
 \csnippet{MODINT}
 
-ocqparagraph{MODINT}
+
+ocqparagraph{MODINT}
 \rocqsnippet{MODINT}
 
 \ifinternalaudit
@@ -2095,13 +2072,13 @@ Same pattern as \texttt{DIVINT}.  Uses \texttt{Z.rem} which matches C's \texttt{
 % ─── ANDINT ───────────────────────────────────────────────────────────────────
 \instruction{ANDINT}{andint}
 
-\paragraph{PDF Spec.}
-\texttt{ANDINT}: Bitwise AND.
+\pdfspec{ANDINT}
 
 \cparagraph{ANDINT}
 \csnippet{ANDINT}
 
-ocqparagraph{ANDINT}
+
+ocqparagraph{ANDINT}
 \rocqsnippet{ANDINT}
 
 \ifinternalaudit
@@ -2119,13 +2096,13 @@ Rocq: \texttt{Z.land a b}.  Exact match at the value level.
 % ─── ORINT ────────────────────────────────────────────────────────────────────
 \instruction{ORINT}{orint}
 
-\paragraph{PDF Spec.}
-\texttt{ORINT}: Bitwise OR.
+\pdfspec{ORINT}
 
 \cparagraph{ORINT}
 \csnippet{ORINT}
 
-ocqparagraph{ORINT}
+
+ocqparagraph{ORINT}
 \rocqsnippet{ORINT}
 
 \ifinternalaudit
@@ -2142,13 +2119,13 @@ Rocq: \texttt{Z.lor a b}.  Exact match.
 % ─── XORINT ───────────────────────────────────────────────────────────────────
 \instruction{XORINT}{xorint}
 
-\paragraph{PDF Spec.}
-\texttt{XORINT}: Bitwise XOR.
+\pdfspec{XORINT}
 
 \cparagraph{XORINT}
 \csnippet{XORINT}
 
-ocqparagraph{XORINT}
+
+ocqparagraph{XORINT}
 \rocqsnippet{XORINT}
 
 \ifinternalaudit
@@ -2165,13 +2142,13 @@ Rocq: \texttt{Z.lxor a b}.  Exact match (tag bit is not part of our value repres
 % ─── LSLINT ───────────────────────────────────────────────────────────────────
 \instruction{LSLINT}{lslint}
 
-\paragraph{PDF Spec.}
-\texttt{LSLINT}: Logical shift left.
+\pdfspec{LSLINT}
 
 \cparagraph{LSLINT}
 \csnippet{LSLINT}
 
-ocqparagraph{LSLINT}
+
+ocqparagraph{LSLINT}
 \rocqsnippet{LSLINT}
 
 \ifinternalaudit
@@ -2190,13 +2167,13 @@ Our version operates on untagged values directly.  Exact match.
 % ─── LSRINT ───────────────────────────────────────────────────────────────────
 \instruction{LSRINT}{lsrint}
 
-\paragraph{PDF Spec.}
-\texttt{LSRINT}: Logical (unsigned) shift right.
+\pdfspec{LSRINT}
 
 \cparagraph{LSRINT}
 \csnippet{LSRINT}
 
-ocqparagraph{LSRINT}
+
+ocqparagraph{LSRINT}
 \rocqsnippet{LSRINT}
 
 \ifinternalaudit
@@ -2215,13 +2192,13 @@ logical (fills with zeros from the left).  Exact match.
 % ─── ASRINT ───────────────────────────────────────────────────────────────────
 \instruction{ASRINT}{asrint}
 
-\paragraph{PDF Spec.}
-\texttt{ASRINT}: Arithmetic (signed) shift right.
+\pdfspec{ASRINT}
 
 \cparagraph{ASRINT}
 \csnippet{ASRINT}
 
-ocqparagraph{ASRINT}
+
+ocqparagraph{ASRINT}
 \rocqsnippet{ASRINT}
 
 \ifinternalaudit
@@ -2244,13 +2221,13 @@ Rocq: \texttt{Z.shiftr a b} --- arithmetic right shift on \texttt{Z}.  Exact mat
 % ─── EQ ───────────────────────────────────────────────────────────────────────
 \instruction{EQ}{eq}
 
-\paragraph{PDF Spec.}
-\texttt{EQ}: \texttt{accu = (accu == sp[0]); sp++}.  Physical equality.
+\pdfspec{EQ}
 
 \cparagraph{EQ}
 \csnippet{EQ}
 
-ocqparagraph{EQ}
+
+ocqparagraph{EQ}
 \rocqsnippet{EQ}
 
 \ifinternalaudit
@@ -2275,13 +2252,13 @@ only observable with mutable values (which should use \texttt{==} sparingly).
 % ─── NEQ ──────────────────────────────────────────────────────────────────────
 \instruction{NEQ}{neq}
 
-\paragraph{PDF Spec.}
-\texttt{NEQ}: \texttt{accu = (accu != sp[0]); sp++}.
+\pdfspec{NEQ}
 
 \cparagraph{NEQ}
 \csnippet{NEQ}
 
-ocqparagraph{NEQ}
+
+ocqparagraph{NEQ}
 \rocqsnippet{NEQ}
 
 \ifinternalaudit
@@ -2297,13 +2274,13 @@ Negation of \texttt{EQ}.  Same caveats.
 % ─── LTINT ────────────────────────────────────────────────────────────────────
 \instruction{LTINT}{ltint}
 
-\paragraph{PDF Spec.}
-\texttt{LTINT}: \texttt{accu = (accu < sp[0]); sp++}.
+\pdfspec{LTINT}
 
 \cparagraph{LTINT}
 \csnippet{LTINT}
 
-ocqparagraph{LTINT}
+
+ocqparagraph{LTINT}
 \rocqsnippet{LTINT}
 
 \ifinternalaudit
@@ -2321,13 +2298,13 @@ Rocq: \texttt{Z.ltb a b}.  Exact match.
 % ─── LEINT ────────────────────────────────────────────────────────────────────
 \instruction{LEINT}{leint}
 
-\paragraph{PDF Spec.}
-\texttt{LEINT}: \texttt{accu = (accu <= sp[0]); sp++}.
+\pdfspec{LEINT}
 
 \cparagraph{LEINT}
 \csnippet{LEINT}
 
-ocqparagraph{LEINT}
+
+ocqparagraph{LEINT}
 \rocqsnippet{LEINT}
 
 \ifinternalaudit
@@ -2343,13 +2320,13 @@ Same pattern.  \texttt{Z.leb}.  Exact match.
 % ─── GTINT ────────────────────────────────────────────────────────────────────
 \instruction{GTINT}{gtint}
 
-\paragraph{PDF Spec.}
-\texttt{GTINT}: \texttt{accu = (accu > sp[0]); sp++}.
+\pdfspec{GTINT}
 
 \cparagraph{GTINT}
 \csnippet{GTINT}
 
-ocqparagraph{GTINT}
+
+ocqparagraph{GTINT}
 \rocqsnippet{GTINT}
 
 \ifinternalaudit
@@ -2365,13 +2342,13 @@ Same pattern.  \texttt{Z.leb}.  Exact match.
 % ─── GEINT ────────────────────────────────────────────────────────────────────
 \instruction{GEINT}{geint}
 
-\paragraph{PDF Spec.}
-\texttt{GEINT}: \texttt{accu = (accu >= sp[0]); sp++}.
+\pdfspec{GEINT}
 
 \cparagraph{GEINT}
 \csnippet{GEINT}
 
-ocqparagraph{GEINT}
+
+ocqparagraph{GEINT}
 \rocqsnippet{GEINT}
 
 \ifinternalaudit
@@ -2387,13 +2364,13 @@ Same pattern.  \texttt{Z.leb}.  Exact match.
 % ─── OFFSETINT ────────────────────────────────────────────────────────────────
 \instruction{OFFSETINT}{offsetint}
 
-\paragraph{PDF Spec.}
-\texttt{OFFSETINT $n$}: \texttt{accu += $n$}.
+\pdfspec{OFFSETINT}
 
 \cparagraph{OFFSETINT}
 \csnippet{OFFSETINT}
 
-ocqparagraph{OFFSETINT}
+
+ocqparagraph{OFFSETINT}
 \rocqsnippet{OFFSETINT}
 
 \ifinternalaudit
@@ -2410,14 +2387,13 @@ Rocq: \texttt{Val\_int(a + n)}.  Exact match.
 % ─── OFFSETREF ────────────────────────────────────────────────────────────────
 \instruction{OFFSETREF}{offsetref}
 
-\paragraph{PDF Spec.}
-\texttt{OFFSETREF $n$}: \texttt{Field(accu, 0) += $n$; accu = ()}.
-Increments/decrements the value stored in a reference.
+\pdfspec{OFFSETREF}
 
 \cparagraph{OFFSETREF}
 \csnippet{OFFSETREF}
 
-ocqparagraph{OFFSETREF}
+
+ocqparagraph{OFFSETREF}
 \rocqsnippet{OFFSETREF}
 
 \ifinternalaudit
@@ -2435,14 +2411,13 @@ Exact match.
 % ─── ISINT ────────────────────────────────────────────────────────────────────
 \instruction{ISINT}{isint}
 
-\paragraph{PDF Spec.}
-\texttt{ISINT}: \texttt{accu = Val\_long(accu \& 1)}.  Tests if accu is an integer
-(tag bit set).
+\pdfspec{ISINT}
 
 \cparagraph{ISINT}
 \csnippet{ISINT}
 
-ocqparagraph{ISINT}
+
+ocqparagraph{ISINT}
 \rocqsnippet{ISINT}
 
 \ifinternalaudit
@@ -2463,13 +2438,13 @@ C: tests tag bit.  Rocq: pattern matches on \texttt{Val\_int}.  Exact match.
 % ─── ULTINT ───────────────────────────────────────────────────────────────────
 \instruction{ULTINT}{ultint}
 
-\paragraph{PDF Spec.}
-\texttt{ULTINT}: Unsigned less-than: \texttt{accu = ((uintnat)accu < (uintnat)sp[0])}.
+\pdfspec{ULTINT}
 
 \cparagraph{ULTINT}
 \csnippet{ULTINT}
 
-ocqparagraph{ULTINT}
+
+ocqparagraph{ULTINT}
 \rocqsnippet{ULTINT}
 
 \ifinternalaudit
@@ -2494,13 +2469,13 @@ when both operands have the tag set.
 % ─── UGEINT ───────────────────────────────────────────────────────────────────
 \instruction{UGEINT}{ugeint}
 
-\paragraph{PDF Spec.}
-\texttt{UGEINT}: Unsigned greater-or-equal.
+\pdfspec{UGEINT}
 
 \cparagraph{UGEINT}
 \csnippet{UGEINT}
 
-ocqparagraph{UGEINT}
+
+ocqparagraph{UGEINT}
 \rocqsnippet{UGEINT}
 
 \ifinternalaudit
@@ -2521,13 +2496,13 @@ Same technique as \texttt{ULTINT} with \texttt{Z.geb}.  Exact match.
 % ─── BEQ ──────────────────────────────────────────────────────────────────────
 \instruction{BEQ}{beq}
 
-\paragraph{PDF Spec.}
-\texttt{BEQ $n$ $ofs$}: If $n$ = \texttt{Long\_val(accu)}, branch by $ofs$.
+\pdfspec{BEQ}
 
 \cparagraph{BEQ}
 \csnippet{BEQ}
 
-ocqparagraph{BEQ}
+
+ocqparagraph{BEQ}
 \rocqsnippet{BEQ}
 
 \ifinternalaudit
@@ -2546,13 +2521,13 @@ integer literal can never equal a block.
 % ─── BNEQ ─────────────────────────────────────────────────────────────────────
 \instruction{BNEQ}{bneq}
 
-\paragraph{PDF Spec.}
-\texttt{BNEQ $n$ $ofs$}: Branch if $n \neq$ accu.
+\pdfspec{BNEQ}
 
 \cparagraph{BNEQ}
 \csnippet{BNEQ}
 
-ocqparagraph{BNEQ}
+
+ocqparagraph{BNEQ}
 \rocqsnippet{BNEQ}
 
 \ifinternalaudit
@@ -2569,13 +2544,13 @@ is never equal to an integer).
 % ─── BLTINT ───────────────────────────────────────────────────────────────────
 \instruction{BLTINT}{bltint}
 
-\paragraph{PDF Spec.}
-\texttt{BLTINT $n$ $ofs$}: Branch if $n <$ accu (the operand is on the left).
+\pdfspec{BLTINT}
 
 \cparagraph{BLTINT}
 \csnippet{BLTINT}
 
-ocqparagraph{BLTINT}
+
+ocqparagraph{BLTINT}
 \rocqsnippet{BLTINT}
 
 \ifinternalaudit
@@ -2593,13 +2568,13 @@ $a$ is accu).
 % ─── BLEINT ───────────────────────────────────────────────────────────────────
 \instruction{BLEINT}{bleint}
 
-\paragraph{PDF Spec.}
-\texttt{BLEINT $n$ $ofs$}: Branch if $n \leq$ accu.
+\pdfspec{BLEINT}
 
 \cparagraph{BLEINT}
 \csnippet{BLEINT}
 
-ocqparagraph{BLEINT}
+
+ocqparagraph{BLEINT}
 \rocqsnippet{BLEINT}
 
 \ifinternalaudit
@@ -2615,13 +2590,13 @@ $a$ is accu).
 % ─── BGTINT ───────────────────────────────────────────────────────────────────
 \instruction{BGTINT}{bgtint}
 
-\paragraph{PDF Spec.}
-\texttt{BGTINT $n$ $ofs$}: Branch if $n >$ accu.
+\pdfspec{BGTINT}
 
 \cparagraph{BGTINT}
 \csnippet{BGTINT}
 
-ocqparagraph{BGTINT}
+
+ocqparagraph{BGTINT}
 \rocqsnippet{BGTINT}
 
 \ifinternalaudit
@@ -2637,13 +2612,13 @@ $a$ is accu).
 % ─── BGEINT ───────────────────────────────────────────────────────────────────
 \instruction{BGEINT}{bgeint}
 
-\paragraph{PDF Spec.}
-\texttt{BGEINT $n$ $ofs$}: Branch if $n \geq$ accu.
+\pdfspec{BGEINT}
 
 \cparagraph{BGEINT}
 \csnippet{BGEINT}
 
-ocqparagraph{BGEINT}
+
+ocqparagraph{BGEINT}
 \rocqsnippet{BGEINT}
 
 \ifinternalaudit
@@ -2659,13 +2634,13 @@ $a$ is accu).
 % ─── BULTINT ──────────────────────────────────────────────────────────────────
 \instruction{BULTINT}{bultint}
 
-\paragraph{PDF Spec.}
-\texttt{BULTINT $n$ $ofs$}: Unsigned branch if $n <$ accu.
+\pdfspec{BULTINT}
 
 \cparagraph{BULTINT}
 \csnippet{BULTINT}
 
-ocqparagraph{BULTINT}
+
+ocqparagraph{BULTINT}
 \rocqsnippet{BULTINT}
 
 \ifinternalaudit
@@ -2683,13 +2658,13 @@ Same \texttt{z\_flip\_sign} technique as \texttt{ULTINT}.  Exact match.
 % ─── BUGEINT ──────────────────────────────────────────────────────────────────
 \instruction{BUGEINT}{bugeint}
 
-\paragraph{PDF Spec.}
-\texttt{BUGEINT $n$ $ofs$}: Unsigned branch if $n \geq$ accu.
+\pdfspec{BUGEINT}
 
 \cparagraph{BUGEINT}
 \csnippet{BUGEINT}
 
-ocqparagraph{BUGEINT}
+
+ocqparagraph{BUGEINT}
 \rocqsnippet{BUGEINT}
 
 \ifinternalaudit
@@ -2710,14 +2685,13 @@ Same \texttt{z\_flip\_sign} technique as \texttt{ULTINT}.  Exact match.
 % ─── GETMETHOD ────────────────────────────────────────────────────────────────
 \instruction{GETMETHOD}{getmethod}
 
-\paragraph{PDF Spec.}
-\texttt{GETMETHOD}: \texttt{accu = Field(Field(sp[0], 0), Int\_val(accu))}.
-Looks up a method in the object's class table.
+\pdfspec{GETMETHOD}
 
 \cparagraph{GETMETHOD}
 \csnippet{GETMETHOD}
 
-ocqparagraph{GETMETHOD}
+
+ocqparagraph{GETMETHOD}
 \rocqsnippet{GETMETHOD}
 
 \ifinternalaudit
@@ -2735,14 +2709,13 @@ Rocq: Gets \texttt{field\_or\_heap obj 0} (class table), then
 % ─── GETPUBMET ────────────────────────────────────────────────────────────────
 \instruction{GETPUBMET}{getpubmet}
 
-\paragraph{PDF Spec.}
-\texttt{GETPUBMET $tag$}: Push object, look up public method by tag.
-Uses binary search in the method table (with optional cache).
+\pdfspec{GETPUBMET}
 
 \cparagraph{GETPUBMET}
 \csnippet{GETPUBMET}
 
-ocqparagraph{GETPUBMET}
+
+ocqparagraph{GETPUBMET}
 \rocqsnippet{GETPUBMET}
 
 \ifinternalaudit
@@ -2778,14 +2751,13 @@ $(closure, tag)$ layout at even/odd positions.
 % ─── GETDYNMET ────────────────────────────────────────────────────────────────
 \instruction{GETDYNMET}{getdynmet}
 
-\paragraph{PDF Spec.}
-\texttt{GETDYNMET}: Dynamic method lookup.  \texttt{accu} is the method tag,
-\texttt{sp[0]} is the object.
+\pdfspec{GETDYNMET}
 
 \cparagraph{GETDYNMET}
 \csnippet{GETDYNMET}
 
-ocqparagraph{GETDYNMET}
+
+ocqparagraph{GETDYNMET}
 \rocqsnippet{GETDYNMET}
 
 \ifinternalaudit
@@ -2807,13 +2779,13 @@ Rocq uses linear scan.  Same correctness argument.
 % ─── STOP ─────────────────────────────────────────────────────────────────────
 \instruction{STOP}{stop}
 
-\paragraph{PDF Spec.}
-\texttt{STOP}: Terminate execution, return accu.
+\pdfspec{STOP}
 
 \cparagraph{STOP}
 \csnippet{STOP}
 
-ocqparagraph{STOP}
+
+ocqparagraph{STOP}
 \rocqsnippet{STOP}
 
 \ifinternalaudit
@@ -2830,13 +2802,13 @@ Rocq: returns \texttt{Halt accu}.  Exact match.
 % ─── EVENT ────────────────────────────────────────────────────────────────────
 \instruction{EVENT}{event}
 
-\paragraph{PDF Spec.}
-\texttt{EVENT}: Debugger event hook.
+\pdfspec{EVENT}
 
 \cparagraph{EVENT}
 \csnippet{EVENT}
 
-ocqparagraph{EVENT}
+
+ocqparagraph{EVENT}
 \rocqsnippet{EVENT}
 
 \ifinternalaudit
@@ -2853,11 +2825,7 @@ zero.  Safe to skip since we don't model the debugger.
 % ─── BREAK ────────────────────────────────────────────────────────────────────
 \instruction{BREAK}{break}
 
-\paragraph{PDF Spec.}
-\texttt{BREAK}: Debugger breakpoint.
-
-ocqparagraph{BREAK}
-\rocqsnippet{BREAK}
+\pdfspec{BREAK}
 
 \ifinternalaudit
 \paragraph{Analysis.}
@@ -2872,11 +2840,7 @@ Modeled as no-op, same as \texttt{EVENT}.
 % ─── PERFORM/RESUME/RESUMETERM/REPERFORMTERM ─────────────────────────────────
 \instruction{PERFORM}{perform}
 
-\paragraph{PDF Spec.}
-OCaml 5.x effect handlers.  Not present in OCaml 4.14.
-
-ocqparagraph{PERFORM}
-\rocqsnippet{PERFORM}
+\pdfspec{PERFORM}
 
 \ifinternalaudit
 \paragraph{Analysis.}
