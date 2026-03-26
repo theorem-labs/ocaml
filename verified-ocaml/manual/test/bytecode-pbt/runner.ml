@@ -5,5 +5,5 @@
    because Coq appends '0' to avoid clashing with module-level let () = ... *)
 
 let () =
-  let _exit_code = Interp_extracted.main0 in
+  let _exit_code = Interp_extracted.main0 () in
   flush stdout

@@ -23,6 +23,14 @@ extract: build
 	coqc $(COQC_FLAGS) Extract.v -output-directory /tmp
 	cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml
 	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
+	@# Wrap eager module instantiation so it doesn't run at load time.
+	@# Pipeline(ConcreteDecoder) reads Sys.argv and would crash all test exes.
+	sed -i 's/^module App = Pipeline(ConcreteDecoder)/module App() = Pipeline(ConcreteDecoder)/' \
+	  manual/test/common/interp_extracted.ml
+	sed -i 's/^let main0 =$$/let main0 () =/' \
+	  manual/test/common/interp_extracted.ml
+	sed -i 's/^  App\.main$$/  let module M = App() in M.main/' \
+	  manual/test/common/interp_extracted.ml
 
 test: extract
 	dune build \
