@@ -21,12 +21,11 @@ import textwrap
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 DEFAULT_INTERP_V = os.path.join(
-    SCRIPT_DIR, "..", "..", "theories", "Trusted", "Bytecode", "Interp.v"
+    SCRIPT_DIR, "..", "theories", "Bytecode", "Interpret.v"
 )
-# Search paths for Interp.v (tried in order)
+# Search paths for Interpret.v (tried in order)
 ALT_INTERP_V_PATHS = [
-    "/workspaces/theorem-work/theorem-ocaml/new-ocaml-compiler/theories/Trusted/Bytecode/Interp.v",
-    "/workspaces/theorem-work/theorem-ocaml/new-ocaml-compiler/_build/default/theories/Trusted/Bytecode/Interp.v",
+    os.path.join(SCRIPT_DIR, "..", "..", "manual", "theories", "Bytecode", "Interpret.v"),
 ]
 DEFAULT_INTERP_C = os.path.join(SCRIPT_DIR, "interp.c")
 
@@ -297,6 +296,23 @@ def write_snippet(outdir, instr_name, start_line, lines, lang):
         f.write(f"\\end{{{env}}}\n")
 
 
+def write_lines_tex(snippets_dir, rocq_snippets, c_snippets):
+    """Write snippets/lines.tex with \\rocqline{INSTR} and \\cline{INSTR} macros."""
+    filepath = os.path.join(snippets_dir, "lines.tex")
+    os.makedirs(snippets_dir, exist_ok=True)
+    with open(filepath, "w") as f:
+        f.write("% Auto-generated line number macros. Do not edit.\n")
+        f.write("% Usage: \\rocqline{ACC} expands to the line number in Interpret.v\n")
+        f.write("% Usage: \\clineno{ACC} expands to the line number in interp.c\n\n")
+        for instr in ALL_INSTRUCTIONS:
+            if instr in rocq_snippets:
+                start_line, _ = rocq_snippets[instr]
+                f.write(f"\\expandafter\\def\\csname rocqline@{instr}\\endcsname{{{start_line}}}\n")
+            if instr in c_snippets:
+                start_line, _ = c_snippets[instr]
+                f.write(f"\\expandafter\\def\\csname cline@{instr}\\endcsname{{{start_line}}}\n")
+
+
 def main():
     interp_v = sys.argv[1] if len(sys.argv) > 1 else DEFAULT_INTERP_V
     interp_c = sys.argv[2] if len(sys.argv) > 2 else DEFAULT_INTERP_C
@@ -336,8 +352,12 @@ def main():
             write_snippet(C_OUT, instr, start_line, lines, "c")
             c_count += 1
 
+    # Write line number macros
+    write_lines_tex(os.path.join(SCRIPT_DIR, "snippets"), rocq_snippets, c_snippets)
+
     print(f"Wrote {rocq_count}/{len(ALL_INSTRUCTIONS)} Rocq snippets to {ROCQ_OUT}")
     print(f"Wrote {c_count}/{len(ALL_INSTRUCTIONS)} C snippets to {C_OUT}")
+    print(f"Wrote snippets/lines.tex with line number macros")
 
     # Report missing
     missing_rocq = [i for i in ALL_INSTRUCTIONS if i not in rocq_snippets]

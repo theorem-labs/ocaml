@@ -1,5 +1,5 @@
-% Auto-generated from rocq source, line 637
-\begin{rocqcode}[firstnumber=637]
+% Auto-generated from rocq source, line 638
+\begin{rocqcode}[firstnumber=638]
   | PUSHTRAP handler_pc =>
     let prev_tsp := Val_int (Z.of_nat s.(trap_sp)) in
     let new_stack := Val_int handler_pc :: prev_tsp :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: s.(stack) in

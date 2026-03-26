@@ -1,5 +1,5 @@
-% Auto-generated from rocq source, line 942
-\begin{rocqcode}[firstnumber=942]
+% Auto-generated from rocq source, line 943
+\begin{rocqcode}[firstnumber=943]
   | ULTINT =>
     match s.(accu), s.(stack) with
     | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (Z.ltb (z_flip_sign a) (z_flip_sign b))) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))

@@ -1,5 +1,5 @@
-% Auto-generated from rocq source, line 150
-\begin{rocqcode}[firstnumber=150]
+% Auto-generated from rocq source, line 151
+\begin{rocqcode}[firstnumber=151]
   | PUSH_RETADDR ret_addr =>
     let frame := Val_int ret_addr :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: s.(stack) in
     Step (st s pc' s.(accu) frame s.(env) s.(extra_args) s.(global) s.(trap_sp))

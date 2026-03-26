@@ -1,5 +1,5 @@
-% Auto-generated from rocq source, line 483
-\begin{rocqcode}[firstnumber=483]
+% Auto-generated from rocq source, line 484
+\begin{rocqcode}[firstnumber=484]
   | SETFIELD n =>
     match s.(stack) with
     | newval :: rest =>
@@ -16,5 +16,5 @@
       | _ => Error "SETFIELD: not a mutable block"
     | _ => Error "SETFIELD: stack underflow"
 
-  (* SETFLOATFIELD n: stack top is the float array (tag 254), accu is the new float value. *)
+  (* SETFLOATFIELD n: accu is the float array (tag 254), sp[0] is the new float value. *)
 \end{rocqcode}

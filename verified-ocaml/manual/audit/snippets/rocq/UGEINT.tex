@@ -1,5 +1,5 @@
-% Auto-generated from rocq source, line 948
-\begin{rocqcode}[firstnumber=948]
+% Auto-generated from rocq source, line 949
+\begin{rocqcode}[firstnumber=949]
   | UGEINT =>
     match s.(accu), s.(stack) with
     | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (Z.geb (z_flip_sign a) (z_flip_sign b))) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
