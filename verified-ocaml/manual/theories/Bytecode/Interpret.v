@@ -9,6 +9,7 @@ From Stdlib.Array Require Import PrimArray.
 From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
+From RecordUpdate Require Import RecordUpdate.
 Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope list_scope.
@@ -71,12 +72,6 @@ Definition get_code_ptr_s (s : state) (v : value) : option Z :=
   | _ => None
   end.
 
-(* Helper: build a new state sharing heap from the input state, with updated
-   trap_sp.  Most instructions leave trap_sp unchanged; pass s.(trap_sp). *)
-Definition st (s : state) (pc : Z) (accu : value) (stack : list value)
-  (env : value) (ea : nat) (glob : list value) (tsp : nat) : state :=
-  mk_state pc accu stack env ea glob tsp s.(hp) s.(next_addr).
-
 (* Predefined exception values (tag=248, fields=[name_string, unique_id]).
    Ids match OCaml runtime: Division_by_zero=-6. *)
 Definition make_exn_string (chars : list Z) : value :=
@@ -96,8 +91,8 @@ Definition do_raise (exn : value) (s : state) : step_result :=
     let frame_top := skipn k s.(stack) in
     match frame_top with
     | Val_int handler_pc :: Val_int prev_tsp :: saved_env :: Val_int saved_ea :: rest =>
-      Step (mk_state handler_pc exn rest saved_env (Z.to_nat saved_ea) s.(global)
-                     (Z.to_nat prev_tsp) s.(hp) s.(next_addr))
+      Step (s <|pc := handler_pc|> <|accu := exn|> <|stack := rest|> <|env := saved_env|>
+              <|extra_args := Z.to_nat saved_ea|> <|trap_sp := Z.to_nat prev_tsp|>)
     | _ => Error "RAISE: malformed trap frame"
     end.
 
@@ -110,39 +105,39 @@ Definition step (code : array instruction) (s : state) : step_result :=
 
   | ACC n =>
     match nth_error s.(stack) n with
-    | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
     | None => Error "ACC: stack underflow"
     end
 
   | PUSH =>
-    Step (st s pc' s.(accu) (s.(accu) :: s.(stack)) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := pc'|> <|stack := s.(accu) :: s.(stack)|>)
 
   | PUSHACC n =>
     let new_stack := s.(accu) :: s.(stack) in
     match nth_error new_stack n with
-    | Some v => Step (st s pc' v new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
     | None => Error "PUSHACC: stack underflow"
     end
 
   | POP n =>
-    Step (st s pc' s.(accu) (skipn n s.(stack)) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := pc'|> <|stack := skipn n s.(stack)|>)
 
   | ASSIGN n =>
     match set_nth s.(stack) n s.(accu) with
-    | Some new_stack => Step (st s pc' val_unit new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some new_stack => Step (s <|pc := pc'|> <|accu := val_unit|> <|stack := new_stack|>)
     | None => Error "ASSIGN: stack underflow"
     end
 
   | ENVACC n =>
     match field_or_heap s s.(env) n with
-    | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
     | None => Error "ENVACC: env access out of bounds"
     end
 
   | PUSHENVACC n =>
     let new_stack := s.(accu) :: s.(stack) in
     match field_or_heap s s.(env) n with
-    | Some v => Step (st s pc' v new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
     | None => Error "PUSHENVACC: env access out of bounds"
     end
 
@@ -150,13 +145,13 @@ Definition step (code : array instruction) (s : state) : step_result :=
      In interp.c: sp[0]=pc+ofs, sp[1]=env, sp[2]=Long_val(extra_args). *)
   | PUSH_RETADDR ret_addr =>
     let frame := Val_int ret_addr :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: s.(stack) in
-    Step (st s pc' s.(accu) frame s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := pc'|> <|stack := frame|>)
 
   (* APPLY n: tail call with n args already on stack; sets extra_args = n-1. *)
   | APPLY n =>
     match get_code_ptr_s s s.(accu) with
     | Some target_pc =>
-      Step (st s target_pc s.(accu) s.(stack) s.(accu) (Nat.sub n 1) s.(global) s.(trap_sp))
+      Step (s <|pc := target_pc|> <|env := s.(accu)|> <|extra_args := Nat.sub n 1|>)
     | None => Error "APPLY: accu is not a closure"
     end
 
@@ -167,7 +162,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
       match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         let new_stack := arg1 :: Val_int pc' :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: rest in
-        Step (st s target_pc s.(accu) new_stack s.(accu) 0 s.(global) s.(trap_sp))
+        Step (s <|pc := target_pc|> <|stack := new_stack|> <|env := s.(accu)|> <|extra_args := 0%nat|>)
       | None => Error "APPLY1: accu is not a closure"
       end
     | _ => Error "APPLY1: stack underflow"
@@ -179,7 +174,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
       match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         let new_stack := arg1 :: arg2 :: Val_int pc' :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: rest in
-        Step (st s target_pc s.(accu) new_stack s.(accu) 1 s.(global) s.(trap_sp))
+        Step (s <|pc := target_pc|> <|stack := new_stack|> <|env := s.(accu)|> <|extra_args := 1%nat|>)
       | None => Error "APPLY2: accu is not a closure"
       end
     | _ => Error "APPLY2: stack underflow"
@@ -191,7 +186,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
       match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
         let new_stack := arg1 :: arg2 :: arg3 :: Val_int pc' :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: rest in
-        Step (st s target_pc s.(accu) new_stack s.(accu) 2 s.(global) s.(trap_sp))
+        Step (s <|pc := target_pc|> <|stack := new_stack|> <|env := s.(accu)|> <|extra_args := 2%nat|>)
       | None => Error "APPLY3: accu is not a closure"
       end
     | _ => Error "APPLY3: stack underflow"
@@ -203,7 +198,8 @@ Definition step (code : array instruction) (s : state) : step_result :=
     let base := skipn slotsize s.(stack) in
     match get_code_ptr_s s s.(accu) with
     | Some target_pc =>
-      Step (st s target_pc s.(accu) (args ++ base) s.(accu) (Nat.add s.(extra_args) (Nat.sub nargs 1)) s.(global) s.(trap_sp))
+      Step (s <|pc := target_pc|> <|stack := args ++ base|> <|env := s.(accu)|>
+              <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>)
     | None => Error "APPTERM: accu is not a closure"
     end
 
@@ -213,7 +209,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
       let base := skipn slotsize s.(stack) in
       match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
-        Step (st s target_pc s.(accu) (arg1 :: base) s.(accu) s.(extra_args) s.(global) s.(trap_sp))
+        Step (s <|pc := target_pc|> <|stack := arg1 :: base|> <|env := s.(accu)|>)
       | None => Error "APPTERM1: accu is not a closure"
       end
     | _ => Error "APPTERM1: stack underflow"
@@ -225,7 +221,8 @@ Definition step (code : array instruction) (s : state) : step_result :=
       let base := skipn slotsize s.(stack) in
       match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
-        Step (st s target_pc s.(accu) (arg1 :: arg2 :: base) s.(accu) (Nat.add s.(extra_args) 1) s.(global) s.(trap_sp))
+        Step (s <|pc := target_pc|> <|stack := arg1 :: arg2 :: base|> <|env := s.(accu)|>
+                <|extra_args := Nat.add s.(extra_args) 1|>)
       | None => Error "APPTERM2: accu is not a closure"
       end
     | _ => Error "APPTERM2: stack underflow"
@@ -237,7 +234,8 @@ Definition step (code : array instruction) (s : state) : step_result :=
       let base := skipn slotsize s.(stack) in
       match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
-        Step (st s target_pc s.(accu) (arg1 :: arg2 :: arg3 :: base) s.(accu) (Nat.add s.(extra_args) 2) s.(global) s.(trap_sp))
+        Step (s <|pc := target_pc|> <|stack := arg1 :: arg2 :: arg3 :: base|> <|env := s.(accu)|>
+                <|extra_args := Nat.add s.(extra_args) 2|>)
       | None => Error "APPTERM3: accu is not a closure"
       end
     | _ => Error "APPTERM3: stack underflow"
@@ -249,13 +247,15 @@ Definition step (code : array instruction) (s : state) : step_result :=
     if Nat.ltb 0 s.(extra_args) then
       match get_code_ptr_s s s.(accu) with
       | Some target_pc =>
-        Step (st s target_pc s.(accu) stk s.(accu) (Nat.sub s.(extra_args) 1) s.(global) s.(trap_sp))
+        Step (s <|pc := target_pc|> <|stack := stk|> <|env := s.(accu)|>
+                <|extra_args := Nat.sub s.(extra_args) 1|>)
       | None => Error "RETURN: accu is not a closure"
       end
     else
       match stk with
       | Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest =>
-        Step (st s ret_pc s.(accu) rest saved_env (Z.to_nat saved_ea) s.(global) s.(trap_sp))
+        Step (s <|pc := ret_pc|> <|stack := rest|> <|env := saved_env|>
+                <|extra_args := Z.to_nat saved_ea|>)
       | _ => Error "RETURN: malformed return frame"
       end
 
@@ -268,7 +268,8 @@ Definition step (code : array instruction) (s : state) : step_result :=
       let new_stack := args ++ s.(stack) in
       match nth_error fields 2 with
       | Some saved_env =>
-        Step (st s pc' s.(accu) new_stack saved_env (Nat.add s.(extra_args) num_args) s.(global) s.(trap_sp))
+        Step (s <|pc := pc'|> <|stack := new_stack|> <|env := saved_env|>
+                <|extra_args := Nat.add s.(extra_args) num_args|>)
       | None => Error "RESTART: malformed closure"
       end in
     match s.(env) with
@@ -289,7 +290,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
      else build partial application closure and return to caller. *)
   | GRAB required =>
     if Nat.leb required s.(extra_args) then
-      Step (st s pc' s.(accu) s.(stack) s.(env) (Nat.sub s.(extra_args) required) s.(global) s.(trap_sp))
+      Step (s <|pc := pc'|> <|extra_args := Nat.sub s.(extra_args) required|>)
     else
       let num_args := S s.(extra_args) in
       let saved_args := firstn num_args s.(stack) in
@@ -302,7 +303,8 @@ Definition step (code : array instruction) (s : state) : step_result :=
       let closure := Val_closure addr 0%nat in
       match rest_stack with
       | Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest =>
-        Step (st s' ret_pc closure rest saved_env (Z.to_nat saved_ea) s.(global) s.(trap_sp))
+        Step (s' <|pc := ret_pc|> <|accu := closure|> <|stack := rest|> <|env := saved_env|>
+                 <|extra_args := Z.to_nat saved_ea|>)
       | _ => Error "GRAB: malformed return frame"
       end
 
@@ -317,7 +319,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
     let '(s', base_ptr) := heap_alloc s Closure_tag fields in
     let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
     let closure := Val_closure addr 0%nat in
-    Step (st s' pc' closure rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s' <|pc := pc'|> <|accu := closure|> <|stack := rest|>)
 
   (* CLOSUREREC nf nv [ofs0;ofs1;...]: build flat closure block of
      (nf*3-1+nv) fields.  Layout: [code0,ci0, infix,code1,ci1, ..., v0,v1,...]
@@ -356,7 +358,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
           closure_at i' :: stk'
         end in
       let new_stack := push_closures nfuncs rest in
-      Step (st s' pc' (closure_at 0%nat) new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      Step (s' <|pc := pc'|> <|accu := closure_at 0%nat|> <|stack := new_stack|>)
     end
 
   (* OFFSETCLOSURE n: accu := env offset by n fields (within the same heap block). *)
@@ -364,10 +366,10 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match s.(env) with
     | Val_closure addr base_ofs =>
       let new_ofs := Z.to_nat (Z.of_nat base_ofs + ofs) in
-      Step (st s pc' (Val_closure addr new_ofs) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      Step (s <|pc := pc'|> <|accu := Val_closure addr new_ofs|>)
     | Val_block t _ =>
       if Z.eqb ofs 0 then
-        Step (st s pc' s.(env) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+        Step (s <|pc := pc'|> <|accu := s.(env)|>)
       else Error "OFFSETCLOSURE: non-zero offset on non-closure env"
     | _ => Error "OFFSETCLOSURE: invalid env"
     end
@@ -377,24 +379,24 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match s.(env) with
     | Val_closure addr base_ofs =>
       let new_ofs := Z.to_nat (Z.of_nat base_ofs + ofs) in
-      Step (st s pc' (Val_closure addr new_ofs) new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      Step (s <|pc := pc'|> <|accu := Val_closure addr new_ofs|> <|stack := new_stack|>)
     | Val_block t _ =>
       if Z.eqb ofs 0 then
-        Step (st s pc' s.(env) new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+        Step (s <|pc := pc'|> <|accu := s.(env)|> <|stack := new_stack|>)
       else Error "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"
     | _ => Error "PUSHOFFSETCLOSURE: invalid env"
     end
 
   | GETGLOBAL n =>
     match nth_error s.(global) n with
-    | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
     | None => Error "GETGLOBAL: index out of bounds"
     end
 
   | PUSHGETGLOBAL n =>
     let new_stack := s.(accu) :: s.(stack) in
     match nth_error s.(global) n with
-    | Some v => Step (st s pc' v new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
     | None => Error "PUSHGETGLOBAL: index out of bounds"
     end
 
@@ -402,7 +404,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match nth_error s.(global) n with
     | Some glob =>
       match field_or_heap s glob p with
-      | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | Some v => Step (s <|pc := pc'|> <|accu := v|>)
       | None => Error "GETGLOBALFIELD: field access failed"
       end
     | None => Error "GETGLOBALFIELD: index out of bounds"
@@ -413,7 +415,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match nth_error s.(global) n with
     | Some glob =>
       match field_or_heap s glob p with
-      | Some v => Step (st s pc' v new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
       | None => Error "PUSHGETGLOBALFIELD: field access failed"
       end
     | None => Error "PUSHGETGLOBALFIELD: index out of bounds"
@@ -422,33 +424,33 @@ Definition step (code : array instruction) (s : state) : step_result :=
   | SETGLOBAL n =>
     let new_global := match set_nth s.(global) n s.(accu) with
                       | Some g => g | None => s.(global) end in
-    Step (st s pc' val_unit s.(stack) s.(env) s.(extra_args) new_global s.(trap_sp))
+    Step (s <|pc := pc'|> <|accu := val_unit|> <|global := new_global|>)
 
   | ATOM t =>
     let '(s', ptr) := heap_alloc s t [] in
-    Step (st s' pc' ptr s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s' <|pc := pc'|> <|accu := ptr|>)
 
   | PUSHATOM t =>
     let new_stack := s.(accu) :: s.(stack) in
     let '(s', ptr) := heap_alloc s t [] in
-    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>)
 
   (* MAKEBLOCK tag size: accu=field0, pop (size-1) from stack. *)
   | MAKEBLOCK t size =>
     let fields := s.(accu) :: firstn (Nat.sub size 1) s.(stack) in
     let new_stack := skipn (Nat.sub size 1) s.(stack) in
     let '(s', ptr) := heap_alloc s t fields in
-    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>)
 
   | MAKEBLOCK1 t =>
     let '(s', ptr) := heap_alloc s t [s.(accu)] in
-    Step (st s' pc' ptr s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s' <|pc := pc'|> <|accu := ptr|>)
 
   | MAKEBLOCK2 t =>
     match s.(stack) with
     | v1 :: rest =>
       let '(s', ptr) := heap_alloc s t [s.(accu); v1] in
-      Step (st s' pc' ptr rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := rest|>)
     | _ => Error "MAKEBLOCK2: stack underflow"
     end
 
@@ -456,7 +458,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match s.(stack) with
     | v1 :: v2 :: rest =>
       let '(s', ptr) := heap_alloc s t [s.(accu); v1; v2] in
-      Step (st s' pc' ptr rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := rest|>)
     | _ => Error "MAKEBLOCK3: stack underflow"
     end
 
@@ -466,18 +468,18 @@ Definition step (code : array instruction) (s : state) : step_result :=
     let fields := s.(accu) :: firstn (Nat.sub n 1) s.(stack) in
     let new_stack := skipn (Nat.sub n 1) s.(stack) in
     let '(s', ptr) := heap_alloc s 254 fields in
-    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>)
 
   | GETFIELD n =>
     match field_or_heap s s.(accu) n with
-    | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
     | None => Error "GETFIELD: access failed"
     end
 
   (* GETFLOATFIELD n: accu is a float array (tag 254), get field n. *)
   | GETFLOATFIELD n =>
     match field_or_heap s s.(accu) n with
-    | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
     | None => Error "GETFLOATFIELD: access failed"
     end
 
@@ -491,7 +493,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
           match set_nth fields n newval with
           | Some new_fields =>
             let new_hp := heap_update s.(hp) addr new_fields in
-            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+            Step (s <|pc := pc'|> <|accu := val_unit|> <|stack := rest|> <|hp := new_hp|>)
           | None => Error "SETFIELD: index out of bounds"
           end
         | None => Error "SETFIELD: dangling pointer"
@@ -512,7 +514,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
           match set_nth fields n newval with
           | Some new_fields =>
             let new_hp := heap_update s.(hp) addr new_fields in
-            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+            Step (s <|pc := pc'|> <|accu := val_unit|> <|stack := rest|> <|hp := new_hp|>)
           | None => Error "SETFLOATFIELD: index out of bounds"
           end
         | None => Error "SETFLOATFIELD: dangling pointer"
@@ -524,7 +526,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
 
   | VECTLENGTH =>
     match size_or_heap s s.(accu) with
-    | Some n => Step (st s pc' (Val_int (Z.of_nat n)) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Some n => Step (s <|pc := pc'|> <|accu := Val_int (Z.of_nat n)|>)
     | None => Error "VECTLENGTH: not a block"
     end
 
@@ -532,7 +534,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match s.(stack) with
     | Val_int idx :: rest =>
       match field_or_heap s s.(accu) (Z.to_nat idx) with
-      | Some v => Step (st s pc' v rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := rest|>)
       | None => Error "GETVECTITEM: index out of bounds"
       end
     | _ => Error "GETVECTITEM: bad index or stack underflow"
@@ -548,7 +550,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
           match set_nth fields (Z.to_nat idx) newval with
           | Some new_fields =>
             let new_hp := heap_update s.(hp) addr new_fields in
-            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+            Step (s <|pc := pc'|> <|accu := val_unit|> <|stack := rest|> <|hp := new_hp|>)
           | None => Error "SETVECTITEM: index out of bounds"
           end
         | None => Error "SETVECTITEM: dangling pointer"
@@ -562,7 +564,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match s.(stack) with
     | Val_int idx :: rest =>
       match field_or_heap s s.(accu) (Z.to_nat idx) with
-      | Some (Val_int c) => Step (st s pc' (Val_int c) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | Some (Val_int c) => Step (s <|pc := pc'|> <|accu := Val_int c|> <|stack := rest|>)
       | _ => Error "GETSTRINGCHAR: index out of bounds or not a char"
       end
     | _ => Error "GETSTRINGCHAR: stack underflow"
@@ -578,7 +580,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
           match set_nth fields (Z.to_nat idx) (Val_int newchar) with
           | Some new_fields =>
             let new_hp := heap_update s.(hp) addr new_fields in
-            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+            Step (s <|pc := pc'|> <|accu := val_unit|> <|stack := rest|> <|hp := new_hp|>)
           | None => Error "SETBYTESCHAR: index out of bounds"
           end
         | None => Error "SETBYTESCHAR: dangling pointer"
@@ -589,37 +591,37 @@ Definition step (code : array instruction) (s : state) : step_result :=
     end
 
   | BRANCH target =>
-    Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := target|>)
 
   | BRANCHIF target =>
     match s.(accu) with
-    | Val_int 0 => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-    | _ => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int 0 => Step (s <|pc := pc'|>)
+    | _ => Step (s <|pc := target|>)
     end
 
   | BRANCHIFNOT target =>
     match s.(accu) with
-    | Val_int 0 => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-    | _ => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int 0 => Step (s <|pc := target|>)
+    | _ => Step (s <|pc := pc'|>)
     end
 
   | SWITCH _nc _nb const_targets block_targets =>
     match s.(accu) with
     | Val_int n =>
       match nth_error const_targets (Z.to_nat n) with
-      | Some target => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | Some target => Step (s <|pc := target|>)
       | None => Error "SWITCH: constant index out of range"
       end
     | Val_block t _ =>
       match nth_error block_targets t with
-      | Some target => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | Some target => Step (s <|pc := target|>)
       | None => Error "SWITCH: block tag out of range"
       end
     | Val_ptr addr | Val_closure addr _ =>
       match tag_or_heap s s.(accu) with
       | Some t =>
         match nth_error block_targets t with
-        | Some target => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+        | Some target => Step (s <|pc := target|>)
         | None => Error "SWITCH: block tag out of range"
         end
       | None => Error "SWITCH: dangling pointer"
@@ -628,8 +630,8 @@ Definition step (code : array instruction) (s : state) : step_result :=
 
   | BOOLNOT =>
     match s.(accu) with
-    | Val_int 0 => Step (st s pc' val_true s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-    | _ => Step (st s pc' val_false s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int 0 => Step (s <|pc := pc'|> <|accu := val_true|>)
+    | _ => Step (s <|pc := pc'|> <|accu := val_false|>)
     end
 
   (* PUSHTRAP: push trap frame [handler_pc, prev_trap_sp, env, extra_args] onto
@@ -639,14 +641,14 @@ Definition step (code : array instruction) (s : state) : step_result :=
     let prev_tsp := Val_int (Z.of_nat s.(trap_sp)) in
     let new_stack := Val_int handler_pc :: prev_tsp :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: s.(stack) in
     let new_tsp := length new_stack in
-    Step (st s pc' s.(accu) new_stack s.(env) s.(extra_args) s.(global) new_tsp)
+    Step (s <|pc := pc'|> <|stack := new_stack|> <|trap_sp := new_tsp|>)
 
   (* POPTRAP: restore trap_sp from the trap link (sp[1]) and pop 4 values.
      For well-formed code the trap frame is always at the current stack top. *)
   | POPTRAP =>
     match s.(stack) with
     | _ :: Val_int prev_tsp :: _ :: _ :: rest =>
-      Step (st s pc' s.(accu) rest s.(env) s.(extra_args) s.(global) (Z.to_nat prev_tsp))
+      Step (s <|pc := pc'|> <|stack := rest|> <|trap_sp := Z.to_nat prev_tsp|>)
     | _ => Error "POPTRAP: malformed trap frame"
     end
 
@@ -657,43 +659,43 @@ Definition step (code : array instruction) (s : state) : step_result :=
     do_raise s.(accu) s
 
   | CHECK_SIGNALS =>
-    Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := pc'|>)
 
   (* C_CALL: suspend and request a C primitive call. *)
   | C_CALL nargs prim_idx =>
     let args := s.(accu) :: firstn (Nat.sub nargs 1) s.(stack) in
     let new_stack := skipn (Nat.sub nargs 1) s.(stack) in
-    let cont := st s pc' val_unit new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp) in
+    let cont := s <|pc := pc'|> <|accu := val_unit|> <|stack := new_stack|> in
     CCall_request prim_idx args cont
 
   | CONSTINT n =>
-    Step (st s pc' (Val_int n) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := pc'|> <|accu := Val_int n|>)
 
   | PUSHCONSTINT n =>
     let new_stack := s.(accu) :: s.(stack) in
-    Step (st s pc' (Val_int n) new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := pc'|> <|accu := Val_int n|> <|stack := new_stack|>)
 
   | NEGINT =>
     match s.(accu) with
-    | Val_int n => Step (st s pc' (Val_int (- n)) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int n => Step (s <|pc := pc'|> <|accu := Val_int (- n)|>)
     | _ => Error "NEGINT: not an integer"
     end
 
   | ADDINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (a + b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (a + b)|> <|stack := rest|>)
     | _, _ => Error "ADDINT: type error or stack underflow"
     end
 
   | SUBINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (a - b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (a - b)|> <|stack := rest|>)
     | _, _ => Error "SUBINT: type error or stack underflow"
     end
 
   | MULINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (a * b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (a * b)|> <|stack := rest|>)
     | _, _ => Error "MULINT: type error or stack underflow"
     end
 
@@ -701,7 +703,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match s.(accu), s.(stack) with
     | Val_int a, Val_int b :: rest =>
       if Z.eqb b 0 then do_raise div_by_zero_exn s
-      else Step (st s pc' (Val_int (Z.quot a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      else Step (s <|pc := pc'|> <|accu := Val_int (Z.quot a b)|> <|stack := rest|>)
     | _, _ => Error "DIVINT: type error or stack underflow"
     end
 
@@ -709,85 +711,85 @@ Definition step (code : array instruction) (s : state) : step_result :=
     match s.(accu), s.(stack) with
     | Val_int a, Val_int b :: rest =>
       if Z.eqb b 0 then do_raise div_by_zero_exn s
-      else Step (st s pc' (Val_int (Z.rem a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      else Step (s <|pc := pc'|> <|accu := Val_int (Z.rem a b)|> <|stack := rest|>)
     | _, _ => Error "MODINT: type error or stack underflow"
     end
 
   | ANDINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.land a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (Z.land a b)|> <|stack := rest|>)
     | _, _ => Error "ANDINT: type error or stack underflow"
     end
 
   | ORINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.lor a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (Z.lor a b)|> <|stack := rest|>)
     | _, _ => Error "ORINT: type error or stack underflow"
     end
 
   | XORINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.lxor a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (Z.lxor a b)|> <|stack := rest|>)
     | _, _ => Error "XORINT: type error or stack underflow"
     end
 
   | LSLINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.shiftl a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (Z.shiftl a b)|> <|stack := rest|>)
     | _, _ => Error "LSLINT: type error or stack underflow"
     end
 
   | LSRINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (z_lsr a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (z_lsr a b)|> <|stack := rest|>)
     | _, _ => Error "LSRINT: type error or stack underflow"
     end
 
   | ASRINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.shiftr a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := Val_int (Z.shiftr a b)|> <|stack := rest|>)
     | _, _ => Error "ASRINT: type error or stack underflow"
     end
 
   | EQ =>
     match s.(stack) with
-    | b :: rest => Step (st s pc' (if value_phys_eqb s.(accu) b then val_true else val_false) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | b :: rest => Step (s <|pc := pc'|> <|accu := if value_phys_eqb s.(accu) b then val_true else val_false|> <|stack := rest|>)
     | _ => Error "EQ: stack underflow"
     end
 
   | NEQ =>
     match s.(stack) with
-    | b :: rest => Step (st s pc' (if value_phys_eqb s.(accu) b then val_false else val_true) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | b :: rest => Step (s <|pc := pc'|> <|accu := if value_phys_eqb s.(accu) b then val_false else val_true|> <|stack := rest|>)
     | _ => Error "NEQ: stack underflow"
     end
 
   | LTINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (a <? b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := val_bool (a <? b)|> <|stack := rest|>)
     | _, _ => Error "LTINT: type error or stack underflow"
     end
 
   | LEINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (a <=? b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := val_bool (a <=? b)|> <|stack := rest|>)
     | _, _ => Error "LEINT: type error or stack underflow"
     end
 
   | GTINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (a >? b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := val_bool (a >? b)|> <|stack := rest|>)
     | _, _ => Error "GTINT: type error or stack underflow"
     end
 
   | GEINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (a >=? b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := val_bool (a >=? b)|> <|stack := rest|>)
     | _, _ => Error "GEINT: type error or stack underflow"
     end
 
   | OFFSETINT n =>
     match s.(accu) with
-    | Val_int a => Step (st s pc' (Val_int (a + n)) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => Step (s <|pc := pc'|> <|accu := Val_int (a + n)|>)
     | _ => Error "OFFSETINT: not an integer"
     end
 
@@ -797,14 +799,14 @@ Definition step (code : array instruction) (s : state) : step_result :=
       match heap_lookup s.(hp) addr with
       | Some (_, Val_int old :: rest) =>
         let new_hp := heap_update s.(hp) addr (Val_int (old + n) :: rest) in
-        Step (mk_state pc' val_unit s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+        Step (s <|pc := pc'|> <|accu := val_unit|> <|hp := new_hp|>)
       | _ => Error "OFFSETREF: not a ref"
       end
     | _ => Error "OFFSETREF: not a ref"
     end
 
   | ISINT =>
-    Step (st s pc' (if is_int s.(accu) then val_true else val_false) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    Step (s <|pc := pc'|> <|accu := if is_int s.(accu) then val_true else val_false|>)
 
   (* GETMETHOD: accu is the method index, stack top is the object.
      Look up method at position accu in the object's class table. *)
@@ -816,7 +818,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
         match s.(accu) with
         | Val_int n =>
           match field_or_heap s class_tbl (Z.to_nat n) with
-          | Some method_fn => Step (st s pc' method_fn s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+          | Some method_fn => Step (s <|pc := pc'|> <|accu := method_fn|>)
           | None => Error "GETMETHOD: method not found"
           end
         | _ => Error "GETMETHOD: not an integer index"
@@ -853,7 +855,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
         | _ :: [] => Error "GETPUBMET: method not found"
         | method_fn :: tag_val :: rest =>
           if value_eqb tag_val (Val_int tag) then
-            Step (st s pc' method_fn new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+            Step (s <|pc := pc'|> <|accu := method_fn|> <|stack := new_stack|>)
           else scan rest
         end
       in scan (skipn 2 fields)
@@ -882,7 +884,7 @@ Definition step (code : array instruction) (s : state) : step_result :=
           | _ :: [] => Error "GETDYNMET: method not found"
           | method_fn :: tag_val :: rest =>
             if value_eqb tag_val tag then
-              Step (st s pc' method_fn s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+              Step (s <|pc := pc'|> <|accu := method_fn|>)
             else scan rest
           end
         in scan (skipn 2 fields)
@@ -895,18 +897,18 @@ Definition step (code : array instruction) (s : state) : step_result :=
      In interp.c the operand is an absolute instruction index (after decode). *)
   | BEQ n target =>
     match s.(accu) with
-    | Val_int a => if Z.eqb a n then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.eqb a n then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
     (* Non-integer values are never equal to Val_int n, so don't branch *)
-    | _ => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Step (s <|pc := pc'|>)
     end
 
   | BNEQ n target =>
     match s.(accu) with
-    | Val_int a => if Z.eqb a n then Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.eqb a n then Step (s <|pc := pc'|>)
+                   else Step (s <|pc := target|>)
     (* Non-integer values are never equal to Val_int n, so always branch *)
-    | _ => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Step (s <|pc := target|>)
     end
 
   (* B-comparison instructions: semantics is *pc++ CMP Long_val(accu),
@@ -914,41 +916,41 @@ Definition step (code : array instruction) (s : state) : step_result :=
 
   | BLTINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.ltb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.ltb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
     | _ => Error "BLTINT: not an integer"
     end
 
   | BLEINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.leb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.leb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
     | _ => Error "BLEINT: not an integer"
     end
 
   | BGTINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.gtb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.gtb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
     | _ => Error "BGTINT: not an integer"
     end
 
   | BGEINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.geb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.geb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
     | _ => Error "BGEINT: not an integer"
     end
 
   | ULTINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (Z.ltb (z_flip_sign a) (z_flip_sign b))) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := val_bool (Z.ltb (z_flip_sign a) (z_flip_sign b))|> <|stack := rest|>)
     | _, _ => Error "ULTINT: type error or stack underflow"
     end
 
   | UGEINT =>
     match s.(accu), s.(stack) with
-    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (Z.geb (z_flip_sign a) (z_flip_sign b))) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a, Val_int b :: rest => Step (s <|pc := pc'|> <|accu := val_bool (Z.geb (z_flip_sign a) (z_flip_sign b))|> <|stack := rest|>)
     | _, _ => Error "UGEINT: type error or stack underflow"
     end
 
@@ -957,21 +959,21 @@ Definition step (code : array instruction) (s : state) : step_result :=
      Like signed B-ops (which use n CMP accu), both use z_flip_sign for unsigned order. *)
   | BULTINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.ltb (z_flip_sign n) (z_flip_sign a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.ltb (z_flip_sign n) (z_flip_sign a) then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
     | _ => Error "BULTINT: not an integer"
     end
 
   | BUGEINT n target =>
     match s.(accu) with
-    | Val_int a => if Z.geb (z_flip_sign n) (z_flip_sign a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_int a => if Z.geb (z_flip_sign n) (z_flip_sign a) then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
     | _ => Error "BUGEINT: not an integer"
     end
 
   | STOP => Halt s.(accu)
-  | EVENT => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
-  | BREAK => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+  | EVENT => Step (s <|pc := pc'|>)
+  | BREAK => Step (s <|pc := pc'|>)
 
   | PERFORM => Error "PERFORM: effects not supported"
   | RESUME => Error "RESUME: effects not supported"
@@ -994,7 +996,7 @@ Fixpoint run_micro (fuel : nat) (code : array instruction) (s : state) : bcmicro
     | CCall_request prim_idx args cont =>
       MVis prim_idx args (fun result =>
         match result with
-        | Some v => run_micro fuel' code (set_accu cont v)
+        | Some v => run_micro fuel' code (cont <|accu := v|>)
         | None => MErr "C call returned None"
         end)
     end

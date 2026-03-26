@@ -6,6 +6,7 @@ From Stdlib.FSets Require Import FMapPositive.
 From Stdlib.PArith Require Import BinPosDef.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST.
+From RecordUpdate Require Import RecordUpdate.
 
 (* Heap: maps addresses (nat) to (tag, fields) pairs.
    Uses PositiveMap for O(log n) lookup instead of O(n) linear scan.
@@ -30,6 +31,9 @@ Record state : Type := mk_state {
   next_addr  : nat;            (* next free heap address *)
 }.
 
+#[export] Instance eta_state : Settable state :=
+  settable! mk_state <pc; accu; stack; env; extra_args; global; trap_sp; hp; next_addr>.
+
 Inductive step_result : Type :=
   | Step      : state -> step_result
   | Halt      : value -> step_result
@@ -41,9 +45,6 @@ Inductive run_result : Type :=
   | Run_error   : string -> run_result
   | Out_of_fuel : state -> run_result.
 
-Definition set_accu (s : state) (v : value) : state :=
-  mk_state s.(pc) v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp) s.(hp) s.(next_addr).
-
 (* Heap operations *)
 Definition heap_lookup (h : heap) (addr : nat) : option (nat * list value) :=
   PositiveMap.find (Pos.of_succ_nat addr) h.
@@ -51,9 +52,7 @@ Definition heap_lookup (h : heap) (addr : nat) : option (nat * list value) :=
 Definition heap_alloc (s : state) (tag : nat) (fields : list value) : state * value :=
   let addr := s.(next_addr) in
   let h' := PositiveMap.add (Pos.of_succ_nat addr) (tag, fields) s.(hp) in
-  let s' := mk_state s.(pc) s.(accu) s.(stack) s.(env) s.(extra_args) s.(global)
-              s.(trap_sp) h' (S addr) in
-  (s', Val_ptr addr).
+  (s <|hp := h'|> <|next_addr := S addr|>, Val_ptr addr).
 
 Definition heap_update (h : heap) (addr : nat) (fields : list value) : heap :=
   match PositiveMap.find (Pos.of_succ_nat addr) h with

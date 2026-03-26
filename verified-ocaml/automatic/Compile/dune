@@ -3,4 +3,5 @@
  (theories Stdlib
   OCamlInterp.Manual.Utils
   OCamlInterp.Manual.Bytecode
-  OCamlInterp.SemiAutomatic.Interpret))
+  OCamlInterp.SemiAutomatic.Interpret
+  RecordUpdate))

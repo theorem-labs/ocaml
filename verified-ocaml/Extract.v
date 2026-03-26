@@ -185,7 +185,7 @@ Extraction "Interp_extracted.ml"
   state mk_state step run run_pure
   step_result run_result
   bcmicro MRet MErr MFuel MVis run_micro handle_bcmicro
-  set_accu initial_state
+  initial_state
   field_or_heap tag_or_heap size_or_heap
   heap_alloc heap_lookup heap_update
   list_to_code_array fetch_instr
