@@ -413,7 +413,9 @@ let make_handler ?(raw_globals=[||]) prims buf =
     | "caml_sys_const_ostype_win32", _ -> Some (Val_int 0)
     | "caml_sys_const_ostype_cygwin", _ -> Some (Val_int 0)
     | "caml_sys_const_naked_pointers_checked", _ -> Some (Val_int 0)
-    | "caml_sys_const_backend_type", _ -> Some (tuple_val [string_val "Bytecode"])
+    | "caml_sys_const_backend_type", _ ->
+      (* Sys.backend_type: Native=Val_int 0, Bytecode=Val_int 1, Other s=Val_block(0,[s]) *)
+      Some (Val_int 1)
     | "caml_sys_getenv", [sv] ->
       (* Try system env if arg is a string, else raise Not_found *)
       let varname = match resolve_string heap sv with
@@ -432,7 +434,9 @@ let make_handler ?(raw_globals=[||]) prims buf =
     | "caml_sys_getenv", _ -> None  (* fallback *)
     | "caml_sys_get_argv", _ -> Some (tuple_val [string_val "<test>"; Val_block (0, [string_val "<test>"])])
     | "caml_sys_time", _ -> Some (Val_int 0)
-    | "caml_sys_random_seed", _ -> Some (Val_block (0, [Val_int 0]))
+    | "caml_sys_random_seed", _ ->
+      let t = int_of_float (Unix.gettimeofday () *. 1000000.) in
+      Some (Val_block (0, [Val_int t]))
     (* --- GC (stub: return zero floats) --- *)
     | ("caml_gc_counters" | "caml_gc_stat" | "caml_gc_quick_stat"), _ ->
       let zero_float = Val_block (253, [Val_int 0; Val_int 0]) in
@@ -635,7 +639,11 @@ let make_handler ?(raw_globals=[||]) prims buf =
        | None -> Some (Val_int 0))
     | "caml_obj_set_field", _ -> Some (Val_int 0)
     | "caml_obj_block", [Val_int t; Val_int n] ->
-      Some (heap_alloc_local t (List.init n (fun _ -> Val_int 0)))
+      if t >= 255 || (t = 252 && n = 0) then
+        ccall_raise (Val_block (0, [exn_desc "Invalid_argument" (-4);
+                                    string_val "Obj.new_block"]))
+      else
+        Some (heap_alloc_local t (List.init n (fun _ -> Val_int 0)))
     | "caml_obj_dup", [v] ->
       (* Duplicate: allocate a fresh copy on heap *)
       (match v with
@@ -1329,6 +1337,49 @@ let make_handler ?(raw_globals=[||]) prims buf =
     | "caml_atan2",[a;b] -> float_binop atan2 a b
     | "caml_asin", [a] -> float_unop asin a
     | "caml_acos", [a] -> float_unop acos a
+    | "caml_trunc_float", [a] ->
+      let f = val_to_float a in
+      let r = if f >= 0.0 then floor f else ceil f in
+      Some (float_to_val r)
+    | "caml_round_float", [a] ->
+      let f = val_to_float a in
+      let r = if f >= 0.0 then floor (f +. 0.5) else ceil (f -. 0.5) in
+      Some (float_to_val r)
+    | "caml_nextafter_float", [a; b] ->
+      let fa = val_to_float a and fb = val_to_float b in
+      Some (float_to_val (Float.next_after fa fb))
+    | "caml_copysign_float", [a; b] ->
+      let fa = val_to_float a and fb = val_to_float b in
+      Some (float_to_val (Float.copy_sign fa fb))
+    | "caml_signbit_float", [a] ->
+      Some (Val_int (if Float.sign_bit (val_to_float a) then 1 else 0))
+    | "caml_frexp_float", [a] ->
+      let (frac, exp) = Float.frexp (val_to_float a) in
+      Some (tuple_val [float_to_val frac; Val_int exp])
+    | "caml_ldexp_float", [a; Val_int exp] ->
+      Some (float_to_val (Float.ldexp (val_to_float a) exp))
+    | "caml_fma_float", [a; b; c] ->
+      let fa = val_to_float a and fb = val_to_float b and fc = val_to_float c in
+      Some (float_to_val (Float.fma fa fb fc))
+    | "caml_modf_float", [a] ->
+      let (frac, intg) = Float.modf (val_to_float a) in
+      Some (tuple_val [float_to_val frac; float_to_val intg])
+    | ("caml_power_float" | "caml_float_pow"), [a; b] -> float_binop ( ** ) a b
+    | "caml_log10", [a] -> float_unop log10 a
+    | "caml_log2_float", [a] -> float_unop (fun x -> log x /. log 2.0) a
+    | "caml_cosh", [a] -> float_unop cosh a
+    | "caml_sinh", [a] -> float_unop sinh a
+    | "caml_tanh", [a] -> float_unop tanh a
+    | "caml_ceil", [a] -> float_unop ceil a
+    | "caml_floor", [a] -> float_unop floor a
+    | "caml_hypot_float", [a; b] -> float_binop hypot a b
+    | "caml_fmod_float", [a; b] -> float_binop mod_float a b
+    | "caml_classify_float", [a] ->
+      let c = match Float.classify_float (val_to_float a) with
+        | FP_normal -> 0 | FP_subnormal -> 1 | FP_zero -> 2
+        | FP_infinite -> 3 | FP_nan -> 4
+      in
+      Some (Val_int c)
     | ("caml_float_neg" | "caml_neg_float"), [a] -> float_unop ( ~-. ) a
     | ("caml_float_abs" | "caml_abs_float"), [a] -> float_unop abs_float a
     | ("caml_float_of_string" | "caml_float_of_bytes"), [sv] ->
@@ -1526,6 +1577,56 @@ let make_handler ?(raw_globals=[||]) prims buf =
        | None ->
          let failure = exn_desc "Failure" (-5) in
          ccall_raise failure)
+    (* --- Obj module: reachable_words, with_tag, new_block --- *)
+    | "caml_obj_reachable_words", [v] ->
+      let visited = Hashtbl.create 16 in
+      let count = ref 0 in
+      let rec walk v =
+        match v with
+        | Val_ptr addr when not (Hashtbl.mem visited addr) ->
+          Hashtbl.add visited addr true;
+          (match heap_lookup heap addr with
+           | Some (_, fields) ->
+             count := !count + 1 + List.length fields;
+             List.iter walk fields
+           | None -> ())
+        | Val_block (t, fields) when t < 251 ->
+          count := !count + 1 + List.length fields;
+          List.iter walk fields
+        | _ -> ()
+      in
+      walk v;
+      Some (Val_int !count)
+    | "caml_obj_with_tag", [Val_int new_tag; v] ->
+      (match v with
+       | Val_ptr addr ->
+         (match heap_lookup heap addr with
+          | Some (old_tag, fields) ->
+            if new_tag = old_tag then Some v
+            else Some (heap_alloc_local new_tag fields)
+          | None -> Some v)
+       | Val_block (old_tag, fields) ->
+         if new_tag = old_tag then Some v
+         else Some (Val_block (new_tag, fields))
+       | _ -> Some v)
+    | "caml_obj_new_block", [Val_int tag; Val_int size] ->
+      if tag = 255 || (tag = 252 && size = 0) then
+        ccall_raise (Val_block (0, [exn_desc "Invalid_argument" (-4);
+                                    string_val "Obj.new_block"]))
+      else
+        Some (heap_alloc_local tag (List.init size (fun _ -> Val_int 0)))
+    (* --- GC stubs --- *)
+    | "caml_gc_get", _ ->
+      let zero_float = float_to_val 0.0 in
+      Some (Val_block (0, [
+        Val_int 256; Val_int 0; Val_int 80; Val_int 3; Val_int 250;
+        Val_int 4096; zero_float; Val_int 0; Val_int 0; Val_int 0; Val_int 0;
+      ]))
+    | "caml_gc_set", _ -> Some (Val_int 0)
+    | "caml_gc_minor_words", _ -> Some (float_to_val 0.0)
+    (* --- Sys stubs --- *)
+    | "caml_sys_system_command", _ -> Some (Val_int (-1))
+    | "caml_sys_isatty", _ -> Some (Val_int 0)
     | _ ->
       Printf.eprintf "WARNING: unimplemented C-call %S (idx=%d, %d args)\n%!" name idx (List.length args);
       None
