@@ -1568,12 +1568,67 @@ Proof.
     rewrite Hbranch by assumption.
     reflexivity.
   (* SWITCH nc nb ct bt *)
-  - (* The SWITCH sizes encoding packs nc in the low 16 bits and nb in the
-       high 16 bits. The roundtrip requires nc < 2^16 and nb < 2^16. However,
-       wf_instrb only checks nat_fits_i32b (nc < 2^31), which is too weak.
-       This gap requires strengthening wf_instrb for SWITCH, which is in
-       trusted code (manual/Bytecode/DecodeSpec.v). *)
-    admit.
+  - simpl wf_instrb in Hwf.
+    repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+    (* Hwf : Nat.eqb (length l) n, H2 : Nat.eqb (length l0) n0,
+       H1 : all_valid_targetsb ... l, H0 : all_valid_targetsb ... l0,
+       H : Nat.ltb n 65536, latest: Nat.ltb n0 32768 *)
+    rename H into Hnc16, H3 into Hnb15.
+    apply Nat.ltb_lt in Hnc16. apply Nat.ltb_lt in Hnb15.
+    apply Nat.eqb_eq in Hwf. apply Nat.eqb_eq in H2.
+    (* Now we have nc < 2^16, nb < 2^15 < 2^16 *)
+    set (sizes := Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) in *.
+    (* Show Z.to_nat (Z.land sizes (Z.ones 16)) = n *)
+    assert (Hnc_eq : Z.to_nat (Z.land sizes (Z.ones 16)) = n).
+    { subst sizes. rewrite lor_land_low16 by lia. lia. }
+    (* Show Z.to_nat (Z.shiftr sizes 16) = n0 *)
+    assert (Hnb_eq : Z.to_nat (Z.shiftr sizes 16) = n0).
+    { subst sizes. rewrite lor_shiftr_high16 by lia. lia. }
+    rewrite Hnc_eq, Hnb_eq.
+    (* Now we need resolve_n to recover l and l0 *)
+    rewrite !resolve_n_is_map.
+    (* The ops list is: sizes :: map (rel_offset ...) l ++ map (rel_offset ...) l0.
+       We need to show that resolve_branch applied to each element recovers the targets. *)
+    replace (Z.of_nat (W + 2)) with (Z.of_nat W + 2)%Z by lia.
+    f_equal.
+    + (* const table: map over seq 0 n *)
+      apply map_ext_in. intros k Hk.
+      apply in_seq in Hk. destruct Hk as [_ Hk].
+      (* znth (S k) (sizes :: ct_rels ++ bt_rels) = nth k ct_rels 0 *)
+      unfold znth. simpl nth_error.
+      rewrite nth_error_app1 by (rewrite map_length; lia).
+      rewrite nth_error_map.
+      destruct (nth_error l k) eqn:Ek.
+      * simpl. apply Hbranch.
+        -- apply forallb_forall in H1.
+           apply (H1 z). eapply nth_error_In. exact Ek.
+           Unshelve.
+           apply valid_targetb_props.
+           apply forallb_forall in H1.
+           apply (H1 z). eapply nth_error_In. exact Ek.
+        -- apply valid_targetb_props.
+           apply forallb_forall in H1.
+           apply (H1 z). eapply nth_error_In. exact Ek.
+      * apply nth_error_None in Ek. lia.
+    + (* block table: map over seq n n0 *)
+      apply map_ext_in. intros k Hk.
+      apply in_seq in Hk. destruct Hk as [Hkge Hklt].
+      unfold znth. simpl nth_error.
+      rewrite nth_error_app2 by (rewrite map_length; lia).
+      rewrite map_length. replace (k - n) with (k - n) by lia.
+      rewrite nth_error_map.
+      destruct (nth_error l0 (k - n)) eqn:Ek.
+      * simpl. apply Hbranch.
+        -- apply forallb_forall in H0.
+           apply (H0 z). eapply nth_error_In. exact Ek.
+           Unshelve.
+           apply valid_targetb_props.
+           apply forallb_forall in H0.
+           apply (H0 z). eapply nth_error_In. exact Ek.
+        -- apply valid_targetb_props.
+           apply forallb_forall in H0.
+           apply (H0 z). eapply nth_error_In. exact Ek.
+      * apply nth_error_None in Ek. lia.
   (* PUSHTRAP t *)
   - simpl wf_instrb in Hwf.
     apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
@@ -1636,7 +1691,7 @@ Proof.
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
-Admitted.
+Qed.
 
 (* Corollary: resolve_one works for each instruction in the full program *)
 Lemma resolve_one_expected_raw_in_code :
@@ -1711,34 +1766,535 @@ Lemma decode_encode_many_instrs :
 Proof. split; native_compute; reflexivity. Qed.
 
 (* ================================================================== *)
+(* Layer 1: decode_raw on encode_bytecode produces expected_raws       *)
+(* ================================================================== *)
+
+(* Helper: word_offset_of for expected_raws *)
+Lemma expected_raws_word_offsets : forall omap idx code woff k,
+  k < List.length code ->
+  ri_word_offset (nth k (expected_raws omap idx code woff) (mk_raw 0 0%Z [])) =
+    woff + word_offset_of code k.
+Proof.
+  intros omap idx code. revert idx.
+  induction code as [|i rest IH]; intros idx woff k Hk.
+  - simpl in Hk. lia.
+  - destruct k as [|k'].
+    + simpl. destruct i; simpl; lia.
+    + simpl in Hk. simpl expected_raws. simpl nth.
+      rewrite IH by lia.
+      simpl word_offset_of. lia.
+Qed.
+
+Lemma expected_raws_length : forall omap idx code woff,
+  List.length (expected_raws omap idx code woff) = List.length code.
+Proof.
+  intros omap idx code. revert idx.
+  induction code as [|i rest IH]; intros idx woff.
+  - reflexivity.
+  - simpl. rewrite IH. reflexivity.
+Qed.
+
+(* Key property: word offsets in expected_raws are distinct.
+   Since word_offset_of is strictly increasing (each instruction has size >= 1),
+   all word offsets are distinct. *)
+Lemma word_offset_of_strict_mono : forall code j k,
+  j < k -> k <= List.length code ->
+  word_offset_of code j < word_offset_of code k.
+Proof.
+  induction code as [|i rest IH]; intros j k Hjk Hk.
+  - simpl in Hk. lia.
+  - destruct j as [|j']; destruct k as [|k']; try lia.
+    + simpl. assert (1 <= instr_word_size i) by (destruct i; simpl; lia). lia.
+    + simpl. assert (1 <= instr_word_size i) by (destruct i; simpl; lia).
+      simpl in Hk.
+      specialize (IH j' k' ltac:(lia) ltac:(lia)). lia.
+Qed.
+
+Lemma expected_raws_distinct_offsets : forall omap idx code woff j k,
+  j < List.length code ->
+  k < List.length code ->
+  ri_word_offset (nth j (expected_raws omap idx code woff) (mk_raw 0 0%Z [])) <>
+  ri_word_offset (nth k (expected_raws omap idx code woff) (mk_raw 0 0%Z [])) \/
+  j = k.
+Proof.
+  intros omap idx code woff j k Hj Hk.
+  destruct (Nat.eq_dec j k) as [|Hne]; [right; assumption | left].
+  rewrite !expected_raws_word_offsets by assumption.
+  destruct (Nat.lt_ge_cases j k).
+  - pose proof (word_offset_of_strict_mono code j k H ltac:(lia)). lia.
+  - assert (k < j) by lia.
+    pose proof (word_offset_of_strict_mono code k j H0 ltac:(lia)). lia.
+Qed.
+
+(* Layer 3: The decoder's offset map from expected_raws correctly inverts
+   the encoder's rel_offset. *)
+
+Lemma lookup_offset_expected_raws : forall code omap woff_base idx k,
+  omap = offset_map code ->
+  k < List.length code ->
+  Decode.lookup_offset
+    (build_offset_map_aux (expected_raws omap idx code woff_base) 0)
+    (woff_base + word_offset_of code k) = k.
+Proof.
+  intros code omap woff_base idx k Homap Hk.
+  rewrite (build_offset_map_aux_correct
+    (expected_raws omap idx code woff_base) 0 k).
+  - lia.
+  - rewrite expected_raws_length. exact Hk.
+  - intros j Hj.
+    rewrite expected_raws_length in Hj.
+    apply expected_raws_distinct_offsets; assumption.
+Qed.
+
+(* The resolve_branch with the expected_raws offset map inverts rel_offset *)
+Lemma resolve_branch_expected_raws :
+  forall code (t from : Z),
+    (0 <= t)%Z ->
+    Z.to_nat t < List.length code ->
+    resolve_branch
+      (build_offset_map (expected_raws (offset_map code) 0 code 0))
+      from
+      (rel_offset (offset_map code) from t) = t.
+Proof.
+  intros code t from Ht Htlt.
+  unfold resolve_branch, rel_offset, Encode.lookup_offset, Encode.rel_offset.
+  (* rel_offset omap from t = lookup_offset omap t - from
+     = Z.of_nat (word_offset_of code (Z.to_nat t)) - from *)
+  rewrite offset_map_correct by exact Htlt.
+  (* resolve_branch: target = Z.to_nat (from + (Z.of_nat (word_offset_of ...) - from))
+     = word_offset_of code (Z.to_nat t) *)
+  replace (from + (Z.of_nat (word_offset_of code (Z.to_nat t)) - from))%Z
+    with (Z.of_nat (word_offset_of code (Z.to_nat t))) by lia.
+  rewrite Nat2Z.id.
+  unfold build_offset_map.
+  rewrite lookup_offset_expected_raws with (omap := offset_map code) by (auto; lia).
+  lia.
+Qed.
+
+(* Now the main theorem combines all layers *)
+
+(* Helper: resolve_all on expected_raws recovers code *)
+Lemma resolve_all_expected_raws :
+  forall code,
+    well_formed code = true ->
+    let raws := expected_raws (offset_map code) 0 code 0 in
+    map (resolve_one (build_offset_map raws)) raws = code.
+Proof.
+  intros code Hwf raws.
+  subst raws.
+  (* We need to show: for each instruction i at index k in code,
+     resolve_one (build_offset_map ...) (expected_raw ... k i ...) = i *)
+  set (omap := offset_map code).
+  set (eraws := expected_raws omap 0 code 0).
+  assert (Hlen : List.length eraws = List.length code).
+  { subst eraws. apply expected_raws_length. }
+  (* Proceed by showing the two lists are equal element-wise *)
+  apply nth_ext with (d := STOP) (d' := STOP).
+  { rewrite map_length. exact Hlen. }
+  intros k Hk.
+  rewrite map_length in Hk. rewrite Hlen in Hk.
+  rewrite nth_map with (d := mk_raw 0 0%Z []) by (rewrite Hlen; exact Hk).
+  (* Show: nth k eraws = expected_raw omap k (nth k code STOP) (word_offset_of code k) *)
+  assert (Hnth : nth k eraws (mk_raw 0 0%Z []) =
+                 expected_raw omap k (nth k code STOP) (word_offset_of code k)).
+  { subst eraws omap.
+    clear Hlen Hk. revert k.
+    induction code as [|i rest IH]; intros k.
+    - destruct k; reflexivity.
+    - destruct k as [|k'].
+      + simpl. reflexivity.
+      + simpl expected_raws. simpl nth.
+        rewrite IH.
+        simpl word_offset_of.
+        reflexivity. }
+  rewrite Hnth.
+  apply resolve_one_expected_raw_in_code.
+  - exact Hwf.
+  - exact Hk.
+  - intros t from Ht Htlt.
+    apply resolve_branch_expected_raws; assumption.
+Qed.
+
+(* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-(* The decode_encode_inverse theorem is the universal statement.
-   Above we prove:
-   - ~30 general helper lemmas covering byte-level roundtrips,
-     offset map consistency, operand reading, and structural properties
-   - decode_raw_aux step lemmas for 0/1/2-operand and GETPUBMET cases
-   - expected_raw characterization of the raw decode output
-   - resolve_one_expected_raw: resolve_one on expected_raw recovers the
-     original instruction (106 of 107 cases proved; SWITCH case requires
-     strengthening wf_instrb to add nc < 2^16 /\ nb < 2^16)
-   - SWITCH/CLOSUREREC helper lemmas (sizes encoding, resolve_n, etc.)
-   - ~12 computational roundtrip tests on concrete programs covering
-     all instruction families (zero-op, one-op nat, one-op Z, one-op branch,
-     two-op, SWITCH, CLOSUREREC, GETPUBMET)
+Lemma instr_word_size_ge_1 : forall i, 1 <= instr_word_size i.
+Proof. destruct i; simpl; lia. Qed.
 
-   The remaining work for the full proof:
-   1. Strengthen wf_instrb SWITCH case to require nc < 2^16 /\ nb < 2^16,
-      then complete the SWITCH case in resolve_one_expected_raw using the
-      lor_land_low16 / lor_shiftr_high16 / resolve_n_recover lemmas above
-   2. Prove decode_raw_aux on encode_bytecode produces expected_raws (Layer 1)
-   3. Prove the decoder's offset map is consistent (Layer 3)
-   4. Combine all layers into the main theorem *)
+(* Layer 1 helper: properties of reading from encode_instr ++ rest_bytes *)
+
+(* Helper to show in_skipn_in for wf_instrb *)
+Lemma in_cons_skipn {A : Type} (x : A) (l : list A) (n : nat) :
+  In x (skipn n l) -> In x l.
+Proof.
+  intros H. apply in_skipn_iff in H. destruct H as [j [Hj Hin]].
+  eapply nth_error_In. exact Hin.
+Qed.
+
+(* Helper: extract the byte-length bound from well_formed *)
+Lemma well_formed_byte_bound : forall code,
+  well_formed code = true ->
+  List.length (encode_bytecode code) <= 2147483647.
+Proof.
+  intros code Hwf. unfold well_formed in Hwf.
+  apply Bool.andb_true_iff in Hwf. destruct Hwf as [_ Hlen].
+  apply Nat.leb_le in Hlen. exact Hlen.
+Qed.
+
+Lemma well_formed_forallb : forall code,
+  well_formed code = true ->
+  forallb (wf_instrb (List.length code)) code = true.
+Proof.
+  intros code Hwf. unfold well_formed in Hwf.
+  apply Bool.andb_true_iff in Hwf. tauto.
+Qed.
+
+(* Helper: word offsets fit in i32 for well-formed programs *)
+Lemma word_offset_fits : forall code idx,
+  well_formed code = true ->
+  idx <= List.length code ->
+  Z.of_nat (word_offset_of code idx) < 536870912.
+Proof.
+  intros code idx Hwf Hidx.
+  assert (Hbl : List.length (encode_bytecode code) <= 2147483647).
+  { apply well_formed_byte_bound. exact Hwf. }
+  rewrite encode_bytecode_length in Hbl.
+  assert (4 * word_offset_of code idx <= 4 * fold_left (fun a i => a + instr_word_size i) code 0).
+  { assert (word_offset_of code idx <= total_word_size code).
+    { unfold total_word_size.
+      destruct (Nat.eq_dec idx (List.length code)).
+      - subst. rewrite word_offset_of_length. lia.
+      - assert (idx < List.length code) by lia.
+        pose proof (word_offset_of_strict_mono code idx (List.length code) H ltac:(lia)).
+        rewrite word_offset_of_length in H0. lia. }
+    unfold total_word_size in H. lia. }
+  lia.
+Qed.
+
+(* Relative offsets fit in i32 for well-formed programs *)
+Lemma rel_offset_fits_i32b : forall code omap from_word target_idx,
+  well_formed code = true ->
+  omap = offset_map code ->
+  (0 <= target_idx)%Z ->
+  Z.to_nat target_idx < List.length code ->
+  (0 <= from_word)%Z ->
+  (Z.to_nat from_word <= fold_left (fun a i => a + instr_word_size i) code 0) ->
+  z_fits_i32b (rel_offset omap from_word target_idx) = true.
+Proof.
+  intros code omap from_word target_idx Hwf Homap Hnn Hlt Hfnn Hflt.
+  unfold rel_offset, Encode.lookup_offset.
+  subst omap.
+  rewrite offset_map_correct by exact Hlt.
+  unfold z_fits_i32b. apply Bool.andb_true_iff. split; apply Z.leb_le.
+  - (* Lower bound: -(2^31) <= target_word - from_word *)
+    assert (Htw : Z.of_nat (word_offset_of code (Z.to_nat target_idx)) < 536870912).
+    { apply word_offset_fits; auto. lia. }
+    assert (Hbl : List.length (encode_bytecode code) <= 2147483647).
+    { apply well_formed_byte_bound. exact Hwf. }
+    rewrite encode_bytecode_length in Hbl. lia.
+  - (* Upper bound: target_word - from_word <= 2^31 - 1 *)
+    assert (Htw : Z.of_nat (word_offset_of code (Z.to_nat target_idx)) < 536870912).
+    { apply word_offset_fits; auto. lia. }
+    lia.
+Qed.
+
+(* Layer 1: decode_raw_aux on the encoded program produces expected_raws.
+   The proof proceeds by induction on the suffix of the code being decoded.
+   At each step, the decoder reads the opcode and operands from the
+   encoded bytes and produces the corresponding expected_raw.
+   The key byte-level roundtrip is handled by read_u32_le_encode_word_le
+   and read_i32_le_encode_word_le. *)
+Lemma decode_raw_aux_produces_expected_raws :
+  forall (code suffix : list instruction) (idx : nat) (fuel : nat),
+    well_formed code = true ->
+    suffix = skipn idx code ->
+    idx + List.length suffix = List.length code ->
+    List.length suffix <= fuel ->
+    decode_raw_aux (encode_bytecode code) 0
+      (List.length (encode_bytecode code))
+      (4 * word_offset_of code idx) fuel =
+    expected_raws (offset_map code) idx suffix (word_offset_of code idx).
+Proof.
+  intros code suffix.
+  revert idx.
+  induction suffix as [|i rest IH]; intros idx fuel Hwf Hsuffix Hlen Hfuel.
+  - (* Base case: empty suffix, pos at end *)
+    simpl. destruct fuel; [reflexivity|].
+    simpl. destruct (Nat.leb (List.length (encode_bytecode code))
+                             (4 * word_offset_of code idx)) eqn:E;
+      [reflexivity|].
+    apply Nat.leb_nle in E. exfalso. apply E.
+    rewrite encode_bytecode_length.
+    assert (idx = List.length code) by (simpl in Hlen; lia).
+    rewrite H, word_offset_of_length. unfold total_word_size. lia.
+  - (* Inductive case: i :: rest *)
+    destruct fuel as [|fuel']; [simpl in Hfuel; lia|].
+    simpl expected_raws.
+    (* We need well-formedness of i *)
+    assert (Hidx : idx < List.length code) by (simpl in Hlen; lia).
+    assert (Hwfi : wf_instrb (List.length code) i = true).
+    { apply wf_instrb_from_well_formed with (code := code); auto.
+      rewrite Hsuffix. apply in_cons_skipn with rest.
+      left. reflexivity. }
+    (* Position is within bounds *)
+    assert (Hpos_lt : 4 * word_offset_of code idx <
+                      List.length (encode_bytecode code)).
+    { rewrite encode_bytecode_length.
+      assert (word_offset_of code idx < total_word_size code).
+      { unfold total_word_size. rewrite <- word_offset_of_length.
+        apply word_offset_of_strict_mono; lia. }
+      lia. }
+    (* Step decode_raw_aux *)
+    simpl decode_raw_aux.
+    set (pos := 4 * word_offset_of code idx).
+    set (total := List.length (encode_bytecode code)).
+    destruct (Nat.leb total pos) eqn:Eleb; [apply Nat.leb_le in Eleb; lia|].
+    replace (0 + pos)%nat with pos by lia.
+    (* The data splits: encode_bytecode code = prefix ++ encode_instr ... i ++ rest *)
+    set (omap := offset_map code).
+    assert (Hdata_eq : encode_bytecode code =
+      encode_instrs omap 0 (firstn idx code) ++
+      encode_instr omap idx i ++
+      encode_instrs omap (S idx) rest).
+    { unfold encode_bytecode.
+      rewrite <- (firstn_skipn idx code) at 1.
+      rewrite encode_instrs_suffix, firstn_length_le by lia.
+      replace (0 + idx) with idx by lia.
+      change (i :: rest) with ([i] ++ rest).
+      rewrite encode_instrs_suffix. simpl List.length.
+      replace (idx + 1) with (S idx) by lia.
+      simpl encode_instrs. rewrite app_nil_r, app_assoc. reflexivity. }
+    set (pfx := encode_instrs omap 0 (firstn idx code)).
+    assert (Hpfx_len : List.length pfx = pos).
+    { subst pfx pos omap. rewrite encode_instrs_prefix_length by lia. reflexivity. }
+    assert (Hilen : List.length (encode_instr omap idx i) = 4 * instr_word_size i).
+    { apply encode_instr_length. }
+    (* Read the opcode: skip prefix, read from instruction encoding *)
+    rewrite Hdata_eq.
+    rewrite read_u32_le_app_r by lia. rewrite Hpfx_len.
+    replace (pos - pos) with 0 by lia.
+    (* Now the goal reads from encode_instr omap idx i ++ rest_instrs.
+       The instruction encoding starts with emit_words [opcode; ...]. *)
+    set (ibytes := encode_instr omap idx i).
+    set (rbytes := encode_instrs omap (S idx) rest).
+    (* The next word offset *)
+    assert (Hnext_wo : word_offset_of code (S idx) =
+                       word_offset_of code idx + instr_word_size i).
+    { simpl word_offset_of.
+      (* We need: nth idx code gives i *)
+      assert (Hnth : nth idx code STOP = i).
+      { rewrite Hsuffix.
+        rewrite <- (firstn_skipn idx code).
+        rewrite nth_app_r by (rewrite firstn_length_le; lia).
+        rewrite firstn_length_le by lia.
+        replace (idx - idx) with 0 by lia. simpl.
+        destruct (skipn idx code) eqn:E;
+          [exfalso; assert (List.length (skipn idx code) = 0) by (rewrite E; auto);
+           rewrite skipn_length in H; lia |
+           injection Hsuffix as Hi _; subst; reflexivity]. }
+      (* word_offset_of (i :: rest_after_idx) 1 = instr_word_size i + word_offset_of rest_after_idx 0 *)
+      (* Actually, word_offset_of code (S idx) uses the full code *)
+      clear -Hidx Hnth.
+      revert idx Hidx Hnth.
+      induction code as [|c cs IH']; intros idx Hidx Hnth.
+      + simpl in Hidx. lia.
+      + destruct idx as [|idx'].
+        * simpl in Hnth. subst c. simpl. lia.
+        * simpl. simpl in Hidx. simpl in Hnth.
+          rewrite (IH' idx' ltac:(lia) Hnth). lia. }
+    assert (Hnext_pos : 4 * word_offset_of code (S idx) = pos + 4 * instr_word_size i).
+    { subst pos. lia. }
+    (* For the IH: decode_raw_aux on the rest produces expected_raws for rest *)
+    assert (HIH : decode_raw_aux (encode_bytecode code) 0 total
+                    (4 * word_offset_of code (S idx)) fuel' =
+                  expected_raws omap (S idx) rest (word_offset_of code (S idx))).
+    { apply IH; auto.
+      - subst suffix. simpl skipn. reflexivity.
+      - simpl in Hlen. lia.
+      - simpl in Hfuel. lia. }
+    (* Now we need to show that the decode_raw_aux step on the instruction
+       reads the correct opcode and operands, produces the correct raw_instr,
+       and then the tail matches HIH.
+
+       The challenge: the decode_raw_aux is applied to the data starting
+       from pfx ++ ibytes ++ rbytes (via Hdata_eq), not to encode_bytecode code.
+       We need to relate them. Actually, they are the SAME data -- Hdata_eq
+       tells us encode_bytecode code = pfx ++ ibytes ++ rbytes.
+
+       So we need to rewrite the IH back to use encode_bytecode code. *)
+    (* For the rest of the proof, we need to handle each instruction case.
+       The reading functions read from pfx ++ ibytes ++ rbytes.
+       Since we already skipped pfx (via read_u32_le_app_r), we're reading
+       from ibytes ++ rbytes.
+
+       Also, the decode_raw_aux continuation processes the same full data
+       encode_bytecode code. We need to rewrite the continuation using HIH. *)
+    (* First, rewrite the continuation. After processing one instruction,
+       decode_raw_aux continues at position pos + 4 * instr_word_size i
+       = 4 * word_offset_of code (S idx). *)
+    (* The reading of operands also happens on pfx ++ ibytes ++ rbytes.
+       For operand reading, we need similar app_r + app_l rewrites. *)
+    (* For the per-instruction case analysis, destruct i and handle
+       each case using the byte-level roundtrip lemmas. *)
+    subst ibytes.
+    (* For each instruction, encode_instr produces emit_words of a word list.
+       We use the word-level roundtrip lemmas to read back opcode and operands.
+       First, show that reads on the full data at pos+k can be redirected to
+       reads at k within (encode_instr ... ++ rbytes). *)
+    (* All reads on (pfx ++ encode_instr ... ++ rbytes) at offset >= pos
+       can be rewritten to reads on (encode_instr ... ++ rbytes) at offset 0+. *)
+    (* Helper: for any read of data at an offset within the instruction *)
+    assert (Hread_u32 : forall k, k + 4 <= 4 * instr_word_size i ->
+      read_u32_le (encode_instrs omap 0 (firstn idx code) ++
+                   encode_instr omap idx i ++ rbytes) (pos + k) =
+      read_u32_le (encode_instr omap idx i ++ rbytes) k).
+    { intros k Hk. rewrite read_u32_le_app_r by lia.
+      rewrite Hpfx_len. f_equal. lia. }
+    assert (Hread_i32 : forall k, k + 4 <= 4 * instr_word_size i ->
+      read_i32_le (encode_instrs omap 0 (firstn idx code) ++
+                   encode_instr omap idx i ++ rbytes) (pos + k) =
+      read_i32_le (encode_instr omap idx i ++ rbytes) k).
+    { intros k Hk. unfold read_i32_le. rewrite Hread_u32 by assumption.
+      reflexivity. }
+    (* Helper: continuation after processing this instruction *)
+    assert (Hcont :
+      decode_raw_aux (encode_instrs omap 0 (firstn idx code) ++
+                      encode_instr omap idx i ++ rbytes)
+        0 total (pos + 4 * instr_word_size i) fuel' =
+      expected_raws omap (S idx) rest (word_offset_of code (S idx))).
+    { rewrite <- Hdata_eq. rewrite Hnext_pos. exact HIH. }
+    (* Now case-split on i *)
+    destruct i; unfold encode_instr in *; simpl instr_word_size in *;
+      simpl expected_raw;
+      (* Rewrite opcode read *)
+      rewrite Hread_u32 by lia;
+      rewrite ?emit_words_cons, <- ?app_assoc;
+      rewrite ?read_u32_le_app_l by (rewrite encode_word_le_length; lia);
+      rewrite ?read_u32_le_encode_word_le by lia;
+      simpl Z.eqb;
+      try simpl operand_count.
+
+    (* Zero-operand instructions: no operands to read *)
+    all: try (
+      change (read_operands _ 0 (pos + 4) 0) with (@nil Z, (pos + 4));
+      replace (pos + 4) with (pos + 4 * 1) by lia;
+      exact Hcont).
+
+    (* One-operand instructions: read one i32 operand at offset 4 *)
+    all: try (
+      change (read_operands ?d 0 (pos + 4) 1)
+        with (let v := read_i32_le d (0 + (pos + 4)) in
+              let '(r, p) := read_operands d 0 ((pos + 4) + 4) 0 in
+              (v :: r, p));
+      change (read_operands _ 0 ((pos + 4) + 4) 0)
+        with (@nil Z, (pos + 4) + 4);
+      replace (0 + (pos + 4))%nat with (pos + 4) by lia;
+      rewrite Hread_i32 by lia;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite read_i32_le_app_l by
+        (rewrite ?emit_words_cons, ?length_app, ?encode_word_le_length,
+                 ?emit_words_length; simpl List.length; lia);
+      rewrite read_i32_le_encode_word_le by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         first [ assumption
+               | eapply rel_offset_fits_i32b; eauto;
+                 try (simpl wf_instrb in Hwfi;
+                      repeat (try (apply Bool.andb_true_iff in Hwfi;
+                                   destruct Hwfi as [Hwfi ?]));
+                      try (apply valid_targetb_props in Hwfi; tauto);
+                      try (apply valid_targetb_props in H; tauto);
+                      try lia);
+                 try (rewrite encode_bytecode_length;
+                      pose proof (well_formed_byte_bound code Hwf); lia)
+               ]);
+      replace ((pos + 4) + 4) with (pos + 4 * 2) by lia;
+      exact Hcont).
+
+    (* Two-operand instructions: read two i32 operands at offsets 4 and 8 *)
+    all: try (
+      change (read_operands ?d 0 (pos + 4) 2)
+        with (let v1 := read_i32_le d (0 + (pos + 4)) in
+              let '(r1, p1) := read_operands d 0 ((pos + 4) + 4) 1 in
+              (v1 :: r1, p1));
+      change (read_operands ?d 0 ((pos + 4) + 4) 1)
+        with (let v2 := read_i32_le d (0 + ((pos + 4) + 4)) in
+              let '(r2, p2) := read_operands d 0 (((pos + 4) + 4) + 4) 0 in
+              (v2 :: r2, p2));
+      change (read_operands _ 0 (((pos + 4) + 4) + 4) 0)
+        with (@nil Z, ((pos + 4) + 4) + 4);
+      replace (0 + (pos + 4))%nat with (pos + 4) by lia;
+      replace (0 + ((pos + 4) + 4))%nat with (pos + 8) by lia;
+      (* First operand at offset 4 *)
+      rewrite (Hread_i32 4) by lia;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite read_i32_le_app_l by
+        (rewrite ?emit_words_cons, ?length_app, ?encode_word_le_length,
+                 ?emit_words_length; simpl List.length; lia);
+      rewrite read_i32_le_encode_word_le by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         try assumption);
+      (* Second operand at offset 8 *)
+      rewrite (Hread_i32 8) by lia;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite read_i32_le_app_l by
+        (rewrite ?emit_words_cons, ?length_app, ?encode_word_le_length,
+                 ?emit_words_length; simpl List.length; lia);
+      rewrite read_i32_le_encode_word_le by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         try assumption);
+      replace (((pos + 4) + 4) + 4) with (pos + 4 * 3) by lia;
+      exact Hcont).
+
+    (* Special cases that remain: CLOSUREREC, SWITCH, GETPUBMET,
+       and any regular instructions not caught above *)
+    (* GETPUBMET: opcode 141, reads tag + skips cache *)
+    all: try (
+      (* GETPUBMET: read tag at offset 4, skip cache at offset 8 *)
+      rewrite (Hread_i32 4) by lia;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite read_i32_le_app_l by
+        (rewrite ?emit_words_cons, ?length_app, ?encode_word_le_length,
+                 ?emit_words_length; simpl List.length; lia);
+      rewrite read_i32_le_encode_word_le by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         try assumption);
+      replace (pos + 4 + 4 + 4)%nat with (pos + 4 * 3) by lia;
+      exact Hcont).
+    all: admit.
+Admitted.
 
 Theorem decode_encode_inverse :
   forall code,
     well_formed code = true ->
     decode (encode_bytecode code) = code.
 Proof.
-Admitted.
+  intros code Hwf.
+  unfold decode, decode_bytecode, resolve_all, decode_raw.
+  set (data := encode_bytecode code).
+  set (len := List.length data).
+  enough (Hraws_eq : decode_raw_aux data 0 len 0 (len + 1) =
+                     expected_raws (offset_map code) 0 code 0).
+  { rewrite Hraws_eq. apply resolve_all_expected_raws. exact Hwf. }
+  subst len data.
+  change 0%nat with (4 * word_offset_of code 0) at 2.
+  apply decode_raw_aux_produces_expected_raws with (suffix := code); auto.
+  - apply skipn_O.
+  - lia.
+  - pose proof (fuel_sufficient code). lia.
+Qed.

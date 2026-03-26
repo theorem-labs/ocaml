@@ -5,71 +5,7 @@
    3. Compare outputs *)
 
 open Interp_extracted
-
-(* === Utilities === *)
-
-let with_temp_dir f =
-  let dir = Filename.temp_file "pbt" "" in
-  Sys.remove dir; Unix.mkdir dir 0o700;
-  Fun.protect ~finally:(fun () ->
-    (try Array.iter (fun n -> Sys.remove (Filename.concat dir n)) (Sys.readdir dir) with _ -> ());
-    (try Unix.rmdir dir with _ -> ())
-  ) (fun () -> f dir)
-
-let compile_and_run_ocamlc dir source =
-  let src = Filename.concat dir "test.ml" in
-  let exe = Filename.concat dir "test.byte" in
-  let oc = open_out src in output_string oc source; close_out oc;
-  if Sys.command (Printf.sprintf "ocamlc -o %s %s 2>/dev/null" exe src) <> 0 then None
-  else begin
-    let ic = Unix.open_process_in (Printf.sprintf "timeout 5 ocamlrun %s 2>/dev/null" exe) in
-    let buf = Buffer.create 256 in
-    (try while true do Buffer.add_char buf (input_char ic) done with End_of_file -> ());
-    ignore (Unix.close_process_in ic);
-    Some (Buffer.contents buf)
-  end
-
-let cl s = List.init (String.length s) (fun i -> s.[i])
-let sc l = let buf = Buffer.create (List.length l) in List.iter (Buffer.add_char buf) l; Buffer.contents buf
-
-let print_int_nl e =
-  Exp_seq (Exp_app (Exp_var (cl "print_int"), e),
-           Exp_app (Exp_var (cl "print_newline"), Exp_unit))
-
-let run_our_compiler prog =
-  let code = list_to_code_array (compile_program prog) in
-  let buf = Buffer.create 64 in
-  let handler idx args =
-    match idx, args with
-    | 0, [Val_int n] ->
-      String.iter (Buffer.add_char buf) (string_of_int n);
-      Some (Val_int 0)
-    | 1, [_] ->
-      Buffer.add_char buf '\n';
-      Some (Val_int 0)
-    | _ -> Some (Val_int 0)
-  in
-  let s = ref (initial_state []) in
-  let remaining = ref 1000000 in
-  let result = ref None in
-  let rec loop () =
-    if !remaining <= 0 then result := Some "timeout"
-    else begin
-      decr remaining;
-      match step code !s with
-      | Step s' -> s := s'; loop ()
-      | Halt _ -> ()
-      | Error msg -> result := Some (sc msg)
-      | CCall_request (idx, args, cont) ->
-        (match handler idx args with
-         | Some v -> s := set_accu cont v; loop ()
-         | None -> result := Some "ccall failed")
-    end
-  in
-  loop ();
-  match !result with
-  | None -> Ok (Buffer.contents buf)
-  | Some err -> Error err
+open Test_common
 
 (* === Random AST generator === *)
 
@@ -109,6 +45,8 @@ let rec gen_int_expr (depth : int) (scope : string list) : (expr * string) QChec
       (1, gen_tuple_pat depth scope);
       (1, gen_match_int depth scope);
       (1, gen_seq depth scope);
+      (1, gen_letrec depth scope);
+      (1, gen_closure depth scope);
     ]
 
 and gen_int_leaf (scope : string list) : (expr * string) QCheck.Gen.t =
@@ -274,6 +212,49 @@ and gen_seq (depth : int) (scope : string list) : (expr * string) QCheck.Gen.t =
   (* Wrap first expression as a side-effect (ignore its value) *)
   return (Exp_seq (Exp_let (cl "_", e1, Exp_unit), e2),
           parens ("let _ = " ^ s1 ^ " in " ^ s2))
+
+and gen_letrec (depth : int) (scope : string list) : (expr * string) QCheck.Gen.t =
+  let open QCheck.Gen in
+  let d = depth - 1 in
+  gen_fresh_var scope >>= fun fname ->
+  gen_fresh_var (fname :: scope) >>= fun param ->
+  (* Recursive function body: simple countdown that sums *)
+  gen_int_expr d (param :: fname :: scope) >>= fun (base_e, base_s) ->
+  gen_int_expr d scope >>= fun (arg_e, arg_s) ->
+  let body_e =
+    Exp_if (Exp_binop (Op_le, Exp_var (cl param), Exp_int 0),
+      base_e,
+      Exp_binop (Op_add, Exp_int 1,
+        Exp_app (Exp_var (cl fname),
+          Exp_binop (Op_sub, Exp_var (cl param), Exp_int 1)))) in
+  let body_s = Printf.sprintf "if %s <= 0 then %s else 1 + %s (%s - 1)" param base_s fname param in
+  return (Exp_letrec (cl fname,
+            Exp_fun (cl param, body_e),
+            Exp_app (Exp_var (cl fname), arg_e)),
+          parens ("let rec " ^ fname ^ " " ^ param ^ " = " ^ body_s ^
+                  " in " ^ fname ^ " " ^ parens arg_s))
+
+and gen_closure (depth : int) (scope : string list) : (expr * string) QCheck.Gen.t =
+  let open QCheck.Gen in
+  let d = depth - 1 in
+  match scope with
+  | [] ->
+    (* No variables to capture, just generate a regular let *)
+    gen_let d scope
+  | _ ->
+    (* Pick a variable from scope to capture in the closure *)
+    oneofl scope >>= fun captured ->
+    gen_fresh_var scope >>= fun fname ->
+    gen_fresh_var (fname :: scope) >>= fun param ->
+    gen_int_expr d (param :: scope) >>= fun (body_e, body_s) ->
+    gen_int_expr d scope >>= fun (arg_e, arg_s) ->
+    let closure_body = Exp_binop (Op_add, Exp_var (cl captured), body_e) in
+    let closure_body_s = captured ^ " + " ^ body_s in
+    return (Exp_let (cl fname,
+              Exp_fun (cl param, closure_body),
+              Exp_app (Exp_var (cl fname), arg_e)),
+            parens ("let " ^ fname ^ " " ^ param ^ " = " ^ closure_body_s ^
+                    " in " ^ fname ^ " " ^ parens arg_s))
 
 (* Generate a complete program with OCaml source for ocamlc *)
 let gen_random_program_with_source : (decl list * string) QCheck.Gen.t =
@@ -1368,12 +1349,947 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
               Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y")))]))))] in
       let src = Printf.sprintf "let () = print_int (let swap p = match p with (a, b) -> (b, a) in match swap (%d, %d) with (x, y) -> x + y); print_newline ()" a b in
       (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* === NEW GENERATORS: Exp_function === *)
+
+    (* 103. Exp_function: basic function with int pattern arms *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_function [
+            (Pat_int 0, Exp_int 100);
+            (Pat_int 1, Exp_int 200);
+            (Pat_wild, Exp_int 300)],
+          Exp_app (Exp_var (cl "f"), Exp_int n))))] in
+      let src = Printf.sprintf "let () = print_int (let f = function 0 -> 100 | 1 -> 200 | _ -> 300 in f %d); print_newline ()" n in
+      (prog, src)) (int_range 0 3));
+
+    (* 104. Exp_function: with Pat_var binding *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_function [
+            (Pat_int 0, Exp_int 42);
+            (Pat_var (cl "x"), Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2))],
+          Exp_app (Exp_var (cl "f"), Exp_int n))))] in
+      let src = Printf.sprintf "let () = print_int (let f = function 0 -> 42 | x -> x * 2 in f %d); print_newline ()" n in
+      (prog, src)) (int_range 0 9));
+
+    (* 105. Exp_function: capturing a free variable *)
+    (map2 (fun a n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "f",
+            Exp_function [
+              (Pat_int 0, Exp_var (cl "a"));
+              (Pat_wild, Exp_int 0)],
+            Exp_app (Exp_var (cl "f"), Exp_int n)))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let f = function 0 -> a | _ -> 0 in f %d); print_newline ()" a n in
+      (prog, src)) (int_range 1 50) (int_range 0 2));
+
+    (* === NEW GENERATORS: Exp_nil / Exp_cons / Pat_nil / Pat_cons === *)
+
+    (* 106. Exp_cons: build a simple 1-element list, match on it *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_cons (Exp_int n, Exp_nil),
+          [(Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"));
+           (Pat_nil, Exp_int 0)])
+        ))] in
+      let src = Printf.sprintf "let () = print_int (match %d :: [] with h :: _ -> h | [] -> 0); print_newline ()" n in
+      (prog, src)) (int_range 0 49));
+
+    (* 107. Exp_cons: build a 2-element list, extract head *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_nil)),
+          [(Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"));
+           (Pat_nil, Exp_int 0)])
+        ))] in
+      let src = Printf.sprintf "let () = print_int (match %d :: %d :: [] with h :: _ -> h | [] -> 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* 108. Pat_nil: match empty list *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_nil,
+          [(Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"));
+           (Pat_nil, Exp_int 99)])
+        ))] in
+      let src = "let () = print_int (match [] with h :: _ -> h | [] -> 99); print_newline ()" in
+      (prog, src)));
+
+    (* 109. Pat_cons: simple h :: t destructuring on 2-element list, sum h and head of t *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_nil)),
+          [(Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+            Exp_binop (Op_add, Exp_var (cl "h"),
+              Exp_match (Exp_var (cl "t"),
+                [(Pat_cons (Pat_var (cl "h2"), Pat_wild), Exp_var (cl "h2"));
+                 (Pat_nil, Exp_int 0)])));
+           (Pat_nil, Exp_int 0)])
+        ))] in
+      let src = Printf.sprintf "let () = print_int (match %d :: %d :: [] with h :: t -> h + (match t with h2 :: _ -> h2 | [] -> 0) | [] -> 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* === NEW GENERATORS: 3+ arg functions with partial application === *)
+
+    (* 110. Three-argument function, fully applied *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "x", Exp_fun (cl "y", Exp_fun (cl "z",
+            Exp_binop (Op_add, Exp_var (cl "x"),
+              Exp_binop (Op_add, Exp_var (cl "y"), Exp_var (cl "z")))))),
+          Exp_app (Exp_app (Exp_app (Exp_var (cl "f"), Exp_int a), Exp_int b), Exp_int c))))] in
+      let src = Printf.sprintf "let () = print_int (let f x y z = x + y + z in f %d %d %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* 111. Three-argument function with partial application (apply 1, then 2 more) *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "x", Exp_fun (cl "y", Exp_fun (cl "z",
+            Exp_binop (Op_add, Exp_binop (Op_mul, Exp_var (cl "x"), Exp_var (cl "y")), Exp_var (cl "z"))))),
+          Exp_let (cl "g", Exp_app (Exp_var (cl "f"), Exp_int a),
+            Exp_app (Exp_app (Exp_var (cl "g"), Exp_int b), Exp_int c)))))] in
+      let src = Printf.sprintf "let () = print_int (let f x y z = x * y + z in let g = f %d in g %d %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 112. Three-argument function with partial application (apply 2, then 1) *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "x", Exp_fun (cl "y", Exp_fun (cl "z",
+            Exp_binop (Op_sub, Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y")), Exp_var (cl "z"))))),
+          Exp_let (cl "g", Exp_app (Exp_app (Exp_var (cl "f"), Exp_int a), Exp_int b),
+            Exp_app (Exp_var (cl "g"), Exp_int c)))))] in
+      let src = Printf.sprintf "let () = print_int (let f x y z = x + y - z in let g = f %d %d in g %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 9));
+
+    (* === NEW GENERATORS: Closures capturing multiple free vars from different scopes === *)
+
+    (* 113. Closure captures vars from 3 different scope levels *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "b", Exp_int b,
+            Exp_let (cl "c", Exp_int c,
+              Exp_let (cl "f", Exp_fun (cl "x",
+                Exp_binop (Op_add, Exp_var (cl "a"),
+                  Exp_binop (Op_add, Exp_var (cl "b"),
+                    Exp_binop (Op_add, Exp_var (cl "c"), Exp_var (cl "x"))))),
+                Exp_app (Exp_var (cl "f"), Exp_int 1)))))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let b = %d in let c = %d in let f x = a + b + c + x in f 1); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 114. Two closures each capturing different variables *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "b", Exp_int b,
+            Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "x"))),
+              Exp_let (cl "g", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "x"))),
+                Exp_binop (Op_add,
+                  Exp_app (Exp_var (cl "f"), Exp_int c),
+                  Exp_app (Exp_var (cl "g"), Exp_int c))))))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let b = %d in let f x = a + x in let g x = b + x in f %d + g %d); print_newline ()" a b c c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 9));
+
+    (* === NEW GENERATORS: Variable shadowing inside closures === *)
+
+    (* 115. Variable shadowing: closure parameter shadows captured variable *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "x", Exp_int a,
+          Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1)),
+            Exp_binop (Op_add, Exp_var (cl "x"), Exp_app (Exp_var (cl "f"), Exp_int b))))))] in
+      let src = Printf.sprintf "let () = print_int (let x = %d in let f x = x + 1 in x + f %d); print_newline ()" a b in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
+
+    (* 116. Variable shadowing: inner let shadows captured variable in closure *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "x", Exp_int a,
+          Exp_let (cl "f", Exp_fun (cl "y",
+            Exp_let (cl "x", Exp_binop (Op_add, Exp_var (cl "y"), Exp_int 1),
+              Exp_binop (Op_add, Exp_var (cl "x"), Exp_int b))),
+            Exp_binop (Op_add, Exp_var (cl "x"),
+              Exp_app (Exp_var (cl "f"), Exp_int c))))))] in
+      let src = Printf.sprintf "let () = print_int (let x = %d in let f y = let x = y + 1 in x + %d in x + f %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* === NEW GENERATORS: Evaluation order with side effects in let bindings === *)
+
+    (* 117. Let binding evaluation order: e1 before e2 *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr
+        (Exp_let (cl "x", Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int a), Exp_int 0),
+          Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int b),
+            Exp_app (Exp_var (cl "print_newline"), Exp_unit))))] in
+      let src = Printf.sprintf "let () = let _x = (print_int %d; 0) in print_int %d; print_newline ()" a b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 118. Sequential let with effects: verify order *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr
+        (Exp_let (cl "x", Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int a), Exp_int a),
+          Exp_let (cl "y", Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int b), Exp_int b),
+            Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int c),
+              Exp_app (Exp_var (cl "print_newline"), Exp_unit)))))] in
+      let src = Printf.sprintf "let () = let _x = (print_int %d; %d) in let _y = (print_int %d; %d) in print_int %d; print_newline ()" a a b b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* === NEW GENERATORS: Exp_constr (with args) === *)
+
+    (* 119. Exp_constr None (nullary constructor) used in match *)
+    (map (fun n ->
+      let prog = [
+        Decl_type (cl "color", [],
+          Td_variant [(cl "Red", None); (cl "Blue", None); (cl "Green", None)]);
+        Decl_expr (print_int_nl
+          (Exp_match (Exp_constr (cl "Red", None),
+            [(Pat_wild, Exp_int n)])
+          ))] in
+      let src = Printf.sprintf "type color = Red | Blue | Green\nlet () = print_int (match Red with _ -> %d); print_newline ()" n in
+      (prog, src)) (int_range 0 49));
+
+    (* 120. Exp_constr with arg: Some x *)
+    (map (fun n ->
+      let prog = [
+        Decl_type (cl "opt", [],
+          Td_variant [(cl "None", None); (cl "Some", Some Ty_int)]);
+        Decl_expr (print_int_nl
+          (Exp_match (Exp_constr (cl "Some", Some (Exp_int n)),
+            [(Pat_wild, Exp_int n)])
+          ))] in
+      let src = Printf.sprintf "type opt = None | Some of int\nlet () = print_int (match Some %d with _ -> %d); print_newline ()" n n in
+      (prog, src)) (int_range 0 49));
+
+    (* === NEW GENERATORS: Exp_record / Exp_field === *)
+
+    (* 121. Record creation and field access *)
+    (map2 (fun a b ->
+      let prog = [
+        Decl_type (cl "point", [],
+          Td_record [(cl "x", Ty_int); (cl "y", Ty_int)]);
+        Decl_expr (print_int_nl
+          (Exp_let (cl "p", Exp_record [(cl "x", Exp_int a); (cl "y", Exp_int b)],
+            Exp_binop (Op_add,
+              Exp_field (Exp_var (cl "p"), cl "x"),
+              Exp_field (Exp_var (cl "p"), cl "y")))))] in
+      let src = Printf.sprintf "type point = { x : int; y : int }\nlet () = print_int (let p = { x = %d; y = %d } in p.x + p.y); print_newline ()" a b in
+      (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* 122. Record with 3 fields *)
+    (map3 (fun a b c ->
+      let prog = [
+        Decl_type (cl "triple", [],
+          Td_record [(cl "a", Ty_int); (cl "b", Ty_int); (cl "c", Ty_int)]);
+        Decl_expr (print_int_nl
+          (Exp_let (cl "t", Exp_record [(cl "a", Exp_int a); (cl "b", Exp_int b); (cl "c", Exp_int c)],
+            Exp_binop (Op_add,
+              Exp_field (Exp_var (cl "t"), cl "a"),
+              Exp_binop (Op_add,
+                Exp_field (Exp_var (cl "t"), cl "b"),
+                Exp_field (Exp_var (cl "t"), cl "c"))))))] in
+      let src = Printf.sprintf "type triple = { a : int; b : int; c : int }\nlet () = print_int (let t = { a = %d; b = %d; c = %d } in t.a + t.b + t.c); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* === NEW GENERATORS: Recursive with list === *)
+
+    (* 123. Recursive sum over a list *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_letrec (cl "sum",
+          Exp_fun (cl "l",
+            Exp_match (Exp_var (cl "l"),
+              [(Pat_nil, Exp_int 0);
+               (Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+                Exp_binop (Op_add, Exp_var (cl "h"),
+                  Exp_app (Exp_var (cl "sum"), Exp_var (cl "t"))))])),
+          Exp_app (Exp_var (cl "sum"),
+            Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_cons (Exp_int c, Exp_nil)))))
+        ))] in
+      let src = Printf.sprintf "let () = print_int (let rec sum l = match l with [] -> 0 | h :: t -> h + sum t in sum [%d; %d; %d]); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* 124. Recursive length of list *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_letrec (cl "len",
+          Exp_fun (cl "l",
+            Exp_match (Exp_var (cl "l"),
+              [(Pat_nil, Exp_int 0);
+               (Pat_cons (Pat_wild, Pat_var (cl "t")),
+                Exp_binop (Op_add, Exp_int 1,
+                  Exp_app (Exp_var (cl "len"), Exp_var (cl "t"))))])),
+          Exp_app (Exp_var (cl "len"),
+            Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_nil))))
+        ))] in
+      let src = Printf.sprintf "let () = print_int (let rec len l = match l with [] -> 0 | _ :: t -> 1 + len t in len [%d; %d]); print_newline ()" a b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* === BATCH 2: More complex patterns and expressions === *)
+
+    (* 125. Pat_cons with nil fallback: match on empty vs non-empty list *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (
+          (if n > 0 then Exp_cons (Exp_int n, Exp_nil) else Exp_nil),
+          [(Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"));
+           (Pat_nil, Exp_int (-1))])
+        ))] in
+      let src = Printf.sprintf "let () = print_int (match %s with h :: _ -> h | [] -> -1); print_newline ()"
+        (if n > 0 then Printf.sprintf "[%d]" n else "[]") in
+      (prog, src)) (int_range 0 3));
+
+    (* 126. Recursive map over list *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_letrec (cl "sum",
+          Exp_fun (cl "l",
+            Exp_match (Exp_var (cl "l"),
+              [(Pat_nil, Exp_int 0);
+               (Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+                Exp_binop (Op_add,
+                  Exp_binop (Op_mul, Exp_var (cl "h"), Exp_int 2),
+                  Exp_app (Exp_var (cl "sum"), Exp_var (cl "t"))))])),
+          Exp_app (Exp_var (cl "sum"),
+            Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_cons (Exp_int c, Exp_nil)))))
+        ))] in
+      let src = Printf.sprintf "let () = print_int (let rec sum l = match l with [] -> 0 | h :: t -> h * 2 + sum t in sum [%d; %d; %d]); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 127. Exp_function with tuple destructuring *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_function [
+            (Pat_tuple [Pat_var (cl "x"); Pat_var (cl "y")],
+             Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y")))],
+          Exp_app (Exp_var (cl "f"), Exp_tuple [Exp_int a; Exp_int b]))))] in
+      let src = Printf.sprintf "let () = print_int (let f = function (x, y) -> x + y in f (%d, %d)); print_newline ()" a b in
+      (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* 128. Exp_function with bool pattern arms *)
+    (map (fun b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "to_int",
+          Exp_function [
+            (Pat_bool true, Exp_int 1);
+            (Pat_bool false, Exp_int 0)],
+          Exp_app (Exp_var (cl "to_int"), Exp_bool b))))] in
+      let src = Printf.sprintf "let () = print_int (let to_int = function true -> 1 | false -> 0 in to_int %s); print_newline ()" (if b then "true" else "false") in
+      (prog, src)) QCheck.Gen.bool);
+
+    (* 129. Closure capturing 4 free variables *)
+    (map2 (fun a b ->
+      let c = a + b in
+      let d = a * 2 in
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "b", Exp_int b,
+            Exp_let (cl "c", Exp_int c,
+              Exp_let (cl "d", Exp_int d,
+                Exp_let (cl "f", Exp_fun (cl "x",
+                  Exp_binop (Op_add, Exp_var (cl "a"),
+                    Exp_binop (Op_add, Exp_var (cl "b"),
+                      Exp_binop (Op_add, Exp_var (cl "c"),
+                        Exp_binop (Op_add, Exp_var (cl "d"), Exp_var (cl "x")))))),
+                  Exp_app (Exp_var (cl "f"), Exp_int 1))))))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let b = %d in let c = %d in let d = %d in let f x = a + b + c + d + x in f 1); print_newline ()" a b c d in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 130. Variable shadowing inside closure that captures outer var *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "x", Exp_int a,
+          Exp_let (cl "y", Exp_int b,
+            Exp_let (cl "f", Exp_fun (cl "z",
+              Exp_let (cl "x", Exp_binop (Op_add, Exp_var (cl "z"), Exp_var (cl "y")),
+                Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2))),
+              Exp_binop (Op_add,
+                Exp_var (cl "x"),
+                Exp_app (Exp_var (cl "f"), Exp_int c)))))))] in
+      let src = Printf.sprintf "let () = print_int (let x = %d in let y = %d in let f z = let x = z + y in x * 2 in x + f %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 131. 4-arg function, fully applied *)
+    (map2 (fun a b ->
+      let c = a + 1 in let d = b + 1 in
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "a", Exp_fun (cl "b", Exp_fun (cl "c", Exp_fun (cl "d",
+            Exp_binop (Op_add,
+              Exp_binop (Op_mul, Exp_var (cl "a"), Exp_var (cl "b")),
+              Exp_binop (Op_mul, Exp_var (cl "c"), Exp_var (cl "d"))))))),
+          Exp_app (Exp_app (Exp_app (Exp_app (Exp_var (cl "f"),
+            Exp_int a), Exp_int b), Exp_int c), Exp_int d))))] in
+      let src = Printf.sprintf "let () = print_int (let f a b c d = a * b + c * d in f %d %d %d %d); print_newline ()" a b c d in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 132. 4-arg function, partial application: apply 1, then 3 *)
+    (map2 (fun a b ->
+      let c = 1 in let d = 2 in
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "a", Exp_fun (cl "b", Exp_fun (cl "c", Exp_fun (cl "d",
+            Exp_binop (Op_add,
+              Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "b")),
+              Exp_binop (Op_add, Exp_var (cl "c"), Exp_var (cl "d"))))))),
+          Exp_let (cl "g", Exp_app (Exp_var (cl "f"), Exp_int a),
+            Exp_app (Exp_app (Exp_app (Exp_var (cl "g"),
+              Exp_int b), Exp_int c), Exp_int d)))))] in
+      let src = Printf.sprintf "let () = print_int (let f a b c d = a + b + c + d in let g = f %d in g %d %d %d); print_newline ()" a b c d in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
+
+    (* 133. 3-arg function, partial application saving 2 closures *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "x", Exp_fun (cl "y", Exp_fun (cl "z",
+            Exp_binop (Op_add, Exp_var (cl "x"),
+              Exp_binop (Op_mul, Exp_var (cl "y"), Exp_var (cl "z")))))),
+          Exp_let (cl "g", Exp_app (Exp_var (cl "f"), Exp_int a),
+            Exp_let (cl "h", Exp_app (Exp_var (cl "g"), Exp_int b),
+              Exp_app (Exp_var (cl "h"), Exp_int c))))))] in
+      let src = Printf.sprintf "let () = print_int (let f x y z = x + y * z in let g = f %d in let h = g %d in h %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 134. Recursive function where closure captures variable that changes per call *)
+    (map2 (fun n m ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "offset", Exp_int m,
+          Exp_letrec (cl "f",
+            Exp_fun (cl "n",
+              Exp_if (Exp_binop (Op_le, Exp_var (cl "n"), Exp_int 0),
+                Exp_var (cl "offset"),
+                Exp_binop (Op_add, Exp_int 1,
+                  Exp_app (Exp_var (cl "f"),
+                    Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1))))),
+            Exp_app (Exp_var (cl "f"), Exp_int n)))))] in
+      let src = Printf.sprintf "let () = print_int (let offset = %d in let rec f n = if n <= 0 then offset else 1 + f (n - 1) in f %d); print_newline ()" m n in
+      (prog, src)) (int_range 0 7) (int_range 10 30));
+
+    (* 135. Top-level Decl_letrec using list recursion *)
+    (map3 (fun a b c ->
+      let prog = [
+        Decl_letrec (cl "sum",
+          Exp_fun (cl "l",
+            Exp_match (Exp_var (cl "l"),
+              [(Pat_nil, Exp_int 0);
+               (Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+                Exp_binop (Op_add, Exp_var (cl "h"),
+                  Exp_app (Exp_var (cl "sum"), Exp_var (cl "t"))))])));
+        Decl_expr (print_int_nl
+          (Exp_app (Exp_var (cl "sum"),
+            Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_cons (Exp_int c, Exp_nil))))))] in
+      let src = Printf.sprintf "let rec sum l = match l with [] -> 0 | h :: t -> h + sum t\nlet () = print_int (sum [%d; %d; %d]); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* 136. Match with both Pat_int and Pat_var, compute with bound var *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_binop (Op_mul, Exp_int n, Exp_int 3),
+          [(Pat_int 0, Exp_int 42);
+           (Pat_int 3, Exp_int 99);
+           (Pat_var (cl "x"), Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1000))])
+        ))] in
+      let src = Printf.sprintf "let () = print_int (match %d * 3 with 0 -> 42 | 3 -> 99 | x -> x + 1000); print_newline ()" n in
+      (prog, src)) (int_range 0 5));
+
+    (* 137. Op_and / Op_or logical operators *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_if (Exp_binop (Op_and,
+          Exp_binop (Op_gt, Exp_int a, Exp_int 5),
+          Exp_binop (Op_gt, Exp_int b, Exp_int 5)),
+          Exp_int 1, Exp_int 0)))] in
+      let src = Printf.sprintf "let () = print_int (if %d > 5 && %d > 5 then 1 else 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 10) (int_range 0 10));
+
+    (* 138. Op_or logical operator *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_if (Exp_binop (Op_or,
+          Exp_binop (Op_eq, Exp_int a, Exp_int 0),
+          Exp_binop (Op_eq, Exp_int b, Exp_int 0)),
+          Exp_int 1, Exp_int 0)))] in
+      let src = Printf.sprintf "let () = print_int (if %d = 0 || %d = 0 then 1 else 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 3) (int_range 0 3));
+
+    (* 139. Nested closures: closure inside closure *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "f", Exp_fun (cl "b",
+            Exp_let (cl "g", Exp_fun (cl "c",
+              Exp_binop (Op_add, Exp_var (cl "a"),
+                Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "c")))),
+              Exp_app (Exp_var (cl "g"), Exp_int c))),
+            Exp_app (Exp_var (cl "f"), Exp_int b)))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let f b = let g c = a + b + c in g %d in f %d); print_newline ()" a c b in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 140. Multiple closures returned and used *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "make_pair",
+          Exp_fun (cl "x",
+            Exp_tuple [
+              Exp_fun (cl "y", Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y")));
+              Exp_fun (cl "y", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_var (cl "y")))]),
+          Exp_let (cl "p", Exp_app (Exp_var (cl "make_pair"), Exp_int a),
+            Exp_binop (Op_add,
+              Exp_app (Exp_app (Exp_var (cl "fst"), Exp_var (cl "p")), Exp_int b),
+              Exp_app (Exp_app (Exp_var (cl "snd"), Exp_var (cl "p")), Exp_int b))))))] in
+      let src = Printf.sprintf "let () = print_int (let make_pair x = ((fun y -> x + y), (fun y -> x * y)) in let p = make_pair %d in (fst p) %d + (snd p) %d); print_newline ()" a b b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 141. Match on list with function application in arm *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "double", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)),
+          Exp_match (Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_nil)),
+            [(Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+              Exp_binop (Op_add,
+                Exp_app (Exp_var (cl "double"), Exp_var (cl "h")),
+                Exp_match (Exp_var (cl "t"),
+                  [(Pat_cons (Pat_var (cl "h2"), Pat_wild),
+                    Exp_app (Exp_var (cl "double"), Exp_var (cl "h2")));
+                   (Pat_nil, Exp_int 0)])));
+             (Pat_nil, Exp_int 0)]))))] in
+      let src = Printf.sprintf "let () = print_int (let double x = x * 2 in match [%d; %d] with h :: t -> double h + (match t with h2 :: _ -> double h2 | [] -> 0) | [] -> 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
+
+    (* 142. Exp_function as argument to higher-order function *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "apply",
+          Exp_fun (cl "f", Exp_fun (cl "x", Exp_app (Exp_var (cl "f"), Exp_var (cl "x")))),
+          Exp_app (Exp_app (Exp_var (cl "apply"),
+            Exp_function [
+              (Pat_int 0, Exp_int 100);
+              (Pat_wild, Exp_int 200)]),
+            Exp_int n))))] in
+      let src = Printf.sprintf "let () = print_int (let apply f x = f x in apply (function 0 -> 100 | _ -> 200) %d); print_newline ()" n in
+      (prog, src)) (int_range 0 3));
+
+    (* 143. Record: field access on function return value *)
+    (map2 (fun a b ->
+      let prog = [
+        Decl_type (cl "pair", [],
+          Td_record [(cl "fst_val", Ty_int); (cl "snd_val", Ty_int)]);
+        Decl_expr (print_int_nl
+          (Exp_let (cl "mk",
+            Exp_fun (cl "x", Exp_fun (cl "y",
+              Exp_record [(cl "fst_val", Exp_var (cl "x")); (cl "snd_val", Exp_var (cl "y"))])),
+            Exp_let (cl "p", Exp_app (Exp_app (Exp_var (cl "mk"), Exp_int a), Exp_int b),
+              Exp_binop (Op_add,
+                Exp_field (Exp_var (cl "p"), cl "fst_val"),
+                Exp_field (Exp_var (cl "p"), cl "snd_val"))))))] in
+      let src = Printf.sprintf "type pair = { fst_val : int; snd_val : int }\nlet () = print_int (let mk x y = { fst_val = x; snd_val = y } in let p = mk %d %d in p.fst_val + p.snd_val); print_newline ()" a b in
+      (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* 144. Nested match with closures: test environment handling *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "x", Exp_int a,
+          Exp_match (Exp_int b,
+            [(Pat_int 0,
+              Exp_let (cl "f", Exp_fun (cl "y", Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y"))),
+                Exp_app (Exp_var (cl "f"), Exp_int 10)));
+             (Pat_wild,
+              Exp_let (cl "g", Exp_fun (cl "y", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_var (cl "y"))),
+                Exp_app (Exp_var (cl "g"), Exp_int 10)))]))
+        ))] in
+      let src = Printf.sprintf "let () = print_int (let x = %d in match %d with 0 -> (let f y = x + y in f 10) | _ -> (let g y = x * y in g 10)); print_newline ()" a b in
+      (prog, src)) (int_range 0 9) (int_range 0 3));
+
+    (* === BATCH 3: Edge cases and stress tests === *)
+
+    (* 145. Empty list construction and immediate nil test *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_nil,
+          [(Pat_nil, Exp_int 1);
+           (Pat_cons (Pat_wild, Pat_wild), Exp_int 0)])
+        ))] in
+      let src = "let () = print_int (match [] with [] -> 1 | _ :: _ -> 0); print_newline ()" in
+      (prog, src)));
+
+    (* 146. List with single element, match both nil and cons *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_cons (Exp_int n, Exp_nil),
+          [(Pat_nil, Exp_int (-1));
+           (Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"))])
+        ))] in
+      let src = Printf.sprintf "let () = print_int (match [%d] with [] -> -1 | h :: _ -> h); print_newline ()" n in
+      (prog, src)) (int_range 0 49));
+
+    (* 147. Recursive fold_left over list *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_letrec (cl "fold",
+          Exp_fun (cl "f", Exp_fun (cl "acc", Exp_fun (cl "l",
+            Exp_match (Exp_var (cl "l"),
+              [(Pat_nil, Exp_var (cl "acc"));
+               (Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+                Exp_app (Exp_app (Exp_app (Exp_var (cl "fold"), Exp_var (cl "f")),
+                  Exp_app (Exp_app (Exp_var (cl "f"), Exp_var (cl "acc")), Exp_var (cl "h"))),
+                  Exp_var (cl "t")))])))),
+          Exp_app (Exp_app (Exp_app (Exp_var (cl "fold"),
+            Exp_fun (cl "a", Exp_fun (cl "b", Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "b"))))),
+            Exp_int 0),
+            Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_cons (Exp_int c, Exp_nil)))))
+        ))] in
+      let src = Printf.sprintf "let () = print_int (let rec fold f acc l = match l with [] -> acc | h :: t -> fold f (f acc h) t in fold (fun a b -> a + b) 0 [%d; %d; %d]); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 148. 4-element tuple destructuring *)
+    (map2 (fun a b ->
+      let c = a + b in let d = a * b in
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_tuple [Exp_int a; Exp_int b; Exp_int c; Exp_int d],
+          [(Pat_tuple [Pat_var (cl "a"); Pat_var (cl "b"); Pat_var (cl "c"); Pat_var (cl "d")],
+            Exp_binop (Op_add,
+              Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "b")),
+              Exp_binop (Op_add, Exp_var (cl "c"), Exp_var (cl "d"))))])))] in
+      let src = Printf.sprintf "let () = print_int (match (%d, %d, %d, %d) with (a, b, c, d) -> a + b + c + d); print_newline ()" a b c d in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 149. Exp_function with wildcard and variable capture *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "classify",
+          Exp_function [
+            (Pat_int 0, Exp_int 0);
+            (Pat_var (cl "x"),
+              Exp_if (Exp_binop (Op_gt, Exp_var (cl "x"), Exp_int 0),
+                Exp_int 1, Exp_int (-1)))],
+          Exp_app (Exp_var (cl "classify"), Exp_int n))))] in
+      let src = Printf.sprintf "let () = print_int (let classify = function 0 -> 0 | x -> if x > 0 then 1 else -1 in classify %d); print_newline ()" n in
+      (prog, src)) (int_range (-5) 5));
+
+    (* 150. Multiple print_string side effects checking output order *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr
+        (Exp_seq (
+          Exp_app (Exp_var (cl "print_int"), Exp_int a),
+          Exp_seq (
+            Exp_app (Exp_var (cl "print_int"), Exp_int b),
+            Exp_seq (
+              Exp_app (Exp_var (cl "print_int"), Exp_binop (Op_add, Exp_int a, Exp_int b)),
+              Exp_app (Exp_var (cl "print_newline"), Exp_unit)))))] in
+      let src = Printf.sprintf "let () = print_int %d; print_int %d; print_int %d; print_newline ()" a b (a+b) in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 151. Nested Pat_tuple with wildcard *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_tuple [Exp_int a; Exp_int b],
+          [(Pat_tuple [Pat_var (cl "x"); Pat_wild],
+            Exp_var (cl "x"))])))] in
+      let src = Printf.sprintf "let () = print_int (match (%d, %d) with (x, _) -> x); print_newline ()" a b in
+      (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* 152. Closures in list: build list of closures, apply them *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "fa", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int a)),
+          Exp_let (cl "fb", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int b)),
+            Exp_binop (Op_add,
+              Exp_app (Exp_var (cl "fa"), Exp_int 0),
+              Exp_app (Exp_var (cl "fb"), Exp_int 0))))))] in
+      let src = Printf.sprintf "let () = print_int (let fa x = x + %d in let fb x = x + %d in fa 0 + fb 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
+
+    (* 153. Mutual recursion via higher-order: even/odd check *)
+    (map (fun n ->
+      let n = n mod 10 in  (* keep small to avoid deep recursion *)
+      let prog = [Decl_expr (print_int_nl
+        (Exp_letrec (cl "is_even",
+          Exp_fun (cl "n",
+            Exp_if (Exp_binop (Op_eq, Exp_var (cl "n"), Exp_int 0),
+              Exp_int 1,
+              Exp_if (Exp_binop (Op_eq, Exp_var (cl "n"), Exp_int 1),
+                Exp_int 0,
+                Exp_app (Exp_var (cl "is_even"),
+                  Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 2))))),
+          Exp_app (Exp_var (cl "is_even"), Exp_int n))))] in
+      let src = Printf.sprintf "let () = print_int (let rec is_even n = if n = 0 then 1 else if n = 1 then 0 else is_even (n - 2) in is_even %d); print_newline ()" n in
+      (prog, src)) (int_range 0 10));
+
+    (* 154. Recursive with list and closure capturing *)
+    (map2 (fun n offset ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "offset", Exp_int offset,
+          Exp_letrec (cl "sum",
+            Exp_fun (cl "l",
+              Exp_match (Exp_var (cl "l"),
+                [(Pat_nil, Exp_int 0);
+                 (Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+                  Exp_binop (Op_add,
+                    Exp_binop (Op_add, Exp_var (cl "h"), Exp_var (cl "offset")),
+                    Exp_app (Exp_var (cl "sum"), Exp_var (cl "t"))))])),
+            Exp_app (Exp_var (cl "sum"),
+              Exp_cons (Exp_int 1, Exp_cons (Exp_int 2, Exp_cons (Exp_int 3, Exp_nil))))))))] in
+      let src = Printf.sprintf "let () = print_int (let offset = %d in let rec sum l = match l with [] -> 0 | h :: t -> (h + offset) + sum t in sum [1; 2; 3]); print_newline ()" offset in
+      ignore n;
+      (prog, src)) (int_range 0 5) (int_range 0 9));
+
+    (* 155. Top-level function calling another top-level function with list *)
+    (map2 (fun a b ->
+      let prog = [
+        Decl_let (cl "add1", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1)));
+        Decl_letrec (cl "map_add1",
+          Exp_fun (cl "l",
+            Exp_match (Exp_var (cl "l"),
+              [(Pat_nil, Exp_nil);
+               (Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+                Exp_cons (
+                  Exp_app (Exp_var (cl "add1"), Exp_var (cl "h")),
+                  Exp_app (Exp_var (cl "map_add1"), Exp_var (cl "t"))))])));
+        Decl_letrec (cl "sum",
+          Exp_fun (cl "l",
+            Exp_match (Exp_var (cl "l"),
+              [(Pat_nil, Exp_int 0);
+               (Pat_cons (Pat_var (cl "h"), Pat_var (cl "t")),
+                Exp_binop (Op_add, Exp_var (cl "h"),
+                  Exp_app (Exp_var (cl "sum"), Exp_var (cl "t"))))])));
+        Decl_expr (print_int_nl
+          (Exp_app (Exp_var (cl "sum"),
+            Exp_app (Exp_var (cl "map_add1"),
+              Exp_cons (Exp_int a, Exp_cons (Exp_int b, Exp_nil))))))] in
+      let src = Printf.sprintf "let add1 x = x + 1\nlet rec map_add1 l = match l with [] -> [] | h :: t -> add1 h :: map_add1 t\nlet rec sum l = match l with [] -> 0 | h :: t -> h + sum t\nlet () = print_int (sum (map_add1 [%d; %d])); print_newline ()" a b in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
+
+    (* === BATCH 4: Pat_constr branching tests (critical) === *)
+
+    (* 156. match None with Some x -> x | None -> 42 (Some first, None second) *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_constr (cl "None", None),
+          [(Pat_constr (cl "Some", Some (Pat_var (cl "x"))), Exp_var (cl "x"));
+           (Pat_constr (cl "None", None), Exp_int 42)])))] in
+      let src = "let () = print_int (match None with Some x -> x | None -> 42); print_newline ()" in
+      (prog, src)));
+
+    (* 157. match Some 7 with Some x -> x | None -> 0 *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_constr (cl "Some", Some (Exp_int 7)),
+          [(Pat_constr (cl "Some", Some (Pat_var (cl "x"))), Exp_var (cl "x"));
+           (Pat_constr (cl "None", None), Exp_int 0)])))] in
+      let src = "let () = print_int (match Some 7 with Some x -> x | None -> 0); print_newline ()" in
+      (prog, src)));
+
+    (* 158. match None with None -> 99 | Some x -> x (None first, Some second) *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_constr (cl "None", None),
+          [(Pat_constr (cl "None", None), Exp_int 99);
+           (Pat_constr (cl "Some", Some (Pat_var (cl "x"))), Exp_var (cl "x"))])))] in
+      let src = "let () = print_int (match None with None -> 99 | Some x -> x); print_newline ()" in
+      (prog, src)));
+
+    (* 159. match Some 5 with None -> 0 | Some x -> x (None first, Some second) *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_constr (cl "Some", Some (Exp_int 5)),
+          [(Pat_constr (cl "None", None), Exp_int 0);
+           (Pat_constr (cl "Some", Some (Pat_var (cl "x"))), Exp_var (cl "x"))])))] in
+      let src = "let () = print_int (match Some 5 with None -> 0 | Some x -> x); print_newline ()" in
+      (prog, src)));
+
+    (* 160. Parametric Some/None branching *)
+    (map (fun n ->
+      let input = if n > 3 then
+        Exp_constr (cl "Some", Some (Exp_int n))
+      else
+        Exp_constr (cl "None", None) in
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (input,
+          [(Pat_constr (cl "Some", Some (Pat_var (cl "x"))),
+            Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 100));
+           (Pat_constr (cl "None", None), Exp_int (-1))])))] in
+      let input_src = if n > 3 then Printf.sprintf "Some %d" n else "None" in
+      let src = Printf.sprintf "let () = print_int (match %s with Some x -> x + 100 | None -> (-1)); print_newline ()" input_src in
+      (prog, src)) (int_range 0 8));
+
+    (* 161. Option get_or_default function, tested both ways *)
+    (map2 (fun n default_val ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "get_or",
+          Exp_fun (cl "d", Exp_fun (cl "o",
+            Exp_match (Exp_var (cl "o"),
+              [(Pat_constr (cl "Some", Some (Pat_var (cl "v"))), Exp_var (cl "v"));
+               (Pat_constr (cl "None", None), Exp_var (cl "d"))]))),
+          Exp_binop (Op_add,
+            Exp_app (Exp_app (Exp_var (cl "get_or"), Exp_int default_val),
+              Exp_constr (cl "Some", Some (Exp_int n))),
+            Exp_app (Exp_app (Exp_var (cl "get_or"), Exp_int default_val),
+              Exp_constr (cl "None", None))))))] in
+      let src = Printf.sprintf "let () = print_int (let get_or d o = match o with Some v -> v | None -> d in get_or %d (Some %d) + get_or %d None); print_newline ()" default_val n default_val in
+      (prog, src)) (int_range 0 19) (int_range 0 9));
+
+    (* === BATCH 5: Op_and / Op_or compilation checks === *)
+
+    (* 162. Op_and: both sides false *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_if (
+          Exp_binop (Op_and, Exp_bool false, Exp_bool false),
+          Exp_int 1, Exp_int 0)))] in
+      let src = "let () = print_int (if false && false then 1 else 0); print_newline ()" in
+      (prog, src)));
+
+    (* 163. Op_or: both sides false *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_if (
+          Exp_binop (Op_or, Exp_bool false, Exp_bool false),
+          Exp_int 1, Exp_int 0)))] in
+      let src = "let () = print_int (if false || false then 1 else 0); print_newline ()" in
+      (prog, src)));
+
+    (* 164. Op_and: true && true *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_if (
+          Exp_binop (Op_and, Exp_bool true, Exp_bool true),
+          Exp_int 1, Exp_int 0)))] in
+      let src = "let () = print_int (if true && true then 1 else 0); print_newline ()" in
+      (prog, src)));
+
+    (* 165. Op_or: false || true *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_if (
+          Exp_binop (Op_or, Exp_bool false, Exp_bool true),
+          Exp_int 1, Exp_int 0)))] in
+      let src = "let () = print_int (if false || true then 1 else 0); print_newline ()" in
+      (prog, src)));
+
+    (* 166. Op_and with comparison *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_if (
+          Exp_binop (Op_and,
+            Exp_binop (Op_gt, Exp_int a, Exp_int 5),
+            Exp_binop (Op_lt, Exp_int b, Exp_int 10)),
+          Exp_int 1, Exp_int 0)))] in
+      let src = Printf.sprintf "let () = print_int (if %d > 5 && %d < 10 then 1 else 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 15) (int_range 0 15));
+
+    (* 167. Nested Op_and/Op_or *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_if (
+          Exp_binop (Op_or,
+            Exp_binop (Op_and,
+              Exp_binop (Op_eq, Exp_int a, Exp_int 1),
+              Exp_binop (Op_eq, Exp_int b, Exp_int 2)),
+            Exp_binop (Op_eq, Exp_int c, Exp_int 3)),
+          Exp_int 1, Exp_int 0)))] in
+      let src = Printf.sprintf "let () = print_int (if (%d = 1 && %d = 2) || %d = 3 then 1 else 0); print_newline ()" a b c in
+      (prog, src)) (int_range 0 4) (int_range 0 4) (int_range 0 4));
+
+    (* === BATCH 6: Stress tests for list patterns with Pat_nil first === *)
+
+    (* 168. Pat_nil then Pat_cons: empty list *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_nil,
+          [(Pat_nil, Exp_int 0);
+           (Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"))])))] in
+      let src = "let () = print_int (match [] with [] -> 0 | h :: _ -> h); print_newline ()" in
+      (prog, src)));
+
+    (* 169. Pat_nil then Pat_cons: non-empty list *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_cons (Exp_int n, Exp_nil),
+          [(Pat_nil, Exp_int 0);
+           (Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"))])))] in
+      let src = Printf.sprintf "let () = print_int (match [%d] with [] -> 0 | h :: _ -> h); print_newline ()" n in
+      (prog, src)) (int_range 0 49));
+
+    (* 170. Pat_cons then Pat_nil: non-empty list *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_cons (Exp_int n, Exp_nil),
+          [(Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"));
+           (Pat_nil, Exp_int (-1))])))] in
+      let src = Printf.sprintf "let () = print_int (match [%d] with h :: _ -> h | [] -> (-1)); print_newline ()" n in
+      (prog, src)) (int_range 0 49));
+
+    (* 171. Pat_cons then Pat_nil: empty list *)
+    (return
+      (let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_nil,
+          [(Pat_cons (Pat_var (cl "h"), Pat_wild), Exp_var (cl "h"));
+           (Pat_nil, Exp_int (-1))])))] in
+      let src = "let () = print_int (match [] with h :: _ -> h | [] -> (-1)); print_newline ()" in
+      (prog, src)));
+
+    (* === BATCH 7: Record + function integration === *)
+
+    (* 172. Record field in function body *)
+    (map3 (fun a b c ->
+      let prog = [
+        Decl_type (cl "r3", [],
+          Td_record [(cl "f1", Ty_int); (cl "f2", Ty_int); (cl "f3", Ty_int)]);
+        Decl_let (cl "sum_fields",
+          Exp_fun (cl "r",
+            Exp_binop (Op_add,
+              Exp_field (Exp_var (cl "r"), cl "f1"),
+              Exp_binop (Op_add,
+                Exp_field (Exp_var (cl "r"), cl "f2"),
+                Exp_field (Exp_var (cl "r"), cl "f3")))));
+        Decl_expr (print_int_nl
+          (Exp_app (Exp_var (cl "sum_fields"),
+            Exp_record [(cl "f1", Exp_int a); (cl "f2", Exp_int b); (cl "f3", Exp_int c)])))] in
+      let src = Printf.sprintf "type r3 = { f1 : int; f2 : int; f3 : int }\nlet sum_fields r = r.f1 + r.f2 + r.f3\nlet () = print_int (sum_fields { f1 = %d; f2 = %d; f3 = %d }); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* === BATCH 8: Large negative int patterns in match === *)
+
+    (* 173. Match with negative integers *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_int n,
+          [(Pat_int (-2), Exp_int 1);
+           (Pat_int (-1), Exp_int 2);
+           (Pat_int 0, Exp_int 3);
+           (Pat_int 1, Exp_int 4);
+           (Pat_int 2, Exp_int 5);
+           (Pat_wild, Exp_int 0)])))] in
+      let src = Printf.sprintf "let () = print_int (match %d with (-2) -> 1 | (-1) -> 2 | 0 -> 3 | 1 -> 4 | 2 -> 5 | _ -> 0); print_newline ()" n in
+      (prog, src)) (int_range (-3) 4));
+
+    (* 174. succ builtin *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_app (Exp_var (cl "succ"), Exp_int n)))] in
+      let src = Printf.sprintf "let () = print_int (succ %d); print_newline ()" n in
+      (prog, src)) (int_range (-5) 50));
+
+    (* 175. pred builtin *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_app (Exp_var (cl "pred"), Exp_int n)))] in
+      let src = Printf.sprintf "let () = print_int (pred %d); print_newline ()" n in
+      (prog, src)) (int_range (-5) 50));
   ]
 
 let print_test_case (_prog, src) = src
 
 let compile_vs_ocamlc_test =
-  QCheck.Test.make ~name:"compile vs ocamlc" ~count:500
+  QCheck.Test.make ~name:"compile vs ocamlc" ~count:1000
     (QCheck.make gen_test_case ~print:print_test_case)
     (fun (prog, source) ->
        with_temp_dir (fun dir ->
@@ -1386,7 +2302,7 @@ let compile_vs_ocamlc_test =
             | Error _msg -> false)))
 
 let random_compile_vs_ocamlc_test =
-  QCheck.Test.make ~name:"compile vs ocamlc (random AST)" ~count:200
+  QCheck.Test.make ~name:"compile vs ocamlc (random AST)" ~count:300
     (QCheck.make gen_random_program_with_source ~print:(fun (_prog, src) -> src))
     (fun (prog, source) ->
        with_temp_dir (fun dir ->

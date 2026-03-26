@@ -31,6 +31,11 @@ Definition ccall_to_events (prim_idx : nat) (args : list value) : list event :=
   | _, _ => []
   end.
 
+(* List-based wrapper: compile_program produces list instruction,
+   but the trusted step function works on PrimArray.  Convert once. *)
+Definition step_list (code : list instruction) (s : state) : step_result :=
+  step (list_to_code_array code) s.
+
 (* Run bytecode collecting output events.
    Output list accumulated in reverse order (newest first). *)
 Fixpoint run_collecting (fuel : nat) (code : list instruction) (s : state)
@@ -38,7 +43,7 @@ Fixpoint run_collecting (fuel : nat) (code : list instruction) (s : state)
   match fuel with
   | O => mk_behavior (rev out) Term_timeout
   | S fuel' =>
-    match step code s with
+    match step_list code s with
     | Step s' => run_collecting fuel' code s' out
     | Halt v => mk_behavior (rev out) (Term_normal v)
     | Error msg => mk_behavior (rev out) (Term_error msg)

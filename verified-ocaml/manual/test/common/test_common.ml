@@ -1634,6 +1634,21 @@ let make_handler ?(raw_globals=[||]) prims buf =
   (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value)
 
 (* Run our compiled bytecode through our interpreter *)
+type interp_result = Interp_ok of string | Interp_err of string
+
+let run_source_interp prog =
+  let result = interpret 10000 prog in
+  match result.result with
+  | Term_timeout -> Interp_err "timeout"
+  | Term_error msg ->
+    let buf = Buffer.create (List.length msg) in
+    List.iter (Buffer.add_char buf) msg;
+    Interp_err (Buffer.contents buf)
+  | Term_normal _ ->
+    let buf = Buffer.create (List.length result.trace) in
+    List.iter (fun c -> Buffer.add_char buf (Char.chr c)) result.trace;
+    Interp_ok (Buffer.contents buf)
+
 let run_our_compiler prog =
   let code = Array.of_list (compile_program prog) in
   let buf = Buffer.create 64 in

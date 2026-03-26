@@ -5,52 +5,7 @@
    3. Compare outputs *)
 
 open Interp_extracted
-
-(* === Utilities === *)
-
-let with_temp_dir f =
-  let dir = Filename.temp_file "pbt" "" in
-  Sys.remove dir; Unix.mkdir dir 0o700;
-  Fun.protect ~finally:(fun () ->
-    (try Array.iter (fun n -> Sys.remove (Filename.concat dir n)) (Sys.readdir dir) with _ -> ());
-    (try Unix.rmdir dir with _ -> ())
-  ) (fun () -> f dir)
-
-let compile_and_run_ocamlc dir source =
-  let src = Filename.concat dir "test.ml" in
-  let exe = Filename.concat dir "test.byte" in
-  let oc = open_out src in output_string oc source; close_out oc;
-  if Sys.command (Printf.sprintf "ocamlc -o %s %s 2>/dev/null" exe src) <> 0 then None
-  else begin
-    let ic = Unix.open_process_in (Printf.sprintf "timeout 5 ocamlrun %s 2>/dev/null" exe) in
-    let buf = Buffer.create 256 in
-    (try while true do Buffer.add_char buf (input_char ic) done with End_of_file -> ());
-    ignore (Unix.close_process_in ic);
-    Some (Buffer.contents buf)
-  end
-
-let cl s = List.init (String.length s) (fun i -> s.[i])
-
-let print_int_nl e =
-  Exp_seq (Exp_app (Exp_var (cl "print_int"), e),
-           Exp_app (Exp_var (cl "print_newline"), Exp_unit))
-
-(* === Source interpreter runner === *)
-
-type interp_result = Interp_ok of string | Interp_err of string
-
-let run_source_interp prog =
-  let result = interpret 10000 prog in
-  match result.result with
-  | Term_timeout -> Interp_err "timeout"
-  | Term_error msg ->
-    let buf = Buffer.create (List.length msg) in
-    List.iter (Buffer.add_char buf) msg;
-    Interp_err (Buffer.contents buf)
-  | Term_normal _ ->
-    let buf = Buffer.create (List.length result.trace) in
-    List.iter (fun c -> Buffer.add_char buf (Char.chr c)) result.trace;
-    Interp_ok (Buffer.contents buf)
+open Test_common
 
 (* === QCheck generators producing (prog, source) pairs === *)
 
@@ -359,6 +314,241 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_binop (Op_mod, Exp_int a, Exp_int b))))] in
       let src = Printf.sprintf "let () = print_int (%d / %d + %d mod %d); print_newline ()" a b a b in
       (prog, src)) (int_range 0 499) (int_range 0 19));
+
+    (* --- New generators for source interpreter coverage --- *)
+
+    (* 33. Match on bool patterns *)
+    (map (fun b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_bool b,
+          [(Pat_bool true, Exp_int 1);
+           (Pat_bool false, Exp_int 0)])))] in
+      let src = Printf.sprintf "let () = print_int (match %s with true -> 1 | false -> 0); print_newline ()" (if b then "true" else "false") in
+      (prog, src)) QCheck.Gen.bool);
+
+    (* 34. Match on unit *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_unit,
+          [(Pat_unit, Exp_int n)])))] in
+      let src = Printf.sprintf "let () = print_int (match () with () -> %d); print_newline ()" n in
+      (prog, src)) (int_range 0 99));
+
+    (* 35. Tuple destructuring via Pat_tuple *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_tuple [Exp_int a; Exp_int b],
+          [(Pat_tuple [Pat_var (cl "x"); Pat_var (cl "y")],
+            Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y")))])))] in
+      let src = Printf.sprintf "let () = print_int (match (%d, %d) with (x, y) -> x + y); print_newline ()" a b in
+      (prog, src)) (int_range 0 49) (int_range 0 49));
+
+    (* 36. 3-tuple destructuring *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_tuple [Exp_int a; Exp_int b; Exp_int c],
+          [(Pat_tuple [Pat_var (cl "a"); Pat_var (cl "b"); Pat_var (cl "c")],
+            Exp_binop (Op_add, Exp_var (cl "a"),
+              Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "c"))))])))] in
+      let src = Printf.sprintf "let () = print_int (match (%d, %d, %d) with (a, b, c) -> a + b + c); print_newline ()" a b c in
+      (prog, src)) (int_range 0 30) (int_range 0 30) (int_range 0 30));
+
+    (* 37. Closure capturing two free variables *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "b", Exp_int b,
+            Exp_let (cl "f", Exp_fun (cl "c",
+              Exp_binop (Op_add, Exp_var (cl "a"),
+                Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "c")))),
+              Exp_app (Exp_var (cl "f"), Exp_int c))))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let b = %d in let f c = a + b + c in f %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* 38. Variable shadowing inside closure *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "x", Exp_int a,
+          Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)),
+            Exp_binop (Op_add, Exp_var (cl "x"),
+              Exp_app (Exp_var (cl "f"), Exp_int b))))))] in
+      let src = Printf.sprintf "let () = print_int (let x = %d in let f x = x * 2 in x + f %d); print_newline ()" a b in
+      (prog, src)) (int_range 0 19) (int_range 0 19));
+
+    (* 39. Three-argument function *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "x", Exp_fun (cl "y", Exp_fun (cl "z",
+            Exp_binop (Op_add, Exp_var (cl "x"),
+              Exp_binop (Op_add, Exp_var (cl "y"), Exp_var (cl "z")))))),
+          Exp_app (Exp_app (Exp_app (Exp_var (cl "f"), Exp_int a), Exp_int b), Exp_int c))))] in
+      let src = Printf.sprintf "let () = print_int (let f x y z = x + y + z in f %d %d %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* 40. Three-argument partial application *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "x", Exp_fun (cl "y", Exp_fun (cl "z",
+            Exp_binop (Op_add, Exp_var (cl "x"),
+              Exp_binop (Op_mul, Exp_var (cl "y"), Exp_var (cl "z")))))),
+          Exp_let (cl "g", Exp_app (Exp_var (cl "f"), Exp_int a),
+            Exp_let (cl "h", Exp_app (Exp_var (cl "g"), Exp_int b),
+              Exp_app (Exp_var (cl "h"), Exp_int c))))))] in
+      let src = Printf.sprintf "let () = print_int (let f x y z = x + y * z in let g = f %d in let h = g %d in h %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 41. apply_twice: higher-order with closure *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "apply_twice",
+          Exp_fun (cl "f", Exp_fun (cl "x",
+            Exp_app (Exp_var (cl "f"), Exp_app (Exp_var (cl "f"), Exp_var (cl "x"))))),
+          Exp_app (Exp_app (Exp_var (cl "apply_twice"),
+            Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1))),
+            Exp_int n))))] in
+      let src = Printf.sprintf "let () = print_int (let apply_twice f x = f (f x) in apply_twice (fun x -> x + 1) %d); print_newline ()" n in
+      (prog, src)) (int_range 0 49));
+
+    (* 42. Recursive function with closure capturing free variable *)
+    (map2 (fun base n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "base", Exp_int base,
+          Exp_letrec (cl "f",
+            Exp_fun (cl "n",
+              Exp_if (Exp_binop (Op_le, Exp_var (cl "n"), Exp_int 0),
+                Exp_var (cl "base"),
+                Exp_binop (Op_add, Exp_int 1,
+                  Exp_app (Exp_var (cl "f"),
+                    Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1))))),
+            Exp_app (Exp_var (cl "f"), Exp_int n)))))] in
+      let src = Printf.sprintf "let () = print_int (let base = %d in let rec f n = if n <= 0 then base else 1 + f (n - 1) in f %d); print_newline ()" base n in
+      (prog, src)) (int_range 10 30) (int_range 0 7));
+
+    (* 43. Nested closures: outer and inner capture *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "make",
+            Exp_fun (cl "b",
+              Exp_fun (cl "c",
+                Exp_binop (Op_add, Exp_var (cl "a"),
+                  Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "c"))))),
+            Exp_app (Exp_app (Exp_var (cl "make"), Exp_int b), Exp_int c)))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let make b c = a + b + c in make %d %d); print_newline ()" a b c in
+      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+
+    (* 44. Nested match *)
+    (map2 (fun x y ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_match (Exp_int x,
+          [(Pat_int 0,
+            Exp_match (Exp_int y,
+              [(Pat_int 0, Exp_int 10);
+               (Pat_wild, Exp_int 20)]));
+           (Pat_wild,
+            Exp_match (Exp_int y,
+              [(Pat_int 0, Exp_int 30);
+               (Pat_wild, Exp_int 40)]))])))] in
+      let src = Printf.sprintf "let () = print_int (match %d with 0 -> (match %d with 0 -> 10 | _ -> 20) | _ -> (match %d with 0 -> 30 | _ -> 40)); print_newline ()" x y y in
+      (prog, src)) (int_range 0 2) (int_range 0 2));
+
+    (* 45. Returned closure: make_adder returns function *)
+    (map2 (fun n m ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "make_mul",
+          Exp_fun (cl "n", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "n"), Exp_var (cl "x")))),
+          Exp_let (cl "double", Exp_app (Exp_var (cl "make_mul"), Exp_int n),
+            Exp_app (Exp_var (cl "double"), Exp_int m)))))] in
+      let src = Printf.sprintf "let () = print_int (let make_mul n x = n * x in let double = make_mul %d in double %d); print_newline ()" n m in
+      (prog, src)) (int_range 1 9) (int_range 0 19));
+
+    (* 46. Op_neq explicit test *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_if (Exp_binop (Op_neq, Exp_int a, Exp_int b), Exp_int 1, Exp_int 0)))] in
+      let src = Printf.sprintf "let () = print_int (if %d <> %d then 1 else 0); print_newline ()" a b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 47. All six comparison operators combined *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_binop (Op_add,
+          Exp_binop (Op_add,
+            Exp_binop (Op_add,
+              Exp_if (Exp_binop (Op_eq, Exp_int a, Exp_int b), Exp_int 1, Exp_int 0),
+              Exp_if (Exp_binop (Op_neq, Exp_int a, Exp_int b), Exp_int 10, Exp_int 0)),
+            Exp_binop (Op_add,
+              Exp_if (Exp_binop (Op_lt, Exp_int a, Exp_int b), Exp_int 100, Exp_int 0),
+              Exp_if (Exp_binop (Op_le, Exp_int a, Exp_int b), Exp_int 1000, Exp_int 0))),
+          Exp_binop (Op_add,
+            Exp_if (Exp_binop (Op_gt, Exp_int a, Exp_int b), Exp_int 10000, Exp_int 0),
+            Exp_if (Exp_binop (Op_ge, Exp_int a, Exp_int b), Exp_int 100000, Exp_int 0)))))] in
+      let src = Printf.sprintf "let () = print_int ((if %d = %d then 1 else 0) + (if %d <> %d then 10 else 0) + (if %d < %d then 100 else 0) + (if %d <= %d then 1000 else 0) + (if %d > %d then 10000 else 0) + (if %d >= %d then 100000 else 0)); print_newline ()" a b a b a b a b a b a b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 48. Function returning tuple, then destructuring *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "f",
+          Exp_fun (cl "x",
+            Exp_tuple [Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1);
+                       Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)]),
+          Exp_match (Exp_app (Exp_var (cl "f"), Exp_int n),
+            [(Pat_tuple [Pat_var (cl "a"); Pat_var (cl "b")],
+              Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "b")))]))))] in
+      let src = Printf.sprintf "let () = print_int (let f x = (x + 1, x * 2) in match f %d with (a, b) -> a + b); print_newline ()" n in
+      (prog, src)) (int_range 0 20));
+
+    (* 49. Triple variable shadowing *)
+    (map (fun n ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "x", Exp_int n,
+          Exp_let (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1),
+            Exp_let (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2),
+              Exp_var (cl "x"))))))] in
+      let src = Printf.sprintf "let () = print_int (let x = %d in let x = x + 1 in let x = x * 2 in x); print_newline ()" n in
+      (prog, src)) (int_range 0 19));
+
+    (* 50. Swap via tuple destructuring *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "swap",
+          Exp_fun (cl "p",
+            Exp_match (Exp_var (cl "p"),
+              [(Pat_tuple [Pat_var (cl "a"); Pat_var (cl "b")],
+                Exp_tuple [Exp_var (cl "b"); Exp_var (cl "a")])])),
+          Exp_match (Exp_app (Exp_var (cl "swap"), Exp_tuple [Exp_int a; Exp_int b]),
+            [(Pat_tuple [Pat_var (cl "x"); Pat_var (cl "y")],
+              Exp_binop (Op_add, Exp_var (cl "x"),
+                Exp_binop (Op_mul, Exp_int 100, Exp_var (cl "y"))))]))))] in
+      let src = Printf.sprintf "let () = print_int (let swap p = match p with (a, b) -> (b, a) in match swap (%d, %d) with (x, y) -> x + 100 * y); print_newline ()" a b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
+
+    (* 51. Seq with side-effect ordering *)
+    (map3 (fun a b c ->
+      let prog = [Decl_expr
+        (Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int a),
+          Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int b),
+            Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int c),
+              Exp_app (Exp_var (cl "print_newline"), Exp_unit)))))] in
+      let src = Printf.sprintf "let () = print_int %d; print_int %d; print_int %d; print_newline ()" a b c in
+      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+
+    (* 52. Closure over closure: nested function-returning-function *)
+    (map2 (fun a b ->
+      let prog = [Decl_expr (print_int_nl
+        (Exp_let (cl "a", Exp_int a,
+          Exp_let (cl "make",
+            Exp_fun (cl "b",
+              Exp_fun (cl "x",
+                Exp_binop (Op_add, Exp_var (cl "a"),
+                  Exp_binop (Op_mul, Exp_var (cl "b"), Exp_var (cl "x"))))),
+            Exp_let (cl "f", Exp_app (Exp_var (cl "make"), Exp_int b),
+              Exp_app (Exp_var (cl "f"), Exp_int 3))))))] in
+      let src = Printf.sprintf "let () = print_int (let a = %d in let make b x = a + b * x in let f = make %d in f 3); print_newline ()" a b in
+      (prog, src)) (int_range 0 9) (int_range 0 9));
   ]
 
 (* === Test === *)

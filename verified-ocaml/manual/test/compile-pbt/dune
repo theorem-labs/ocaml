@@ -27,3 +27,15 @@
  (libraries unix pbt_common)
  (flags (:standard -w -a))
  (modules rocq_source_test))
+
+(executable
+ (name roundtrip_test)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (flags (:standard -w -a))
+ (modules roundtrip_test))
+
+(executable
+ (name bytecode_equiv_test)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (flags (:standard -w -a))
+ (modules bytecode_equiv_test))

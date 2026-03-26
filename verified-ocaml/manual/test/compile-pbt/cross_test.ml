@@ -22,7 +22,7 @@ let print_int_nl e =
 (* === Bytecode path: compile + interpret-bytecode === *)
 
 let run_our_compiler prog =
-  let code = compile_program prog in
+  let code = list_to_code_array (compile_program prog) in
   let buf = Buffer.create 64 in
   let handler idx args =
     match idx, args with

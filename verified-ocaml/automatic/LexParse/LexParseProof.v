@@ -456,11 +456,96 @@ Proof.
     change 20 with (S 19). apply nat_to_string_aux_all_ident; [lia | reflexivity].
 Qed.
 
-(* The full parse_nat / nat_to_string roundtrip requires detailed
-   reasoning about decimal representation. Admitted. *)
+(* Helper: read_digits on a non-digit-starting string returns acc unchanged *)
+Lemma read_digits_non_digit : forall rest acc,
+  non_digit_start rest ->
+  read_digits rest acc = (acc, rest).
+Proof.
+  intros rest acc Hnd.
+  destruct Hnd as [-> | [c [r [-> Hnd]]]]; simpl; [reflexivity|].
+  rewrite Hnd. reflexivity.
+Qed.
+
+(* Helper: digit_val extracts the value of a digit character *)
+Definition digit_val (c : ascii) : nat := nat_of_ascii c - 48.
+
+(* Helper: nat_of_ascii of a digit char *)
+Lemma digit_char_nat_val : forall k,
+  k < 10 -> nat_of_ascii (ascii_of_nat (48 + k)) - 48 = k.
+Proof.
+  intros k Hk. do 10 (destruct k; [reflexivity|]). lia.
+Qed.
+
+(* Helper: read_digits on digit chars followed by non-digit *)
+Lemma read_digits_digit_rest : forall k acc rest,
+  k < 10 ->
+  non_digit_start rest ->
+  read_digits (String (ascii_of_nat (48 + k)) "" ++ rest) acc =
+  read_digits rest (acc * 10 + k).
+Proof.
+  intros k acc rest Hk Hnd.
+  change (String (ascii_of_nat (48 + k)) "" ++ rest)%string
+    with (String (ascii_of_nat (48 + k)) rest).
+  simpl. rewrite (digit_char_is_digit k Hk).
+  rewrite digit_char_nat_val by exact Hk.
+  reflexivity.
+Qed.
+
+(* Helper: nat_to_string_aux produces all digits *)
+Lemma nat_to_string_aux_all_digits : forall fuel n acc,
+  n > 0 ->
+  non_digit_start acc ->
+  match nat_to_string_aux (S fuel) n "" with
+  | EmptyString => True
+  | String c _ => is_digit c = true
+  end.
+Proof.
+  intros fuel n acc Hn Hacc.
+  apply nat_to_string_aux_starts_digit. exact Hn.
+Qed.
+
+(* Main roundtrip for read_digits/nat_to_string_aux *)
+Lemma read_digits_nat_to_string_aux : forall fuel n acc rest,
+  n > 0 -> fuel >= 1 ->
+  non_digit_start rest ->
+  read_digits (nat_to_string_aux fuel n "" ++ rest) acc =
+  (acc * Nat.pow 10 (String.length (nat_to_string_aux fuel n "")) + n, rest).
+Proof.
+  (* This requires detailed induction on fuel and the structure of nat_to_string_aux *)
+  admit.
+Admitted.
+
+(* The full parse_nat / nat_to_string roundtrip *)
 Lemma parse_nat_nat_to_string : forall n rest,
   non_digit_start rest -> (Z.of_nat n < Z.pow 10 20)%Z ->
   parse_nat (nat_to_string n ++ rest) = Some (n, rest).
+Proof.
+  intros n rest Hnd Hbound.
+  unfold nat_to_string.
+  destruct (Nat.eqb n 0) eqn:En.
+  - (* n = 0 *)
+    apply Nat.eqb_eq in En. subst n. simpl.
+    rewrite read_digits_non_digit by exact Hnd. reflexivity.
+  - (* n > 0 *)
+    apply Nat.eqb_neq in En.
+    assert (Hn : n > 0) by lia.
+    set (s := nat_to_string_aux 20 n "").
+    assert (Hne : s <> "").
+    { unfold s. intro H.
+      generalize (nat_to_string_aux_starts_digit 19 n "" Hn).
+      change (S 19) with 20. change 20 with (S 19) in H. rewrite H. auto. }
+    destruct s as [|c srest] eqn:Es; [contradiction|].
+    assert (Hd : is_digit c = true).
+    { generalize (nat_to_string_aux_starts_digit 19 n "" Hn).
+      change (S 19) with 20. rewrite <- Es. auto. }
+    unfold parse_nat.
+    change (nat_to_string_aux 20 n "" ++ rest)%string with (s ++ rest)%string.
+    rewrite Es. simpl.
+    rewrite Hd.
+    (* Now: Some (read_digits (srest ++ rest) (nat_of_ascii c - 48)) = Some (n, rest) *)
+    (* Need: read_digits (srest ++ rest) (nat_of_ascii c - 48) = (n, rest) *)
+    (* This follows from read_digits_nat_to_string_aux with acc = 0 *)
+    admit.
 Admitted.
 
 (* wf_int guarantees Z.pos p < 10^20 in Z (efficient binary comparison) *)
@@ -471,10 +556,14 @@ Lemma wf_int_bound : forall z, wf_int z = true ->
   | Zneg p => (Z.pos p < Z.pow 10 20)%Z
   end.
 Proof.
-  (* Pos.leb p (10^20-1) = true implies Z.pos p < 10^20.
-     Proof is straightforward but Z.pow 10 20 is expensive to compute. *)
-  admit.
-Admitted.
+  intros [|p|p] Hwf; [exact I | |]; simpl in Hwf;
+    apply Pos.leb_le in Hwf;
+    (* Hwf : (p <= 99999999999999999999)%positive *)
+    (* Goal: Z.pos p < Z.pow 10 20 *)
+    (* 99999999999999999999 + 1 = 10^20, so p < 10^20 *)
+    change (Z.pow 10 20)%Z with (Z.pos 100000000000000000000);
+    lia.
+Qed.
 
 (* ================================================================ *)
 (* try_neg_int lemmas                                               *)
@@ -742,7 +831,24 @@ Lemma pp_expr_nonempty : forall e,
   wf_expr e = true ->
   pp_expr e <> "".
 Proof.
-Admitted.
+  intros e Hwf Hempty.
+  destruct e; try (simpl in Hempty; discriminate Hempty);
+    try (simpl in Hempty; destruct z; simpl in Hempty; try discriminate;
+         exact (nat_to_string_nonempty _ Hempty));
+    try (simpl in Hempty; destruct b; discriminate);
+    try (simpl in Hempty; destruct u; discriminate);
+    try (simpl in Hempty; subst; simpl in Hwf; discriminate).
+  (* Exp_constr: the only remaining case *)
+  (* pp_expr (Exp_constr name opt_e) = match opt_e with ... end *)
+  (* After simpl in Hempty, it's not reduced because opt_e is abstract *)
+  (* Let's use change to expose the structure *)
+  remember (Exp_constr _ _) as ec eqn:Hec in Hempty, Hwf.
+  destruct ec; try discriminate Hec.
+  injection Hec. intros Ho Hi.
+  subst. simpl in Hempty.
+  destruct o; simpl in Hempty; try discriminate Hempty.
+  subst. simpl in Hwf. discriminate.
+Qed.
 
 (* General lemma: strip_prefix of a 1-char string *)
 Lemma strip_prefix_1_neq : forall c1 c2 s,
@@ -832,52 +938,37 @@ Qed.
    Instead of using simpl (which expands everything), we use
    a direct approach with change/rewrite. *)
 
-(* parse_expr_S: one-step unfolding lemma for parse_expr.
-   Previously contained an exact copy of parse_expr's body as the RHS,
-   proved by reflexivity. Since parse_expr was extended with new constructs,
-   the copy is out of date. Admitted for now -- callers are also Admitted. *)
-Lemma parse_expr_S : forall fuel' s,
-  parse_expr (S fuel') s =
-  match try_neg_int s with
-  | Some (z, rest) => Some (Exp_int z, rest)
-  | None =>
-  match strip_prefix "()" s with
-  | Some rest => Some (Exp_unit, rest)
-  | None =>
-  match strip_prefix "{ " s with
-  | Some _ => parse_expr (S fuel') s  (* record: placeholder *)
-  | None =>
-  match strip_prefix "(" s with
-  | Some rest1 =>
-    match strip_prefix "- " rest1 with
-    | Some rest2 =>
-      match parse_expr fuel' rest2 with
-      | Some (e, rest3) =>
-        match strip_prefix ")" rest3 with
-        | Some rest4 => Some (Exp_unop Op_neg e, rest4)
-        | None => None end
+(* parse_expr_atoms: direct proof for the "atoms" branch of parse_expr.
+   When s doesn't start with "(", "{", or "(-", parse_expr handles atoms directly. *)
+Lemma parse_expr_atoms : forall fuel s,
+  fuel >= 1 ->
+  try_neg_int s = None ->
+  strip_prefix "()" s = None ->
+  strip_prefix "{ " s = None ->
+  strip_prefix "(" s = None ->
+  parse_expr fuel s =
+  match s with
+  | String c _ =>
+    if is_digit c then
+      match parse_nat s with
+      | Some (n, rest) => Some (Exp_int (Z.of_nat n), rest)
       | None => None end
-    | None => parse_expr (S fuel') s  (* remaining "(" branches: placeholder *)
-    end
-  | None =>
-    match s with
-    | String c _ =>
-      if is_digit c then
-        match parse_nat s with
-        | Some (n, rest) => Some (Exp_int (Z.of_nat n), rest)
-        | None => None end
-      else if (is_alpha c || Ascii.eqb c "_"%char)%bool then
-        match parse_ident s with
-        | Some (id, rest) =>
-          if String.eqb id "true" then Some (Exp_bool true, rest)
-          else if String.eqb id "false" then Some (Exp_bool false, rest)
-          else if is_upper c then Some (Exp_constr id None, rest)
-          else Some (Exp_var id, rest)
-        | None => None end
-      else None
-    | EmptyString => None end
-  end end end end.
-Admitted.
+    else if (is_alpha c || Ascii.eqb c "_"%char)%bool then
+      match parse_ident s with
+      | Some (id, rest) =>
+        if String.eqb id "true" then Some (Exp_bool true, rest)
+        else if String.eqb id "false" then Some (Exp_bool false, rest)
+        else if is_upper c then Some (Exp_constr id None, rest)
+        else Some (Exp_var id, rest)
+      | None => None end
+    else None
+  | EmptyString => None end.
+Proof.
+  intros fuel s Hfuel Hni Hunit Hrec Hparen.
+  destruct fuel; [lia|].
+  simpl. rewrite Hni. rewrite Hunit. rewrite Hrec. rewrite Hparen.
+  reflexivity.
+Qed.
 
 (* ================================================================ *)
 (* The parse_expr_pp proof                                          *)
@@ -950,20 +1041,64 @@ Proof.
     - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower, is_upper in *. simpl in *.
       destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in *; try discriminate; reflexivity.
     - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
-  (* After parse_expr was extended with new constructs (records, strings,
-     function, field access), the rewrite parse_expr_S approach no longer
-     works here. The atoms branch still parses vars correctly but reaching
-     it through the expanded definition requires additional strip_prefix
-     failure lemmas for "{ " etc. *)
-  admit.
-Admitted.
+  (* Show the negative conditions for parse_expr_atoms *)
+  assert (Htn : try_neg_int (String c xrest ++ rest) = None).
+  { apply try_neg_int_no_paren. exact Hnp. }
+  assert (Hsu : strip_prefix "()" (String c xrest ++ rest) = None).
+  { apply strip_unit_no_paren. exact Hnp. }
+  assert (Hbrace : strip_prefix "{ " (String c xrest ++ rest) = None).
+  { simpl. rewrite <- ascii_eqb_sym.
+    assert (Hnb : Ascii.eqb c "{"%char = false).
+    { apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
+      - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower in Hl. simpl in Hl.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hl; try discriminate; reflexivity.
+      - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
+    rewrite Hnb. reflexivity. }
+  assert (Hpo : strip_prefix "(" (String c xrest ++ rest) = None).
+  { apply strip_open_no_paren. exact Hnp. }
+  rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo].
+  simpl. rewrite Hnd. rewrite Haou.
+  rewrite parse_ident_var; [|exact Hvv|exact Hni].
+  rewrite (valid_var_not_true _ Hvv).
+  rewrite (valid_var_not_false _ Hvv).
+  rewrite Hnup.
+  reflexivity.
+Qed.
 
 (* Helper: parse_expr on constructor name (no arg) *)
-Lemma parse_expr_constr_none : forall c rest fuel',
-  valid_constr_name c = true ->
+Lemma parse_expr_constr_none : forall cname rest fuel',
+  valid_constr_name cname = true ->
   non_ident_start rest ->
-  parse_expr (S fuel') (c ++ rest) = Some (Exp_constr c None, rest).
-Admitted.
+  parse_expr (S fuel') (cname ++ rest) = Some (Exp_constr cname None, rest).
+Proof.
+  intros cname rest fuel' Hvc Hni.
+  destruct cname as [|c crest]; [discriminate|].
+  assert (Hfacts := valid_constr_ident_facts _ Hvc).
+  destruct Hfacts as [His [Hall [Hu Hic]]].
+  assert (Hnp : Ascii.eqb c "("%char = false) by (apply upper_not_oparen; exact Hu).
+  assert (Hnd : is_digit c = false) by (apply upper_not_digit; exact Hu).
+  assert (Haou : (is_alpha c || Ascii.eqb c "_"%char)%bool = true).
+  { apply Bool.orb_true_iff. left. apply upper_is_alpha. exact Hu. }
+  assert (Htn : try_neg_int (String c crest ++ rest) = None).
+  { apply try_neg_int_no_paren. exact Hnp. }
+  assert (Hsu : strip_prefix "()" (String c crest ++ rest) = None).
+  { apply strip_unit_no_paren. exact Hnp. }
+  assert (Hbrace : strip_prefix "{ " (String c crest ++ rest) = None).
+  { simpl. rewrite <- ascii_eqb_sym.
+    assert (Hnb : Ascii.eqb c "{"%char = false).
+    { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+    rewrite Hnb. reflexivity. }
+  assert (Hpo : strip_prefix "(" (String c crest ++ rest) = None).
+  { apply strip_open_no_paren. exact Hnp. }
+  rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo].
+  simpl. rewrite Hnd. rewrite Haou.
+  rewrite parse_ident_constr; [|exact Hvc|exact Hni].
+  rewrite (valid_constr_not_true _ Hvc).
+  rewrite (valid_constr_not_false _ Hvc).
+  rewrite Hu.
+  reflexivity.
+Qed.
 
 Lemma parse_expr_pp : forall e rest fuel,
   wf_expr e = true -> fuel >= expr_size e ->

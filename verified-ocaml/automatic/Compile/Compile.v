@@ -442,7 +442,6 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
                                match tuple_vars ps with
                                | Some _ => true | None => false
                                end
-                             | Pat_cons _ _ => true
                              | _ => false
                              end in
           let body_ce := match pat with
@@ -501,26 +500,162 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
                   extr ++ bc ++ [POP nv]
                 | None => compile_expr fuel' body body_ce fe b
                 end
+              | Pat_constr _ (Some cpat) =>
+                (* Last case: constructor with argument, extract field 0 *)
+                match cpat with
+                | Pat_var x =>
+                  let extr := [ACC 0; GETFIELD 0; PUSH] in
+                  let el := len extr in
+                  let constr_ce := (x, Loc_stack 0) :: shift scrut_ce 1 in
+                  let bc := compile_expr fuel' body constr_ce fe (b + el) in
+                  extr ++ bc ++ [POP 1]
+                | Pat_wild =>
+                  compile_expr fuel' body body_ce fe b
+                | _ =>
+                  compile_expr fuel' body body_ce fe b
+                end
               | _ => compile_expr fuel' body body_ce fe b
               end
             | _ =>
-              let test := match pat with
-                | Pat_int n => [ACC 0; PUSH; CONSTINT n; EQ]
-                | Pat_bool true => [ACC 0; PUSH; CONSTINT 1; EQ]
-                | Pat_bool false => [ACC 0; PUSH; CONSTINT 0; EQ]
-                | Pat_nil => [ACC 0; PUSH; CONSTINT 0; EQ]
-                | _ => []
-                end in
-              let tl := len test in
-              let bs := (b + tl + 1)%nat in  (* +1 for BRANCHIFNOT *)
-              let bc := compile_expr fuel' body body_ce fe bs in
-              let bl := len bc in
-              let ns := (bs + bl + 1)%nat in  (* +1 for BRANCH end *)
-              let rc := compile_cases rest ns in
-              let rl := len rc in
-              let ep := (ns + rl)%nat in
-              test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
-              bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+              match pat with
+              | Pat_cons ph pt =>
+                (* Pat_cons with remaining cases: test ISINT (nil=int, cons=block),
+                   then extract fields if test passes. *)
+                let test := [ACC 0; ISINT; BOOLNOT] in
+                let tl := len test in
+                let bs := (b + tl + 1)%nat in  (* +1 for BRANCHIFNOT *)
+                (* After test passes, extract cons fields *)
+                match tuple_vars [ph; pt] with
+                | Some vars =>
+                  let nv := 2%nat in
+                  let extr := extract_fields nv nv 0%nat in
+                  let el := len extr in
+                  let cons_ce := make_tuple_env (rev vars) 0%nat ++ shift scrut_ce nv in
+                  let bc := compile_expr fuel' body cons_ce fe (bs + el) in
+                  let bl := len bc in
+                  let pop_len := 1%nat in  (* POP nv *)
+                  let ns := (bs + el + bl + pop_len + 1)%nat in  (* +1 for BRANCH end *)
+                  let rc := compile_cases rest ns in
+                  let rl := len rc in
+                  let ep := (ns + rl)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                  extr ++ bc ++ [POP nv] ++ [BRANCH (Z.of_nat ep)] ++ rc
+                | None =>
+                  let bc := compile_expr fuel' body body_ce fe bs in
+                  let bl := len bc in
+                  let ns := (bs + bl + 1)%nat in  (* +1 for BRANCH end *)
+                  let rc := compile_cases rest ns in
+                  let rl := len rc in
+                  let ep := (ns + rl)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                  bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+                end
+              | Pat_constr _ (Some cpat) =>
+                (* Constructor with argument: test ISINT; BOOLNOT
+                   (true if block = has arg), then extract field 0. *)
+                let test := [ACC 0; ISINT; BOOLNOT] in
+                let tl := len test in
+                let bs := (b + tl + 1)%nat in  (* +1 for BRANCHIFNOT *)
+                match cpat with
+                | Pat_var x =>
+                  let extr := [ACC 0; GETFIELD 0; PUSH] in
+                  let el := len extr in
+                  let constr_ce := (x, Loc_stack 0) :: shift scrut_ce 1 in
+                  let bc := compile_expr fuel' body constr_ce fe (bs + el) in
+                  let bl := len bc in
+                  let pop_len := 1%nat in  (* POP 1 *)
+                  let ns := (bs + el + bl + pop_len + 1)%nat in
+                  let rc := compile_cases rest ns in
+                  let rl := len rc in
+                  let ep := (ns + rl)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                  extr ++ bc ++ [POP 1] ++ [BRANCH (Z.of_nat ep)] ++ rc
+                | Pat_wild =>
+                  let bc := compile_expr fuel' body body_ce fe bs in
+                  let bl := len bc in
+                  let ns := (bs + bl + 1)%nat in
+                  let rc := compile_cases rest ns in
+                  let rl := len rc in
+                  let ep := (ns + rl)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                  bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+                | Pat_constr _ (Some inner_pat) =>
+                  (* Nested constructor: Some (Some x) -- extract outer field,
+                     then test if inner is also a block. *)
+                  match inner_pat with
+                  | Pat_var x =>
+                    (* E.g. Some (Some x): extract field 0 of outer,
+                       test ISINT of inner, extract field 0 of inner. *)
+                    let extr_outer := [ACC 0; GETFIELD 0] in
+                    let test_inner := [PUSH; ACC 0; ISINT; BOOLNOT] in
+                    let extr_inner := [ACC 0; GETFIELD 0; PUSH] in
+                    let setup := extr_outer ++ test_inner in
+                    let setup_len := len setup in
+                    let bs2 := (bs + setup_len + 1)%nat in
+                    let inner_extr_len := len extr_inner in
+                    let inner_ce := (x, Loc_stack 0) :: shift scrut_ce 2 in
+                    let bc := compile_expr fuel' body inner_ce fe (bs2 + inner_extr_len) in
+                    let bl := len bc in
+                    let ns := (bs2 + inner_extr_len + bl + 1 + 1)%nat in
+                    let rc := compile_cases rest ns in
+                    let rl := len rc in
+                    let ep := (ns + rl)%nat in
+                    test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                    setup ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                    extr_inner ++ bc ++ [POP 2] ++ [BRANCH (Z.of_nat ep)] ++ rc
+                  | _ =>
+                    let bc := compile_expr fuel' body body_ce fe bs in
+                    let bl := len bc in
+                    let ns := (bs + bl + 1)%nat in
+                    let rc := compile_cases rest ns in
+                    let rl := len rc in
+                    let ep := (ns + rl)%nat in
+                    test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                    bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+                  end
+                | _ =>
+                  let bc := compile_expr fuel' body body_ce fe bs in
+                  let bl := len bc in
+                  let ns := (bs + bl + 1)%nat in
+                  let rc := compile_cases rest ns in
+                  let rl := len rc in
+                  let ep := (ns + rl)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                  bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+                end
+              | Pat_constr _ None =>
+                (* Nullary constructor (e.g. None): test ISINT
+                   (true if int = nullary constr) *)
+                let test := [ACC 0; ISINT] in
+                let tl := len test in
+                let bs := (b + tl + 1)%nat in
+                let bc := compile_expr fuel' body body_ce fe bs in
+                let bl := len bc in
+                let ns := (bs + bl + 1)%nat in
+                let rc := compile_cases rest ns in
+                let rl := len rc in
+                let ep := (ns + rl)%nat in
+                test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+              | _ =>
+                let test := match pat with
+                  | Pat_int n => [ACC 0; PUSH; CONSTINT n; EQ]
+                  | Pat_bool true => [ACC 0; PUSH; CONSTINT 1; EQ]
+                  | Pat_bool false => [ACC 0; PUSH; CONSTINT 0; EQ]
+                  | Pat_nil => [ACC 0; PUSH; CONSTINT 0; EQ]
+                  | _ => []
+                  end in
+                let tl := len test in
+                let bs := (b + tl + 1)%nat in  (* +1 for BRANCHIFNOT *)
+                let bc := compile_expr fuel' body body_ce fe bs in
+                let bl := len bc in
+                let ns := (bs + bl + 1)%nat in  (* +1 for BRANCH end *)
+                let rc := compile_cases rest ns in
+                let rl := len rc in
+                let ep := (ns + rl)%nat in
+                test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+              end
             end
         end) cases cases_base in
     cs ++ [PUSH] ++ cases_code ++ [POP 1]

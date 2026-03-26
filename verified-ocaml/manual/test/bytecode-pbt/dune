@@ -1,4 +1,4 @@
 (executables
- (names harness runner manual_test roundtrip_test source_interp_test compile_test bytecode_equiv_test ocaml_testsuite_runner)
+ (names harness runner manual_test ocaml_testsuite_runner)
  (libraries unix qcheck-core qcheck-core.runner pbt_common)
  (flags (:standard -w -a)))

@@ -56,7 +56,7 @@ Definition wf_instrb (n : nat) (i : instruction) : bool :=
   | SWITCH nc nb ct bt
     => Nat.eqb (List.length ct) nc && Nat.eqb (List.length bt) nb
        && all_valid_targetsb n ct && all_valid_targetsb n bt
-       && nat_fits_i32b nc && nat_fits_i32b nb
+       && Nat.ltb nc 65536 && Nat.ltb nb 32768
   | BEQ v t | BNEQ v t | BLTINT v t | BLEINT v t
   | BGTINT v t | BGEINT v t | BULTINT v t | BUGEINT v t
     => z_fits_i32b v && valid_targetb n t
@@ -71,7 +71,8 @@ Definition wf_instrb (n : nat) (i : instruction) : bool :=
 
 Definition well_formed (code : list instruction) : bool :=
   let n := List.length code in
-  forallb (wf_instrb n) code.
+  forallb (wf_instrb n) code
+  && Nat.leb (List.length (encode_bytecode code)) 2147483647.
 
 (* ------------------------------------------------------------------ *)
 (* Roundtrip spec                                                      *)

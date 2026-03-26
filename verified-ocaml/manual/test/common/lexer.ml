@@ -4,9 +4,15 @@
 type token =
   | INT of int
   | STRING of string  (* identifier or keyword *)
+  | STRING_LIT of string  (* "..." string literal *)
   | LPAREN | RPAREN
+  | LBRACKET | RBRACKET  (* [ and ] *)
+  | LBRACE | RBRACE  (* { and } *)
   | COMMA | SEMI | SEMISEMI | PIPE | UNDERSCORE
   | ARROW    (* -> *)
+  | COLONCOLON  (* :: *)
+  | COLON    (* : *)
+  | DOT      (* . *)
   | PLUS | MINUS | STAR | SLASH
   | MOD      (* mod *)
   | EQ | NEQ (* = and <> *)
@@ -15,9 +21,10 @@ type token =
   | NOT      (* not *)
   | IF | THEN | ELSE
   | LET | REC | IN
-  | FUN | MATCH | WITH
+  | FUN | FUNCTION | MATCH | WITH
   | TYPE | OF
   | TRUE | FALSE
+  | MODULE | STRUCT | END | OPEN | EXCEPTION
   | APOSTROPHE  (* ' for type params *)
   | EOF
 
@@ -29,10 +36,13 @@ let keyword_or_ident s =
   match s with
   | "if" -> IF | "then" -> THEN | "else" -> ELSE
   | "let" -> LET | "rec" -> REC | "in" -> IN
-  | "fun" -> FUN | "match" -> MATCH | "with" -> WITH
+  | "fun" -> FUN | "function" -> FUNCTION
+  | "match" -> MATCH | "with" -> WITH
   | "type" -> TYPE | "of" -> OF
   | "true" -> TRUE | "false" -> FALSE
   | "not" -> NOT | "mod" -> MOD
+  | "module" -> MODULE | "struct" -> STRUCT | "end" -> END
+  | "open" -> OPEN | "exception" -> EXCEPTION
   | "_" -> UNDERSCORE
   | s -> STRING s
 
@@ -58,6 +68,11 @@ let tokenize (input : string) : token list =
     end
     else if c = '(' then (tokens := LPAREN :: !tokens; incr pos)
     else if c = ')' then (tokens := RPAREN :: !tokens; incr pos)
+    else if c = '[' then (tokens := LBRACKET :: !tokens; incr pos)
+    else if c = ']' then (tokens := RBRACKET :: !tokens; incr pos)
+    else if c = '{' then (tokens := LBRACE :: !tokens; incr pos)
+    else if c = '}' then (tokens := RBRACE :: !tokens; incr pos)
+    else if c = '.' then (tokens := DOT :: !tokens; incr pos)
     else if c = ',' then (tokens := COMMA :: !tokens; incr pos)
     else if c = ';' && !pos + 1 < len && input.[!pos + 1] = ';' then
       (tokens := SEMISEMI :: !tokens; pos := !pos + 2)
@@ -82,6 +97,20 @@ let tokenize (input : string) : token list =
     else if c = '-' && !pos + 1 < len && input.[!pos + 1] = '>' then
       (tokens := ARROW :: !tokens; pos := !pos + 2)
     else if c = '-' then (tokens := MINUS :: !tokens; incr pos)
+    else if c = ':' && !pos + 1 < len && input.[!pos + 1] = ':' then
+      (tokens := COLONCOLON :: !tokens; pos := !pos + 2)
+    else if c = ':' then (tokens := COLON :: !tokens; incr pos)
+    else if c = '"' then begin
+      (* String literal *)
+      let buf = Buffer.create 16 in
+      incr pos;
+      while !pos < len && input.[!pos] <> '"' do
+        Buffer.add_char buf input.[!pos];
+        incr pos
+      done;
+      if !pos < len then incr pos;  (* skip closing quote *)
+      tokens := STRING_LIT (Buffer.contents buf) :: !tokens
+    end
     else if c = '\'' then (tokens := APOSTROPHE :: !tokens; incr pos)
     else if is_digit c then begin
       let start = !pos in

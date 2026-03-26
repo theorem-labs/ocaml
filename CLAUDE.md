@@ -39,10 +39,10 @@ All PBT suites use QCheck. Run from `verified-ocaml/`:
 ```bash
 dune exec manual/test/bytecode-pbt/manual_test.exe         # Manual bytecode tests
 dune exec manual/test/bytecode-pbt/harness.exe             # Bytecode PBT (interpret-bytecode vs ocamlrun)
-dune exec manual/test/compile-pbt/roundtrip_test.exe                 # Parser round-trip PBT
-dune exec manual/test/interpret-pbt/source_interp_test.exe           # Source interpreter PBT
-dune exec manual/test/compile-pbt/compile_test.exe                   # Compiler PBT
-dune exec manual/test/compile-pbt/bytecode_equiv_test.exe            # Bytecode equivalence PBT (our compiler vs ocamlc)
+dune exec manual/test/compile-pbt/harness.exe              # Compiler PBT (compile + interpret-bytecode vs ocamlrun)
+dune exec manual/test/compile-pbt/roundtrip_test.exe       # Parser round-trip PBT
+dune exec manual/test/compile-pbt/source_interp_test.exe   # Source interpreter PBT
+dune exec manual/test/compile-pbt/bytecode_equiv_test.exe  # Bytecode equivalence PBT (our compiler vs ocamlc)
 ```
 
 ## Architecture
@@ -113,16 +113,15 @@ Theories are organized by automation level: **Manual** (human-authored), **SemiA
   - `harness.ml` — Bytecode PBT: interpret-bytecode vs ocamlrun (37 generators)
   - `manual_test.ml` — Hand-written bytecode tests
   - `ocaml_testsuite_runner.ml` — Runs OCaml's own test suite through our interpreter
-  - `trace.ml` — Execution tracer
 
 - **`compile-pbt/`** — Steps 2, 3, 5: Compiler and parser PBT:
-  - `lexer.ml` / `parser.ml` — OCaml tokenizer and parser for the AST subset
+  - `harness.ml` — Compiler PBT: compile + interpret-bytecode vs ocamlrun (step 3)
   - `roundtrip_test.ml` — Parser round-trip PBT (step 2)
-  - `compile_test.ml` — Compiler PBT: compile + interpret-bytecode vs ocamlrun (step 3, 32 generators)
   - `bytecode_equiv_test.ml` — Bytecode equivalence PBT: our compiler vs ocamlc (step 5)
-
-- **`interpret-pbt/`** — Step 3: Source interpreter PBT:
-  - `source_interp_test.ml` — Source interpreter vs ocamlrun
+  - `source_interp_test.ml` — Source interpreter vs ocamlrun (step 3)
+  - `cross_test.ml` — Cross-validates interpret vs compile+interpret-bytecode (step 4)
+  - `advanced_test.ml` — Hand-crafted complex program tests
+  - `rocq_source_test.ml` — Tests using Rocq-style function patterns
 
 ### Extraction flow
 
