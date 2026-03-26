@@ -12,23 +12,23 @@ Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret.
 
-(* Abstract C state representation. This will be instantiated with the
-   Clight memory/local-environment pair when the Clight AST is available. *)
-Parameter c_state : Type.
-
-(* Abstraction relation: a C state corresponds to a Rocq machine state. *)
-Parameter abs_rel : c_state -> state -> Prop.
-
-(* C-level error indicator. *)
-Parameter c_error : c_state -> Prop.
-
-(* C-level halt with a value. *)
-Parameter c_halt : c_state -> value -> Prop.
-
-(* C-level CCall request. *)
-Parameter c_ccall : c_state -> nat -> list value -> c_state -> Prop.
-
 Module Type InstructSpec.
+
+  (* Abstract C state representation. Will be instantiated with the
+     Clight memory/local-environment pair when the Clight AST is available. *)
+  Parameter c_state : Type.
+
+  (* Abstraction relation: a C state corresponds to a Rocq machine state. *)
+  Parameter abs_rel : c_state -> state -> Prop.
+
+  (* C-level error indicator. *)
+  Parameter c_error : c_state -> Prop.
+
+  (* C-level halt with a value. *)
+  Parameter c_halt : c_state -> value -> Prop.
+
+  (* C-level CCall request. *)
+  Parameter c_ccall : c_state -> nat -> list value -> c_state -> Prop.
 
   (* ================================================================== *)
   (* Stack operations                                                    *)
