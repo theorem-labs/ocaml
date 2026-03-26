@@ -320,7 +320,8 @@ Definition main : Z :=
       let handler := make_ccall_handler prims in
       let init := initial_state globals in
       let fuel := Z.to_nat 100000000 in
-      match run fuel code init handler with
+      let code_arr := list_to_code_array code in
+      match run fuel code_arr init handler with
       | Finished _ => 0
       | Run_error _ =>
         print_io (str_to_codes "Runtime error") (print_io [10] 1)

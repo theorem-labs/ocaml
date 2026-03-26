@@ -1,78 +1,14 @@
-(* harness.ml - Step 5 PBT: our compiler (Compile.v) vs ocamlc.
-   For each generated program:
+(* bytecode_equiv_test.ml - Part 5: PBT that our compiler and ocamlc produce
+   behaviorally equivalent bytecode. For each test program:
    1. Compile AST with compile_program -> run through our bytecode interpreter
-   2. Compile OCaml source with ocamlc -> run with ocamlrun
-   3. Compare outputs *)
+   2. OCaml source -> compile with ocamlc -> load bytecode -> run through our interpreter
+   3. Compare outputs
+   Migrated to QCheck. *)
 
 open Interp_extracted
+open Test_common
 
-(* === Utilities === *)
-
-let with_temp_dir f =
-  let dir = Filename.temp_file "pbt" "" in
-  Sys.remove dir; Unix.mkdir dir 0o700;
-  Fun.protect ~finally:(fun () ->
-    (try Array.iter (fun n -> Sys.remove (Filename.concat dir n)) (Sys.readdir dir) with _ -> ());
-    (try Unix.rmdir dir with _ -> ())
-  ) (fun () -> f dir)
-
-let compile_and_run_ocamlc dir source =
-  let src = Filename.concat dir "test.ml" in
-  let exe = Filename.concat dir "test.byte" in
-  let oc = open_out src in output_string oc source; close_out oc;
-  if Sys.command (Printf.sprintf "ocamlc -o %s %s 2>/dev/null" exe src) <> 0 then None
-  else begin
-    let ic = Unix.open_process_in (Printf.sprintf "timeout 5 ocamlrun %s 2>/dev/null" exe) in
-    let buf = Buffer.create 256 in
-    (try while true do Buffer.add_char buf (input_char ic) done with End_of_file -> ());
-    ignore (Unix.close_process_in ic);
-    Some (Buffer.contents buf)
-  end
-
-let cl s = List.init (String.length s) (fun i -> s.[i])
-let sc l = let buf = Buffer.create (List.length l) in List.iter (Buffer.add_char buf) l; Buffer.contents buf
-
-let print_int_nl e =
-  Exp_seq (Exp_app (Exp_var (cl "print_int"), e),
-           Exp_app (Exp_var (cl "print_newline"), Exp_unit))
-
-let run_our_compiler prog =
-  let code = list_to_code_array (compile_program prog) in
-  let buf = Buffer.create 64 in
-  let handler idx args =
-    match idx, args with
-    | 0, [Val_int n] ->
-      String.iter (Buffer.add_char buf) (string_of_int n);
-      Some (Val_int 0)
-    | 1, [_] ->
-      Buffer.add_char buf '\n';
-      Some (Val_int 0)
-    | _ -> Some (Val_int 0)
-  in
-  let s = ref (initial_state []) in
-  let remaining = ref 1000000 in
-  let result = ref None in
-  let rec loop () =
-    if !remaining <= 0 then result := Some "timeout"
-    else begin
-      decr remaining;
-      match step code !s with
-      | Step s' -> s := s'; loop ()
-      | Halt _ -> ()
-      | Error msg -> result := Some (sc msg)
-      | CCall_request (idx, args, cont) ->
-        (match handler idx args with
-         | Some v -> s := set_accu cont v; loop ()
-         | None -> result := Some "ccall failed")
-    end
-  in
-  loop ();
-  match !result with
-  | None -> Ok (Buffer.contents buf)
-  | Some err -> Error err
-
-(* === QCheck generators producing (prog, source) pairs === *)
-
+(* QCheck generators producing (prog, source) pairs *)
 let gen_test_case : (decl list * string) QCheck.Gen.t =
   let open QCheck.Gen in
   oneof [
@@ -163,11 +99,13 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
       let prog = [Decl_expr (print_int_nl (Exp_unop (Op_neg, Exp_int a)))] in
       let src = Printf.sprintf "let () = print_int (- %d); print_newline ()" a in
       (prog, src)) (int_range 0 99));
+    (* nested arithmetic *)
     (map3 (fun a b c ->
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_add, Exp_binop (Op_mul, Exp_int a, Exp_int b), Exp_int c)))] in
       let src = Printf.sprintf "let () = print_int (%d * %d + %d); print_newline ()" a b c in
       (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+    (* match with variable binding *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_int n,
@@ -175,6 +113,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
            (Pat_var (cl "x"), Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1))])))] in
       let src = Printf.sprintf "let () = print_int (match %d with 0 -> 42 | x -> x + 1); print_newline ()" n in
       (prog, src)) (int_range 0 99));
+    (* match on computed value *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_binop (Op_sub, Exp_int a, Exp_int b),
@@ -182,6 +121,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
            (Pat_wild, Exp_int 0)])))] in
       let src = Printf.sprintf "let () = print_int (match %d - %d with 0 -> 1 | _ -> 0); print_newline ()" a b in
       (prog, src)) (int_range 0 19) (int_range 0 19));
+    (* match with 5 int cases *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_int n,
@@ -190,6 +130,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
            (Pat_wild, Exp_int 50)])))] in
       let src = Printf.sprintf "let () = print_int (match %d with 0 -> 10 | 1 -> 20 | 2 -> 30 | 3 -> 40 | _ -> 50); print_newline ()" n in
       (prog, src)) (int_range 0 4));
+    (* nested if inside match body *)
     (map2 (fun n m ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_int n,
@@ -197,6 +138,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
            (Pat_wild, Exp_int 99)])))] in
       let src = Printf.sprintf "let () = print_int (match %d with 0 -> if %d > 5 then 1 else 0 | _ -> 99); print_newline ()" n m in
       (prog, src)) (int_range 0 2) (int_range 0 9));
+    (* function returning match result *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "f",
@@ -206,6 +148,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_app (Exp_var (cl "f"), Exp_int n))))] in
       let src = Printf.sprintf "let () = print_int (let f x = match x with 0 -> 100 | 1 -> 200 | _ -> 300 in f %d); print_newline ()" n in
       (prog, src)) (int_range 0 2));
+    (* deeply nested let *)
     (map (fun a ->
       let b = a + 1 in let c = a + 2 in let d = a + 3 in
       let prog = [Decl_expr (print_int_nl
@@ -218,6 +161,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                   Exp_binop (Op_add, Exp_var (cl "c"), Exp_var (cl "d")))))))))] in
       let src = Printf.sprintf "let () = print_int (let a = %d in let b = %d in let c = %d in let d = %d in a + b + c + d); print_newline ()" a b c d in
       (prog, src)) (int_range 0 9));
+    (* recursive function with match *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_letrec (cl "count",
@@ -230,6 +174,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_app (Exp_var (cl "count"), Exp_int n))))] in
       let src = Printf.sprintf "let () = print_int (let rec count n = match n with 0 -> 0 | x -> 1 + count (x - 1) in count %d); print_newline ()" n in
       (prog, src)) (int_range 0 7));
+    (* top-level Decl_letrec *)
     (map (fun n ->
       let prog = [
         Decl_letrec (cl "fact",
@@ -242,6 +187,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         Decl_expr (print_int_nl (Exp_app (Exp_var (cl "fact"), Exp_int n)))] in
       let src = Printf.sprintf "let rec fact n = if n <= 1 then 1 else n * fact (n-1)\nlet () = print_int (fact %d); print_newline ()" n in
       (prog, src)) (int_range 0 9));
+    (* non-commutative tuple access *)
     (map2 (fun a b ->
       let a = a + 10 in
       let prog = [Decl_expr (print_int_nl
@@ -251,6 +197,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_app (Exp_var (cl "snd"), Exp_var (cl "p"))))))] in
       let src = Printf.sprintf "let () = print_int (let p = (%d, %d) in fst p - snd p); print_newline ()" a b in
       (prog, src)) (int_range 0 49) (int_range 0 49));
+    (* division and modulo *)
     (map2 (fun a b ->
       let a = a + 1 in let b = b + 1 in
       let prog = [Decl_expr (print_int_nl
@@ -259,6 +206,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_binop (Op_mod, Exp_int a, Exp_int b))))] in
       let src = Printf.sprintf "let () = print_int (%d / %d + %d mod %d); print_newline ()" a b a b in
       (prog, src)) (int_range 0 499) (int_range 0 19));
+    (* nested function calls f(g(x)) *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1)),
@@ -266,6 +214,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_app (Exp_var (cl "f"), Exp_app (Exp_var (cl "g"), Exp_int n))))))] in
       let src = Printf.sprintf "let () = print_int (let f x = x + 1 in let g x = x * 2 in f (g %d)); print_newline ()" n in
       (prog, src)) (int_range 0 19));
+    (* higher-order function returning closure *)
     (map2 (fun n m ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "make_adder",
@@ -273,6 +222,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_app (Exp_app (Exp_var (cl "make_adder"), Exp_int n), Exp_int m))))] in
       let src = Printf.sprintf "let () = print_int (let make_adder n x = n + x in make_adder %d %d); print_newline ()" n m in
       (prog, src)) (int_range 0 19) (int_range 0 19));
+    (* multiple print statements *)
     (map2 (fun a b ->
       let prog = [Decl_expr
         (Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int a),
@@ -280,6 +230,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_app (Exp_var (cl "print_newline"), Exp_unit))))] in
       let src = Printf.sprintf "let () = print_int %d; print_int %d; print_newline ()" a b in
       (prog, src)) (int_range 0 9) (int_range 0 9));
+    (* comparison operators *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_add,
@@ -289,6 +240,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_if (Exp_binop (Op_ge, Exp_int a, Exp_int b), Exp_int 100, Exp_int 0))))] in
       let src = Printf.sprintf "let () = print_int ((if %d < %d then 1 else 0) + (if %d = %d then 10 else 0) + (if %d >= %d then 100 else 0)); print_newline ()" a b a b a b in
       (prog, src)) (int_range 0 19) (int_range 0 19));
+    (* variable shadowing *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "x", Exp_int a,
@@ -296,6 +248,7 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_var (cl "x")))))] in
       let src = Printf.sprintf "let () = print_int (let x = %d in let x = x + %d in x); print_newline ()" a b in
       (prog, src)) (int_range 0 19) (int_range 0 19));
+    (* partial application via currying *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "add",
@@ -308,18 +261,19 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
 
 let print_test_case (_prog, src) = src
 
-let compile_vs_ocamlc_test =
-  QCheck.Test.make ~name:"compile vs ocamlc" ~count:200
+let bytecode_equiv_test =
+  QCheck.Test.make ~name:"bytecode equivalence: our compiler vs ocamlc" ~count:100
     (QCheck.make gen_test_case ~print:print_test_case)
     (fun (prog, source) ->
        with_temp_dir (fun dir ->
          let our_result = run_our_compiler prog in
-         match compile_and_run_ocamlc dir source with
-         | None -> true
-         | Some expected ->
-           (match our_result with
-            | Ok ours -> ours = expected
-            | Error _msg -> false)))
+         match compile_ocamlc dir source with
+         | None -> true  (* skip *)
+         | Some exe ->
+           let ocamlc_result = run_ocamlc_bytecode exe in
+           (match our_result, ocamlc_result with
+            | Ok ours, Ok theirs -> ours = theirs
+            | _ -> false)))
 
 let () =
-  exit (QCheck_base_runner.run_tests ~verbose:true [compile_vs_ocamlc_test])
+  exit (QCheck_base_runner.run_tests ~verbose:true [bytecode_equiv_test])

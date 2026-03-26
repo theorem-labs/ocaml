@@ -1,10 +1,3 @@
-(library
- (name pbt_common)
- (libraries unix)
- (flags (:standard -w -a))
- (wrapped false)
- (modules interp_extracted))
-
 (executable
  (name harness)
  (libraries unix qcheck-core qcheck-core.runner pbt_common)

@@ -2,21 +2,22 @@
 
 From Stdlib Require Import ZArith Strings.String.
 From Stdlib Require Import List. Import ListNotations.
+From Stdlib.FSets Require Import FMapPositive.
+From Stdlib.PArith Require Import BinPosDef.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST.
 
-Record trap_frame : Type := mk_trap_frame {
-  trap_pc         : Z;
-  trap_sp_offset  : nat;
-  trap_env        : value;
-  trap_extra_args : nat;
-}.
-
 (* Heap: maps addresses (nat) to (tag, fields) pairs.
-   Used for mutable blocks (refs, arrays). Closures and immutable
-   blocks remain as inline Val_block values. *)
-Definition heap := list (nat * (nat * list value)).  (* addr -> (tag, fields) *)
+   Uses PositiveMap for O(log n) lookup instead of O(n) linear scan.
+   Keys are Pos.of_succ_nat addr, mapping nat 0→1, 1→2, etc. *)
+Definition heap := PositiveMap.t (nat * list value).
 
+(* Machine state.
+   trap_sp : nat — stack depth (length of stack) at the time the current
+   outermost active PUSHTRAP pushed its trap frame.  Zero means no handler.
+   The trap frame lives on the main stack at positions
+     (length stack - trap_sp) .. (length stack - trap_sp + 3)
+   from the top. *)
 Record state : Type := mk_state {
   pc         : Z;
   accu       : value;
@@ -24,7 +25,7 @@ Record state : Type := mk_state {
   env        : value;
   extra_args : nat;
   global     : list value;
-  trap_stack : list trap_frame;
+  trap_sp    : nat;            (* trap-stack pointer: stack depth at last PUSHTRAP *)
   hp         : heap;           (* mutable heap *)
   next_addr  : nat;            (* next free heap address *)
 }.
@@ -41,28 +42,23 @@ Inductive run_result : Type :=
   | Out_of_fuel : state -> run_result.
 
 Definition set_accu (s : state) (v : value) : state :=
-  mk_state s.(pc) v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_stack) s.(hp) s.(next_addr).
+  mk_state s.(pc) v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp) s.(hp) s.(next_addr).
 
 (* Heap operations *)
-Fixpoint heap_lookup (h : heap) (addr : nat) : option (nat * list value) :=
-  match h with
-  | [] => None
-  | (a, (t, fs)) :: rest =>
-    if Nat.eqb a addr then Some (t, fs) else heap_lookup rest addr
-  end.
+Definition heap_lookup (h : heap) (addr : nat) : option (nat * list value) :=
+  PositiveMap.find (Pos.of_succ_nat addr) h.
 
 Definition heap_alloc (s : state) (tag : nat) (fields : list value) : state * value :=
   let addr := s.(next_addr) in
+  let h' := PositiveMap.add (Pos.of_succ_nat addr) (tag, fields) s.(hp) in
   let s' := mk_state s.(pc) s.(accu) s.(stack) s.(env) s.(extra_args) s.(global)
-              s.(trap_stack) ((addr, (tag, fields)) :: s.(hp)) (S addr) in
+              s.(trap_sp) h' (S addr) in
   (s', Val_ptr addr).
 
-Fixpoint heap_update (h : heap) (addr : nat) (fields : list value) : heap :=
-  match h with
-  | [] => []
-  | (a, (t, fs)) :: rest =>
-    if Nat.eqb a addr then (a, (t, fields)) :: rest
-    else (a, (t, fs)) :: heap_update rest addr fields
+Definition heap_update (h : heap) (addr : nat) (fields : list value) : heap :=
+  match PositiveMap.find (Pos.of_succ_nat addr) h with
+  | Some (tag, _) => PositiveMap.add (Pos.of_succ_nat addr) (tag, fields) h
+  | None => h
   end.
 
 (* Get field from either inline block or heap pointer *)
@@ -106,5 +102,15 @@ Definition size_or_heap (s : state) (v : value) : option nat :=
   | _ => None
   end.
 
+(* Micro monad for bytecode computations.
+   Inspired by the Osiris micro monad (Seassau et al. 2025).
+   Simplified: no exceptions, handlers, parallelism, or effects —
+   just return, error, fuel exhaustion, and C-call requests. *)
+Inductive bcmicro : Type :=
+  | MRet  : value -> bcmicro
+  | MErr  : string -> bcmicro
+  | MFuel : state -> bcmicro
+  | MVis  : nat -> list value -> (option value -> bcmicro) -> bcmicro.
+
 Definition initial_state (global_data : list value) : state :=
-  mk_state 0%Z val_unit [] val_unit 0 global_data [] [] 0.
+  mk_state 0%Z val_unit [] val_unit 0 global_data 0 (PositiveMap.empty _) 0.

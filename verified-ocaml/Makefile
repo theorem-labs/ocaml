@@ -19,7 +19,7 @@ COQC_FLAGS = \
 
 extract: build
 	coqc $(COQC_FLAGS) Extract.v -output-directory /tmp
-	cp /tmp/Interp_extracted.ml manual/test/compile-pbt/interp_extracted.ml
+	cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml
 	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
 
 test: extract

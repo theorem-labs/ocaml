@@ -1,6 +1,6 @@
 (* Extract.v - Extraction directives.
    Run with: make extract
-   Output goes to test/common/interp_extracted.ml. *)
+   Output goes to manual/test/common/interp_extracted.ml. *)
 
 From Stdlib Require Import ZArith Strings.String List.
 From Stdlib Require Extraction.
@@ -8,6 +8,20 @@ From Stdlib Require Import ExtrOcamlBasic.
 From Stdlib Require Import ExtrOcamlNatInt.
 From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
+(* Uint63: extract to native OCaml int. We inline the extraction rather than
+   using ExtrOCamlInt63 which references the Uint63 OCaml library (not installed). *)
+From Stdlib Require Import Uint63.
+Extract Constant Uint63.int => "int".
+Extraction Inline Uint63.int.
+Extract Constant Uint63.lsl => "(lsl)".
+Extract Constant Uint63.lsr => "(lsr)".
+Extract Constant Uint63.lor => "(lor)".
+Extract Constant Uint63.land => "(land)".
+Extract Constant Uint63.sub => "(-)".
+Extract Constant Uint63.add => "(+)".
+Extract Constant Uint63.ltb => "(<)".
+Extract Constant Uint63.leb => "(<=)".
+Extract Constant Uint63.eqb => "(=)".
 
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret Encode.
@@ -122,6 +136,28 @@ Extract Constant load_primitives => "
     ) prims
 ".
 
+(* PrimArray: extract to native OCaml arrays.
+   PrimArray.get/set/make/length are realized by Array.get/set/make/length.
+   PrimArray.get returns the default on out-of-bounds in Coq, but Array.get raises
+   in OCaml -- we guard with bounds checks in fetch_instr, so this is safe.
+   The type extracts as a no-op wrapper (code_arr) to avoid cyclic type alias. *)
+Extract Constant PrimArray.array "'a" => "'a Code_arr.t".
+Extract Constant PrimArray.make => "Code_arr.make".
+Extract Constant PrimArray.get => "Code_arr.get".
+Extract Constant PrimArray.set => "Code_arr.set".
+Extract Constant PrimArray.length => "Code_arr.length".
+
+(* z_flip_sign must use native OCaml lxor with min_int for correct unsigned comparison.
+   Z.lxor is not extracted natively by ExtrOcamlZInt (it uses big-integer algorithms),
+   so we override it directly. *)
+Extract Constant z_flip_sign => "fun a -> a lxor min_int".
+
+(* z_lsr must use native OCaml lsr for correct unsigned (logical) right shift.
+   The Rocq definition uses Z.ones 63 as a mask, but Z.ones 63 = pred(2^63) overflows
+   in 63-bit OCaml int arithmetic, making z_unsigned and z_lsr incorrect.
+   Native `lsr` correctly handles the 63-bit unsigned shift. *)
+Extract Constant z_lsr => "fun a b -> a lsr b".
+
 (* ------------------------------------------------------------------ *)
 (* Instantiate the trusted pipeline with the untrusted decoder         *)
 (* ------------------------------------------------------------------ *)
@@ -148,9 +184,12 @@ Extraction "Interp_extracted.ml"
   (* Machine / bytecode interpreter *)
   state mk_state step run run_pure
   step_result run_result
+  bcmicro MRet MErr MFuel MVis run_micro handle_bcmicro
   set_accu initial_state
   field_or_heap tag_or_heap size_or_heap
   heap_alloc heap_lookup heap_update
+  list_to_code_array fetch_instr
+  z_flip_sign z_lsr
   (* Pretty-printer *)
   pp_expr pp_pattern pp_decl pp_program
   (* Observable behavior *)
