@@ -1,0 +1,7 @@
+(include_subdirs qualified)
+
+(coq.theory
+ (name OCamlInterp.Automatic)
+ (theories Stdlib Ltac2 RecordUpdate
+  OCamlInterp.Manual
+  OCamlInterp.SemiAutomatic))

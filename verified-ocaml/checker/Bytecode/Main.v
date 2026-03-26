@@ -8,25 +8,11 @@ From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Import Ascii.
 From OCamlInterp.Manual.Utils Require Import Value.
-From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret IO.
+From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret IO DecodeSpec.
 Open Scope Z_scope.
 Open Scope bool_scope.
 
-(* ------------------------------------------------------------------ *)
-(* Decoder interface (satisfied by automatic/Decode.v)                  *)
-(* ------------------------------------------------------------------ *)
-
-Record section : Type := mk_section {
-  sec_name   : Z;
-  sec_offset : nat;
-  sec_length : nat;
-}.
-
-Module Type DecoderSpec.
-  Parameter load_code_section : list Z -> nat -> option (list instruction).
-  Parameter parse_sections    : list Z -> nat -> list section.
-  Parameter find_section      : list section -> Z -> option section.
-End DecoderSpec.
+(* section and DecoderSpec are imported from DecodeSpec.v *)
 
 (* ------------------------------------------------------------------ *)
 (* Decode the global encoding produced by unmarshal_globals             *)

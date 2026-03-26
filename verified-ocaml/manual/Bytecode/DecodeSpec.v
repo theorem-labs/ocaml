@@ -90,7 +90,18 @@ Module Type DecodeSpec.
 
 End DecodeSpec.
 
-(* The checker that the untrusted proof satisfies this spec lives in
-   manual/theories/Checker/DecodeCorrectnessChecker.v, which imports
-   from automatic/.  Keep DecodeSpec.v free of automatic/ dependencies
-   so the trusted core builds independently. *)
+(* ------------------------------------------------------------------ *)
+(* File-format types shared by Decode.v and Main.v                     *)
+(* ------------------------------------------------------------------ *)
+
+Record section : Type := mk_section {
+  sec_name   : Z;
+  sec_offset : nat;
+  sec_length : nat;
+}.
+
+Module Type DecoderSpec.
+  Parameter load_code_section : list Z -> nat -> option (list instruction).
+  Parameter parse_sections    : list Z -> nat -> list section.
+  Parameter find_section      : list section -> Z -> option section.
+End DecoderSpec.

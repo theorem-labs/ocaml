@@ -1,91 +1,80 @@
 SHELL := /bin/bash
 
-.PHONY: all build build-manual extract extract-full test test-manual \
-        testsuite testsuite-all dashboard clean
+.PHONY: all build extract extract-full test test-manual test-full \
+        testsuite testsuite-all clean
 
-# ---- Default: manual-only (no semi-auto/automatic needed) ----
+# ---- Build ----
 
-all: build-manual extract test-manual
-
-build-manual:
-	@rm -f manual/Extract.glob manual/Extract.vo manual/.Extract.aux
-	dune build manual/theories/
-
-# ---- Full build (semi-auto + automatic) ----
+all: build extract test
 
 build:
-	@rm -f Extract.glob Extract.vo .Extract.aux
-	dune build manual/ semi-auto/ automatic/
+	@rm -f checker/Extract.glob checker/Extract.vo checker/.Extract.aux
+	dune build manual/ semi-auto/ automatic/ checker/
 
 # ---- Extraction ----
 
-COQC_FLAGS_MANUAL = \
-  -R _build/default/manual/theories/Utils OCamlInterp.Manual.Utils \
-  -R _build/default/manual/theories/Bytecode OCamlInterp.Manual.Bytecode \
-  -R _build/default/manual/theories/LexParse OCamlInterp.Manual.LexParse \
-  -R _build/default/manual/theories/Compile OCamlInterp.Manual.Compile
-
-COQC_FLAGS = $(COQC_FLAGS_MANUAL) \
+COQC_FLAGS = \
+  -R _build/default/manual/Utils OCamlInterp.Manual.Utils \
+  -R _build/default/manual/Bytecode OCamlInterp.Manual.Bytecode \
+  -R _build/default/manual/LexParse OCamlInterp.Manual.LexParse \
+  -R _build/default/manual/Compile OCamlInterp.Manual.Compile \
   -R _build/default/semi-auto/LexParse OCamlInterp.SemiAutomatic.LexParse \
   -R _build/default/semi-auto/Interpret OCamlInterp.SemiAutomatic.Interpret \
   -R _build/default/automatic/Compile OCamlInterp.Automatic.Compile \
   -R _build/default/automatic/Bytecode OCamlInterp.Automatic.Bytecode \
-  -R _build/default/automatic/LexParse OCamlInterp.Automatic.LexParse
+  -R _build/default/automatic/LexParse OCamlInterp.Automatic.LexParse \
+  -R _build/default/checker/Bytecode OCamlInterp.Checker.Bytecode \
+  -R _build/default/checker/Compile OCamlInterp.Checker.Compile \
+  -R _build/default/checker/LexParse OCamlInterp.Checker.LexParse
 
-# Manual-only extraction (default).
+# Full extraction (compiler, decoder, source interp, pretty-printer).
 # We always re-extract to avoid stale binaries.
-extract: build-manual
-	coqc $(COQC_FLAGS_MANUAL) manual/Extract.v -output-directory /tmp
-	@if ! diff -q /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml >/dev/null 2>&1; then \
+extract: build
+	coqc $(COQC_FLAGS) checker/Extract.v -output-directory /tmp
+	@if ! diff -q /tmp/Interp_extracted.ml checker/common/interp_extracted.ml >/dev/null 2>&1; then \
 	  echo "Extraction changed — updating interp_extracted.ml"; \
-	  cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml; \
+	  cp /tmp/Interp_extracted.ml checker/common/interp_extracted.ml; \
 	fi
-	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
-
-# Full extraction (includes compiler, decoder, source interp, pretty-printer)
-extract-full: build
-	coqc $(COQC_FLAGS) Extract.v -output-directory /tmp
-	cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml
 	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
 	@# Wrap eager module instantiation so it doesn't run at load time.
 	@# Pipeline(ConcreteDecoder) reads Sys.argv and would crash all test exes.
 	sed -i 's/^module App = Pipeline(ConcreteDecoder)/module App() = Pipeline(ConcreteDecoder)/' \
-	  manual/test/common/interp_extracted.ml
+	  checker/common/interp_extracted.ml
 	sed -i 's/^let main0 =$$/let main0 () =/' \
-	  manual/test/common/interp_extracted.ml
+	  checker/common/interp_extracted.ml
 	sed -i 's/^  App\.main$$/  let module M = App() in M.main/' \
-	  manual/test/common/interp_extracted.ml
+	  checker/common/interp_extracted.ml
 
 # ---- Tests ----
 
-# Manual-only tests: bytecode interpreter PBT
+# Bytecode interpreter PBT
 test-manual: extract
 	dune build \
-		manual/test/bytecode-pbt/harness.exe \
-		manual/test/bytecode-pbt/manual_test.exe
+		checker/Bytecode/tests/harness.exe \
+		checker/Bytecode/tests/manual_test.exe
 	@echo "--- Manual bytecode tests ---"
-	dune exec manual/test/bytecode-pbt/manual_test.exe
+	dune exec checker/Bytecode/tests/manual_test.exe
 	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
-	dune exec manual/test/bytecode-pbt/harness.exe
+	dune exec checker/Bytecode/tests/harness.exe
 
 test: test-manual
 
-# Full tests: includes compiler PBT (needs extract-full)
-test-full: extract-full
+# Full tests: includes compiler PBT
+test-full: extract
 	dune build \
-		manual/test/bytecode-pbt/harness.exe \
-		manual/test/bytecode-pbt/manual_test.exe \
-		manual/test/compile-pbt/harness.exe
+		checker/Bytecode/tests/harness.exe \
+		checker/Bytecode/tests/manual_test.exe \
+		checker/Compile/compile-pbt/harness.exe
 	@echo "--- Manual bytecode tests ---"
-	dune exec manual/test/bytecode-pbt/manual_test.exe
+	dune exec checker/Bytecode/tests/manual_test.exe
 	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
-	dune exec manual/test/bytecode-pbt/harness.exe
+	dune exec checker/Bytecode/tests/harness.exe
 	@echo "--- Compile vs ocamlc PBT (QCheck) ---"
-	dune exec manual/test/compile-pbt/harness.exe
+	dune exec checker/Compile/compile-pbt/harness.exe
 
 # ---- Testsuite ----
 
-TESTSUITE_DIR = manual/test/ocaml-testsuite
+TESTSUITE_DIR = checker/Bytecode/tests/ocaml-testsuite
 
 TESTSUITE_BASIC = \
 	$(TESTSUITE_DIR)/basic \
@@ -141,18 +130,17 @@ TESTSUITE_PHASE1 = \
 	$(TESTSUITE_DIR)/int64-unboxing \
 	$(TESTSUITE_DIR)/basic-multdef
 
-RUNNER = _build/default/manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
+RUNNER = _build/default/checker/Bytecode/tests/ocaml_testsuite_runner.exe
 
 testsuite: extract
-	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
+	dune build checker/Bytecode/tests/ocaml_testsuite_runner.exe
 	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC)
 
 testsuite-all: extract
-	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
+	dune build checker/Bytecode/tests/ocaml_testsuite_runner.exe
 	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
 
 clean:
 	dune clean
 	rm -f Interp_extracted.ml Interp_extracted.mli
-	rm -f Extract.glob Extract.vo .Extract.aux
-	rm -f manual/Extract.glob manual/Extract.vo manual/.Extract.aux
+	rm -f checker/Extract.glob checker/Extract.vo checker/.Extract.aux

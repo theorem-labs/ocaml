@@ -1,0 +1,8 @@
+(include_subdirs qualified)
+
+(coq.theory
+ (name OCamlInterp.Checker)
+ (theories Stdlib Ltac2 RecordUpdate
+  OCamlInterp.Manual
+  OCamlInterp.SemiAutomatic
+  OCamlInterp.Automatic))

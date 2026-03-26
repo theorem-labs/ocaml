@@ -1,5 +1,0 @@
-(coq.theory
- (name OCamlInterp.Manual.Compile)
- (theories Stdlib Ltac2 RecordUpdate
-  OCamlInterp.Manual.Utils
-  OCamlInterp.Manual.Bytecode))

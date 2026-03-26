@@ -1,6 +1,0 @@
-(library
- (name pbt_common)
- (libraries unix str)
- (flags (:standard -w -a))
- (wrapped false)
- (modules interp_extracted loader code_arr uint63 test_common))

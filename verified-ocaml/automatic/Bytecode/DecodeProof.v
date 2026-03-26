@@ -911,9 +911,9 @@ Proof.
   intros nc nb Hnc Hnb.
   (* Convert numeric bounds to Z for easier reasoning *)
   assert (Hnc_z : (Z.of_nat nc < 2 ^ 16)%Z).
-  { change (2 ^ 16)%Z with 65536%Z. lia. }
+  { change (2 ^ 16)%Z with (Z.of_nat 65536). apply Nat2Z.inj_lt. exact Hnc. }
   assert (Hnb_z : (Z.of_nat nb < 2 ^ 15)%Z).
-  { change (2 ^ 15)%Z with 32768%Z. lia. }
+  { change (2 ^ 15)%Z with (Z.of_nat 32768). apply Nat2Z.inj_lt. exact Hnb. }
   unfold z_fits_i32b.
   (* Z.land nc (nb << 16) = 0 because bits don't overlap *)
   assert (Hdisjoint : Z.land (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16) = 0%Z).
@@ -939,7 +939,7 @@ Proof.
       rewrite Hdisjoint in Hls. rewrite Z.bits_0 in Hls.
       destruct (Z.testbit (Z.of_nat nc) j), (Z.testbit (Z.shiftl (Z.of_nat nb) 16) j);
         simpl in Hls; try discriminate; reflexivity.
-    - apply Z.add_nocarry_lxor. exact Hdisjoint. }
+    - symmetry. apply Z.add_nocarry_lxor. exact Hdisjoint. }
   rewrite Heq.
   rewrite Z.shiftl_mul_pow2 by lia.
   apply Bool.andb_true_iff. split; apply Z.leb_le; lia.
@@ -952,7 +952,8 @@ Lemma nth_map_in_range : forall {A B : Type} (f : A -> B) (l : list A) k (d : B)
 Proof.
   intros A B f l k d d' Hk.
   destruct (nth_error l k) eqn:E.
-  - rewrite <- (nth_error_nth l k d' E).
+  - pose proof (nth_error_nth l k d' E) as Hnth.
+    rewrite Hnth.
     pose proof (map_nth_error f k l E) as Hm.
     apply nth_error_nth with (d := d) in Hm. exact Hm.
   - apply nth_error_None in E. lia.
@@ -1688,31 +1689,56 @@ Proof.
     rewrite Hbranch by assumption.
     reflexivity.
   (* SWITCH nc nb ct bt *)
-  - simpl wf_instrb in Hwf.
-    repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-    (* Hypothesis names from repeat destruct are fragile; match by shape *)
-    match goal with
-    | H1 : Nat.ltb _ 65536 = true, H2 : Nat.ltb _ 32768 = true |- _ =>
-      apply Nat.ltb_lt in H1; apply Nat.ltb_lt in H2;
-      rename H1 into Hnc16; rename H2 into Hnb15
-    | H1 : Nat.ltb _ 32768 = true, H2 : Nat.ltb _ 65536 = true |- _ =>
-      apply Nat.ltb_lt in H2; apply Nat.ltb_lt in H1;
-      rename H2 into Hnc16; rename H1 into Hnb15
-    end.
-    match goal with
-    | H1 : Nat.eqb (length l) n = true, H2 : Nat.eqb (length l0) n0 = true |- _ =>
-      apply Nat.eqb_eq in H1; apply Nat.eqb_eq in H2;
-      rename H1 into Hwf_eq; rename H2 into Hwf_eq0
-    end.
-    rename Hwf_eq into Hwf. rename Hwf_eq0 into H2.
+  - (* Extract all wf conditions before destructuring *)
+    assert (Hnc16 : n < 65536).
+    { simpl wf_instrb in Hwf.
+      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+      match goal with H : Nat.ltb n _ = true |- _ => apply Nat.ltb_lt in H; exact H end. }
+    assert (Hnb15 : n0 < 32768).
+    { simpl wf_instrb in Hwf.
+      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+      match goal with H : Nat.ltb n0 _ = true |- _ => apply Nat.ltb_lt in H; exact H end. }
+    assert (Hwf_eq : length l = n).
+    { simpl wf_instrb in Hwf.
+      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+      apply Nat.eqb_eq in Hwf. exact Hwf. }
+    assert (H2 : length l0 = n0).
+    { simpl wf_instrb in Hwf.
+      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+      match goal with H : Nat.eqb (length l0) n0 = true |- _ =>
+        apply Nat.eqb_eq in H; exact H end. }
+    assert (Hwf_ct : all_valid_targetsb (length code) l = true).
+    { simpl wf_instrb in Hwf.
+      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+      assumption. }
+    assert (Hwf_bt : all_valid_targetsb (length code) l0 = true).
+    { simpl wf_instrb in Hwf.
+      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
+      assumption. }
+    (* Hwf_eq : length l = n, H2 : length l0 = n0 *)
+    clear Hwf. rename Hwf_eq into Hwf.
     (* Now we have nc < 2^16, nb < 2^15 < 2^16 *)
     set (sizes := Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) in *.
     (* Show Z.to_nat (Z.land sizes (Z.ones 16)) = n *)
     assert (Hnc_eq : Z.to_nat (Z.land sizes (Z.ones 16)) = n).
-    { subst sizes. rewrite lor_land_low16 by lia. lia. }
+    { subst sizes.
+      assert (Hnc_z : (Z.of_nat n < 2 ^ 16)%Z).
+      { change (2 ^ 16)%Z with (Z.of_nat 65536). apply Nat2Z.inj_lt. exact Hnc16. }
+      assert (Hnb_z : (Z.of_nat n0 < 2 ^ 16)%Z).
+      { change (2 ^ 16)%Z with (Z.of_nat 65536).
+        apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
+        apply Nat.leb_le. native_compute. reflexivity. }
+      rewrite lor_land_low16 by assumption. lia. }
     (* Show Z.to_nat (Z.shiftr sizes 16) = n0 *)
     assert (Hnb_eq : Z.to_nat (Z.shiftr sizes 16) = n0).
-    { subst sizes. rewrite lor_shiftr_high16 by lia. lia. }
+    { subst sizes.
+      assert (Hnc_z : (Z.of_nat n < 2 ^ 16)%Z).
+      { change (2 ^ 16)%Z with (Z.of_nat 65536). apply Nat2Z.inj_lt. exact Hnc16. }
+      assert (Hnb_z : (Z.of_nat n0 < 2 ^ 16)%Z).
+      { change (2 ^ 16)%Z with (Z.of_nat 65536).
+        apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
+        apply Nat.leb_le. native_compute. reflexivity. }
+      rewrite lor_shiftr_high16 by assumption. lia. }
     rewrite Hnc_eq, Hnb_eq.
     (* Now we need resolve_n to recover l and l0 *)
     rewrite !resolve_n_is_map.
@@ -1729,15 +1755,10 @@ Proof.
       rewrite nth_error_map.
       destruct (nth_error l k) eqn:Ek.
       * simpl. apply Hbranch.
-        -- apply forallb_forall in H1.
-           apply (H1 z). eapply nth_error_In. exact Ek.
-           Unshelve.
-           apply valid_targetb_props.
-           apply forallb_forall in H1.
-           apply (H1 z). eapply nth_error_In. exact Ek.
         -- apply valid_targetb_props.
-           apply forallb_forall in H1.
-           apply (H1 z). eapply nth_error_In. exact Ek.
+           eapply forallb_forall; [exact Hwf_ct | eapply nth_error_In; exact Ek].
+        -- apply valid_targetb_props.
+           eapply forallb_forall; [exact Hwf_ct | eapply nth_error_In; exact Ek].
       * apply nth_error_None in Ek. lia.
     + (* block table: map over seq n n0 *)
       apply map_ext_in. intros k Hk.
@@ -1748,15 +1769,10 @@ Proof.
       rewrite nth_error_map.
       destruct (nth_error l0 (k - n)) eqn:Ek.
       * simpl. apply Hbranch.
-        -- apply forallb_forall in H0.
-           apply (H0 z). eapply nth_error_In. exact Ek.
-           Unshelve.
-           apply valid_targetb_props.
-           apply forallb_forall in H0.
-           apply (H0 z). eapply nth_error_In. exact Ek.
         -- apply valid_targetb_props.
-           apply forallb_forall in H0.
-           apply (H0 z). eapply nth_error_In. exact Ek.
+           eapply forallb_forall; [exact Hwf_bt | eapply nth_error_In; exact Ek].
+        -- apply valid_targetb_props.
+           eapply forallb_forall; [exact Hwf_bt | eapply nth_error_In; exact Ek].
       * apply nth_error_None in Ek. lia.
   (* PUSHTRAP t *)
   - simpl wf_instrb in Hwf.

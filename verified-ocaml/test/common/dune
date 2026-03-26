@@ -1,6 +1,0 @@
-(library
- (name compile_pbt_common)
- (libraries unix str pbt_common)
- (flags (:standard -w -a))
- (wrapped false)
- (modules compile_test_common lexer parser))

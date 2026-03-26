@@ -1,7 +1,0 @@
-(coq.theory
- (name OCamlInterp.SemiAutomatic.Compile)
- (theories Stdlib
-  OCamlInterp.Manual.Utils
-  OCamlInterp.Manual.Bytecode
-  OCamlInterp.Manual.Compile
-  OCamlInterp.SemiAutomatic.Interpret))

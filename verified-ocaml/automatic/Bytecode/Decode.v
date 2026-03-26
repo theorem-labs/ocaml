@@ -4,7 +4,7 @@
 
 From Stdlib Require Import ZArith PeanoNat Bool.
 From Stdlib Require Import List. Import ListNotations.
-From OCamlInterp.Manual.Bytecode Require Import AST Main.
+From OCamlInterp.Manual.Bytecode Require Import AST DecodeSpec.
 Open Scope Z_scope.
 
 (* ------------------------------------------------------------------ *)
@@ -50,7 +50,7 @@ Definition read_u32_be (data : list Z) (off : nat) : Z :=
 (* Section table parsing                                               *)
 (* ------------------------------------------------------------------ *)
 
-(* section type imported from Manual.Bytecode.Main *)
+(* section type imported from Manual.Bytecode.DecodeSpec *)
 
 (* Parse section table from the trailer of a .byte file.
    data = full file contents as list Z, data_len = length of data. *)
