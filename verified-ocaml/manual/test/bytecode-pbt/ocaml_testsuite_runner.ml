@@ -475,14 +475,40 @@ let collect_ml_files dir =
     Printf.eprintf "Warning: cannot read directory %s: %s\n" dir msg);
   List.rev !files
 
+(* Parse skip config: each line is "filename  reason", # comments *)
+let parse_skip_conf path =
+  let tbl = Hashtbl.create 32 in
+  if Sys.file_exists path then begin
+    let ic = open_in path in
+    (try while true do
+      let line = String.trim (input_line ic) in
+      if line <> "" && line.[0] <> '#' then begin
+        let len = String.length line in
+        let i = ref 0 in
+        while !i < len && line.[!i] <> ' ' && line.[!i] <> '\t' do incr i done;
+        let filename = String.sub line 0 !i in
+        while !i < len && (line.[!i] = ' ' || line.[!i] = '\t') do incr i done;
+        let reason = if !i < len then String.sub line !i (len - !i) else "skipped by config" in
+        Hashtbl.replace tbl filename reason
+      end
+    done with End_of_file -> ());
+    close_in ic
+  end;
+  tbl
+
 let () =
   let dirs = ref [] in
+  let skip_conf = ref "" in
   let args = Array.to_list Sys.argv |> List.tl in
-  (match args with
-   | [] ->
-     (* Default: basic test directory *)
-     dirs := ["test/ocaml-testsuite/basic"]
-   | l -> dirs := l);
+  let rec parse = function
+    | "--skip-conf" :: path :: rest -> skip_conf := path; parse rest
+    | x :: rest -> dirs := !dirs @ [x]; parse rest
+    | [] -> ()
+  in
+  parse args;
+  if !dirs = [] then dirs := ["test/ocaml-testsuite/basic"];
+  let skip_tbl = if !skip_conf <> "" then parse_skip_conf !skip_conf
+                 else Hashtbl.create 0 in
   let pass = ref 0 and fail = ref 0 and skip = ref 0 in
   let failures = ref [] in
   List.iter (fun dir ->
@@ -490,6 +516,11 @@ let () =
     let files = collect_ml_files dir in
     List.iter (fun path ->
       let basename = Filename.basename path in
+      match Hashtbl.find_opt skip_tbl basename with
+      | Some reason ->
+        incr skip;
+        Printf.printf "  SKIP  %s (config: %s)\n%!" basename reason
+      | None ->
       match test_file path with
       | Pass ->
         incr pass;

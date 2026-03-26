@@ -93,10 +93,12 @@ TESTSUITE_BASIC = \
 	$(TESTSUITE_DIR)/basic-modules \
 	$(TESTSUITE_DIR)/basic-private \
 	$(TESTSUITE_DIR)/basic-float \
+	$(TESTSUITE_DIR)/basic-io \
 	$(TESTSUITE_DIR)/basic-io-2 \
 	$(TESTSUITE_DIR)/basic-manyargs
 
 TESTSUITE_PHASE1 = \
+	$(TESTSUITE_DIR)/misc \
 	$(TESTSUITE_DIR)/letrec-compilation \
 	$(TESTSUITE_DIR)/match-exception \
 	$(TESTSUITE_DIR)/array-functions \
@@ -143,11 +145,11 @@ RUNNER = _build/default/manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
 
 testsuite: extract
 	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
-	ulimit -s unlimited && $(RUNNER) $(TESTSUITE_BASIC)
+	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC)
 
 testsuite-all: extract
 	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
-	ulimit -s unlimited && $(RUNNER) $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
+	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
 
 clean:
 	dune clean
