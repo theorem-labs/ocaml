@@ -69,6 +69,14 @@ Definition get_code_ptr_s (s : state) (v : value) : option Z :=
       else None
     | None => None
     end
+  | Val_ptr addr =>
+    match heap_lookup s.(hp) addr with
+    | Some (t, fields) =>
+      if Nat.eqb t Closure_tag then
+        match fields with Val_int pc :: _ => Some pc | _ => None end
+      else None
+    | None => None
+    end
   | _ => None
   end.
 

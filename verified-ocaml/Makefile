@@ -32,10 +32,14 @@ COQC_FLAGS = $(COQC_FLAGS_MANUAL) \
   -R _build/default/automatic/Bytecode OCamlInterp.Automatic.Bytecode \
   -R _build/default/automatic/LexParse OCamlInterp.Automatic.LexParse
 
-# Manual-only extraction (default)
+# Manual-only extraction (default).
+# We always re-extract to avoid stale binaries.
 extract: build-manual
 	coqc $(COQC_FLAGS_MANUAL) manual/Extract.v -output-directory /tmp
-	cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml
+	@if ! diff -q /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml >/dev/null 2>&1; then \
+	  echo "Extraction changed — updating interp_extracted.ml"; \
+	  cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml; \
+	fi
 	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
 
 # Full extraction (includes compiler, decoder, source interp, pretty-printer)
