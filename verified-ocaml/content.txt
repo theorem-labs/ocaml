@@ -24,44 +24,38 @@
 9. [Manual] Set up a Dockerfile and graders for all of these tasks, harden against exploits that involve modifying the testing infra
 
 
-Section 0:
-manual/ExtractSetup.v - extract constants / variants
-checker/Extract.v - extraction commands + recursive
-manual/dune
-semi-auto/dune
-automatic/dune
-checker/dune
-
 Section 1:
-manual/Bytecode:
+manual/theories/Bytecode:
 IO.v - use os; disk to bytes [ReadFile]
 Encode.v - AST to bytes
 DecodeSpec.v - describes the verification of a proof that Encode.v and Decode.v are the same reversed
 AST.v - contains AST data structure
 Interpret.v - AST to syscalls
 IO.v - use os; syscalls to real world [Output]
+Main.v - creates a pipeline with the first IO.v function, Decoder.v (mentioned later), Interpret.v, and the second IO.v to go from disk to real world
+
+manual/test/bytecode-pbt:
+harness.ml - runs a PBT between Main.v and ocamlrun and confirms that they do the same thing
+
 automatic/Bytecode:
 Decode.v - bytes to AST (reverse of Encode.v)
 DecodeProof.v - proof that matches the DecodeSpec.v specification that Decode.v is correct
-checker/Bytecode:
-Main.v - creates a pipeline with the first IO.v function, Decoder.v (mentioned later), Interpret.v, and the second IO.v to go from disk to real world
-DecodeChecker.v - checks the DecodeProof.v
-tests/harness.ml - runs a PBT between Main.v and ocamlrun and confirms that they do the same thing
 
 Section 2:
 automatic/LexParse/LexParse.v - string to AST
 semi-auto/LexParse/PrettyPrint.v - AST to string
-manual/LexParse/LexParseSpec.v - checks whether LexParseProof.v proves that LexParse.v and PrettyPrint.v round trip
+manual/theories/LexParse/LexParseSpec.v - checks whether LexParseProof.v proves that LexParse.v and PrettyPrint.v round trip
 automatic/LexParse/LexParseProof.v - proof that LexParse.v and PrettyPrint.v round trip
-checker/LexParse/LexParseChecker.v - checker of LexParseProof.v
 
 Section 3-5:
 automatic/Compile/Compile.v - compiler (can use LexParse.v if desired)
 semi-auto/Interpret/Interpret.v - interpreter
-manual/Compile/CompileSpec.v - forall source, interpret(source) = (interpret-bytecode∘compile)(source)
+manual/theories/Compile/CompileSpec.v - forall source, interpret(source) = (interpret-bytecode∘compile)(source)
 automatic/Compile/CompileProof.v - proof of CompileSpec.v
-checker/Compile/CompileChecker.v - checker for CompileProof.v
-checker/Compile/compile-pbt/harness.ml - runs a PBT between Compile.v and ocamlc
+manual/test/compile-pbt/harness.ml - runs a PBT between Compile.v and ocamlc
+
+
+
 
 
 
