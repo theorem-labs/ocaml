@@ -51,6 +51,13 @@ Fixpoint pp_pattern (p : pattern) : string :=
   | Pat_constr c None => c
   | Pat_constr c (Some p) => String.append "(" (String.append c (String.append " " (String.append (pp_pattern p) ")")))
   | Pat_wild => "_"
+  | Pat_or p1 p2 => String.append "(" (String.append (pp_pattern p1) (String.append " | " (String.append (pp_pattern p2) ")")))
+  | Pat_record fields =>
+    let pp_field := fun (f : ident * pattern) => let (name, p) := f in
+      String.append name (String.append " = " (pp_pattern p)) in
+    String.append "{ " (String.append (intercalate "; " (List.map pp_field fields)) " }")
+  | Pat_nil => "[]"
+  | Pat_cons ph pt => String.append "(" (String.append (pp_pattern ph) (String.append " :: " (String.append (pp_pattern pt) ")")))
   end.
 
 Fixpoint pp_type_expr (t : type_expr) : string :=
@@ -85,15 +92,34 @@ Fixpoint pp_expr (e : expr) : string :=
       String.append "| " (String.append (pp_pattern p) (String.append " -> " (pp_expr body))) in
     String.append "(match " (String.append (pp_expr e) (String.append " with " (String.append (intercalate " " (List.map pp_case cases)) ")")))
   | Exp_seq e1 e2 => String.append "(" (String.append (pp_expr e1) (String.append "; " (String.append (pp_expr e2) ")")))
+  | Exp_record fields =>
+    let pp_field := fun (f : ident * expr) => let (name, e) := f in
+      String.append name (String.append " = " (pp_expr e)) in
+    String.append "{ " (String.append (intercalate "; " (List.map pp_field fields)) " }")
+  | Exp_field e name => String.append "(" (String.append (pp_expr e) (String.append "." (String.append name ")")))
+  | Exp_string s => String.append "(""" (String.append s """)")
+  | Exp_function cases =>
+    let pp_case := fun (c : pattern * expr) => let (p, body) := c in
+      String.append "| " (String.append (pp_pattern p) (String.append " -> " (pp_expr body))) in
+    String.append "(function " (String.append (intercalate " " (List.map pp_case cases)) ")")
+  | Exp_nil => "[]"
+  | Exp_cons e1 e2 => String.append "(" (String.append (pp_expr e1) (String.append " :: " (String.append (pp_expr e2) ")")))
   end.
+
+Definition newline_char : ascii := Ascii.ascii_of_nat 10.
+Definition newline_str : string := String newline_char EmptyString.
 
 Definition pp_type_def (td : type_def) : string :=
   match td with
   | Td_variant constrs => intercalate " | " (List.map (fun cd => match cd with (name, None) => name | (name, Some t) => String.append name (String.append " of " (pp_type_expr t)) end) constrs)
   | Td_alias t => pp_type_expr t
+  | Td_record fields =>
+    let pp_field := fun (f : ident * type_expr) => let (name, t) := f in
+      String.append name (String.append " : " (pp_type_expr t)) in
+    String.append "{ " (String.append (intercalate "; " (List.map pp_field fields)) " }")
   end.
 
-Definition pp_decl (d : decl) : string :=
+Fixpoint pp_decl (d : decl) : string :=
   match d with
   | Decl_let x e => String.append "let " (String.append x (String.append " = " (pp_expr e)))
   | Decl_letrec f e => String.append "let rec " (String.append f (String.append " = " (pp_expr e)))
@@ -101,6 +127,12 @@ Definition pp_decl (d : decl) : string :=
     let params_str := match params with [] => "" | [p] => String.append "'" (String.append p " ") | _ => String.append "(" (String.append (intercalate ", " (List.map (fun p => String.append "'" p) params)) ") ") end in
     String.append "type " (String.append params_str (String.append name (String.append " = " (pp_type_def td))))
   | Decl_expr e => pp_expr e
+  | Decl_module name decls =>
+    let pp_decl_semi := fun (d : decl) => String.append (pp_decl d) ";;" in
+    String.append "module " (String.append name (String.append " = struct " (String.append (intercalate newline_str (List.map pp_decl_semi decls)) " end")))
+  | Decl_open name => String.append "open " name
+  | Decl_exception name None => String.append "exception " name
+  | Decl_exception name (Some t) => String.append "exception " (String.append name (String.append " of " (pp_type_expr t)))
   end.
 
 Definition pp_program (prog : program) : string :=

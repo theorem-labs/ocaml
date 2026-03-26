@@ -20,7 +20,11 @@ Inductive pattern : Type :=
   | Pat_unit  : pattern
   | Pat_tuple : list pattern -> pattern
   | Pat_constr : ident -> option pattern -> pattern
-  | Pat_wild  : pattern.
+  | Pat_wild  : pattern
+  | Pat_or     : pattern -> pattern -> pattern
+  | Pat_record : list (ident * pattern) -> pattern
+  | Pat_nil    : pattern
+  | Pat_cons   : pattern -> pattern -> pattern.
 
 Inductive type_expr : Type :=
   | Ty_int | Ty_bool | Ty_unit
@@ -43,15 +47,25 @@ Inductive expr : Type :=
   | Exp_tuple  : list expr -> expr
   | Exp_constr : ident -> option expr -> expr
   | Exp_match  : expr -> list (pattern * expr) -> expr
-  | Exp_seq    : expr -> expr -> expr.
+  | Exp_seq    : expr -> expr -> expr
+  | Exp_record   : list (ident * expr) -> expr
+  | Exp_field    : expr -> ident -> expr
+  | Exp_string   : string -> expr
+  | Exp_function : list (pattern * expr) -> expr
+  | Exp_nil      : expr
+  | Exp_cons     : expr -> expr -> expr.
 
 Inductive decl : Type :=
   | Decl_let    : ident -> expr -> decl
   | Decl_letrec : ident -> expr -> decl
   | Decl_type   : ident -> list ident -> type_def -> decl
   | Decl_expr   : expr -> decl
+  | Decl_module    : ident -> list decl -> decl
+  | Decl_open      : ident -> decl
+  | Decl_exception : ident -> option type_expr -> decl
 with type_def : Type :=
   | Td_variant : list (ident * option type_expr) -> type_def
-  | Td_alias   : type_expr -> type_def.
+  | Td_alias   : type_expr -> type_def
+  | Td_record  : list (ident * type_expr) -> type_def.
 
 Definition program := list decl.

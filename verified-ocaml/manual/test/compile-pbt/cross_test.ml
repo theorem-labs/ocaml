@@ -1,33 +1,16 @@
-(* harness.ml - Step 5 PBT: our compiler (Compile.v) vs ocamlc.
-   For each generated program:
-   1. Compile AST with compile_program -> run through our bytecode interpreter
-   2. Compile OCaml source with ocamlc -> run with ocamlrun
-   3. Compare outputs *)
+(* cross_test.ml - Correctness theorem PBT:
+     interpret(source) = (interpret-bytecode . compile)(source)
+
+   For each generated program, compare:
+   1. Source interpreter: interpret 10000 prog -> extract trace as string
+   2. Compiled bytecode path: compile_program prog -> bytecode interpreter step loop -> output
+
+   This does NOT use ocamlc at all -- it directly cross-validates our two paths
+   against each other, which is exactly the correctness theorem. *)
 
 open Interp_extracted
 
 (* === Utilities === *)
-
-let with_temp_dir f =
-  let dir = Filename.temp_file "pbt" "" in
-  Sys.remove dir; Unix.mkdir dir 0o700;
-  Fun.protect ~finally:(fun () ->
-    (try Array.iter (fun n -> Sys.remove (Filename.concat dir n)) (Sys.readdir dir) with _ -> ());
-    (try Unix.rmdir dir with _ -> ())
-  ) (fun () -> f dir)
-
-let compile_and_run_ocamlc dir source =
-  let src = Filename.concat dir "test.ml" in
-  let exe = Filename.concat dir "test.byte" in
-  let oc = open_out src in output_string oc source; close_out oc;
-  if Sys.command (Printf.sprintf "ocamlc -o %s %s 2>/dev/null" exe src) <> 0 then None
-  else begin
-    let ic = Unix.open_process_in (Printf.sprintf "timeout 5 ocamlrun %s 2>/dev/null" exe) in
-    let buf = Buffer.create 256 in
-    (try while true do Buffer.add_char buf (input_char ic) done with End_of_file -> ());
-    ignore (Unix.close_process_in ic);
-    Some (Buffer.contents buf)
-  end
 
 let cl s = List.init (String.length s) (fun i -> s.[i])
 let sc l = let buf = Buffer.create (List.length l) in List.iter (Buffer.add_char buf) l; Buffer.contents buf
@@ -36,8 +19,10 @@ let print_int_nl e =
   Exp_seq (Exp_app (Exp_var (cl "print_int"), e),
            Exp_app (Exp_var (cl "print_newline"), Exp_unit))
 
+(* === Bytecode path: compile + interpret-bytecode === *)
+
 let run_our_compiler prog =
-  let code = list_to_code_array (compile_program prog) in
+  let code = compile_program prog in
   let buf = Buffer.create 64 in
   let handler idx args =
     match idx, args with
@@ -70,6 +55,23 @@ let run_our_compiler prog =
   match !result with
   | None -> Ok (Buffer.contents buf)
   | Some err -> Error err
+
+(* === Source path: interpret === *)
+
+type interp_result = Interp_ok of string | Interp_err of string
+
+let run_source_interp prog =
+  let result = interpret 10000 prog in
+  match result.result with
+  | Term_timeout -> Interp_err "timeout"
+  | Term_error msg ->
+    let buf = Buffer.create (List.length msg) in
+    List.iter (Buffer.add_char buf) msg;
+    Interp_err (Buffer.contents buf)
+  | Term_normal _ ->
+    let buf = Buffer.create (List.length result.trace) in
+    List.iter (fun c -> Buffer.add_char buf (Char.chr c)) result.trace;
+    Interp_ok (Buffer.contents buf)
 
 (* === Random AST generator === *)
 
@@ -275,7 +277,17 @@ and gen_seq (depth : int) (scope : string list) : (expr * string) QCheck.Gen.t =
   return (Exp_seq (Exp_let (cl "_", e1, Exp_unit), e2),
           parens ("let _ = " ^ s1 ^ " in " ^ s2))
 
-(* Generate a complete program with OCaml source for ocamlc *)
+(* Generate a complete program: wrap expression in print_int + print_newline *)
+let gen_random_program : (decl list * string) QCheck.Gen.t =
+  let open QCheck.Gen in
+  (* Use depth 1-3 to keep programs manageable *)
+  int_range 1 3 >>= fun depth ->
+  gen_int_expr depth [] >>= fun (e, s) ->
+  let prog = [Decl_expr (print_int_nl e)] in
+  let desc = Printf.sprintf "random[d=%d]: print_int (%s)" depth s in
+  return (prog, desc)
+
+(* Same generator but producing OCaml source for ocamlc *)
 let gen_random_program_with_source : (decl list * string) QCheck.Gen.t =
   let open QCheck.Gen in
   int_range 1 3 >>= fun depth ->
@@ -284,44 +296,42 @@ let gen_random_program_with_source : (decl list * string) QCheck.Gen.t =
   let src = Printf.sprintf "let () = print_int (%s); print_newline ()" s in
   return (prog, src)
 
-(* === QCheck generators producing (prog, source) pairs === *)
+(* === QCheck generators producing (prog, description) pairs === *)
 
 let gen_test_case : (decl list * string) QCheck.Gen.t =
   let open QCheck.Gen in
   oneof [
-    (* --- Original generators (1-28) --- *)
-
     (* 1. Print a single integer *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl (Exp_int n))] in
-      let src = Printf.sprintf "let () = print_int (%d); print_newline ()" n in
-      (prog, src)) (int_range (-100) 99));
+      let desc = Printf.sprintf "print_int (%d)" n in
+      (prog, desc)) (int_range (-100) 99));
 
     (* 2. Addition *)
     (map2 (fun a b ->
       let b = b + 1 in
       let prog = [Decl_expr (print_int_nl (Exp_binop (Op_add, Exp_int a, Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int (%d + %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 99) (int_range 0 99));
+      let desc = Printf.sprintf "print_int (%d + %d)" a b in
+      (prog, desc)) (int_range 0 99) (int_range 0 99));
 
     (* 3. Subtraction *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl (Exp_binop (Op_sub, Exp_int a, Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int (%d - %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 99) (int_range 0 99));
+      let desc = Printf.sprintf "print_int (%d - %d)" a b in
+      (prog, desc)) (int_range 0 99) (int_range 0 99));
 
     (* 4. Multiplication *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl (Exp_binop (Op_mul, Exp_int a, Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int (%d * %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "print_int (%d * %d)" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
     (* 5. If with Op_gt *)
     (map2 (fun n t ->
       let prog = [Decl_expr (print_int_nl
         (Exp_if (Exp_binop (Op_gt, Exp_int n, Exp_int t), Exp_int 1, Exp_int 0)))] in
-      let src = Printf.sprintf "let () = print_int (if %d > %d then 1 else 0); print_newline ()" n t in
-      (prog, src)) (int_range 0 99) (int_range 0 99));
+      let desc = Printf.sprintf "if %d > %d then 1 else 0" n t in
+      (prog, desc)) (int_range 0 99) (int_range 0 99));
 
     (* 6. Let x, let y, add *)
     (map2 (fun a b ->
@@ -329,16 +339,16 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_let (cl "x", Exp_int a,
           Exp_let (cl "y", Exp_int b,
             Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y"))))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let y = %d in x + y); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "let x = %d in let y = %d in x + y" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 7. Function: double *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "x"))),
           Exp_app (Exp_var (cl "f"), Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let f x = x + x in f %d); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "let f x = x + x in f %d" n in
+      (prog, desc)) (int_range 0 49));
 
     (* 8. Recursive factorial *)
     (map (fun n ->
@@ -351,8 +361,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_app (Exp_var (cl "fact"),
                   Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1))))),
           Exp_app (Exp_var (cl "fact"), Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let rec fact n = if n <= 1 then 1 else n * fact (n-1) in fact %d); print_newline ()" n in
-      (prog, src)) (int_range 0 9));
+      let desc = Printf.sprintf "fact %d" n in
+      (prog, desc)) (int_range 0 9));
 
     (* 9. Tuple fst + snd *)
     (map2 (fun a b ->
@@ -361,8 +371,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_binop (Op_add,
             Exp_app (Exp_var (cl "fst"), Exp_var (cl "p")),
             Exp_app (Exp_var (cl "snd"), Exp_var (cl "p"))))))] in
-      let src = Printf.sprintf "let () = print_int (let p = (%d, %d) in fst p + snd p); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "let p = (%d, %d) in fst p + snd p" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
     (* 10. Match on ints: 0, 1, wildcard *)
     (map (fun n ->
@@ -371,8 +381,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           [(Pat_int 0, Exp_int 100);
            (Pat_int 1, Exp_int 200);
            (Pat_wild, Exp_int 999)])))] in
-      let src = Printf.sprintf "let () = print_int (match %d with 0 -> 100 | 1 -> 200 | _ -> 999); print_newline ()" n in
-      (prog, src)) (int_range 0 2));
+      let desc = Printf.sprintf "match %d with 0->100 | 1->200 | _->999" n in
+      (prog, desc)) (int_range 0 2));
 
     (* 11. Two-argument function *)
     (map2 (fun a b ->
@@ -381,8 +391,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_fun (cl "x", Exp_fun (cl "y",
             Exp_binop (Op_add, Exp_binop (Op_mul, Exp_var (cl "x"), Exp_var (cl "y")), Exp_int 1))),
           Exp_app (Exp_app (Exp_var (cl "f"), Exp_int a), Exp_int b))))] in
-      let src = Printf.sprintf "let () = print_int (let f x y = x * y + 1 in f %d %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 29) (int_range 0 29));
+      let desc = Printf.sprintf "let f x y = x*y+1 in f %d %d" a b in
+      (prog, desc)) (int_range 0 29) (int_range 0 29));
 
     (* 12. Recursive fibonacci *)
     (map (fun n ->
@@ -395,21 +405,21 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_app (Exp_var (cl "fib"), Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1)),
                 Exp_app (Exp_var (cl "fib"), Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 2))))),
           Exp_app (Exp_var (cl "fib"), Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let rec fib n = if n <= 1 then n else fib (n-1) + fib (n-2) in fib %d); print_newline ()" n in
-      (prog, src)) (int_range 0 11));
+      let desc = Printf.sprintf "fib %d" n in
+      (prog, desc)) (int_range 0 11));
 
     (* 13. Unary negation *)
     (map (fun a ->
       let prog = [Decl_expr (print_int_nl (Exp_unop (Op_neg, Exp_int a)))] in
-      let src = Printf.sprintf "let () = print_int (- %d); print_newline ()" a in
-      (prog, src)) (int_range 0 99));
+      let desc = Printf.sprintf "- %d" a in
+      (prog, desc)) (int_range 0 99));
 
     (* 14. Mixed arithmetic: a * b + c *)
     (map3 (fun a b c ->
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_add, Exp_binop (Op_mul, Exp_int a, Exp_int b), Exp_int c)))] in
-      let src = Printf.sprintf "let () = print_int (%d * %d + %d); print_newline ()" a b c in
-      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "%d * %d + %d" a b c in
+      (prog, desc)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
 
     (* 15. Match with Pat_var binding *)
     (map (fun n ->
@@ -417,8 +427,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_match (Exp_int n,
           [(Pat_int 0, Exp_int 42);
            (Pat_var (cl "x"), Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1))])))] in
-      let src = Printf.sprintf "let () = print_int (match %d with 0 -> 42 | x -> x + 1); print_newline ()" n in
-      (prog, src)) (int_range 0 99));
+      let desc = Printf.sprintf "match %d with 0->42 | x->x+1" n in
+      (prog, desc)) (int_range 0 99));
 
     (* 16. Match on computed expression *)
     (map2 (fun a b ->
@@ -426,8 +436,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_match (Exp_binop (Op_sub, Exp_int a, Exp_int b),
           [(Pat_int 0, Exp_int 1);
            (Pat_wild, Exp_int 0)])))] in
-      let src = Printf.sprintf "let () = print_int (match %d - %d with 0 -> 1 | _ -> 0); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "match %d-%d with 0->1 | _->0" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 17. Match with many branches *)
     (map (fun n ->
@@ -436,8 +446,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           [(Pat_int 0, Exp_int 10); (Pat_int 1, Exp_int 20);
            (Pat_int 2, Exp_int 30); (Pat_int 3, Exp_int 40);
            (Pat_wild, Exp_int 50)])))] in
-      let src = Printf.sprintf "let () = print_int (match %d with 0 -> 10 | 1 -> 20 | 2 -> 30 | 3 -> 40 | _ -> 50); print_newline ()" n in
-      (prog, src)) (int_range 0 4));
+      let desc = Printf.sprintf "match %d many-branches" n in
+      (prog, desc)) (int_range 0 4));
 
     (* 18. Match with if in branch body *)
     (map2 (fun n m ->
@@ -445,8 +455,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_match (Exp_int n,
           [(Pat_int 0, Exp_if (Exp_binop (Op_gt, Exp_int m, Exp_int 5), Exp_int 1, Exp_int 0));
            (Pat_wild, Exp_int 99)])))] in
-      let src = Printf.sprintf "let () = print_int (match %d with 0 -> if %d > 5 then 1 else 0 | _ -> 99); print_newline ()" n m in
-      (prog, src)) (int_range 0 2) (int_range 0 9));
+      let desc = Printf.sprintf "match %d with 0->if %d>5 then 1 else 0 | _->99" n m in
+      (prog, desc)) (int_range 0 2) (int_range 0 9));
 
     (* 19. Function with match body *)
     (map (fun n ->
@@ -456,8 +466,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_match (Exp_var (cl "x"),
               [(Pat_int 0, Exp_int 100); (Pat_int 1, Exp_int 200); (Pat_wild, Exp_int 300)])),
           Exp_app (Exp_var (cl "f"), Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let f x = match x with 0 -> 100 | 1 -> 200 | _ -> 300 in f %d); print_newline ()" n in
-      (prog, src)) (int_range 0 2));
+      let desc = Printf.sprintf "fun-with-match %d" n in
+      (prog, desc)) (int_range 0 2));
 
     (* 20. Nested let bindings (4 deep) *)
     (map (fun a ->
@@ -470,8 +480,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_binop (Op_add,
                   Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "b")),
                   Exp_binop (Op_add, Exp_var (cl "c"), Exp_var (cl "d")))))))))] in
-      let src = Printf.sprintf "let () = print_int (let a = %d in let b = %d in let c = %d in let d = %d in a + b + c + d); print_newline ()" a b c d in
-      (prog, src)) (int_range 0 9));
+      let desc = Printf.sprintf "nested-let-4 a=%d" a in
+      (prog, desc)) (int_range 0 9));
 
     (* 21. Recursive count with match *)
     (map (fun n ->
@@ -484,8 +494,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                  Exp_app (Exp_var (cl "count"),
                    Exp_binop (Op_sub, Exp_var (cl "x"), Exp_int 1))))])),
           Exp_app (Exp_var (cl "count"), Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let rec count n = match n with 0 -> 0 | x -> 1 + count (x - 1) in count %d); print_newline ()" n in
-      (prog, src)) (int_range 0 7));
+      let desc = Printf.sprintf "rec-count %d" n in
+      (prog, desc)) (int_range 0 7));
 
     (* 22. Top-level Decl_letrec followed by Decl_expr *)
     (map (fun n ->
@@ -498,8 +508,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_app (Exp_var (cl "fact"),
                   Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1))))));
         Decl_expr (print_int_nl (Exp_app (Exp_var (cl "fact"), Exp_int n)))] in
-      let src = Printf.sprintf "let rec fact n = if n <= 1 then 1 else n * fact (n-1)\nlet () = print_int (fact %d); print_newline ()" n in
-      (prog, src)) (int_range 0 9));
+      let desc = Printf.sprintf "top-letrec fact %d" n in
+      (prog, desc)) (int_range 0 9));
 
     (* 23. Tuple fst - snd *)
     (map2 (fun a b ->
@@ -509,8 +519,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_binop (Op_sub,
             Exp_app (Exp_var (cl "fst"), Exp_var (cl "p")),
             Exp_app (Exp_var (cl "snd"), Exp_var (cl "p"))))))] in
-      let src = Printf.sprintf "let () = print_int (let p = (%d, %d) in fst p - snd p); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "fst-snd (%d,%d)" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
     (* 24. Division + modulo *)
     (map2 (fun a b ->
@@ -519,8 +529,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_binop (Op_add,
           Exp_binop (Op_div, Exp_int a, Exp_int b),
           Exp_binop (Op_mod, Exp_int a, Exp_int b))))] in
-      let src = Printf.sprintf "let () = print_int (%d / %d + %d mod %d); print_newline ()" a b a b in
-      (prog, src)) (int_range 0 499) (int_range 0 19));
+      let desc = Printf.sprintf "%d/%d + %d mod %d" a b a b in
+      (prog, desc)) (int_range 0 499) (int_range 0 19));
 
     (* 25. Nested function application: f (g n) *)
     (map (fun n ->
@@ -528,8 +538,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1)),
           Exp_let (cl "g", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)),
             Exp_app (Exp_var (cl "f"), Exp_app (Exp_var (cl "g"), Exp_int n))))))] in
-      let src = Printf.sprintf "let () = print_int (let f x = x + 1 in let g x = x * 2 in f (g %d)); print_newline ()" n in
-      (prog, src)) (int_range 0 19));
+      let desc = Printf.sprintf "f(g(%d))" n in
+      (prog, desc)) (int_range 0 19));
 
     (* 26. Curried function (make_adder) *)
     (map2 (fun n m ->
@@ -537,8 +547,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_let (cl "make_adder",
           Exp_fun (cl "n", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "n")))),
           Exp_app (Exp_app (Exp_var (cl "make_adder"), Exp_int n), Exp_int m))))] in
-      let src = Printf.sprintf "let () = print_int (let make_adder n x = n + x in make_adder %d %d); print_newline ()" n m in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "make_adder %d %d" n m in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 27. Sequential print of two ints *)
     (map2 (fun a b ->
@@ -546,8 +556,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int a),
           Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int b),
             Exp_app (Exp_var (cl "print_newline"), Exp_unit))))] in
-      let src = Printf.sprintf "let () = print_int %d; print_int %d; print_newline ()" a b in
-      (prog, src)) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "seq-print %d %d" a b in
+      (prog, desc)) (int_range 0 9) (int_range 0 9));
 
     (* 28. Multiple comparison operators combined *)
     (map2 (fun a b ->
@@ -557,8 +567,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_if (Exp_binop (Op_lt, Exp_int a, Exp_int b), Exp_int 1, Exp_int 0),
             Exp_if (Exp_binop (Op_eq, Exp_int a, Exp_int b), Exp_int 10, Exp_int 0)),
           Exp_if (Exp_binop (Op_ge, Exp_int a, Exp_int b), Exp_int 100, Exp_int 0))))] in
-      let src = Printf.sprintf "let () = print_int ((if %d < %d then 1 else 0) + (if %d = %d then 10 else 0) + (if %d >= %d then 100 else 0)); print_newline ()" a b a b a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "cmp-combo %d %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 29. Variable shadowing *)
     (map2 (fun a b ->
@@ -566,8 +576,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_let (cl "x", Exp_int a,
           Exp_let (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int b),
             Exp_var (cl "x")))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let x = x + %d in x); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "shadow x=%d +%d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 30. Partial application *)
     (map (fun n ->
@@ -576,21 +586,17 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_fun (cl "x", Exp_fun (cl "y", Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y")))),
           Exp_let (cl "inc", Exp_app (Exp_var (cl "add"), Exp_int 1),
             Exp_app (Exp_var (cl "inc"), Exp_int n)))))] in
-      let src = Printf.sprintf "let () = print_int (let add x y = x + y in let inc = add 1 in inc %d); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "partial-app inc %d" n in
+      (prog, desc)) (int_range 0 49));
 
-    (* --- New generators (31-58) --- *)
-
-    (* 31. Match on bool patterns: match true/false with true -> ... | false -> ... *)
+    (* 31. Match on bool patterns *)
     (map (fun b ->
-      let bval = if b then 1 else 0 in
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_bool (b),
           [(Pat_bool true, Exp_int 1);
            (Pat_bool false, Exp_int 0)])))] in
-      let src = Printf.sprintf "let () = print_int (match %s with true -> 1 | false -> 0); print_newline ()" (if b then "true" else "false") in
-      ignore bval;
-      (prog, src)) QCheck.Gen.bool);
+      let desc = Printf.sprintf "match-bool %b" b in
+      (prog, desc)) QCheck.Gen.bool);
 
     (* 32. Match on bool patterns with expressions *)
     (map2 (fun a b ->
@@ -598,18 +604,18 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_match (Exp_bool (a > b),
           [(Pat_bool true, Exp_int a);
            (Pat_bool false, Exp_int b)])))] in
-      let src = Printf.sprintf "let () = print_int (match %d > %d with true -> %d | false -> %d); print_newline ()" a b a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "match-bool-expr %d %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
-    (* 33. Match with Pat_unit: match () with () -> 42 *)
+    (* 33. Match with Pat_unit *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_unit,
           [(Pat_unit, Exp_int n)])))] in
-      let src = Printf.sprintf "let () = print_int (match () with () -> %d); print_newline ()" n in
-      (prog, src)) (int_range 0 99));
+      let desc = Printf.sprintf "match-unit %d" n in
+      (prog, desc)) (int_range 0 99));
 
-    (* 34. Nested match: match on outer, then inner *)
+    (* 34. Nested match *)
     (map2 (fun x y ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_int x,
@@ -621,10 +627,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_match (Exp_int y,
               [(Pat_int 0, Exp_int 30);
                (Pat_wild, Exp_int 40)]))])))] in
-      let src = Printf.sprintf "let () = print_int (match %d with 0 -> (match %d with 0 -> 10 | _ -> 20) | _ -> (match %d with 0 -> 30 | _ -> 40)); print_newline ()" x y y in
-      (prog, src)) (int_range 0 2) (int_range 0 2));
+      let desc = Printf.sprintf "nested-match %d %d" x y in
+      (prog, desc)) (int_range 0 2) (int_range 0 2));
 
-    (* 35. Nested match: outer match feeds into inner match via Pat_var *)
+    (* 35. Nested match via Pat_var *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_int n,
@@ -633,12 +639,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
               [(Pat_int 0, Exp_int 100);
                (Pat_int 1, Exp_int 200);
                (Pat_wild, Exp_int 300)]))])))] in
-      let src = Printf.sprintf "let () = print_int (match %d with x -> (match x with 0 -> 100 | 1 -> 200 | _ -> 300)); print_newline ()" n in
-      (prog, src)) (int_range 0 3));
+      let desc = Printf.sprintf "nested-match-var %d" n in
+      (prog, desc)) (int_range 0 3));
 
-    (* 36. 3-element tuple: create and verify via nested 2-tuples *)
-    (* We create (a, b, c) as a 3-tuple, then create (a, b) and verify fst/snd
-       match the first two elements. The 3-tuple creation exercises MAKEBLOCK3. *)
+    (* 36. 3-element tuple *)
     (map3 (fun a b c ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "t3", Exp_tuple [Exp_int a; Exp_int b; Exp_int c],
@@ -646,10 +650,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_binop (Op_add,
               Exp_app (Exp_var (cl "fst"), Exp_var (cl "t2")),
               Exp_app (Exp_var (cl "snd"), Exp_var (cl "t2")))))))] in
-      let src = Printf.sprintf "let () = print_int (let _t3 = (%d, %d, %d) in let t2 = (%d, %d) in fst t2 + snd t2); print_newline ()" a b c a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "3-tuple (%d,%d,%d)" a b c in
+      (prog, desc)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
 
-    (* 37. 3-element tuple: create and use first two elements via nested pairs *)
+    (* 37. 3-element tuple via let bindings *)
     (map3 (fun a b c ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "x", Exp_int a,
@@ -661,8 +665,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                     Exp_app (Exp_var (cl "fst"), Exp_var (cl "p")),
                     Exp_app (Exp_var (cl "snd"), Exp_var (cl "p"))),
                   Exp_var (cl "z"))))))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let y = %d in let z = %d in let p = (x, y) in fst p + snd p + z); print_newline ()" a b c in
-      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "tuple-via-lets %d %d %d" a b c in
+      (prog, desc)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
 
     (* 38. Closure: function captures free variable *)
     (map2 (fun x y ->
@@ -670,10 +674,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_let (cl "x", Exp_int x,
           Exp_let (cl "f", Exp_fun (cl "y", Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y"))),
             Exp_app (Exp_var (cl "f"), Exp_int y)))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let f y = x + y in f %d); print_newline ()" x y in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "closure x=%d f(y=%d)" x y in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
-    (* 39. Closure: function captures two free variables *)
+    (* 39. Closure: two free variables *)
     (map3 (fun a b c ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "a", Exp_int a,
@@ -682,8 +686,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
               Exp_binop (Op_add, Exp_var (cl "a"),
                 Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "c")))),
               Exp_app (Exp_var (cl "f"), Exp_int c))))))] in
-      let src = Printf.sprintf "let () = print_int (let a = %d in let b = %d in let f c = a + b + c in f %d); print_newline ()" a b c in
-      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "closure-2free %d %d %d" a b c in
+      (prog, desc)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
 
     (* 40. Closure: returned function captures variable *)
     (map2 (fun n m ->
@@ -692,10 +696,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_fun (cl "n", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "n"), Exp_var (cl "x")))),
           Exp_let (cl "double", Exp_app (Exp_var (cl "make_mul"), Exp_int n),
             Exp_app (Exp_var (cl "double"), Exp_int m)))))] in
-      let src = Printf.sprintf "let () = print_int (let make_mul n x = n * x in let double = make_mul %d in double %d); print_newline ()" n m in
-      (prog, src)) (int_range 1 9) (int_range 0 19));
+      let desc = Printf.sprintf "make_mul %d then %d" n m in
+      (prog, desc)) (int_range 1 9) (int_range 0 19));
 
-    (* 41. Recursive function with closure: captures free variable *)
+    (* 41. Recursive function with closure *)
     (map2 (fun base n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "base", Exp_int base,
@@ -707,8 +711,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                   Exp_app (Exp_var (cl "f"),
                     Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1))))),
             Exp_app (Exp_var (cl "f"), Exp_int n)))))] in
-      let src = Printf.sprintf "let () = print_int (let base = %d in let rec f n = if n <= 0 then base else 1 + f (n - 1) in f %d); print_newline ()" base n in
-      (prog, src)) (int_range 10 30) (int_range 0 7));
+      let desc = Printf.sprintf "rec-closure base=%d n=%d" base n in
+      (prog, desc)) (int_range 10 30) (int_range 0 7));
 
     (* 42. Multiple sequential print statements (3 ints) *)
     (map3 (fun a b c ->
@@ -717,8 +721,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int b),
             Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int c),
               Exp_app (Exp_var (cl "print_newline"), Exp_unit)))))] in
-      let src = Printf.sprintf "let () = print_int %d; print_int %d; print_int %d; print_newline ()" a b c in
-      (prog, src)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "seq-3 %d %d %d" a b c in
+      (prog, desc)) (int_range 0 9) (int_range 0 9) (int_range 0 9));
 
     (* 43. Multiple sequential print statements (4 ints) *)
     (map2 (fun a b ->
@@ -730,8 +734,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int c),
               Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int d),
                 Exp_app (Exp_var (cl "print_newline"), Exp_unit))))))] in
-      let src = Printf.sprintf "let () = print_int %d; print_int %d; print_int %d; print_int %d; print_newline ()" a b c d in
-      (prog, src)) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "seq-4 %d %d %d %d" a b c d in
+      (prog, desc)) (int_range 0 9) (int_range 0 9));
 
     (* 44. Nested function application: f (g (h x)) *)
     (map (fun n ->
@@ -742,10 +746,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
               Exp_app (Exp_var (cl "f"),
                 Exp_app (Exp_var (cl "g"),
                   Exp_app (Exp_var (cl "h"), Exp_int n))))))))] in
-      let src = Printf.sprintf "let () = print_int (let h x = x + 1 in let g x = x * 2 in let f x = x - 3 in f (g (h %d))); print_newline ()" n in
-      (prog, src)) (int_range 0 19));
+      let desc = Printf.sprintf "f(g(h(%d)))" n in
+      (prog, desc)) (int_range 0 19));
 
-    (* 45. Higher-order function: apply f x = f x *)
+    (* 45. Higher-order: apply f x = f x *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "apply",
@@ -753,10 +757,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_app (Exp_app (Exp_var (cl "apply"),
             Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1))),
             Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let apply f x = f x in apply (fun x -> x + 1) %d); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "apply (+1) %d" n in
+      (prog, desc)) (int_range 0 49));
 
-    (* 46. Higher-order function: apply_twice f x = f (f x) *)
+    (* 46. Higher-order: apply_twice f x = f (f x) *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "apply_twice",
@@ -765,10 +769,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_app (Exp_app (Exp_var (cl "apply_twice"),
             Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1))),
             Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let apply_twice f x = f (f x) in apply_twice (fun x -> x + 1) %d); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "apply_twice (+1) %d" n in
+      (prog, desc)) (int_range 0 49));
 
-    (* 47. Higher-order: map-like, apply function to each element of pair *)
+    (* 47. Higher-order: map-like on pair *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)),
@@ -776,29 +780,29 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_binop (Op_add,
               Exp_app (Exp_var (cl "f"), Exp_app (Exp_var (cl "fst"), Exp_var (cl "p"))),
               Exp_app (Exp_var (cl "f"), Exp_app (Exp_var (cl "snd"), Exp_var (cl "p"))))))))] in
-      let src = Printf.sprintf "let () = print_int (let f x = x * 2 in let p = (%d, %d) in f (fst p) + f (snd p)); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "map-pair (*2) (%d,%d)" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
-    (* 48. Op_neq explicit test *)
+    (* 48. Op_neq *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_if (Exp_binop (Op_neq, Exp_int a, Exp_int b), Exp_int 1, Exp_int 0)))] in
-      let src = Printf.sprintf "let () = print_int (if %d <> %d then 1 else 0); print_newline ()" a b in
-      (prog, src)) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "%d <> %d" a b in
+      (prog, desc)) (int_range 0 9) (int_range 0 9));
 
-    (* 49. Op_le explicit test *)
+    (* 49. Op_le *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_if (Exp_binop (Op_le, Exp_int a, Exp_int b), Exp_int 1, Exp_int 0)))] in
-      let src = Printf.sprintf "let () = print_int (if %d <= %d then 1 else 0); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "%d <= %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
-    (* 50. Op_ge explicit test *)
+    (* 50. Op_ge *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_if (Exp_binop (Op_ge, Exp_int a, Exp_int b), Exp_int 1, Exp_int 0)))] in
-      let src = Printf.sprintf "let () = print_int (if %d >= %d then 1 else 0); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "%d >= %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 51. All six comparison operators combined *)
     (map2 (fun a b ->
@@ -814,30 +818,29 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_binop (Op_add,
             Exp_if (Exp_binop (Op_gt, Exp_int a, Exp_int b), Exp_int 10000, Exp_int 0),
             Exp_if (Exp_binop (Op_ge, Exp_int a, Exp_int b), Exp_int 100000, Exp_int 0)))))] in
-      let src = Printf.sprintf "let () = print_int ((if %d = %d then 1 else 0) + (if %d <> %d then 10 else 0) + (if %d < %d then 100 else 0) + (if %d <= %d then 1000 else 0) + (if %d > %d then 10000 else 0) + (if %d >= %d then 100000 else 0)); print_newline ()" a b a b a b a b a b a b in
-      (prog, src)) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "all-6-cmp %d %d" a b in
+      (prog, desc)) (int_range 0 9) (int_range 0 9));
 
-    (* 52. Variable shadowing in nested scopes: inner x shadows outer x *)
-    (map3 (fun a b c ->
+    (* 52. Variable shadowing in nested scopes *)
+    (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "x", Exp_int a,
           Exp_let (cl "y",
             Exp_let (cl "x", Exp_int b,
               Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1)),
             Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y"))))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let y = (let x = %d in x + 1) in x + y); print_newline ()" a b in
-      ignore c;
-      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "nested-shadow %d %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
-    (* 53. Variable shadowing: function parameter shadows outer binding *)
+    (* 53. Function parameter shadows outer binding *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "x", Exp_int a,
           Exp_let (cl "f", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)),
             Exp_binop (Op_add, Exp_var (cl "x"),
               Exp_app (Exp_var (cl "f"), Exp_int b))))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let f x = x * 2 in x + f %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "param-shadow x=%d f(%d)" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 54. Triple variable shadowing *)
     (map (fun n ->
@@ -846,25 +849,25 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_let (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1),
             Exp_let (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2),
               Exp_var (cl "x"))))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let x = x + 1 in let x = x * 2 in x); print_newline ()" n in
-      (prog, src)) (int_range 0 19));
+      let desc = Printf.sprintf "triple-shadow %d" n in
+      (prog, desc)) (int_range 0 19));
 
-    (* 55. Top-level Decl_let followed by Decl_expr using it *)
+    (* 55. Top-level Decl_let + Decl_expr *)
     (map (fun n ->
       let prog = [
         Decl_let (cl "x", Exp_int n);
         Decl_expr (print_int_nl (Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1)))] in
-      let src = Printf.sprintf "let x = %d\nlet () = print_int (x + 1); print_newline ()" n in
-      (prog, src)) (int_range 0 99));
+      let desc = Printf.sprintf "top-let x=%d" n in
+      (prog, desc)) (int_range 0 99));
 
-    (* 56. Multiple top-level Decl_let declarations *)
+    (* 56. Multiple top-level Decl_let *)
     (map2 (fun a b ->
       let prog = [
         Decl_let (cl "x", Exp_int a);
         Decl_let (cl "y", Exp_int b);
         Decl_expr (print_int_nl (Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y"))))] in
-      let src = Printf.sprintf "let x = %d\nlet y = %d\nlet () = print_int (x + y); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "multi-top-let %d %d" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
     (* 57. Three top-level Decl_let + computed Decl_let *)
     (map3 (fun a b c ->
@@ -875,26 +878,26 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         Decl_let (cl "sum", Exp_binop (Op_add, Exp_var (cl "a"),
           Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "c"))));
         Decl_expr (print_int_nl (Exp_var (cl "sum")))] in
-      let src = Printf.sprintf "let a = %d\nlet b = %d\nlet c = %d\nlet sum = a + b + c\nlet () = print_int sum; print_newline ()" a b c in
-      (prog, src)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "3-top-let %d+%d+%d" a b c in
+      (prog, desc)) (int_range 0 19) (int_range 0 19) (int_range 0 19));
 
-    (* 58. Top-level Decl_let with function + Decl_expr calling it *)
+    (* 58. Top-level function Decl_let *)
     (map (fun n ->
       let prog = [
         Decl_let (cl "double", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)));
         Decl_expr (print_int_nl (Exp_app (Exp_var (cl "double"), Exp_int n)))] in
-      let src = Printf.sprintf "let double x = x * 2\nlet () = print_int (double %d); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "top-fun double %d" n in
+      (prog, desc)) (int_range 0 49));
 
-    (* 59. Match with Pat_var binding: single arm *)
+    (* 59. Match with Pat_var single arm *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_binop (Op_add, Exp_int n, Exp_int 1),
           [(Pat_var (cl "x"), Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2))])))] in
-      let src = Printf.sprintf "let () = print_int (match %d + 1 with x -> x * 2); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "match-var-single %d" n in
+      (prog, desc)) (int_range 0 49));
 
-    (* 60. Deeply nested let bindings (5 levels) *)
+    (* 60. Deeply nested let (5 levels) *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "a", Exp_int n,
@@ -903,10 +906,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
               Exp_let (cl "d", Exp_binop (Op_sub, Exp_var (cl "c"), Exp_int 3),
                 Exp_let (cl "e", Exp_binop (Op_add, Exp_var (cl "d"), Exp_var (cl "a")),
                   Exp_var (cl "e"))))))))] in
-      let src = Printf.sprintf "let () = print_int (let a = %d in let b = a + 1 in let c = b * 2 in let d = c - 3 in let e = d + a in e); print_newline ()" n in
-      (prog, src)) (int_range 0 19));
+      let desc = Printf.sprintf "deep-let-5 %d" n in
+      (prog, desc)) (int_range 0 19));
 
-    (* 61. Deeply nested let bindings (6 levels) with all variables used *)
+    (* 61. Deeply nested let (6 levels, fibonacci-like) *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "v1", Exp_int n,
@@ -916,10 +919,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_let (cl "v5", Exp_binop (Op_add, Exp_var (cl "v3"), Exp_var (cl "v4")),
                   Exp_let (cl "v6", Exp_binop (Op_add, Exp_var (cl "v4"), Exp_var (cl "v5")),
                     Exp_var (cl "v6")))))))))] in
-      let src = Printf.sprintf "let () = print_int (let v1 = %d in let v2 = v1 + 1 in let v3 = v1 + v2 in let v4 = v2 + v3 in let v5 = v3 + v4 in let v6 = v4 + v5 in v6); print_newline ()" n in
-      (prog, src)) (int_range 0 9));
+      let desc = Printf.sprintf "deep-let-6 %d" n in
+      (prog, desc)) (int_range 0 9));
 
-    (* 62. Function composition: compose f g x = f (g x) *)
+    (* 62. Function composition *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "compose",
@@ -929,8 +932,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 10))),
             Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 3))),
             Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let compose f g x = f (g x) in compose (fun x -> x + 10) (fun x -> x * 3) %d); print_newline ()" n in
-      (prog, src)) (int_range 0 19));
+      let desc = Printf.sprintf "compose (+10) (*3) %d" n in
+      (prog, desc)) (int_range 0 19));
 
     (* 63. Function composition with top-level decls *)
     (map (fun n ->
@@ -939,75 +942,75 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         Decl_let (cl "dbl", Exp_fun (cl "x", Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)));
         Decl_expr (print_int_nl
           (Exp_app (Exp_var (cl "inc"), Exp_app (Exp_var (cl "dbl"), Exp_int n))))] in
-      let src = Printf.sprintf "let inc x = x + 1\nlet dbl x = x * 2\nlet () = print_int (inc (dbl %d)); print_newline ()" n in
-      (prog, src)) (int_range 0 19));
+      let desc = Printf.sprintf "top-compose inc(dbl(%d))" n in
+      (prog, desc)) (int_range 0 19));
 
     (* 64. Division with non-trivial values *)
     (map2 (fun a b ->
       let a = a + 2 in let b = b + 2 in
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_div, Exp_binop (Op_mul, Exp_int a, Exp_int b), Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int (%d * %d / %d); print_newline ()" a b b in
-      (prog, src)) (int_range 0 49) (int_range 0 19));
+      let desc = Printf.sprintf "%d*%d/%d" a b b in
+      (prog, desc)) (int_range 0 49) (int_range 0 19));
 
-    (* 65. Modulo with non-trivial values *)
+    (* 65. Modulo *)
     (map2 (fun a b ->
       let b = b + 2 in
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_mod, Exp_int a, Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int (%d mod %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 99) (int_range 0 19));
+      let desc = Printf.sprintf "%d mod %d" a b in
+      (prog, desc)) (int_range 0 99) (int_range 0 19));
 
-    (* 66. Division and modulo: a = (a/b)*b + (a mod b) *)
+    (* 66. Division identity: a = (a/b)*b + (a mod b) *)
     (map2 (fun a b ->
       let b = b + 1 in
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_add,
           Exp_binop (Op_mul, Exp_binop (Op_div, Exp_int a, Exp_int b), Exp_int b),
           Exp_binop (Op_mod, Exp_int a, Exp_int b))))] in
-      let src = Printf.sprintf "let () = print_int ((%d / %d) * %d + %d mod %d); print_newline ()" a b b a b in
-      (prog, src)) (int_range 0 99) (int_range 0 19));
+      let desc = Printf.sprintf "div-identity %d %d" a b in
+      (prog, desc)) (int_range 0 99) (int_range 0 19));
 
-    (* 67. Negative number arithmetic: addition *)
+    (* 67. Negative number addition *)
     (map2 (fun a b ->
       let a = -a in
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_add, Exp_int a, Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int ((%d) + %d); print_newline ()" a b in
-      (prog, src)) (int_range 1 50) (int_range 0 99));
+      let desc = Printf.sprintf "(%d) + %d" a b in
+      (prog, desc)) (int_range 1 50) (int_range 0 99));
 
-    (* 68. Negative number arithmetic: multiplication *)
+    (* 68. Negative number multiplication *)
     (map2 (fun a b ->
       let a = -a in
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_mul, Exp_int a, Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int ((%d) * %d); print_newline ()" a b in
-      (prog, src)) (int_range 1 20) (int_range 0 20));
+      let desc = Printf.sprintf "(%d) * %d" a b in
+      (prog, desc)) (int_range 1 20) (int_range 0 20));
 
-    (* 69. Negative number arithmetic: subtraction producing negative *)
+    (* 69. Subtraction producing negative *)
     (map2 (fun a b ->
       let b = b + a + 1 in
       let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_sub, Exp_int a, Exp_int b)))] in
-      let src = Printf.sprintf "let () = print_int (%d - %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 1 50));
+      let desc = Printf.sprintf "%d - %d" a b in
+      (prog, desc)) (int_range 0 49) (int_range 1 50));
 
     (* 70. Double negation *)
     (map (fun a ->
       let prog = [Decl_expr (print_int_nl
         (Exp_unop (Op_neg, Exp_unop (Op_neg, Exp_int a))))] in
-      let src = Printf.sprintf "let () = print_int (- (- %d)); print_newline ()" a in
-      (prog, src)) (int_range 0 99));
+      let desc = Printf.sprintf "neg(neg(%d))" a in
+      (prog, desc)) (int_range 0 99));
 
-    (* 71. Complex: if inside let *)
+    (* 71. If inside let *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "x", Exp_if (Exp_binop (Op_gt, Exp_int a, Exp_int b), Exp_int a, Exp_int b),
           Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2))))] in
-      let src = Printf.sprintf "let () = print_int (let x = if %d > %d then %d else %d in x * 2); print_newline ()" a b a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "if-in-let %d %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
-    (* 72. Complex: let inside if branches *)
+    (* 72. Let inside if branches *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_if (Exp_binop (Op_lt, Exp_int a, Exp_int b),
@@ -1015,10 +1018,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 10)),
           Exp_let (cl "x", Exp_binop (Op_sub, Exp_int a, Exp_int b),
             Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 20)))))] in
-      let src = Printf.sprintf "let () = print_int (if %d < %d then (let x = %d - %d in x * 10) else (let x = %d - %d in x * 20)); print_newline ()" a b b a a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "let-in-if %d %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
-    (* 73. Complex: match inside let, let inside match *)
+    (* 73. Match inside let, let inside match *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "classify",
@@ -1029,10 +1032,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_if (Exp_binop (Op_gt, Exp_var (cl "x"), Exp_int 0), Exp_int 1, Exp_int (-1)))])),
           Exp_let (cl "r", Exp_app (Exp_var (cl "classify"), Exp_int n),
             Exp_binop (Op_mul, Exp_var (cl "r"), Exp_int 100)))))] in
-      let src = Printf.sprintf "let () = print_int (let classify n = match n with 0 -> 0 | x -> if x > 0 then 1 else -1 in let r = classify %d in r * 100); print_newline ()" n in
-      (prog, src)) (int_range (-5) 5));
+      let desc = Printf.sprintf "classify %d" n in
+      (prog, desc)) (int_range (-5) 5));
 
-    (* 74. Complex: nested if/let/match combo *)
+    (* 74. Nested if/let/match combo *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "x", Exp_int a,
@@ -1044,17 +1047,17 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
               Exp_match (Exp_var (cl "y"),
                 [(Pat_int 0, Exp_int 0);
                  (Pat_wild, Exp_binop (Op_mul, Exp_var (cl "x"), Exp_var (cl "y")))]))))))] in
-      let src = Printf.sprintf "let () = print_int (let x = %d in let y = %d in if x > y then (match x with 0 -> 0 | _ -> x + y) else (match y with 0 -> 0 | _ -> x * y)); print_newline ()" a b in
-      (prog, src)) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "if-let-match %d %d" a b in
+      (prog, desc)) (int_range 0 9) (int_range 0 9));
 
-    (* 75. Op_not (boolean negation) -- BOOLNOT flips 0<->1 *)
+    (* 75. Op_not *)
     (map (fun a ->
       let prog = [Decl_expr (print_int_nl
         (Exp_if (
           Exp_unop (Op_not, Exp_binop (Op_eq, Exp_int a, Exp_int 0)),
           Exp_int 1, Exp_int 0)))] in
-      let src = Printf.sprintf "let () = print_int (if not (%d = 0) then 1 else 0); print_newline ()" a in
-      (prog, src)) (int_range 0 5));
+      let desc = Printf.sprintf "not(%d=0)" a in
+      (prog, desc)) (int_range 0 5));
 
     (* 76. Op_not on comparisons *)
     (map2 (fun a b ->
@@ -1062,15 +1065,15 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_if (
           Exp_unop (Op_not, Exp_binop (Op_gt, Exp_int a, Exp_int b)),
           Exp_int 1, Exp_int 0)))] in
-      let src = Printf.sprintf "let () = print_int (if not (%d > %d) then 1 else 0); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "not(%d>%d)" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
-    (* 77. Exp_bool true/false in if condition *)
+    (* 77. Exp_bool in if condition *)
     (map (fun b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_if (Exp_bool b, Exp_int 42, Exp_int 0)))] in
-      let src = Printf.sprintf "let () = print_int (if %s then 42 else 0); print_newline ()" (if b then "true" else "false") in
-      (prog, src)) QCheck.Gen.bool);
+      let desc = Printf.sprintf "if %b then 42 else 0" b in
+      (prog, desc)) QCheck.Gen.bool);
 
     (* 78. Top-level Decl_letrec + Decl_let + Decl_expr *)
     (map (fun n ->
@@ -1084,10 +1087,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                   Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1))))));
         Decl_let (cl "result", Exp_app (Exp_var (cl "sum"), Exp_int n));
         Decl_expr (print_int_nl (Exp_var (cl "result")))] in
-      let src = Printf.sprintf "let rec sum n = if n <= 0 then 0 else n + sum (n - 1)\nlet result = sum %d\nlet () = print_int result; print_newline ()" n in
-      (prog, src)) (int_range 0 10));
+      let desc = Printf.sprintf "top-letrec-let sum(%d)" n in
+      (prog, desc)) (int_range 0 10));
 
-    (* 79. Closure: function applied to tuple component *)
+    (* 79. Closure applied to tuple component *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "p", Exp_tuple [Exp_int a; Exp_int b],
@@ -1095,8 +1098,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_binop (Op_add,
               Exp_app (Exp_var (cl "add1"), Exp_app (Exp_var (cl "fst"), Exp_var (cl "p"))),
               Exp_app (Exp_var (cl "add1"), Exp_app (Exp_var (cl "snd"), Exp_var (cl "p"))))))))] in
-      let src = Printf.sprintf "let () = print_int (let p = (%d, %d) in let add1 x = x + 1 in add1 (fst p) + add1 (snd p)); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "closure-tuple (%d,%d)" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 80. Recursive with accumulator *)
     (map (fun n ->
@@ -1109,10 +1112,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1)),
                 Exp_binop (Op_add, Exp_var (cl "acc"), Exp_var (cl "n")))))),
           Exp_app (Exp_app (Exp_var (cl "sum_acc"), Exp_int n), Exp_int 0))))] in
-      let src = Printf.sprintf "let () = print_int (let rec sum_acc n acc = if n <= 0 then acc else sum_acc (n - 1) (acc + n) in sum_acc %d 0); print_newline ()" n in
-      (prog, src)) (int_range 0 10));
+      let desc = Printf.sprintf "sum_acc %d" n in
+      (prog, desc)) (int_range 0 10));
 
-    (* 81. Recursive power function with closure *)
+    (* 81. Recursive power with closure *)
     (map2 (fun base exp ->
       let exp = exp mod 6 in
       let prog = [Decl_expr (print_int_nl
@@ -1125,8 +1128,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                   Exp_app (Exp_var (cl "power"),
                     Exp_binop (Op_sub, Exp_var (cl "n"), Exp_int 1))))),
             Exp_app (Exp_var (cl "power"), Exp_int exp)))))] in
-      let src = Printf.sprintf "let () = print_int (let b = %d in let rec power n = if n <= 0 then 1 else b * power (n - 1) in power %d); print_newline ()" base exp in
-      (prog, src)) (int_range 1 4) (int_range 0 5));
+      let desc = Printf.sprintf "power %d^%d" base exp in
+      (prog, desc)) (int_range 1 4) (int_range 0 5));
 
     (* 82. Sequence: compute then print *)
     (map2 (fun a b ->
@@ -1134,10 +1137,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_let (cl "x", Exp_binop (Op_add, Exp_int a, Exp_int b),
           Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_var (cl "x")),
             Exp_app (Exp_var (cl "print_newline"), Exp_unit))))] in
-      let src = Printf.sprintf "let () = let x = %d + %d in print_int x; print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "compute-print %d+%d" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
-    (* 83. Sequence: multiple computations + prints *)
+    (* 83. Multiple computations + prints *)
     (map2 (fun a b ->
       let prog = [Decl_expr
         (Exp_let (cl "x", Exp_binop (Op_add, Exp_int a, Exp_int b),
@@ -1145,8 +1148,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_var (cl "x")),
               Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_var (cl "y")),
                 Exp_app (Exp_var (cl "print_newline"), Exp_unit))))))] in
-      let src = Printf.sprintf "let () = let x = %d + %d in let y = %d * %d in print_int x; print_int y; print_newline ()" a b a b in
-      (prog, src)) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "multi-compute-print %d %d" a b in
+      (prog, desc)) (int_range 0 9) (int_range 0 9));
 
     (* 84. Match on bool result of comparison *)
     (map2 (fun a b ->
@@ -1154,16 +1157,16 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_match (Exp_binop (Op_lt, Exp_int a, Exp_int b),
           [(Pat_bool true, Exp_binop (Op_sub, Exp_int b, Exp_int a));
            (Pat_bool false, Exp_binop (Op_sub, Exp_int a, Exp_int b))])))] in
-      let src = Printf.sprintf "let () = print_int (match %d < %d with true -> %d - %d | false -> %d - %d); print_newline ()" a b b a a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "match-cmp %d<%d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 85. Identity function *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "id", Exp_fun (cl "x", Exp_var (cl "x")),
           Exp_app (Exp_var (cl "id"), Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let id x = x in id %d); print_newline ()" n in
-      (prog, src)) (int_range (-50) 50));
+      let desc = Printf.sprintf "id %d" n in
+      (prog, desc)) (int_range (-50) 50));
 
     (* 86. Constant function *)
     (map2 (fun a b ->
@@ -1171,8 +1174,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_let (cl "const",
           Exp_fun (cl "x", Exp_fun (cl "y", Exp_var (cl "x"))),
           Exp_app (Exp_app (Exp_var (cl "const"), Exp_int a), Exp_int b))))] in
-      let src = Printf.sprintf "let () = print_int (let const x _y = x in const %d %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "const %d %d" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
     (* 87. Flip function *)
     (map2 (fun a b ->
@@ -1184,8 +1187,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_app (Exp_app (Exp_app (Exp_var (cl "flip"),
             Exp_fun (cl "x", Exp_fun (cl "y", Exp_binop (Op_sub, Exp_var (cl "x"), Exp_var (cl "y"))))),
             Exp_int a), Exp_int b))))] in
-      let src = Printf.sprintf "let () = print_int (let flip f x y = f y x in flip (fun x y -> x - y) %d %d); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "flip sub %d %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 88. Multiple top-level functions calling each other *)
     (map (fun n ->
@@ -1193,8 +1196,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         Decl_let (cl "add1", Exp_fun (cl "x", Exp_binop (Op_add, Exp_var (cl "x"), Exp_int 1)));
         Decl_let (cl "add2", Exp_fun (cl "x", Exp_app (Exp_var (cl "add1"), Exp_app (Exp_var (cl "add1"), Exp_var (cl "x")))));
         Decl_expr (print_int_nl (Exp_app (Exp_var (cl "add2"), Exp_int n)))] in
-      let src = Printf.sprintf "let add1 x = x + 1\nlet add2 x = add1 (add1 x)\nlet () = print_int (add2 %d); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "top-chain add2(%d)" n in
+      (prog, desc)) (int_range 0 49));
 
     (* 89. Recursive GCD *)
     (map2 (fun a b ->
@@ -1207,8 +1210,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
               Exp_app (Exp_app (Exp_var (cl "gcd"), Exp_var (cl "b")),
                 Exp_binop (Op_mod, Exp_var (cl "a"), Exp_var (cl "b")))))),
           Exp_app (Exp_app (Exp_var (cl "gcd"), Exp_int a), Exp_int b))))] in
-      let src = Printf.sprintf "let () = print_int (let rec gcd a b = if b = 0 then a else gcd b (a mod b) in gcd %d %d); print_newline ()" a b in
-      (prog, src)) (int_range 1 50) (int_range 1 50));
+      let desc = Printf.sprintf "gcd %d %d" a b in
+      (prog, desc)) (int_range 1 50) (int_range 1 50));
 
     (* 90. Recursive with multiple match arms *)
     (map (fun n ->
@@ -1224,8 +1227,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                   Exp_app (Exp_var (cl "f"), Exp_binop (Op_sub, Exp_var (cl "x"), Exp_int 1)),
                   Exp_app (Exp_var (cl "f"), Exp_binop (Op_sub, Exp_var (cl "x"), Exp_int 3))))])),
           Exp_app (Exp_var (cl "f"), Exp_int n))))] in
-      let src = Printf.sprintf "let () = print_int (let rec f n = match n with 0 -> 1 | 1 -> 1 | 2 -> 2 | x -> f (x - 1) + f (x - 3) in f %d); print_newline ()" n in
-      (prog, src)) (int_range 0 9));
+      let desc = Printf.sprintf "rec-multi-match %d" n in
+      (prog, desc)) (int_range 0 9));
 
     (* 91. Chained let with function calls *)
     (map (fun n ->
@@ -1235,8 +1238,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_let (cl "b", Exp_app (Exp_var (cl "f"), Exp_var (cl "a")),
               Exp_let (cl "c", Exp_app (Exp_var (cl "f"), Exp_var (cl "b")),
                 Exp_var (cl "c")))))))] in
-      let src = Printf.sprintf "let () = print_int (let f x = x + 1 in let a = f %d in let b = f a in let c = f b in c); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "chained-let-fn %d" n in
+      (prog, desc)) (int_range 0 49));
 
     (* 92. Tuple of expressions *)
     (map2 (fun a b ->
@@ -1247,8 +1250,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_binop (Op_add,
             Exp_app (Exp_var (cl "fst"), Exp_var (cl "p")),
             Exp_app (Exp_var (cl "snd"), Exp_var (cl "p"))))))] in
-      let src = Printf.sprintf "let () = print_int (let p = (%d + 1, %d * 2) in fst p + snd p); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "tuple-expr (%d+1,%d*2)" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 93. Multiple Decl_expr (sequential side effects) *)
     (map2 (fun a b ->
@@ -1257,8 +1260,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                             Exp_app (Exp_var (cl "print_newline"), Exp_unit)));
         Decl_expr (Exp_seq (Exp_app (Exp_var (cl "print_int"), Exp_int b),
                             Exp_app (Exp_var (cl "print_newline"), Exp_unit)))] in
-      let src = Printf.sprintf "let () = print_int %d; print_newline ()\nlet () = print_int %d; print_newline ()" a b in
-      (prog, src)) (int_range 0 99) (int_range 0 99));
+      let desc = Printf.sprintf "multi-decl-expr %d %d" a b in
+      (prog, desc)) (int_range 0 99) (int_range 0 99));
 
     (* 94. Top-level let + multiple Decl_expr *)
     (map (fun n ->
@@ -1269,10 +1272,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         Decl_expr (Exp_seq (Exp_app (Exp_var (cl "print_int"),
                               Exp_binop (Op_mul, Exp_var (cl "x"), Exp_int 2)),
                             Exp_app (Exp_var (cl "print_newline"), Exp_unit)))] in
-      let src = Printf.sprintf "let x = %d\nlet () = print_int x; print_newline ()\nlet () = print_int (x * 2); print_newline ()" n in
-      (prog, src)) (int_range 0 49));
+      let desc = Printf.sprintf "top-let-multi-expr %d" n in
+      (prog, desc)) (int_range 0 49));
 
-    (* 95. Match with wildcard fallthrough after many int patterns *)
+    (* 95. Match with wildcard after many int patterns *)
     (map (fun n ->
       let prog = [Decl_expr (print_int_nl
         (Exp_match (Exp_int n,
@@ -1283,10 +1286,10 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
            (Pat_int 4, Exp_int 40);
            (Pat_int 5, Exp_int 50);
            (Pat_wild, Exp_int (-1))])))] in
-      let src = Printf.sprintf "let () = print_int (match %d with 0 -> 0 | 1 -> 10 | 2 -> 20 | 3 -> 30 | 4 -> 40 | 5 -> 50 | _ -> -1); print_newline ()" n in
-      (prog, src)) (int_range 0 7));
+      let desc = Printf.sprintf "match-6-arms %d" n in
+      (prog, desc)) (int_range 0 7));
 
-    (* 96. Zero: edge cases *)
+    (* 96. Zero edge cases *)
     (return
       (let prog = [Decl_expr (print_int_nl
         (Exp_binop (Op_add,
@@ -1294,18 +1297,18 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
             Exp_binop (Op_mul, Exp_int 0, Exp_int 42),
             Exp_binop (Op_add, Exp_int 0, Exp_int 0)),
           Exp_binop (Op_sub, Exp_int 0, Exp_int 0))))] in
-      let src = "let () = print_int (0 * 42 + (0 + 0) + (0 - 0)); print_newline ()" in
-      (prog, src)));
+      let desc = "zero-edge-cases" in
+      (prog, desc)));
 
-    (* 97. Nested tuples: pair of pairs *)
+    (* 97. Nested tuples *)
     (map2 (fun a b ->
       let prog = [Decl_expr (print_int_nl
         (Exp_let (cl "inner", Exp_tuple [Exp_int a; Exp_int b],
           Exp_binop (Op_mul,
             Exp_app (Exp_var (cl "fst"), Exp_var (cl "inner")),
             Exp_app (Exp_var (cl "snd"), Exp_var (cl "inner"))))))] in
-      let src = Printf.sprintf "let () = print_int (let inner = (%d, %d) in fst inner * snd inner); print_newline ()" a b in
-      (prog, src)) (int_range 0 19) (int_range 0 19));
+      let desc = Printf.sprintf "nested-tuple %d %d" a b in
+      (prog, desc)) (int_range 0 19) (int_range 0 19));
 
     (* 98. Function returning tuple, then extracting *)
     (map2 (fun a b ->
@@ -1320,8 +1323,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
                 Exp_app (Exp_var (cl "fst"), Exp_var (cl "q")),
                 Exp_binop (Op_mul, Exp_int 100,
                   Exp_app (Exp_var (cl "snd"), Exp_var (cl "q")))))))))] in
-      let src = Printf.sprintf "let () = print_int (let swap p = (snd p, fst p) in let p = (%d, %d) in let q = swap p in fst q + 100 * snd q); print_newline ()" a b in
-      (prog, src)) (int_range 0 9) (int_range 0 9));
+      let desc = Printf.sprintf "swap-tuple (%d,%d)" a b in
+      (prog, desc)) (int_range 0 9) (int_range 0 9));
 
     (* 99. Pat_tuple: basic 2-tuple destructuring *)
     (map2 (fun a b ->
@@ -1329,8 +1332,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
         (Exp_match (Exp_tuple [Exp_int a; Exp_int b],
           [(Pat_tuple [Pat_var (cl "a"); Pat_var (cl "b")],
             Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "b")))])))] in
-      let src = Printf.sprintf "let () = print_int (match (%d, %d) with (a, b) -> a + b); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "pat-tuple-2 (%d,%d)" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
 
     (* 100. Pat_tuple: 3-tuple destructuring *)
     (map3 (fun a b c ->
@@ -1339,8 +1342,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           [(Pat_tuple [Pat_var (cl "a"); Pat_var (cl "b"); Pat_var (cl "c")],
             Exp_binop (Op_add, Exp_var (cl "a"),
               Exp_binop (Op_add, Exp_var (cl "b"), Exp_var (cl "c"))))])))] in
-      let src = Printf.sprintf "let () = print_int (match (%d, %d, %d) with (a, b, c) -> a + b + c); print_newline ()" a b c in
-      (prog, src)) (int_range 0 30) (int_range 0 30) (int_range 0 30));
+      let desc = Printf.sprintf "pat-tuple-3 (%d,%d,%d)" a b c in
+      (prog, desc)) (int_range 0 30) (int_range 0 30) (int_range 0 30));
 
     (* 101. Pat_tuple: destructure function result *)
     (map (fun n ->
@@ -1352,8 +1355,8 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_match (Exp_app (Exp_var (cl "f"), Exp_int n),
             [(Pat_tuple [Pat_var (cl "a"); Pat_var (cl "b")],
               Exp_binop (Op_add, Exp_var (cl "a"), Exp_var (cl "b")))]))))] in
-      let src = Printf.sprintf "let () = print_int (let f x = (x + 1, x * 2) in match f %d with (a, b) -> a + b); print_newline ()" n in
-      (prog, src)) (int_range 0 20));
+      let desc = Printf.sprintf "pat-tuple-fn-result f(%d)" n in
+      (prog, desc)) (int_range 0 20));
 
     (* 102. Pat_tuple: swap via destructuring *)
     (map2 (fun a b ->
@@ -1366,37 +1369,78 @@ let gen_test_case : (decl list * string) QCheck.Gen.t =
           Exp_match (Exp_app (Exp_var (cl "swap"), Exp_tuple [Exp_int a; Exp_int b]),
             [(Pat_tuple [Pat_var (cl "x"); Pat_var (cl "y")],
               Exp_binop (Op_add, Exp_var (cl "x"), Exp_var (cl "y")))]))))] in
-      let src = Printf.sprintf "let () = print_int (let swap p = match p with (a, b) -> (b, a) in match swap (%d, %d) with (x, y) -> x + y); print_newline ()" a b in
-      (prog, src)) (int_range 0 49) (int_range 0 49));
+      let desc = Printf.sprintf "pat-tuple-swap (%d,%d)" a b in
+      (prog, desc)) (int_range 0 49) (int_range 0 49));
   ]
 
-let print_test_case (_prog, src) = src
+(* === Test: cross-validate interpret vs compile+interpret-bytecode === *)
 
-let compile_vs_ocamlc_test =
-  QCheck.Test.make ~name:"compile vs ocamlc" ~count:500
+let print_test_case (_prog, desc) = desc
+
+let cross_test =
+  QCheck.Test.make
+    ~name:"correctness: interpret = interpret-bytecode . compile"
+    ~count:500
     (QCheck.make gen_test_case ~print:print_test_case)
-    (fun (prog, source) ->
-       with_temp_dir (fun dir ->
-         let our_result = run_our_compiler prog in
-         match compile_and_run_ocamlc dir source with
-         | None -> true
-         | Some expected ->
-           (match our_result with
-            | Ok ours -> ours = expected
-            | Error _msg -> false)))
+    (fun (prog, _desc) ->
+       let interp_result = run_source_interp prog in
+       let compiled_result = run_our_compiler prog in
+       match interp_result, compiled_result with
+       | Interp_ok interp_out, Ok compiled_out ->
+         if interp_out = compiled_out then true
+         else
+           QCheck.Test.fail_reportf
+             "Output mismatch!\n  interpret:         %S\n  compile+bytecode:  %S"
+             interp_out compiled_out
+       | Interp_err "timeout", Error "timeout" ->
+         true  (* both timed out -- consistent *)
+       | Interp_err interp_err, Error compiled_err ->
+         (* both errored -- check if same error *)
+         if interp_err = compiled_err then true
+         else
+           QCheck.Test.fail_reportf
+             "Both errored but differently!\n  interpret error:  %S\n  compile error:    %S"
+             interp_err compiled_err
+       | Interp_ok interp_out, Error compiled_err ->
+         QCheck.Test.fail_reportf
+           "interpret succeeded but compile+bytecode failed!\n  interpret output:  %S\n  compile error:     %S"
+           interp_out compiled_err
+       | Interp_err interp_err, Ok compiled_out ->
+         QCheck.Test.fail_reportf
+           "compile+bytecode succeeded but interpret failed!\n  compile output:    %S\n  interpret error:   %S"
+           compiled_out interp_err)
 
-let random_compile_vs_ocamlc_test =
-  QCheck.Test.make ~name:"compile vs ocamlc (random AST)" ~count:200
-    (QCheck.make gen_random_program_with_source ~print:(fun (_prog, src) -> src))
-    (fun (prog, source) ->
-       with_temp_dir (fun dir ->
-         let our_result = run_our_compiler prog in
-         match compile_and_run_ocamlc dir source with
-         | None -> true
-         | Some expected ->
-           (match our_result with
-            | Ok ours -> ours = expected
-            | Error _msg -> false)))
+let random_cross_test =
+  QCheck.Test.make
+    ~name:"correctness (random AST): interpret = interpret-bytecode . compile"
+    ~count:1000
+    (QCheck.make gen_random_program ~print:(fun (_prog, desc) -> desc))
+    (fun (prog, _desc) ->
+       let interp_result = run_source_interp prog in
+       let compiled_result = run_our_compiler prog in
+       match interp_result, compiled_result with
+       | Interp_ok interp_out, Ok compiled_out ->
+         if interp_out = compiled_out then true
+         else
+           QCheck.Test.fail_reportf
+             "Output mismatch!\n  interpret:         %S\n  compile+bytecode:  %S"
+             interp_out compiled_out
+       | Interp_err "timeout", Error "timeout" ->
+         true  (* both timed out -- consistent *)
+       | Interp_err interp_err, Error compiled_err ->
+         if interp_err = compiled_err then true
+         else
+           QCheck.Test.fail_reportf
+             "Both errored but differently!\n  interpret error:  %S\n  compile error:    %S"
+             interp_err compiled_err
+       | Interp_ok interp_out, Error compiled_err ->
+         QCheck.Test.fail_reportf
+           "interpret succeeded but compile+bytecode failed!\n  interpret output:  %S\n  compile error:     %S"
+           interp_out compiled_err
+       | Interp_err interp_err, Ok compiled_out ->
+         QCheck.Test.fail_reportf
+           "compile+bytecode succeeded but interpret failed!\n  compile output:    %S\n  interpret error:   %S"
+           compiled_out interp_err)
 
 let () =
-  exit (QCheck_base_runner.run_tests ~verbose:true [compile_vs_ocamlc_test; random_compile_vs_ocamlc_test])
+  exit (QCheck_base_runner.run_tests ~verbose:true [cross_test; random_cross_test])

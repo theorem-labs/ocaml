@@ -26,7 +26,10 @@ Inductive builtin : Type :=
   | Bi_print_char
   | Bi_compare
   | Bi_fst
-  | Bi_snd.
+  | Bi_snd
+  | Bi_succ
+  | Bi_pred
+  | Bi_max.
 
 Inductive svalue : Type :=
   | SVal_int    : Z -> svalue
@@ -37,6 +40,8 @@ Inductive svalue : Type :=
   | SVal_closure : ident -> expr -> env -> svalue
   | SVal_recclosure : ident -> ident -> expr -> env -> svalue
   | SVal_builtin : builtin -> svalue
+  | SVal_record : list (ident * svalue) -> svalue
+  | SVal_string : string -> svalue
 with env : Type :=
   | Env_nil  : env
   | Env_cons : ident -> svalue -> env -> env.
@@ -55,6 +60,14 @@ Fixpoint env_append (e1 e2 : env) : env :=
   match e1 with
   | Env_nil => e2
   | Env_cons x v rest => Env_cons x v (env_append rest e2)
+  end.
+
+(* Record field lookup *)
+Fixpoint record_lookup (fields : list (ident * svalue)) (f : ident) : option svalue :=
+  match fields with
+  | [] => None
+  | (name, v) :: rest =>
+    if String.eqb f name then Some v else record_lookup rest f
   end.
 
 (* === Pattern matching === *)
@@ -83,6 +96,32 @@ Fixpoint match_pattern (p : pattern) (v : svalue) : option env :=
         | _, _ => None
         end) ps vs
     else None
+  | Pat_nil, SVal_constr "[]" None => Some Env_nil
+  | Pat_nil, SVal_int 0 => Some Env_nil
+  | Pat_cons ph pt, SVal_constr "::" (Some (SVal_tuple [h; t])) =>
+    match match_pattern ph h, match_pattern pt t with
+    | Some e1, Some e2 => Some (env_append e1 e2)
+    | _, _ => None
+    end
+  | Pat_or p1 p2, _ =>
+    match match_pattern p1 v with
+    | Some bindings => Some bindings
+    | None => match_pattern p2 v
+    end
+  | Pat_record fps, SVal_record fvs =>
+    (fix match_fields (fps : list (ident * pattern)) : option env :=
+      match fps with
+      | [] => Some Env_nil
+      | (fname, fp) :: rest =>
+        match record_lookup fvs fname with
+        | Some fv =>
+          match match_pattern fp fv, match_fields rest with
+          | Some e1, Some e2 => Some (env_append e1 e2)
+          | _, _ => None
+          end
+        | None => None
+        end
+      end) fps
   | _, _ => None
   end.
 
@@ -172,19 +211,42 @@ Definition apply_builtin (b : builtin) (arg : svalue) (out : list event) :
     Some (SVal_int 0, out)
   | Bi_fst, SVal_tuple (a :: _) => Some (a, out)
   | Bi_snd, SVal_tuple (_ :: b :: _) => Some (b, out)
+  | Bi_succ, SVal_int n => Some (SVal_int (n + 1), out)
+  | Bi_pred, SVal_int n => Some (SVal_int (n - 1), out)
+  | Bi_max, SVal_int _ =>
+    (* max is curried: handled as source-level closure in stdlib_env *)
+    None
   | _, _ => None
   end.
 
+(* max as a source-level closure: fun x -> fun y -> if x >= y then x else y *)
+Definition max_closure : svalue :=
+  SVal_closure "x"
+    (Exp_fun "y"
+      (Exp_if (Exp_binop Op_ge (Exp_var "x") (Exp_var "y"))
+              (Exp_var "x") (Exp_var "y")))
+    Env_nil.
+
+(* Qualified name helper *)
+Definition qualify_name (prefix : ident) (name : ident) : ident :=
+  String.append prefix (String.append "." name).
+
 (* Standard library environment *)
 Definition stdlib_env : env :=
-  Env_cons "print_int" (SVal_builtin Bi_print_int)
-  (Env_cons "print_string" (SVal_builtin Bi_print_string)
-  (Env_cons "print_newline" (SVal_builtin Bi_print_newline)
-  (Env_cons "print_char" (SVal_builtin Bi_print_char)
-  (Env_cons "compare" (SVal_builtin Bi_compare)
-  (Env_cons "fst" (SVal_builtin Bi_fst)
-  (Env_cons "snd" (SVal_builtin Bi_snd)
-  Env_nil)))))).
+  Env_cons "print_int" (SVal_builtin Bi_print_int)  (* 1 *)
+  (Env_cons "print_string" (SVal_builtin Bi_print_string)  (* 2 *)
+  (Env_cons "print_newline" (SVal_builtin Bi_print_newline)  (* 3 *)
+  (Env_cons "print_char" (SVal_builtin Bi_print_char)  (* 4 *)
+  (Env_cons "compare" (SVal_builtin Bi_compare)  (* 5 *)
+  (Env_cons "fst" (SVal_builtin Bi_fst)  (* 6 *)
+  (Env_cons "snd" (SVal_builtin Bi_snd)  (* 7 *)
+  (Env_cons "succ" (SVal_builtin Bi_succ)  (* 8 *)
+  (Env_cons "pred" (SVal_builtin Bi_pred)  (* 9 *)
+  (Env_cons "max" max_closure  (* 10 *)
+  (Env_cons "Stdlib.Int.succ" (SVal_builtin Bi_succ)  (* 11 *)
+  (Env_cons "Stdlib.Int.pred" (SVal_builtin Bi_pred)  (* 12 *)
+  (Env_cons "Stdlib.max" max_closure  (* 13 *)
+  Env_nil)))))))))))).
 
 (* === Main evaluation function, structurally decreasing on fuel === *)
 
@@ -314,47 +376,135 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
     | other => other
     end
 
+  | Exp_record fields =>
+    (fix eval_fields (fuel0 : nat) (fs : list (ident * expr))
+         (acc : list (ident * svalue)) (out0 : list event) : eval_result :=
+      match fs with
+      | [] => Eval_ok (SVal_record (rev acc)) out0
+      | (fname, fe) :: rest =>
+        match eval fuel0 fe env0 out0 with
+        | Eval_ok fv out1 => eval_fields fuel0 rest ((fname, fv) :: acc) out1
+        | other => other
+        end
+      end) fuel' fields [] out
+
+  | Exp_field e1 f =>
+    match eval fuel' e1 env0 out with
+    | Eval_ok (SVal_record fields) out1 =>
+      match record_lookup fields f with
+      | Some v => Eval_ok v out1
+      | None => Eval_err "field not found" out1
+      end
+    | Eval_ok _ out1 => Eval_err "field access on non-record" out1
+    | other => other
+    end
+
+  | Exp_string s =>
+    Eval_ok (SVal_string s) out
+
+  | Exp_function cases =>
+    Eval_ok (SVal_closure "$arg" (Exp_match (Exp_var "$arg") cases) env0) out
+
+  | Exp_nil => Eval_ok (SVal_constr "[]" None) out
+
+  | Exp_cons e1 e2 =>
+    match eval fuel' e1 env0 out with
+    | Eval_ok v1 out1 =>
+      match eval fuel' e2 env0 out1 with
+      | Eval_ok v2 out2 =>
+        Eval_ok (SVal_constr "::" (Some (SVal_tuple [v1; v2]))) out2
+      | other => other
+      end
+    | other => other
+    end
+
   end
   end.
 
 (* === Top-level program evaluation === *)
 
+(* Extract names bound by a list of declarations (static analysis).
+   Only Decl_let and Decl_letrec introduce bindings. *)
+Fixpoint decl_bound_names (ds : list decl) : list ident :=
+  match ds with
+  | [] => []
+  | Decl_let x _ :: rest => x :: decl_bound_names rest
+  | Decl_letrec f _ :: rest => f :: decl_bound_names rest
+  | _ :: rest => decl_bound_names rest
+  end.
+
+(* After evaluating inner module decls, add qualified aliases.
+   For each name x bound by the inner decls, look it up in the resulting
+   env and re-add it as "mod_name.x". *)
+Fixpoint add_qualified_bindings (prefix : ident) (names : list ident) (inner_env env_acc : env) : env :=
+  match names with
+  | [] => env_acc
+  | x :: rest =>
+    let env_acc' :=
+      match env_lookup inner_env x with
+      | Some v => env_extend env_acc (qualify_name prefix x) v
+      | None => env_acc
+      end in
+    add_qualified_bindings prefix rest inner_env env_acc'
+  end.
+
+(* eval_program returns (env * eval_result): the accumulated environment
+   alongside the evaluation result. This allows Decl_module to extract
+   the env produced by inner declarations and add qualified-name aliases. *)
 Fixpoint eval_program (fuel : nat) (prog : program) (env0 : env) (out : list event) :
-    eval_result :=
+    env * eval_result :=
+  match fuel with
+  | O => (env0, Eval_timeout out)
+  | S fuel' =>
   match prog with
-  | [] => Eval_ok SVal_unit out
+  | [] => (env0, Eval_ok SVal_unit out)
   | d :: rest =>
     match d with
     | Decl_let x e =>
-      match eval fuel e env0 out with
-      | Eval_ok v out' => eval_program fuel rest (env_extend env0 x v) out'
-      | other => other
+      match eval fuel' e env0 out with
+      | Eval_ok v out' => eval_program fuel' rest (env_extend env0 x v) out'
+      | other => (env0, other)
       end
     | Decl_letrec f e =>
       match e with
       | Exp_fun param body =>
         let clos := SVal_recclosure f param body env0 in
-        eval_program fuel rest (env_extend env0 f clos) out
+        eval_program fuel' rest (env_extend env0 f clos) out
       | _ =>
-        match eval fuel e env0 out with
-        | Eval_ok v out' => eval_program fuel rest (env_extend env0 f v) out'
-        | other => other
+        match eval fuel' e env0 out with
+        | Eval_ok v out' => eval_program fuel' rest (env_extend env0 f v) out'
+        | other => (env0, other)
         end
       end
     | Decl_type _ _ _ =>
-      eval_program fuel rest env0 out
+      eval_program fuel' rest env0 out
     | Decl_expr e =>
-      match eval fuel e env0 out with
-      | Eval_ok _ out' => eval_program fuel rest env0 out'
-      | other => other
+      match eval fuel' e env0 out with
+      | Eval_ok _ out' => eval_program fuel' rest env0 out'
+      | other => (env0, other)
       end
+    | Decl_module mod_name inner_decls =>
+      match eval_program fuel' inner_decls env0 out with
+      | (inner_env, Eval_ok _ out') =>
+        (* Add unqualified bindings (already in inner_env) and
+           qualified aliases (mod_name.x for each x bound by inner_decls) *)
+        let names := decl_bound_names inner_decls in
+        let env_with_qual := add_qualified_bindings mod_name names inner_env inner_env in
+        eval_program fuel' rest env_with_qual out'
+      | (_, other) => (env0, other)
+      end
+    | Decl_open _ =>
+      eval_program fuel' rest env0 out
+    | Decl_exception _ _ =>
+      eval_program fuel' rest env0 out
     end
+  end
   end.
 
 (* Entry point *)
 Definition interpret (fuel : nat) (prog : program) : behavior :=
   match eval_program fuel prog stdlib_env [] with
-  | Eval_ok _ out => mk_behavior (rev out) (Term_normal (Val_int 0))
-  | Eval_err msg out => mk_behavior (rev out) (Term_error msg)
-  | Eval_timeout out => mk_behavior (rev out) Term_timeout
+  | (_, Eval_ok _ out) => mk_behavior (rev out) (Term_normal (Val_int 0))
+  | (_, Eval_err msg out) => mk_behavior (rev out) (Term_error msg)
+  | (_, Eval_timeout out) => mk_behavior (rev out) Term_timeout
   end.

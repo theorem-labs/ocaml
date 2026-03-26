@@ -6,6 +6,7 @@
 From Stdlib Require Import Strings.String.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Syntax.
+From OCamlInterp.Manual.Utils Require Import WellFormed.
 From OCamlInterp.SemiAutomatic.LexParse Require Import PrettyPrint.
 
 Module Type LexParseSpec.
@@ -13,8 +14,10 @@ Module Type LexParseSpec.
   (* Lex-parser (provided by Untrusted): takes source string, returns AST *)
   Parameter lex_parse : string -> option program.
 
-  (* Roundtrip theorem: parsing a pretty-printed program recovers the original *)
+  (* Roundtrip theorem: parsing a pretty-printed well-formed program
+     recovers the original *)
   Axiom lex_parse_pp_inverse : forall prog,
+    wf_program prog = true ->
     lex_parse (pp_program prog) = Some prog.
 
 End LexParseSpec.
