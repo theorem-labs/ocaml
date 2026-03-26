@@ -1,7 +1,5 @@
 (coq.theory
  (name OCamlInterp.Manual.Compile)
- (theories Stdlib
+ (theories Stdlib Ltac2 RecordUpdate
   OCamlInterp.Manual.Utils
-  OCamlInterp.Manual.Bytecode
-  OCamlInterp.SemiAutomatic.Interpret
-  OCamlInterp.Automatic.Compile))
+  OCamlInterp.Manual.Bytecode))

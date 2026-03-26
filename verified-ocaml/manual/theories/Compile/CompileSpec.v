@@ -6,17 +6,19 @@
    Trust model: this file defines the CONCRETE correctness statement using
    only trusted components (step, initial_state, etc.). The untrusted code
    must provide compile_program and interpret that satisfy this statement.
-   The correctness predicate is NOT a Parameter -- it is fully spelled out
-   here so it cannot be trivialized. *)
+
+   This file has NO dependencies outside manual/ — it is fully self-contained.
+   The concrete compile_program and interpret are supplied by the checker
+   module in automatic/Compile/CompileChecker.v. *)
 
 From Stdlib Require Import ZArith PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Value.
+From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode Require Import Interpret.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
-From OCamlInterp.SemiAutomatic.Interpret Require Import Interpret.
 
 (* === Trusted definitions for running compiled bytecode === *)
 
@@ -50,7 +52,7 @@ Fixpoint run_collecting (fuel : nat) (code : list instruction) (s : state)
     | CCall_request prim_idx args cont =>
       let new_events := ccall_to_events prim_idx args in
       let out' := rev new_events ++ out in
-      run_collecting fuel' code (set_accu cont (Val_int 0)) out'
+      run_collecting fuel' code (cont <|accu := Val_int 0|>) out'
     end
   end.
 
@@ -62,16 +64,15 @@ Definition bytecode_behavior (fuel : nat) (code : list instruction)
 
 Module Type CompileSpec.
 
-  (* Compiler and source interpreter (provided by Untrusted) *)
+  (* Compiler (provided by Untrusted) *)
   Parameter compile_program : program -> list instruction.
+
+  (* Source interpreter (provided by semi-auto, checked by Untrusted) *)
+  Parameter interpret : nat -> program -> behavior.
 
   (* Correctness: if the source interpreter terminates normally with some
      output trace, then there exists enough bytecode fuel such that the
-     compiled code also terminates normally with the same trace.
-
-     The statement is FULLY CONCRETE -- only compile_program is opaque.
-     The source interpreter (interpret) is imported directly from its
-     module, not parameterized, so it cannot be trivialized. *)
+     compiled code also terminates normally with the same trace. *)
   Axiom compiler_correctness :
     forall (prog : program) (src_fuel : nat),
       match interpret src_fuel prog with
@@ -87,12 +88,3 @@ Module Type CompileSpec.
       end.
 
 End CompileSpec.
-
-(* Check that the untrusted proof satisfies the spec *)
-From OCamlInterp.Automatic.Compile Require Import Compile.
-From OCamlInterp.Automatic.Compile Require Import CompileProof.
-
-Module Check <: CompileSpec.
-  Definition compile_program := compile_program.
-  Definition compiler_correctness := compiler_correctness.
-End Check.

@@ -1,41 +1,41 @@
 (executable
  (name harness)
- (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common compile_pbt_common)
  (flags (:standard -w -a))
  (modules harness))
 
 (executable
  (name source_interp_test)
- (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common compile_pbt_common)
  (flags (:standard -w -a))
  (modules source_interp_test))
 
 (executable
  (name cross_test)
- (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common compile_pbt_common)
  (flags (:standard -w -a))
  (modules cross_test))
 
 (executable
  (name advanced_test)
- (libraries unix pbt_common)
+ (libraries unix pbt_common compile_pbt_common)
  (flags (:standard -w -a))
  (modules advanced_test))
 
 (executable
  (name rocq_source_test)
- (libraries unix pbt_common)
+ (libraries unix pbt_common compile_pbt_common)
  (flags (:standard -w -a))
  (modules rocq_source_test))
 
 (executable
  (name roundtrip_test)
- (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common compile_pbt_common)
  (flags (:standard -w -a))
  (modules roundtrip_test))
 
 (executable
  (name bytecode_equiv_test)
- (libraries unix qcheck-core qcheck-core.runner pbt_common)
+ (libraries unix qcheck-core qcheck-core.runner pbt_common compile_pbt_common)
  (flags (:standard -w -a))
  (modules bytecode_equiv_test))

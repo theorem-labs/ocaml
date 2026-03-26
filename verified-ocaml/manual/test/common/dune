@@ -3,4 +3,4 @@
  (libraries unix str)
  (flags (:standard -w -a))
  (wrapped false)
- (modules interp_extracted loader lexer parser code_arr uint63 test_common))
+ (modules interp_extracted loader code_arr uint63 test_common))

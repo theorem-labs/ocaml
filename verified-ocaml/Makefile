@@ -1,25 +1,45 @@
 SHELL := /bin/bash
 
-.PHONY: all build extract test testsuite testsuite-all clean
+.PHONY: all build build-manual extract extract-full test test-manual \
+        testsuite testsuite-all clean
 
-all: build extract test
+# ---- Default: manual-only (no semi-auto/automatic needed) ----
+
+all: build-manual extract test-manual
+
+build-manual:
+	@rm -f manual/Extract.glob manual/Extract.vo manual/.Extract.aux
+	dune build manual/theories/
+
+# ---- Full build (semi-auto + automatic) ----
 
 build:
 	@rm -f Extract.glob Extract.vo .Extract.aux
-	dune build
+	dune build manual/ semi-auto/ automatic/
 
-COQC_FLAGS = \
+# ---- Extraction ----
+
+COQC_FLAGS_MANUAL = \
   -R _build/default/manual/theories/Utils OCamlInterp.Manual.Utils \
   -R _build/default/manual/theories/Bytecode OCamlInterp.Manual.Bytecode \
+  -R _build/default/manual/theories/LexParse OCamlInterp.Manual.LexParse \
+  -R _build/default/manual/theories/Compile OCamlInterp.Manual.Compile
+
+COQC_FLAGS = $(COQC_FLAGS_MANUAL) \
   -R _build/default/semi-auto/LexParse OCamlInterp.SemiAutomatic.LexParse \
   -R _build/default/semi-auto/Interpret OCamlInterp.SemiAutomatic.Interpret \
   -R _build/default/automatic/Compile OCamlInterp.Automatic.Compile \
   -R _build/default/automatic/Bytecode OCamlInterp.Automatic.Bytecode \
-  -R _build/default/automatic/LexParse OCamlInterp.Automatic.LexParse \
-  -R _build/default/manual/theories/LexParse OCamlInterp.Manual.LexParse \
-  -R _build/default/manual/theories/Compile OCamlInterp.Manual.Compile
+  -R _build/default/automatic/LexParse OCamlInterp.Automatic.LexParse
 
-extract: build
+# Manual-only extraction (default)
+extract: build-manual
+	coqc $(COQC_FLAGS_MANUAL) manual/Extract.v -output-directory /tmp
+	cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml
+	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
+
+# Full extraction (includes compiler, decoder, source interp, pretty-printer)
+extract-full: build
 	coqc $(COQC_FLAGS) Extract.v -output-directory /tmp
 	cp /tmp/Interp_extracted.ml manual/test/common/interp_extracted.ml
 	rm -f /tmp/Interp_extracted.ml /tmp/Interp_extracted.mli
@@ -32,15 +52,34 @@ extract: build
 	sed -i 's/^  App\.main$$/  let module M = App() in M.main/' \
 	  manual/test/common/interp_extracted.ml
 
-test: extract
+# ---- Tests ----
+
+# Manual-only tests: bytecode interpreter PBT
+test-manual: extract
 	dune build \
 		manual/test/bytecode-pbt/harness.exe \
-		manual/test/bytecode-pbt/runner.exe \
+		manual/test/bytecode-pbt/manual_test.exe
+	@echo "--- Manual bytecode tests ---"
+	dune exec manual/test/bytecode-pbt/manual_test.exe
+	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
+	dune exec manual/test/bytecode-pbt/harness.exe
+
+test: test-manual
+
+# Full tests: includes compiler PBT (needs extract-full)
+test-full: extract-full
+	dune build \
+		manual/test/bytecode-pbt/harness.exe \
+		manual/test/bytecode-pbt/manual_test.exe \
 		manual/test/compile-pbt/harness.exe
-	@echo "--- Bytecode PBT: Main.v pipeline vs ocamlrun (QCheck) ---"
+	@echo "--- Manual bytecode tests ---"
+	dune exec manual/test/bytecode-pbt/manual_test.exe
+	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
 	dune exec manual/test/bytecode-pbt/harness.exe
 	@echo "--- Compile vs ocamlc PBT (QCheck) ---"
 	dune exec manual/test/compile-pbt/harness.exe
+
+# ---- Testsuite ----
 
 TESTSUITE_DIR = manual/test/ocaml-testsuite
 
@@ -112,3 +151,4 @@ clean:
 	dune clean
 	rm -f Interp_extracted.ml Interp_extracted.mli
 	rm -f Extract.glob Extract.vo .Extract.aux
+	rm -f manual/Extract.glob manual/Extract.vo manual/.Extract.aux

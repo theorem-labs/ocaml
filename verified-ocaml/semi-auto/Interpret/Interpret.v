@@ -173,24 +173,7 @@ Definition eval_unop (op : unop) (v : svalue) : option svalue :=
   | _, _ => None
   end.
 
-(* === Integer to character events (for print_int) === *)
-
-Fixpoint nat_to_events_aux (fuel n : nat) (acc : list event) : list event :=
-  match fuel with
-  | O => acc
-  | S fuel' =>
-    let digit := Out_char (Z.of_nat (48 + Nat.modulo n 10)) in
-    let rest := Nat.div n 10 in
-    if Nat.eqb rest 0 then digit :: acc
-    else nat_to_events_aux fuel' rest (digit :: acc)
-  end.
-
-Definition z_to_events (z : Z) : list event :=
-  match z with
-  | Z0 => [Out_char 48]  (* "0" *)
-  | Zpos p => nat_to_events_aux 20 (Pos.to_nat p) []
-  | Zneg p => Out_char 45 :: nat_to_events_aux 20 (Pos.to_nat p) []  (* "-" prefix *)
-  end.
+(* z_to_events and nat_to_events_aux are now defined in Observable.v *)
 
 (* Apply a builtin function, returning result value and new output *)
 Definition apply_builtin (b : builtin) (arg : svalue) (out : list event) :

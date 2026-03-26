@@ -268,14 +268,14 @@ Definition env_invariant (ce : comp_env) (senv : Interpret.env)
    The code array is prefix ++ compiled_code ++ [STOP], where prefix
    has length base so that compiled instructions start at pc = base. *)
 Definition expr_correct (e : expr) : Prop :=
-  forall fuel ce base s sv out out' prefix,
+  forall fuel ce fe base s sv out out' prefix,
     eval fuel e (Env_nil) out = Eval_ok sv out' ->
     pc s = Z.of_nat base ->
     out = out' ->
     length prefix = base ->
     exists n v,
-      nsteps n (prefix ++ compile_expr fuel e ce base ++ [STOP]) s =
-        Step (s <|pc := Z.of_nat (base + length (compile_expr fuel e ce base))|>
+      nsteps n (prefix ++ compile_expr fuel e ce fe base ++ [STOP]) s =
+        Step (s <|pc := Z.of_nat (base + length (compile_expr fuel e ce fe base))|>
                 <|accu := v|>) /\
       val_corresponds sv v.
 

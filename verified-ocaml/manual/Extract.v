@@ -1,6 +1,8 @@
-(* Extract.v - Extraction directives.
-   Run with: make extract
-   Output goes to manual/test/common/interp_extracted.ml. *)
+(* Extract.v - Manual-only extraction directives.
+   Run with: make extract   (default)
+   Output goes to manual/test/common/interp_extracted.ml.
+
+   ONLY depends on manual/ theories — no semi-auto/ or automatic/ needed. *)
 
 From Stdlib Require Import ZArith Strings.String List.
 From Stdlib Require Extraction.
@@ -8,8 +10,7 @@ From Stdlib Require Import ExtrOcamlBasic.
 From Stdlib Require Import ExtrOcamlNatInt.
 From Stdlib Require Import ExtrOcamlZInt.
 From Stdlib Require Import ExtrOcamlString.
-(* Uint63: extract to native OCaml int. We inline the extraction rather than
-   using ExtrOCamlInt63 which references the Uint63 OCaml library (not installed). *)
+(* Uint63: extract to native OCaml int. *)
 From Stdlib Require Import Uint63.
 Extract Constant Uint63.int => "int".
 Extraction Inline Uint63.int.
@@ -25,13 +26,9 @@ Extract Constant Uint63.eqb => "(=)".
 
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret Encode.
-From OCamlInterp.Manual.Bytecode Require Import IO Main.
+From OCamlInterp.Manual.Bytecode Require Import IO.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
-From OCamlInterp.SemiAutomatic.LexParse Require Import PrettyPrint.
-From OCamlInterp.SemiAutomatic.Interpret Require Import Interpret.
-From OCamlInterp.Automatic.Compile Require Import Compile.
-From OCamlInterp.Automatic.Bytecode Require Import Decode.
 
 (* ------------------------------------------------------------------ *)
 (* IO extraction directives (must be here, not in IO.v)                *)
@@ -135,41 +132,18 @@ Extract Constant load_primitives => "
     ) prims
 ".
 
-(* PrimArray: extract to native OCaml arrays.
-   PrimArray.get/set/make/length are realized by Array.get/set/make/length.
-   PrimArray.get returns the default on out-of-bounds in Coq, but Array.get raises
-   in OCaml -- we guard with bounds checks in fetch_instr, so this is safe.
-   The type extracts as a no-op wrapper (code_arr) to avoid cyclic type alias. *)
+(* PrimArray: extract to native OCaml arrays. *)
 Extract Constant PrimArray.array "'a" => "'a Code_arr.t".
 Extract Constant PrimArray.make => "Code_arr.make".
 Extract Constant PrimArray.get => "Code_arr.get".
 Extract Constant PrimArray.set => "Code_arr.set".
 Extract Constant PrimArray.length => "Code_arr.length".
 
-(* z_flip_sign must use native OCaml lxor with min_int for correct unsigned comparison.
-   Z.lxor is not extracted natively by ExtrOcamlZInt (it uses big-integer algorithms),
-   so we override it directly. *)
+(* z_flip_sign must use native OCaml lxor with min_int for correct unsigned comparison. *)
 Extract Constant z_flip_sign => "fun a -> a lxor min_int".
 
-(* z_lsr must use native OCaml lsr for correct unsigned (logical) right shift.
-   The Rocq definition uses Z.ones 63 as a mask, but Z.ones 63 = pred(2^63) overflows
-   in 63-bit OCaml int arithmetic, making z_unsigned and z_lsr incorrect.
-   Native `lsr` correctly handles the 63-bit unsigned shift. *)
+(* z_lsr must use native OCaml lsr for correct unsigned (logical) right shift. *)
 Extract Constant z_lsr => "fun a b -> a lsr b".
-
-(* ------------------------------------------------------------------ *)
-(* Instantiate the trusted pipeline with the untrusted decoder         *)
-(* ------------------------------------------------------------------ *)
-
-Module ConcreteDecoder <: DecoderSpec.
-  Definition load_code_section := load_code_section.
-  Definition parse_sections := parse_sections.
-  Definition find_section := find_section.
-End ConcreteDecoder.
-
-Module App := Pipeline ConcreteDecoder.
-
-Definition main := App.main.
 
 (* ------------------------------------------------------------------ *)
 (* Extraction                                                          *)
@@ -189,19 +163,10 @@ Extraction "Interp_extracted.ml"
   heap_alloc heap_lookup heap_update
   list_to_code_array fetch_instr
   z_flip_sign z_lsr
-  (* Pretty-printer *)
-  pp_expr pp_pattern pp_decl pp_program
   (* Observable behavior *)
   event behavior termination mk_behavior
-  (* Source interpreter *)
-  svalue env eval eval_program interpret
-  (* Compiler *)
-  compile_program
+  z_to_events nat_to_events_aux
+  (* Syntax / AST *)
+  ident binop unop pattern type_expr expr decl type_def program
   (* Encoder *)
-  encode_bytecode
-  (* Decoder *)
-  decode_bytecode load_code_section
-  parse_sections find_section section
-  read_u32_le read_i32_le read_u32_be
-  (* Standalone entry point *)
-  main.
+  encode_bytecode.

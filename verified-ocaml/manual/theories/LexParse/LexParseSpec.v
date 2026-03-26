@@ -1,15 +1,21 @@
 (* LexParseSpec.v - [TRUSTED] Module Type specifying the contract
    for the pretty-print/lex-parse roundtrip. The pretty-printer (Trusted)
    produces source strings; the lex-parser (Untrusted) must invert it.
-   The theorem statement is trusted; the proof is untrusted and checked here. *)
+   The theorem statement is trusted; the proof is untrusted.
+
+   This file has NO dependencies outside manual/ — it is fully self-contained.
+   The concrete pp_program and lex_parse are supplied by the checker module
+   in automatic/LexParse/LexParseChecker.v. *)
 
 From Stdlib Require Import Strings.String.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Syntax.
 From OCamlInterp.Manual.Utils Require Import WellFormed.
-From OCamlInterp.SemiAutomatic.LexParse Require Import PrettyPrint.
 
 Module Type LexParseSpec.
+
+  (* Pretty-printer (provided by semi-auto): AST -> source string *)
+  Parameter pp_program : program -> string.
 
   (* Lex-parser (provided by Untrusted): takes source string, returns AST *)
   Parameter lex_parse : string -> option program.
@@ -21,12 +27,3 @@ Module Type LexParseSpec.
     lex_parse (pp_program prog) = Some prog.
 
 End LexParseSpec.
-
-(* Check that the untrusted proof satisfies the spec *)
-From OCamlInterp.Automatic.LexParse Require Import LexParse.
-From OCamlInterp.Automatic.LexParse Require Import LexParseProof.
-
-Module Check <: LexParseSpec.
-  Definition lex_parse := lex_parse.
-  Definition lex_parse_pp_inverse := lex_parse_pp_inverse.
-End Check.

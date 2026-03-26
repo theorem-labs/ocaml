@@ -90,10 +90,7 @@ Module Type DecodeSpec.
 
 End DecodeSpec.
 
-(* Check that the untrusted proof satisfies the spec *)
-From OCamlInterp.Automatic.Bytecode Require Import DecodeProof.
-
-Module Check <: DecodeSpec.
-  Definition decode := decode.
-  Definition decode_encode_inverse := decode_encode_inverse.
-End Check.
+(* The checker that the untrusted proof satisfies this spec lives in
+   manual/theories/Checker/DecodeCorrectnessChecker.v, which imports
+   from automatic/.  Keep DecodeSpec.v free of automatic/ dependencies
+   so the trusted core builds independently. *)
