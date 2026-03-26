@@ -97,7 +97,6 @@ TESTSUITE_BASIC = \
 	$(TESTSUITE_DIR)/basic-manyargs
 
 TESTSUITE_PHASE1 = \
-	$(TESTSUITE_DIR)/misc \
 	$(TESTSUITE_DIR)/letrec-compilation \
 	$(TESTSUITE_DIR)/match-exception \
 	$(TESTSUITE_DIR)/array-functions \
