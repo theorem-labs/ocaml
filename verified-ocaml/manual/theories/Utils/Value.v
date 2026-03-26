@@ -49,3 +49,19 @@ Fixpoint value_eqb (v1 v2 : value) : bool :=
   | Val_closure a1 o1, Val_closure a2 o2 => Nat.eqb a1 a2 && Nat.eqb o1 o2
   | _, _ => false
   end.
+
+(* Physical equality comparison for EQ/NEQ bytecodes (OCaml's == / !=).
+   Val_int: unboxed, so physical equality is integer equality.
+   Val_ptr: heap-allocated, physical equality is pointer (address) equality.
+   Val_closure: physical equality is address + offset equality.
+   Val_block: conservative false — two Val_block values represent distinct
+   allocations (e.g. from the DATA section or C-calls). If they were the same
+   heap object, they would share a Val_ptr instead. *)
+Definition value_phys_eqb (v1 v2 : value) : bool :=
+  match v1, v2 with
+  | Val_int n1, Val_int n2 => Z.eqb n1 n2
+  | Val_ptr a1, Val_ptr a2 => Nat.eqb a1 a2
+  | Val_closure a1 o1, Val_closure a2 o2 => Nat.eqb a1 a2 && Nat.eqb o1 o2
+  | Val_block _ _, Val_block _ _ => false
+  | _, _ => false
+  end.

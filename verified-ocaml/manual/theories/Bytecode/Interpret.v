@@ -751,13 +751,13 @@ Definition step (code : array instruction) (s : state) : step_result :=
 
   | EQ =>
     match s.(stack) with
-    | b :: rest => Step (st s pc' (if value_eqb s.(accu) b then val_true else val_false) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | b :: rest => Step (st s pc' (if value_phys_eqb s.(accu) b then val_true else val_false) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _ => Error "EQ: stack underflow"
     end
 
   | NEQ =>
     match s.(stack) with
-    | b :: rest => Step (st s pc' (if value_eqb s.(accu) b then val_false else val_true) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | b :: rest => Step (st s pc' (if value_phys_eqb s.(accu) b then val_false else val_true) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
     | _ => Error "NEQ: stack underflow"
     end
 

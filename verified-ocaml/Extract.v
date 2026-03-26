@@ -178,7 +178,7 @@ Definition main := App.main.
 
 Extraction "Interp_extracted.ml"
   (* Value *)
-  value Val_int Val_block Val_ptr Val_closure
+  value Val_int Val_block Val_ptr Val_closure value_phys_eqb
   (* Bytecode *)
   instruction
   (* Machine / bytecode interpreter *)
