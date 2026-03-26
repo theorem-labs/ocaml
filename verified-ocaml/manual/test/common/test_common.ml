@@ -109,11 +109,13 @@ let heap_allocate_globals globals =
   let rec go v =
     match v with
     | Val_block (tag, fields)
-      when tag < 247 || tag = 248 || tag = 250 || tag = 254 ->
+      when tag < 247 || tag = 248 || tag = 250 || tag = 252 || tag = 254 ->
       (* Mutable or identity-sensitive: allocate on heap.
          Tag 248 = exception descriptor: must be heap-allocated so that
          value_phys_eqb (which returns false for all Val_block pairs)
-         can use Val_ptr identity for exception pattern matching. *)
+         can use Val_ptr identity for exception pattern matching.
+         Tag 252 = string: must be heap-allocated so that physical equality
+         (==) works for string constants shared across data structures. *)
       let fields' = List.map go fields in
       let addr = !next_addr in
       incr next_addr;
@@ -685,20 +687,44 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
       Some (heap_alloc_local 0 (List.init n (fun _ -> Val_int 0)))
     | "caml_alloc_dummy_function", [Val_int n; _] ->
       Some (heap_alloc_local 0 (List.init n (fun _ -> Val_int 0)))
+    | "caml_alloc_dummy_float", [Val_int n] ->
+      (* Allocate a float array dummy (tag 254) with n fields initialized to 0.0.
+         Used by letrec compilation for float array bindings. *)
+      Some (heap_alloc_local 254 (List.init n (fun _ -> float_to_val 0.0)))
+    | "caml_alloc_dummy_infix", [Val_int size; Val_int _offset] ->
+      (* Allocate a closure dummy block (tag 247) with size fields initialized to 0.
+         Used by letrec compilation for mutually recursive closures with infix pointers.
+         Returns Val_closure so that OFFSETCLOSURE can navigate the block after
+         caml_update_dummy fills it with the real closure data. *)
+      let addr = !next_addr_ref in
+      next_addr_ref := addr + 1;
+      heap_ref := PositiveMap.add (Coq_Pos.of_succ_nat addr) (247, List.init size (fun _ -> Val_int 0)) !heap_ref;
+      minor_words_ref := !minor_words_ref +. float_of_int (1 + size);
+      Some (Val_closure (addr, 0))
     | "caml_update_dummy", [dst; src] ->
-      (* Copy fields from src into dst block in place *)
+      (* Copy fields from src into dst block in place.
+         src can be Val_block, Val_ptr, or Val_closure (for mutually recursive closures). *)
       let src_fields = match src with
         | Val_block (_, fs) -> Some fs
         | Val_ptr addr -> (match heap_lookup heap addr with Some (_, fs) -> Some fs | None -> None)
+        | Val_closure (addr, _) ->
+          (match heap_lookup heap addr with Some (_, fs) -> Some fs | None -> None)
         | _ -> None
       in
       let src_tag = match src with
         | Val_block (t, _) -> t
         | Val_ptr a -> (match heap_lookup heap a with Some (t, _) -> t | None -> 0)
+        | Val_closure (a, _) ->
+          (match heap_lookup heap a with Some (t, _) -> t | None -> 247)
         | _ -> 0
       in
-      (match dst with
-       | Val_ptr addr ->
+      (let dst_addr = match dst with
+        | Val_ptr addr -> Some addr
+        | Val_closure (addr, _) -> Some addr
+        | _ -> None
+      in
+      match dst_addr with
+       | Some addr ->
          (match src_fields with
           | Some new_fs ->
             (match heap_lookup !heap_ref addr with
@@ -708,7 +734,7 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
                  !heap_ref
              | None -> ())
           | None -> ())
-       | _ -> ());
+       | None -> ());
       Some (Val_int 0)
     | "caml_obj_make_forward", [blk; v] ->
       (* Forward pointer: update block to become a forward (tag 250) pointing to v *)
