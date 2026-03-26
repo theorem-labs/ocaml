@@ -109,15 +109,18 @@ let heap_allocate_globals globals =
   let rec go v =
     match v with
     | Val_block (tag, fields)
-      when tag < 247 || tag = 250 || tag = 254 ->
-      (* Potentially mutable: allocate on heap so writes work *)
+      when tag < 247 || tag = 248 || tag = 250 || tag = 254 ->
+      (* Mutable or identity-sensitive: allocate on heap.
+         Tag 248 = exception descriptor: must be heap-allocated so that
+         value_phys_eqb (which returns false for all Val_block pairs)
+         can use Val_ptr identity for exception pattern matching. *)
       let fields' = List.map go fields in
       let addr = !next_addr in
       incr next_addr;
       heap := PositiveMap.add (Coq_Pos.of_succ_nat addr) (tag, fields') !heap;
       Val_ptr addr
     | Val_block (tag, fields) ->
-      (* Immutable: 248=exn desc, 252=string, 253=float, 1001/1002/1003=boxed int *)
+      (* Immutable: 252=string, 253=float, 1001/1002/1003=boxed int *)
       Val_block (tag, List.map go fields)
     | other -> other
   in
@@ -301,21 +304,26 @@ let resolve_string heap v =
 (* C-call handler for ocamlc-produced bytecode.
    heap_ref and next_addr_ref are updated before each call;
    handlers may also write new allocations back to heap_ref/next_addr_ref. *)
-let make_handler ?(raw_globals=[||]) prims buf =
+let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
   let heap_ref : heap ref = ref PositiveMap.empty in
   let next_addr_ref = ref 0 in
-  (* Build a lookup table from exception name -> descriptor Val_block(248,...).
-     Searches raw_globals for Val_block(248, [Val_block(252, chars); slot]) entries. *)
+  (* Build a lookup table from exception name -> descriptor.
+     After heap_allocate_globals, tag-248 blocks become Val_ptr (heap-allocated),
+     so we need to use the processed globals_list for identity-correct descriptors.
+     We match by index: find the name in raw_globals, return the same index from globals_list. *)
   let find_exn_desc name =
     let found = ref None in
-    Array.iter (fun v ->
+    Array.iteri (fun i v ->
       match v with
       | Val_block (248, ((Val_block (252, chars)) :: _)) ->
         let n = String.init (List.length chars) (fun i ->
           match List.nth_opt chars i with
           | Some (Val_int c) -> Char.chr (c land 0xFF)
           | _ -> '\000') in
-        if n = name then found := Some v
+        if n = name then
+          (* Return the corresponding value from the processed globals_list,
+             which is a Val_ptr after heap_allocate_globals *)
+          found := List.nth_opt globals_list i
       | _ -> ()
     ) raw_globals;
     !found
@@ -375,30 +383,83 @@ let make_handler ?(raw_globals=[||]) prims buf =
     let heap = !heap_ref in
     match name, args with
     (* --- Output --- *)
-    | "caml_ml_output_char", [_; Val_int c] ->
-      Buffer.add_char buf (Char.chr (c land 0xFF)); Some (Val_int 0)
+    | "caml_ml_output_char", [ch; Val_int c] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd | Some (_, Val_int fd :: _) -> fd | _ -> 1)
+        | _ -> 1
+      in
+      if fd <= 2 then
+        (Buffer.add_char buf (Char.chr (c land 0xFF)); Some (Val_int 0))
+      else begin
+        let tmp = Bytes.create 1 in
+        Bytes.set tmp 0 (Char.chr (c land 0xFF));
+        (try ignore (Unix.write (Obj.magic fd : Unix.file_descr) tmp 0 1) with _ -> ());
+        Some (Val_int 0)
+      end
     | ("caml_ml_output_bytes" | "caml_ml_output"), _ ->
       (match args with
-       | [_; sv; Val_int off; Val_int len] ->
+       | [ch; sv; Val_int off; Val_int len] ->
+         let fd = match ch with
+           | Val_block (255, [Val_int fd]) -> fd
+           | Val_ptr addr -> (match heap_lookup heap addr with
+             | Some (255, [Val_int fd]) -> fd | Some (_, Val_int fd :: _) -> fd | _ -> 1)
+           | _ -> 1
+         in
          (match resolve_string_or_bytes heap sv with
           | Some chars ->
-            for i = off to off + len - 1 do
-              match List.nth_opt chars i with
-              | Some (Val_int c) -> Buffer.add_char buf (Char.chr (c land 0xFF))
-              | _ -> ()
-            done
+            if fd <= 2 then
+              for i = off to off + len - 1 do
+                match List.nth_opt chars i with
+                | Some (Val_int c) -> Buffer.add_char buf (Char.chr (c land 0xFF))
+                | _ -> ()
+              done
+            else begin
+              let s = Bytes.create len in
+              for i = 0 to len - 1 do
+                match List.nth_opt chars (off + i) with
+                | Some (Val_int c) -> Bytes.set s i (Char.chr (c land 0xFF))
+                | _ -> Bytes.set s i '\000'
+              done;
+              (try ignore (Unix.write (Obj.magic fd : Unix.file_descr) s 0 len) with _ -> ())
+            end
           | None -> ());
          Some (Val_int 0)
        | _ -> Some (Val_int 0))
+    | "caml_ml_flush", [ch] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd | Some (_, Val_int fd :: _) -> fd | _ -> 1)
+        | _ -> 1
+      in
+      (* fsync for real file descriptors *)
+      if fd > 2 then
+        (try Unix.fsync (Obj.magic fd : Unix.file_descr) with _ -> ());
+      Some (Val_int 0)
     | "caml_ml_flush", _ -> Some (Val_int 0)
     (* --- Channel management --- *)
     | "caml_ml_open_descriptor_in", [Val_int fd] -> Some (Val_block (255, [Val_int fd]))
     | "caml_ml_open_descriptor_out", [Val_int fd] -> Some (Val_block (255, [Val_int fd]))
     | "caml_ml_set_channel_name", _ -> Some (Val_int 0)
     | "caml_ml_out_channels_list", _ -> Some (Val_int 0)
-    | "caml_ml_channel_size", _ -> Some (Val_int 0)
-    | "caml_ml_channel_size_64", _ -> Some (Val_int 0)
-    | ("caml_ml_input" | "caml_ml_input_char" | "caml_ml_input_int"), _ -> Some (Val_int 0)
+    | ("caml_ml_channel_size" | "caml_ml_channel_size_64"), [ch] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 0)
+        | _ -> 0
+      in
+      if fd <= 2 then Some (Val_int 0)
+      else
+        (try
+          let stats = Unix.fstat (Obj.magic fd : Unix.file_descr) in
+          Some (Val_int stats.Unix.st_size)
+        with _ -> Some (Val_int 0))
+    | ("caml_ml_channel_size" | "caml_ml_channel_size_64"), _ -> Some (Val_int 0)
     (* --- System info --- *)
     | "caml_sys_get_config", _ ->
       (* Returns (os_type: string, word_size: int, big_endian: bool) *)
@@ -554,6 +615,9 @@ let make_handler ?(raw_globals=[||]) prims buf =
       Some (Val_int 0)
     | "caml_array_blit", _ -> Some (Val_int 0)
     (* --- Float array primitives --- *)
+    | "caml_floatarray_create", [Val_int n] ->
+      (* Create a float array of size n, initialized to 0.0 *)
+      Some (heap_alloc_local 254 (List.init n (fun _ -> float_to_val 0.0)))
     | ("caml_floatarray_unsafe_get" | "caml_floatarray_get"), [av; Val_int idx] ->
       let fields = match av with
         | Val_block (_, fs) -> Some fs
@@ -576,6 +640,43 @@ let make_handler ?(raw_globals=[||]) prims buf =
        | _ -> ());
       Some (Val_int 0)
     | ("caml_floatarray_unsafe_set" | "caml_floatarray_set"), _ -> Some (Val_int 0)
+    | ("caml_array_unsafe_get_float" | "caml_array_get_float"), [av; Val_int idx] ->
+      let fields = match av with
+        | Val_block (_, fs) -> Some fs
+        | Val_ptr addr -> (match heap_lookup heap addr with Some (_, fs) -> Some fs | None -> None)
+        | _ -> None
+      in
+      (match fields with
+       | Some fs -> Some (match List.nth_opt fs idx with Some v -> v | None -> float_to_val 0.0)
+       | None -> Some (float_to_val 0.0))
+    | ("caml_array_unsafe_set_float" | "caml_array_set_float"), [av; Val_int idx; v] ->
+      (match av with
+       | Val_ptr addr ->
+         (match heap_lookup !heap_ref addr with
+          | Some (tag, fields) ->
+            let arr = Array.of_list fields in
+            if idx >= 0 && idx < Array.length arr then arr.(idx) <- v;
+            heap_update_local addr (Array.to_list arr);
+            ignore tag
+          | None -> ())
+       | _ -> ());
+      Some (Val_int 0)
+    | ("caml_array_unsafe_set_float" | "caml_array_set_float"), _ -> Some (Val_int 0)
+    | "caml_array_fill", [av; Val_int ofs; Val_int len; v] ->
+      (match av with
+       | Val_ptr addr ->
+         (match heap_lookup !heap_ref addr with
+          | Some (tag, fields) ->
+            let arr = Array.of_list fields in
+            for k = ofs to ofs + len - 1 do
+              if k >= 0 && k < Array.length arr then arr.(k) <- v
+            done;
+            heap_update_local addr (Array.to_list arr);
+            ignore tag
+          | None -> ())
+       | _ -> ());
+      Some (Val_int 0)
+    | "caml_array_fill", _ -> Some (Val_int 0)
     (* --- Obj module extras --- *)
     | "caml_alloc_dummy", [Val_int n] ->
       Some (heap_alloc_local 0 (List.init n (fun _ -> Val_int 0)))
@@ -974,12 +1075,23 @@ let make_handler ?(raw_globals=[||]) prims buf =
       Some (string_val (Int64.to_string v))
     | ("caml_nativeint_format"), [fmt_v; Val_block (1003, [Val_int lo; Val_int hi])] ->
       let v = Int64.(logor (logand (of_int lo) 0xFFFFFFFFL) (shift_left (of_int hi) 32)) in
-      let fmt = match resolve_string heap fmt_v with
+      let fmt = match resolve_string_or_bytes heap fmt_v with
         | Some cs -> String.init (List.length cs) (fun i -> match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000')
         | None -> "%Ld"
       in
-      (try Some (string_val (Printf.sprintf (Scanf.format_from_string fmt "%Ld") v))
-       with _ -> Some (string_val (Int64.to_string v)))
+      (* Detect format specifier to choose the right Printf conversion *)
+      let last_char = if String.length fmt > 0 then fmt.[String.length fmt - 1] else 'd' in
+      let s = match last_char with
+        | 'x' | 'X' | 'o' | 'u' ->
+          (* Use nativeint for correct formatting of platform-width values *)
+          let nv = Int64.to_nativeint v in
+          (try Printf.sprintf (Scanf.format_from_string fmt "%nd") nv
+           with _ -> Int64.to_string v)
+        | _ ->
+          (try Printf.sprintf (Scanf.format_from_string fmt "%Ld") v
+           with _ -> Int64.to_string v)
+      in
+      Some (string_val s)
     (* Int32 *)
     | "caml_int32_of_int", [Val_int n] -> Some (Val_block (1001, [Val_int (n land 0xFFFFFFFF - (if n land 0x80000000 <> 0 then 0x100000000 else 0))]))
     | "caml_int32_to_int", [Val_block (1001, [Val_int n])] -> Some (Val_int n)
@@ -1143,7 +1255,11 @@ let make_handler ?(raw_globals=[||]) prims buf =
        | None -> Some (Val_int 0))
     | "caml_create_bytes", [Val_int n] ->
       (* Allocate mutable bytes on interpreter heap as tag-252 block *)
-      Some (heap_alloc_local 252 (List.init n (fun _ -> Val_int 0)))
+      if n < 0 then
+        ccall_raise (Val_block (0, [exn_desc "Invalid_argument" (-4);
+                                    string_val "Bytes.create"]))
+      else
+        Some (heap_alloc_local 252 (List.init n (fun _ -> Val_int 0)))
     | ("caml_blit_string" | "caml_blit_bytes"), [src_v; Val_int src_off; dst_v; Val_int dst_off; Val_int len] ->
       (* Write src chars into dest bytes heap block *)
       (match dst_v with
@@ -1327,16 +1443,16 @@ let make_handler ?(raw_globals=[||]) prims buf =
       Some (string_val s)
     | ("caml_format_float" | "caml_float_to_string"), [fv] ->
       Some (string_val (string_of_float (val_to_float fv)))
-    | "caml_sqrt", [a] -> float_unop sqrt a
-    | "caml_exp",  [a] -> float_unop exp  a
-    | "caml_log",  [a] -> float_unop log  a
-    | "caml_sin",  [a] -> float_unop sin  a
-    | "caml_cos",  [a] -> float_unop cos  a
-    | "caml_tan",  [a] -> float_unop tan  a
-    | "caml_atan", [a] -> float_unop atan a
-    | "caml_atan2",[a;b] -> float_binop atan2 a b
-    | "caml_asin", [a] -> float_unop asin a
-    | "caml_acos", [a] -> float_unop acos a
+    | ("caml_sqrt" | "caml_sqrt_float"), [a] -> float_unop sqrt a
+    | ("caml_exp" | "caml_exp_float"),  [a] -> float_unop exp  a
+    | ("caml_log" | "caml_log_float"),  [a] -> float_unop log  a
+    | ("caml_sin" | "caml_sin_float"),  [a] -> float_unop sin  a
+    | ("caml_cos" | "caml_cos_float"),  [a] -> float_unop cos  a
+    | ("caml_tan" | "caml_tan_float"),  [a] -> float_unop tan  a
+    | ("caml_atan" | "caml_atan_float"), [a] -> float_unop atan a
+    | ("caml_atan2" | "caml_atan2_float"),[a;b] -> float_binop atan2 a b
+    | ("caml_asin" | "caml_asin_float"), [a] -> float_unop asin a
+    | ("caml_acos" | "caml_acos_float"), [a] -> float_unop acos a
     | "caml_trunc_float", [a] ->
       let f = val_to_float a in
       let r = if f >= 0.0 then floor f else ceil f in
@@ -1367,11 +1483,11 @@ let make_handler ?(raw_globals=[||]) prims buf =
     | ("caml_power_float" | "caml_float_pow"), [a; b] -> float_binop ( ** ) a b
     | "caml_log10", [a] -> float_unop log10 a
     | "caml_log2_float", [a] -> float_unop (fun x -> log x /. log 2.0) a
-    | "caml_cosh", [a] -> float_unop cosh a
-    | "caml_sinh", [a] -> float_unop sinh a
-    | "caml_tanh", [a] -> float_unop tanh a
-    | "caml_ceil", [a] -> float_unop ceil a
-    | "caml_floor", [a] -> float_unop floor a
+    | ("caml_cosh" | "caml_cosh_float"), [a] -> float_unop cosh a
+    | ("caml_sinh" | "caml_sinh_float"), [a] -> float_unop sinh a
+    | ("caml_tanh" | "caml_tanh_float"), [a] -> float_unop tanh a
+    | ("caml_ceil" | "caml_ceil_float"), [a] -> float_unop ceil a
+    | ("caml_floor" | "caml_floor_float"), [a] -> float_unop floor a
     | "caml_hypot_float", [a; b] -> float_binop hypot a b
     | "caml_fmod_float", [a; b] -> float_binop mod_float a b
     | "caml_classify_float", [a] ->
@@ -1490,6 +1606,54 @@ let make_handler ?(raw_globals=[||]) prims buf =
       let av = Int64.(logor (logand (of_int alo) 0xFFFFFFFFL) (shift_left (of_int ahi) 32)) in
       let bv = Int64.(logor (logand (of_int blo) 0xFFFFFFFFL) (shift_left (of_int bhi) 32)) in
       Some (Val_int (Int64.unsigned_compare av bv))
+    (* --- Byte-swap primitives --- *)
+    | "caml_bswap16", [Val_int n] ->
+      (* Swap bytes of a 16-bit integer: (n land 0xFF) lsl 8 lor (n lsr 8) land 0xFF *)
+      let lo = n land 0xFF in
+      let hi = (n lsr 8) land 0xFF in
+      Some (Val_int (lo lsl 8 lor hi))
+    | "caml_int32_bswap", [Val_block (1001, [Val_int n])] ->
+      let n32 = Int32.of_int n in
+      let b0 = Int32.logand n32 0xFFl in
+      let b1 = Int32.logand (Int32.shift_right_logical n32 8) 0xFFl in
+      let b2 = Int32.logand (Int32.shift_right_logical n32 16) 0xFFl in
+      let b3 = Int32.logand (Int32.shift_right_logical n32 24) 0xFFl in
+      let r = Int32.(logor (logor (shift_left b0 24) (shift_left b1 16))
+                           (logor (shift_left b2 8) b3)) in
+      Some (Val_block (1001, [Val_int (Int32.to_int r)]))
+    | "caml_int64_bswap", [Val_block (1002, [Val_int lo; Val_int hi])] ->
+      let v = Int64.(logor (logand (of_int lo) 0xFFFFFFFFL) (shift_left (of_int hi) 32)) in
+      let b0 = Int64.logand v 0xFFL in
+      let b1 = Int64.logand (Int64.shift_right_logical v 8) 0xFFL in
+      let b2 = Int64.logand (Int64.shift_right_logical v 16) 0xFFL in
+      let b3 = Int64.logand (Int64.shift_right_logical v 24) 0xFFL in
+      let b4 = Int64.logand (Int64.shift_right_logical v 32) 0xFFL in
+      let b5 = Int64.logand (Int64.shift_right_logical v 40) 0xFFL in
+      let b6 = Int64.logand (Int64.shift_right_logical v 48) 0xFFL in
+      let b7 = Int64.logand (Int64.shift_right_logical v 56) 0xFFL in
+      let r = Int64.(logor (logor (logor (shift_left b0 56) (shift_left b1 48))
+                                  (logor (shift_left b2 40) (shift_left b3 32)))
+                           (logor (logor (shift_left b4 24) (shift_left b5 16))
+                                  (logor (shift_left b6 8) b7))) in
+      Some (Val_block (1002, [Val_int Int64.(to_int (logand r 0xFFFFFFFFL));
+                               Val_int Int64.(to_int (shift_right_logical r 32))]))
+    | "caml_nativeint_bswap", [Val_block (1003, [Val_int lo; Val_int hi])] ->
+      (* Same as int64_bswap but with nativeint tag *)
+      let v = Int64.(logor (logand (of_int lo) 0xFFFFFFFFL) (shift_left (of_int hi) 32)) in
+      let b0 = Int64.logand v 0xFFL in
+      let b1 = Int64.logand (Int64.shift_right_logical v 8) 0xFFL in
+      let b2 = Int64.logand (Int64.shift_right_logical v 16) 0xFFL in
+      let b3 = Int64.logand (Int64.shift_right_logical v 24) 0xFFL in
+      let b4 = Int64.logand (Int64.shift_right_logical v 32) 0xFFL in
+      let b5 = Int64.logand (Int64.shift_right_logical v 40) 0xFFL in
+      let b6 = Int64.logand (Int64.shift_right_logical v 48) 0xFFL in
+      let b7 = Int64.logand (Int64.shift_right_logical v 56) 0xFFL in
+      let r = Int64.(logor (logor (logor (shift_left b0 56) (shift_left b1 48))
+                                  (logor (shift_left b2 40) (shift_left b3 32)))
+                           (logor (logor (shift_left b4 24) (shift_left b5 16))
+                                  (logor (shift_left b6 8) b7))) in
+      Some (Val_block (1003, [Val_int Int64.(to_int (logand r 0xFFFFFFFFL));
+                               Val_int Int64.(to_int (shift_right_logical r 32))]))
     (* --- System --- *)
     | "caml_ensure_stack_capacity", _ -> Some (Val_int 0)
     | "caml_sys_exit", [Val_int _code] ->
@@ -1623,10 +1787,487 @@ let make_handler ?(raw_globals=[||]) prims buf =
         Val_int 4096; zero_float; Val_int 0; Val_int 0; Val_int 0; Val_int 0;
       ]))
     | "caml_gc_set", _ -> Some (Val_int 0)
+    | "caml_gc_compaction", _ -> Some (Val_int 0)
+    | "caml_gc_major_slice", _ -> Some (Val_int 0)
     | "caml_gc_minor_words", _ -> Some (float_to_val 0.0)
     (* --- Sys stubs --- *)
     | "caml_sys_system_command", _ -> Some (Val_int (-1))
     | "caml_sys_isatty", _ -> Some (Val_int 0)
+    | "caml_sys_time_include_children", _ -> Some (float_to_val 0.0)
+    | "caml_sys_unsafe_getenv", [sv] ->
+      (* Same as caml_sys_getenv but bypasses secure mode *)
+      let varname = match resolve_string_or_bytes heap sv with
+        | Some cs -> Some (String.init (List.length cs) (fun i ->
+            match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000'))
+        | None -> None
+      in
+      (match varname with
+       | Some vname ->
+         (match Sys.getenv_opt vname with
+          | Some v -> Some (string_val v)
+          | None -> ccall_raise (exn_desc "Not_found" (-7)))
+       | None -> ccall_raise (exn_desc "Not_found" (-7)))
+    | "caml_sys_modify_argv", [new_argv] ->
+      (* Modify Sys.argv in-place: update globals slot for Sys.argv.
+         In our interpreter we just ignore this since tests don't rely on
+         reading Sys.argv back after modification. *)
+      ignore new_argv;
+      Some (Val_int 0)
+    (* --- File I/O operations --- *)
+    | "caml_sys_open", [path_v; flags_v; perm_v] ->
+      (* Open a file. flags_v is an OCaml list of open_flag constructors:
+         Open_rdonly=0, Open_wronly=1, Open_append=2, Open_creat=3,
+         Open_trunc=4, Open_excl=5, Open_binary=6, Open_text=7, Open_nonblock=8 *)
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         let perm = match perm_v with Val_int p -> p | _ -> 0o666 in
+         (* Walk the OCaml list to collect flags *)
+         let open_flags = ref [] in
+         let rec walk = function
+           | Val_int 0 -> ()  (* nil *)
+           | Val_block (0, [Val_int tag; tl]) ->
+             (match tag with
+              | 0 -> open_flags := Unix.O_RDONLY :: !open_flags
+              | 1 -> open_flags := Unix.O_WRONLY :: !open_flags
+              | 2 -> open_flags := Unix.O_WRONLY :: Unix.O_APPEND :: !open_flags
+              | 3 -> open_flags := Unix.O_CREAT :: !open_flags
+              | 4 -> open_flags := Unix.O_TRUNC :: !open_flags
+              | 5 -> open_flags := Unix.O_EXCL :: !open_flags
+              | 6 -> () (* O_BINARY - not relevant on Unix *)
+              | 7 -> () (* O_TEXT - not relevant on Unix *)
+              | 8 -> open_flags := Unix.O_NONBLOCK :: !open_flags
+              | _ -> ());
+             walk tl
+           | Val_ptr addr ->
+             (match heap_lookup heap addr with
+              | Some (0, [Val_int tag; tl]) ->
+                (match tag with
+                 | 0 -> open_flags := Unix.O_RDONLY :: !open_flags
+                 | 1 -> open_flags := Unix.O_WRONLY :: !open_flags
+                 | 2 -> open_flags := Unix.O_WRONLY :: Unix.O_APPEND :: !open_flags
+                 | 3 -> open_flags := Unix.O_CREAT :: !open_flags
+                 | 4 -> open_flags := Unix.O_TRUNC :: !open_flags
+                 | 5 -> open_flags := Unix.O_EXCL :: !open_flags
+                 | 6 -> () | 7 -> ()
+                 | 8 -> open_flags := Unix.O_NONBLOCK :: !open_flags
+                 | _ -> ());
+                walk tl
+              | _ -> ())
+           | _ -> ()
+         in
+         walk flags_v;
+         if !open_flags = [] then open_flags := [Unix.O_RDONLY];
+         (try
+           let fd = Unix.openfile path !open_flags perm in
+           let fd_int = (Obj.magic fd : int) in
+           Some (Val_int fd_int)
+         with Unix.Unix_error (err, _, _) ->
+           ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9);
+                                       string_val (path ^ ": " ^ Unix.error_message err)])))
+       | None ->
+         ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9);
+                                     string_val "open: invalid path"])))
+    | "caml_sys_close", [Val_int fd] ->
+      (try Unix.close (Obj.magic fd : Unix.file_descr); Some (Val_int 0)
+       with _ -> Some (Val_int 0))
+    | "caml_sys_file_exists", [path_v] ->
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         Some (Val_int (if Sys.file_exists path then 1 else 0))
+       | None -> Some (Val_int 0))
+    | "caml_sys_rename", [src_v; dst_v] ->
+      (match resolve_string_or_bytes heap src_v, resolve_string_or_bytes heap dst_v with
+       | Some src_cs, Some dst_cs ->
+         let src = String.init (List.length src_cs) (fun i ->
+           match List.nth_opt src_cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         let dst = String.init (List.length dst_cs) (fun i ->
+           match List.nth_opt dst_cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         (try Sys.rename src dst; Some (Val_int 0)
+          with Sys_error msg ->
+            ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val msg])))
+       | _ -> ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val "rename: invalid path"])))
+    | "caml_sys_remove", [path_v] ->
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         (try Sys.remove path; Some (Val_int 0)
+          with Sys_error msg ->
+            ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val msg])))
+       | None -> ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val "remove: invalid path"])))
+    | "caml_sys_getcwd", _ ->
+      Some (string_val (Sys.getcwd ()))
+    | "caml_sys_chdir", [path_v] ->
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         (try Sys.chdir path; Some (Val_int 0)
+          with Sys_error msg ->
+            ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val msg])))
+       | None -> ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val "chdir: invalid path"])))
+    | "caml_sys_mkdir", [path_v; Val_int perm] ->
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         (try Unix.mkdir path perm; Some (Val_int 0)
+          with Unix.Unix_error (err, _, _) ->
+            ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9);
+                                        string_val (path ^ ": " ^ Unix.error_message err)])))
+       | None -> ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val "mkdir: invalid path"])))
+    | "caml_sys_rmdir", [path_v] ->
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         (try Unix.rmdir path; Some (Val_int 0)
+          with Unix.Unix_error (err, _, _) ->
+            ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9);
+                                        string_val (path ^ ": " ^ Unix.error_message err)])))
+       | None -> ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val "rmdir: invalid path"])))
+    | "caml_sys_is_directory", [path_v] ->
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         (try Some (Val_int (if Sys.is_directory path then 1 else 0))
+          with Sys_error msg ->
+            ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val msg])))
+       | None -> Some (Val_int 0))
+    | "caml_sys_read_directory", [path_v] ->
+      (match resolve_string_or_bytes heap path_v with
+       | Some cs ->
+         let path = String.init (List.length cs) (fun i ->
+           match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
+         (try
+           let entries = Sys.readdir path in
+           let arr_fields = Array.to_list (Array.map (fun s -> string_val s) entries) in
+           Some (heap_alloc_local 0 arr_fields)
+         with Sys_error msg ->
+           ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val msg])))
+       | None -> ccall_raise (Val_block (0, [exn_desc "Sys_error" (-9); string_val "readdir: invalid path"])))
+    (* --- Channel operations for file I/O --- *)
+    | "caml_ml_close_channel", [ch] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> Some fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> Some fd
+          | Some (_, Val_int fd :: _) -> Some fd
+          | _ -> None)
+        | _ -> None
+      in
+      (match fd with
+       | Some fd_int when fd_int > 2 ->
+         (* Don't close stdin/stdout/stderr *)
+         (try Unix.close (Obj.magic fd_int : Unix.file_descr) with _ -> ())
+       | _ -> ());
+      Some (Val_int 0)
+    | "caml_ml_input", [ch; buf_v; Val_int ofs; Val_int len] ->
+      (* Read from a channel into a bytes buffer *)
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 0)
+        | _ -> 0
+      in
+      (try
+        let tmp = Bytes.create len in
+        let n = Unix.read (Obj.magic fd : Unix.file_descr) tmp 0 len in
+        (match buf_v with
+         | Val_ptr dst_addr ->
+           (match heap_lookup !heap_ref dst_addr with
+            | Some (tag, fields) ->
+              let arr = Array.of_list fields in
+              for k = 0 to n - 1 do
+                if ofs + k < Array.length arr then
+                  arr.(ofs + k) <- Val_int (Char.code (Bytes.get tmp k))
+              done;
+              heap_update_local dst_addr (Array.to_list arr);
+              ignore tag
+            | None -> ())
+         | _ -> ());
+        Some (Val_int n)
+      with _ -> Some (Val_int 0))
+    | "caml_ml_input_char", [ch] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 0)
+        | _ -> 0
+      in
+      (try
+        let tmp = Bytes.create 1 in
+        let n = Unix.read (Obj.magic fd : Unix.file_descr) tmp 0 1 in
+        if n = 0 then ccall_raise (exn_desc "End_of_file" (-8))
+        else Some (Val_int (Char.code (Bytes.get tmp 0)))
+      with _ -> ccall_raise (exn_desc "End_of_file" (-8)))
+    | "caml_ml_input_int", [ch] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 0)
+        | _ -> 0
+      in
+      (try
+        let tmp = Bytes.create 4 in
+        let _ = Unix.read (Obj.magic fd : Unix.file_descr) tmp 0 4 in
+        let n = (Char.code (Bytes.get tmp 0) lsl 24) lor
+                (Char.code (Bytes.get tmp 1) lsl 16) lor
+                (Char.code (Bytes.get tmp 2) lsl 8) lor
+                 Char.code (Bytes.get tmp 3) in
+        Some (Val_int n)
+      with _ -> Some (Val_int 0))
+    | "caml_ml_output_int", [ch; Val_int n] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 1)
+        | _ -> 1
+      in
+      if fd <= 2 then begin
+        (* stdout/stderr: write to buffer *)
+        Buffer.add_char buf (Char.chr ((n lsr 24) land 0xFF));
+        Buffer.add_char buf (Char.chr ((n lsr 16) land 0xFF));
+        Buffer.add_char buf (Char.chr ((n lsr 8) land 0xFF));
+        Buffer.add_char buf (Char.chr (n land 0xFF))
+      end else begin
+        let tmp = Bytes.create 4 in
+        Bytes.set tmp 0 (Char.chr ((n lsr 24) land 0xFF));
+        Bytes.set tmp 1 (Char.chr ((n lsr 16) land 0xFF));
+        Bytes.set tmp 2 (Char.chr ((n lsr 8) land 0xFF));
+        Bytes.set tmp 3 (Char.chr (n land 0xFF));
+        (try ignore (Unix.write (Obj.magic fd : Unix.file_descr) tmp 0 4) with _ -> ())
+      end;
+      Some (Val_int 0)
+    | "caml_ml_seek_out", [ch; Val_int pos] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 1)
+        | _ -> 1
+      in
+      (try ignore (Unix.lseek (Obj.magic fd : Unix.file_descr) pos Unix.SEEK_SET) with _ -> ());
+      Some (Val_int 0)
+    | "caml_ml_seek_in", [ch; Val_int pos] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 0)
+        | _ -> 0
+      in
+      (try ignore (Unix.lseek (Obj.magic fd : Unix.file_descr) pos Unix.SEEK_SET) with _ -> ());
+      Some (Val_int 0)
+    | "caml_ml_pos_out", [ch] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 1)
+        | _ -> 1
+      in
+      (try
+        let pos = Unix.lseek (Obj.magic fd : Unix.file_descr) 0 Unix.SEEK_CUR in
+        Some (Val_int pos)
+      with _ -> Some (Val_int 0))
+    | "caml_ml_pos_in", [ch] ->
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 0)
+        | _ -> 0
+      in
+      (try
+        let pos = Unix.lseek (Obj.magic fd : Unix.file_descr) 0 Unix.SEEK_CUR in
+        Some (Val_int pos)
+      with _ -> Some (Val_int 0))
+    | "caml_ml_input_scan_line", [ch] ->
+      (* Scan for a newline in the input channel. Returns negative if EOF before newline. *)
+      let fd = match ch with
+        | Val_block (255, [Val_int fd]) -> fd
+        | Val_ptr addr -> (match heap_lookup heap addr with
+          | Some (255, [Val_int fd]) -> fd
+          | Some (_, Val_int fd :: _) -> fd
+          | _ -> 0)
+        | _ -> 0
+      in
+      (try
+        let save_pos = Unix.lseek (Obj.magic fd : Unix.file_descr) 0 Unix.SEEK_CUR in
+        let buf_tmp = Bytes.create 1 in
+        let count = ref 0 in
+        let found = ref false in
+        let eof = ref false in
+        while not !found && not !eof do
+          let n = Unix.read (Obj.magic fd : Unix.file_descr) buf_tmp 0 1 in
+          if n = 0 then eof := true
+          else begin
+            incr count;
+            if Bytes.get buf_tmp 0 = '\n' then found := true
+          end
+        done;
+        ignore (Unix.lseek (Obj.magic fd : Unix.file_descr) save_pos Unix.SEEK_SET);
+        if !found then Some (Val_int !count)
+        else Some (Val_int (- !count))
+      with _ -> Some (Val_int 0))
+    (* --- Marshal / output_value --- *)
+    | ("caml_output_value" | "caml_output_value_to_buffer" | "caml_output_value_to_bytes"
+      | "caml_output_value_to_string"), _ ->
+      (* Stub: marshal operations are complex; return unit for output, empty for to_* *)
+      (match name with
+       | "caml_output_value" -> Some (Val_int 0)
+       | "caml_output_value_to_string" -> Some (string_val "")
+       | "caml_output_value_to_bytes" -> Some (heap_alloc_local 252 [])
+       | _ -> Some (Val_int 0))
+    | "caml_input_value", _ ->
+      (* Reading marshaled values: return a dummy *)
+      ccall_raise (exn_desc "End_of_file" (-8))
+    (* --- Hex float formatting --- *)
+    | "caml_hexstring_of_float", [fv; Val_int prec; Val_int style] ->
+      let f = val_to_float fv in
+      let uppercase = style = Char.code 'A' in
+      (* Format a float as hexadecimal: [-]0xh.hhhp[+-]d *)
+      let s =
+        if Float.is_nan f then (if uppercase then "NAN" else "nan")
+        else if Float.is_infinite f then
+          (if f > 0.0 then (if uppercase then "INFINITY" else "infinity")
+           else (if uppercase then "-INFINITY" else "-infinity"))
+        else if f = 0.0 then begin
+          let sign = if Float.sign_bit f then "-" else "" in
+          if prec <= 0 then
+            Printf.sprintf "%s0x0p+0" sign
+          else
+            Printf.sprintf "%s0x0.%sp+0" sign (String.make prec '0')
+        end
+        else begin
+          let sign = if f < 0.0 then "-" else "" in
+          let abs_f = Float.abs f in
+          let (frac, exp) = Float.frexp abs_f in
+          (* frexp returns 0.5 <= frac < 1.0 and abs_f = frac * 2^exp *)
+          (* Hex float format: 1.xxx * 2^(exp-1), so lead digit is 1 *)
+          let mantissa = frac *. 2.0 in  (* 1.0 <= mantissa < 2.0 *)
+          let exp = exp - 1 in
+          (* Extract hex digits of fractional part *)
+          let frac_part = mantissa -. 1.0 in
+          let hex_digit c = if uppercase then Char.uppercase_ascii c else c in
+          let hex_chars = [|'0';'1';'2';'3';'4';'5';'6';'7';'8';'9';'a';'b';'c';'d';'e';'f'|] in
+          let num_digits = if prec < 0 then 13 else prec in (* default: enough for double *)
+          let digits = Buffer.create 16 in
+          let v = ref frac_part in
+          for _ = 1 to num_digits do
+            v := !v *. 16.0;
+            let d = int_of_float (floor !v) in
+            let d = max 0 (min 15 d) in
+            Buffer.add_char digits (hex_digit hex_chars.(d));
+            v := !v -. float_of_int d
+          done;
+          let digits_str = Buffer.contents digits in
+          (* Trim trailing zeros if prec < 0 *)
+          let digits_str = if prec < 0 then begin
+            let len = String.length digits_str in
+            let last_nonzero = ref (len - 1) in
+            while !last_nonzero > 0 && digits_str.[!last_nonzero] = '0' do
+              decr last_nonzero
+            done;
+            if !last_nonzero < len - 1 then
+              String.sub digits_str 0 (!last_nonzero + 1)
+            else digits_str
+          end else digits_str in
+          let p_sign = if exp >= 0 then "+" else "" in
+          if String.length digits_str = 0 || digits_str = "0" then
+            Printf.sprintf "%s0x1p%s%d" sign p_sign exp
+          else
+            Printf.sprintf "%s0x1.%sp%s%d" sign digits_str p_sign exp
+        end
+      in
+      Some (string_val s)
+    (* --- GC finalization stubs --- *)
+    | "caml_final_register", _ -> Some (Val_int 0)
+    | "caml_final_register_called_without_value", _ -> Some (Val_int 0)
+    | "caml_final_release", _ -> Some (Val_int 0)
+    (* --- Bytes unsafe operations --- *)
+    | "caml_bytes_unsafe_get", [sv; Val_int i] ->
+      (match resolve_string_or_bytes heap sv with
+       | Some cs -> (match List.nth_opt cs i with Some v -> Some v | None -> Some (Val_int 0))
+       | None -> Some (Val_int 0))
+    | "caml_bytes_unsafe_set", [bv; Val_int i; Val_int c] ->
+      (match bv with
+       | Val_ptr addr ->
+         (match heap_lookup !heap_ref addr with
+          | Some (tag, fields) ->
+            let arr = Array.of_list fields in
+            (if i >= 0 && i < Array.length arr then arr.(i) <- Val_int c);
+            heap_update_local addr (Array.to_list arr);
+            ignore tag
+          | None -> ())
+       | _ -> ());
+      Some (Val_int 0)
+    | "caml_string_unsafe_get", [sv; Val_int i] ->
+      (match resolve_string_or_bytes heap sv with
+       | Some cs -> (match List.nth_opt cs i with Some v -> Some v | None -> Some (Val_int 0))
+       | None -> Some (Val_int 0))
+    (* --- Array operations with float tag --- *)
+    | ("caml_array_unsafe_get_float" | "caml_array_get_float"), [av; Val_int idx] ->
+      let fields = match av with
+        | Val_block (_, fs) -> Some fs
+        | Val_ptr addr -> (match heap_lookup heap addr with Some (_, fs) -> Some fs | None -> None)
+        | _ -> None
+      in
+      (match fields with
+       | Some fs -> Some (match List.nth_opt fs idx with Some v -> v | None -> float_to_val 0.0)
+       | None -> Some (float_to_val 0.0))
+    | ("caml_array_unsafe_set_float" | "caml_array_set_float"), [av; Val_int idx; v] ->
+      (match av with
+       | Val_ptr addr ->
+         (match heap_lookup !heap_ref addr with
+          | Some (tag, fields) ->
+            let arr = Array.of_list fields in
+            if idx >= 0 && idx < Array.length arr then arr.(idx) <- v;
+            heap_update_local addr (Array.to_list arr);
+            ignore tag
+          | None -> ())
+       | _ -> ());
+      Some (Val_int 0)
+    | "caml_array_fill", [av; Val_int ofs; Val_int len; v] ->
+      (match av with
+       | Val_ptr addr ->
+         (match heap_lookup !heap_ref addr with
+          | Some (tag, fields) ->
+            let arr = Array.of_list fields in
+            for k = ofs to ofs + len - 1 do
+              if k >= 0 && k < Array.length arr then arr.(k) <- v
+            done;
+            heap_update_local addr (Array.to_list arr);
+            ignore tag
+          | None -> ())
+       | _ -> ());
+      Some (Val_int 0)
+    (* --- Backtrace stubs --- *)
+    | "caml_record_backtrace", _ -> Some (Val_int 0)
+    | "caml_backtrace_status", _ -> Some (Val_int 0)
+    | "caml_get_exception_backtrace", _ -> Some (Val_int 0)  (* None *)
+    | "caml_get_exception_raw_backtrace", _ ->
+      Some (heap_alloc_local 0 [])  (* empty backtrace *)
+    | "caml_raw_backtrace_length", _ -> Some (Val_int 0)
+    | "caml_convert_raw_backtrace", _ -> Some (Val_int 0)  (* None *)
     | _ ->
       Printf.eprintf "WARNING: unimplemented C-call %S (idx=%d, %d args)\n%!" name idx (List.length args);
       None
@@ -1696,7 +2337,7 @@ let run_ocamlc_bytecode exe_file =
   let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
   let prims = load_prims data sections in
   let buf = Buffer.create 256 in
-  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, _get_named_value) = make_handler ~raw_globals prims buf in
+  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, _get_named_value) = make_handler ~raw_globals ~globals_list:globals prims buf in
   let s = ref { (initial_state globals) with hp = init_heap; next_addr = init_next_addr } in
   heap_ref := init_heap;
   next_addr_ref := init_next_addr;

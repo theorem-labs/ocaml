@@ -1,3 +1,5 @@
+SHELL := /bin/bash
+
 .PHONY: all build extract test testsuite testsuite-all clean
 
 all: build extract test

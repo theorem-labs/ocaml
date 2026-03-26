@@ -82,9 +82,10 @@ type test_header = {
   modules: string list;
   include_testing: bool;
   expect_compile_error: bool;
+  readonly_files: string list;
 }
 
-let empty_header = { modules = []; include_testing = false; expect_compile_error = false }
+let empty_header = { modules = []; include_testing = false; expect_compile_error = false; readonly_files = [] }
 
 let parse_test_header path =
   try
@@ -137,34 +138,36 @@ let parse_test_header path =
             Str.split (Str.regexp "[ \t]+") mods_str
           with Not_found -> []
         in
-        { modules; include_testing; expect_compile_error }
+        (* Extract readonly_files = "..." *)
+        let readonly_files =
+          let re = Str.regexp {|readonly_files[ \t]*=[ \t]*"\([^"]*\)"|} in
+          try
+            ignore (Str.search_forward re header_text 0);
+            let files_str = Str.matched_group 1 header_text in
+            Str.split (Str.regexp "[ \t]+") files_str
+          with Not_found -> []
+        in
+        { modules; include_testing; expect_compile_error; readonly_files }
       end
     end
   with _ -> empty_header
 
 (* Read .reference file if it exists next to the .ml file.
-   Checks for .reference first, then .ocaml.reference (used by OCaml testsuite
-   for tests with different expected output per backend). *)
+   Only uses .reference (bytecode output), not .ocaml.reference (toplevel output).
+   The .ocaml.reference files contain toplevel-specific formatting (e.g.,
+   "val x : int = 5") that doesn't match compiled bytecode output. *)
 let read_reference path =
-  let base = Filename.chop_suffix path ".ml" in
-  let candidates = [
-    base ^ ".reference";
-    base ^ ".ocaml.reference";
-  ] in
-  let read_file p =
+  let ref_path = (Filename.chop_suffix path ".ml") ^ ".reference" in
+  if Sys.file_exists ref_path then
     try
-      let ic = open_in p in
+      let ic = open_in ref_path in
       let buf = Buffer.create 256 in
       (try while true do Buffer.add_char buf (input_char ic) done
        with End_of_file -> ());
       close_in ic;
       Some (Buffer.contents buf)
     with _ -> None
-  in
-  List.fold_left (fun acc p ->
-    match acc with Some _ -> acc | None ->
-      if Sys.file_exists p then read_file p else None
-  ) None candidates
+  else None
 
 (* Run ocamlc bytecode through our interpreter, with step limit *)
 exception Clean_exit
@@ -177,7 +180,7 @@ let run_our_interp exe_file =
   let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
   let prims = load_prims data sections in
   let buf = Buffer.create 256 in
-  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value) = make_handler ~raw_globals prims buf in
+  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value) = make_handler ~raw_globals ~globals_list:globals prims buf in
   let open Interp_extracted in
   (* Initialize state with pre-populated heap for mutable global objects *)
   let s = ref { (initial_state globals) with hp = init_heap; next_addr = init_next_addr } in
@@ -385,7 +388,26 @@ let test_file path =
         in
         if Sys.command compile_cmd <> 0 then
           Skip compile_failed_reason
-        else
+        else begin
+          (* Copy readonly_files to the temp dir so the test binary can find them *)
+          List.iter (fun f ->
+            let src = Filename.concat test_dir f in
+            let dst = Filename.concat dir f in
+            if Sys.file_exists src then begin
+              let ic = open_in_bin src in
+              let n = in_channel_length ic in
+              let data = Bytes.create n in
+              really_input ic data 0 n;
+              close_in ic;
+              let oc = open_out_bin dst in
+              output_bytes oc data;
+              close_out oc
+            end
+          ) header.readonly_files;
+          (* Run from temp dir so readonly files are accessible *)
+          let saved_cwd = Sys.getcwd () in
+          if header.readonly_files <> [] then Sys.chdir dir;
+          Fun.protect ~finally:(fun () -> try Sys.chdir saved_cwd with _ -> ()) (fun () ->
           (* Prefer .reference file; fall back to running ocamlrun *)
           let expected_opt = match read_reference path with
             | Some r -> Some r
@@ -427,7 +449,9 @@ let test_file path =
                 Fail (Printf.sprintf
                   "output mismatch:\n  expected: %s\n  actual:   %s"
                   (String.escaped (String.sub expected 0 (min 3500 (String.length expected))))
-                  (String.escaped (String.sub actual 0 (min 3500 (String.length actual))))))))
+                  (String.escaped (String.sub actual 0 (min 3500 (String.length actual)))))))
+          ) (* Fun.protect *)
+        end)
     with
     | Sys_error msg -> Skip (Printf.sprintf "sys error: %s" msg)
     | e -> Skip (Printf.sprintf "exception: %s" (Printexc.to_string e)))
