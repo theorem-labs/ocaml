@@ -1,0 +1,5 @@
+% Wrapper that enables internal audit mode, then loads audit.tex.
+% Build with: pdflatex internal_audit.tex
+\PassOptionsToPackage{internal}{audit}
+\newcommand{\INTERNALAUDIT}{}
+\input{audit}

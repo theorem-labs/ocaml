@@ -1,0 +1,2015 @@
+This is pdfTeX, Version 3.141592653-2.6-1.40.27 (TeX Live 2026/dev/Arch Linux) (preloaded format=pdflatex 2026.2.25)  26 MAR 2026 09:53
+entering extended mode
+ \write18 enabled.
+ file:line:error style messages enabled.
+ %&-line parsing enabled.
+**audit.tex
+(./audit.tex
+LaTeX2e <2024-11-01> patch level 2
+L3 programming layer <2025-01-18>
+(/usr/share/texmf-dist/tex/latex/base/article.cls
+Document Class: article 2024/06/29 v1.4n Standard LaTeX document class
+(/usr/share/texmf-dist/tex/latex/base/size11.clo
+File: size11.clo 2024/06/29 v1.4n Standard LaTeX file (size option)
+)
+\c@part=\count196
+\c@section=\count197
+\c@subsection=\count198
+\c@subsubsection=\count199
+\c@paragraph=\count266
+\c@subparagraph=\count267
+\c@figure=\count268
+\c@table=\count269
+\abovecaptionskip=\skip49
+\belowcaptionskip=\skip50
+\bibindent=\dimen141
+)
+(/usr/share/texmf-dist/tex/latex/base/fontenc.sty
+Package: fontenc 2021/04/29 v2.0v Standard LaTeX package
+)
+(/usr/share/texmf-dist/tex/latex/base/inputenc.sty
+Package: inputenc 2024/02/08 v1.3d Input encoding file
+\inpenc@prehook=\toks17
+\inpenc@posthook=\toks18
+)
+(/usr/share/texmf-dist/tex/latex/lm/lmodern.sty
+Package: lmodern 2015/05/01 v1.6.1 Latin Modern Fonts
+LaTeX Font Info:    Overwriting symbol font `operators' in version `normal'
+(Font)                  OT1/cmr/m/n --> OT1/lmr/m/n on input line 22.
+LaTeX Font Info:    Overwriting symbol font `letters' in version `normal'
+(Font)                  OML/cmm/m/it --> OML/lmm/m/it on input line 23.
+LaTeX Font Info:    Overwriting symbol font `symbols' in version `normal'
+(Font)                  OMS/cmsy/m/n --> OMS/lmsy/m/n on input line 24.
+LaTeX Font Info:    Overwriting symbol font `largesymbols' in version `normal'
+(Font)                  OMX/cmex/m/n --> OMX/lmex/m/n on input line 25.
+LaTeX Font Info:    Overwriting symbol font `operators' in version `bold'
+(Font)                  OT1/cmr/bx/n --> OT1/lmr/bx/n on input line 26.
+LaTeX Font Info:    Overwriting symbol font `letters' in version `bold'
+(Font)                  OML/cmm/b/it --> OML/lmm/b/it on input line 27.
+LaTeX Font Info:    Overwriting symbol font `symbols' in version `bold'
+(Font)                  OMS/cmsy/b/n --> OMS/lmsy/b/n on input line 28.
+LaTeX Font Info:    Overwriting symbol font `largesymbols' in version `bold'
+(Font)                  OMX/cmex/m/n --> OMX/lmex/m/n on input line 29.
+LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `normal'
+(Font)                  OT1/cmr/bx/n --> OT1/lmr/bx/n on input line 31.
+LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `normal'
+(Font)                  OT1/cmss/m/n --> OT1/lmss/m/n on input line 32.
+LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `normal'
+(Font)                  OT1/cmr/m/it --> OT1/lmr/m/it on input line 33.
+LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `normal'
+(Font)                  OT1/cmtt/m/n --> OT1/lmtt/m/n on input line 34.
+LaTeX Font Info:    Overwriting math alphabet `\mathbf' in version `bold'
+(Font)                  OT1/cmr/bx/n --> OT1/lmr/bx/n on input line 35.
+LaTeX Font Info:    Overwriting math alphabet `\mathsf' in version `bold'
+(Font)                  OT1/cmss/bx/n --> OT1/lmss/bx/n on input line 36.
+LaTeX Font Info:    Overwriting math alphabet `\mathit' in version `bold'
+(Font)                  OT1/cmr/bx/it --> OT1/lmr/bx/it on input line 37.
+LaTeX Font Info:    Overwriting math alphabet `\mathtt' in version `bold'
+(Font)                  OT1/cmtt/m/n --> OT1/lmtt/m/n on input line 38.
+)
+(/usr/share/texmf-dist/tex/latex/geometry/geometry.sty
+Package: geometry 2020/01/02 v5.9 Page Geometry
+
+(/usr/share/texmf-dist/tex/latex/graphics/keyval.sty
+Package: keyval 2022/05/29 v1.15 key=value parser (DPC)
+\KV@toks@=\toks19
+)
+(/usr/share/texmf-dist/tex/generic/iftex/ifvtex.sty
+Package: ifvtex 2019/10/25 v1.7 ifvtex legacy package. Use iftex instead.
+
+(/usr/share/texmf-dist/tex/generic/iftex/iftex.sty
+Package: iftex 2024/12/12 v1.0g TeX engine tests
+))
+\Gm@cnth=\count270
+\Gm@cntv=\count271
+\c@Gm@tempcnt=\count272
+\Gm@bindingoffset=\dimen142
+\Gm@wd@mp=\dimen143
+\Gm@odd@mp=\dimen144
+\Gm@even@mp=\dimen145
+\Gm@layoutwidth=\dimen146
+\Gm@layoutheight=\dimen147
+\Gm@layouthoffset=\dimen148
+\Gm@layoutvoffset=\dimen149
+\Gm@dimlist=\toks20
+)
+(/usr/share/texmf-dist/tex/latex/hyperref/hyperref.sty
+Package: hyperref 2024-11-05 v7.01l Hypertext links for LaTeX
+
+(/usr/share/texmf-dist/tex/latex/kvsetkeys/kvsetkeys.sty
+Package: kvsetkeys 2022-10-05 v1.19 Key value parser (HO)
+)
+(/usr/share/texmf-dist/tex/generic/kvdefinekeys/kvdefinekeys.sty
+Package: kvdefinekeys 2019-12-19 v1.6 Define keys (HO)
+)
+(/usr/share/texmf-dist/tex/generic/pdfescape/pdfescape.sty
+Package: pdfescape 2019/12/09 v1.15 Implements pdfTeX's escape features (HO)
+
+(/usr/share/texmf-dist/tex/generic/ltxcmds/ltxcmds.sty
+Package: ltxcmds 2023-12-04 v1.26 LaTeX kernel commands for general use (HO)
+)
+(/usr/share/texmf-dist/tex/generic/pdftexcmds/pdftexcmds.sty
+Package: pdftexcmds 2020-06-27 v0.33 Utility functions of pdfTeX for LuaTeX (HO
+)
+
+(/usr/share/texmf-dist/tex/generic/infwarerr/infwarerr.sty
+Package: infwarerr 2019/12/03 v1.5 Providing info/warning/error messages (HO)
+)
+Package pdftexcmds Info: \pdf@primitive is available.
+Package pdftexcmds Info: \pdf@ifprimitive is available.
+Package pdftexcmds Info: \pdfdraftmode found.
+))
+(/usr/share/texmf-dist/tex/latex/hycolor/hycolor.sty
+Package: hycolor 2020-01-27 v1.10 Color options for hyperref/bookmark (HO)
+)
+(/usr/share/texmf-dist/tex/latex/hyperref/nameref.sty
+Package: nameref 2023-11-26 v2.56 Cross-referencing by name of section
+
+(/usr/share/texmf-dist/tex/latex/refcount/refcount.sty
+Package: refcount 2019/12/15 v3.6 Data extraction from label references (HO)
+)
+(/usr/share/texmf-dist/tex/generic/gettitlestring/gettitlestring.sty
+Package: gettitlestring 2019/12/15 v1.6 Cleanup title references (HO)
+
+(/usr/share/texmf-dist/tex/latex/kvoptions/kvoptions.sty
+Package: kvoptions 2022-06-15 v3.15 Key value format for package options (HO)
+))
+\c@section@level=\count273
+)
+(/usr/share/texmf-dist/tex/latex/etoolbox/etoolbox.sty
+Package: etoolbox 2025/02/11 v2.5l e-TeX tools for LaTeX (JAW)
+\etb@tempcnta=\count274
+)
+(/usr/share/texmf-dist/tex/generic/stringenc/stringenc.sty
+Package: stringenc 2019/11/29 v1.12 Convert strings between diff. encodings (HO
+)
+)
+\@linkdim=\dimen150
+\Hy@linkcounter=\count275
+\Hy@pagecounter=\count276
+
+(/usr/share/texmf-dist/tex/latex/hyperref/pd1enc.def
+File: pd1enc.def 2024-11-05 v7.01l Hyperref: PDFDocEncoding definition (HO)
+Now handling font encoding PD1 ...
+... no UTF-8 mapping file for font encoding PD1
+)
+(/usr/share/texmf-dist/tex/generic/intcalc/intcalc.sty
+Package: intcalc 2019/12/15 v1.3 Expandable calculations with integers (HO)
+)
+\Hy@SavedSpaceFactor=\count277
+
+(/usr/share/texmf-dist/tex/latex/hyperref/puenc.def
+File: puenc.def 2024-11-05 v7.01l Hyperref: PDF Unicode definition (HO)
+Now handling font encoding PU ...
+... no UTF-8 mapping file for font encoding PU
+)
+Package hyperref Info: Hyper figures OFF on input line 4157.
+Package hyperref Info: Link nesting OFF on input line 4162.
+Package hyperref Info: Hyper index ON on input line 4165.
+Package hyperref Info: Plain pages OFF on input line 4172.
+Package hyperref Info: Backreferencing OFF on input line 4177.
+Package hyperref Info: Implicit mode ON; LaTeX internals redefined.
+Package hyperref Info: Bookmarks ON on input line 4424.
+\c@Hy@tempcnt=\count278
+
+(/usr/share/texmf-dist/tex/latex/url/url.sty
+\Urlmuskip=\muskip17
+Package: url 2013/09/16  ver 3.4  Verb mode for urls, etc.
+)
+LaTeX Info: Redefining \url on input line 4763.
+\XeTeXLinkMargin=\dimen151
+
+(/usr/share/texmf-dist/tex/generic/bitset/bitset.sty
+Package: bitset 2019/12/09 v1.3 Handle bit-vector datatype (HO)
+
+(/usr/share/texmf-dist/tex/generic/bigintcalc/bigintcalc.sty
+Package: bigintcalc 2019/12/15 v1.5 Expandable calculations on big integers (HO
+)
+))
+\Fld@menulength=\count279
+\Field@Width=\dimen152
+\Fld@charsize=\dimen153
+Package hyperref Info: Hyper figures OFF on input line 6042.
+Package hyperref Info: Link nesting OFF on input line 6047.
+Package hyperref Info: Hyper index ON on input line 6050.
+Package hyperref Info: backreferencing OFF on input line 6057.
+Package hyperref Info: Link coloring OFF on input line 6062.
+Package hyperref Info: Link coloring with OCG OFF on input line 6067.
+Package hyperref Info: PDF/A mode OFF on input line 6072.
+
+(/usr/share/texmf-dist/tex/latex/base/atbegshi-ltx.sty
+Package: atbegshi-ltx 2021/01/10 v1.0c Emulation of the original atbegshi
+package with kernel methods
+)
+\Hy@abspage=\count280
+\c@Item=\count281
+\c@Hfootnote=\count282
+)
+Package hyperref Info: Driver (autodetected): hpdftex.
+
+(/usr/share/texmf-dist/tex/latex/hyperref/hpdftex.def
+File: hpdftex.def 2024-11-05 v7.01l Hyperref driver for pdfTeX
+
+(/usr/share/texmf-dist/tex/latex/base/atveryend-ltx.sty
+Package: atveryend-ltx 2020/08/19 v1.0a Emulation of the original atveryend pac
+kage
+with kernel methods
+)
+\Fld@listcount=\count283
+\c@bookmark@seq@number=\count284
+
+(/usr/share/texmf-dist/tex/latex/rerunfilecheck/rerunfilecheck.sty
+Package: rerunfilecheck 2022-07-10 v1.10 Rerun checks for auxiliary files (HO)
+
+(/usr/share/texmf-dist/tex/generic/uniquecounter/uniquecounter.sty
+Package: uniquecounter 2019/12/15 v1.4 Provide unlimited unique counter (HO)
+)
+Package uniquecounter Info: New unique counter `rerunfilecheck' on input line 2
+85.
+)
+\Hy@SectionHShift=\skip51
+)
+(/usr/share/texmf-dist/tex/latex/xcolor/xcolor.sty
+Package: xcolor 2024/09/29 v3.02 LaTeX color extensions (UK)
+
+(/usr/share/texmf-dist/tex/latex/graphics-cfg/color.cfg
+File: color.cfg 2016/01/02 v1.6 sample color configuration
+)
+Package xcolor Info: Driver file: pdftex.def on input line 274.
+
+(/usr/share/texmf-dist/tex/latex/graphics-def/pdftex.def
+File: pdftex.def 2024/04/13 v1.2c Graphics/color driver for pdftex
+)
+(/usr/share/texmf-dist/tex/latex/graphics/mathcolor.ltx)
+Package xcolor Info: Model `cmy' substituted by `cmy0' on input line 1349.
+Package xcolor Info: Model `hsb' substituted by `rgb' on input line 1353.
+Package xcolor Info: Model `RGB' extended on input line 1365.
+Package xcolor Info: Model `HTML' substituted by `rgb' on input line 1367.
+Package xcolor Info: Model `Hsb' substituted by `hsb' on input line 1368.
+Package xcolor Info: Model `tHsb' substituted by `hsb' on input line 1369.
+Package xcolor Info: Model `HSB' substituted by `hsb' on input line 1370.
+Package xcolor Info: Model `Gray' substituted by `gray' on input line 1371.
+Package xcolor Info: Model `wave' substituted by `hsb' on input line 1372.
+)
+(/usr/share/texmf-dist/tex/latex/listings/listings.sty
+\lst@mode=\count285
+\lst@gtempboxa=\box52
+\lst@token=\toks21
+\lst@length=\count286
+\lst@currlwidth=\dimen154
+\lst@column=\count287
+\lst@pos=\count288
+\lst@lostspace=\dimen155
+\lst@width=\dimen156
+\lst@newlines=\count289
+\lst@lineno=\count290
+\lst@maxwidth=\dimen157
+
+(/usr/share/texmf-dist/tex/latex/listings/lstpatch.sty
+File: lstpatch.sty 2024/09/23 1.10c (Carsten Heinz)
+)
+(/usr/share/texmf-dist/tex/latex/listings/lstmisc.sty
+File: lstmisc.sty 2024/09/23 1.10c (Carsten Heinz)
+\c@lstnumber=\count291
+\lst@skipnumbers=\count292
+\lst@framebox=\box53
+)
+(/usr/share/texmf-dist/tex/latex/listings/listings.cfg
+File: listings.cfg 2024/09/23 1.10c listings configuration
+))
+Package: listings 2024/09/23 1.10c (Carsten Heinz)
+
+(/usr/share/texmf-dist/tex/latex/booktabs/booktabs.sty
+Package: booktabs 2020/01/12 v1.61803398 Publication quality tables
+\heavyrulewidth=\dimen158
+\lightrulewidth=\dimen159
+\cmidrulewidth=\dimen160
+\belowrulesep=\dimen161
+\belowbottomsep=\dimen162
+\aboverulesep=\dimen163
+\abovetopsep=\dimen164
+\cmidrulesep=\dimen165
+\cmidrulekern=\dimen166
+\defaultaddspace=\dimen167
+\@cmidla=\count293
+\@cmidlb=\count294
+\@aboverulesep=\dimen168
+\@belowrulesep=\dimen169
+\@thisruleclass=\count295
+\@lastruleclass=\count296
+\@thisrulewidth=\dimen170
+)
+(/usr/share/texmf-dist/tex/latex/tools/longtable.sty
+Package: longtable 2024-10-27 v4.22 Multi-page Table package (DPC)
+\LTleft=\skip52
+\LTright=\skip53
+\LTpre=\skip54
+\LTpost=\skip55
+\LTchunksize=\count297
+\LTcapwidth=\dimen171
+\LT@head=\box54
+\LT@firsthead=\box55
+\LT@foot=\box56
+\LT@lastfoot=\box57
+\LT@gbox=\box58
+\LT@cols=\count298
+\LT@rows=\count299
+\c@LT@tables=\count300
+\c@LT@chunks=\count301
+\LT@p@ftn=\toks22
+)
+(/usr/share/texmf-dist/tex/latex/enumitem/enumitem.sty
+Package: enumitem 2025/02/06 v3.11 Customized lists
+\labelindent=\skip56
+\enit@outerparindent=\dimen172
+\enit@toks=\toks23
+\enit@inbox=\box59
+\enit@count@id=\count302
+\enitdp@description=\count303
+)
+(/usr/share/texmf-dist/tex/latex/tools/multicol.sty
+Package: multicol 2024/09/14 v1.9i multicolumn formatting (FMi)
+\c@tracingmulticols=\count304
+\mult@box=\box60
+\multicol@leftmargin=\dimen173
+\c@unbalance=\count305
+\c@collectmore=\count306
+\doublecol@number=\count307
+\multicoltolerance=\count308
+\multicolpretolerance=\count309
+\full@width=\dimen174
+\page@free=\dimen175
+\premulticols=\dimen176
+\postmulticols=\dimen177
+\multicolsep=\skip57
+\multicolbaselineskip=\skip58
+\partial@page=\box61
+\last@line=\box62
+\mc@boxedresult=\box63
+\maxbalancingoverflow=\dimen178
+\mult@rightbox=\box64
+\mult@grightbox=\box65
+\mult@firstbox=\box66
+\mult@gfirstbox=\box67
+\@tempa=\box68
+\@tempa=\box69
+\@tempa=\box70
+\@tempa=\box71
+\@tempa=\box72
+\@tempa=\box73
+\@tempa=\box74
+\@tempa=\box75
+\@tempa=\box76
+\@tempa=\box77
+\@tempa=\box78
+\@tempa=\box79
+\@tempa=\box80
+\@tempa=\box81
+\@tempa=\box82
+\@tempa=\box83
+\@tempa=\box84
+\@tempa=\box85
+\@tempa=\box86
+\@tempa=\box87
+\@tempa=\box88
+\@tempa=\box89
+\@tempa=\box90
+\@tempa=\box91
+\@tempa=\box92
+\@tempa=\box93
+\@tempa=\box94
+\@tempa=\box95
+\@tempa=\box96
+\@tempa=\box97
+\@tempa=\box98
+\@tempa=\box99
+\@tempa=\box100
+\@tempa=\box101
+\@tempa=\box102
+\@tempa=\box103
+\c@minrows=\count310
+\c@columnbadness=\count311
+\c@finalcolumnbadness=\count312
+\last@try=\dimen179
+\multicolovershoot=\dimen180
+\multicolundershoot=\dimen181
+\mult@nat@firstbox=\box104
+\colbreak@box=\box105
+\mc@col@check@num=\count313
+)
+(/usr/share/texmf-dist/tex/latex/fancyhdr/fancyhdr.sty
+Package: fancyhdr 2025/02/07 v5.2 Extensive control of page headers and footers
+
+\f@nch@headwidth=\skip59
+\f@nch@offset@elh=\skip60
+\f@nch@offset@erh=\skip61
+\f@nch@offset@olh=\skip62
+\f@nch@offset@orh=\skip63
+\f@nch@offset@elf=\skip64
+\f@nch@offset@erf=\skip65
+\f@nch@offset@olf=\skip66
+\f@nch@offset@orf=\skip67
+\f@nch@height=\skip68
+\f@nch@footalignment=\skip69
+\f@nch@widthL=\skip70
+\f@nch@widthC=\skip71
+\f@nch@widthR=\skip72
+\@temptokenb=\toks24
+)
+(/usr/share/texmf-dist/tex/latex/titlesec/titlesec.sty
+Package: titlesec 2025/01/04 v2.17 Sectioning titles
+\ttl@box=\box106
+\beforetitleunit=\skip73
+\aftertitleunit=\skip74
+\ttl@plus=\dimen182
+\ttl@minus=\dimen183
+\ttl@toksa=\toks25
+\titlewidth=\dimen184
+\titlewidthlast=\dimen185
+\titlewidthfirst=\dimen186
+)
+(/usr/share/texmf-dist/tex/latex/tools/xspace.sty
+Package: xspace 2014/10/28 v1.13 Space after command names (DPC,MH)
+)
+Package hyperref Info: Option `colorlinks' set `true' on input line 24.
+LaTeX Font Info:    Trying to load font information for T1+lmr on input line 12
+7.
+
+(/usr/share/texmf-dist/tex/latex/lm/t1lmr.fd
+File: t1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+(/usr/share/texmf-dist/tex/latex/l3backend/l3backend-pdftex.def
+File: l3backend-pdftex.def 2024-05-08 L3 backend support: PDF output (pdfTeX)
+\l__color_backend_stack_int=\count314
+\l__pdf_internal_box=\box107
+) (./audit.aux)
+\openout1 = `audit.aux'.
+
+LaTeX Font Info:    Checking defaults for OML/cmm/m/it on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for OMS/cmsy/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for OT1/cmr/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for T1/cmr/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for TS1/cmr/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for OMX/cmex/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for U/cmr/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for PD1/pdf/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+LaTeX Font Info:    Checking defaults for PU/pdf/m/n on input line 127.
+LaTeX Font Info:    ... okay on input line 127.
+
+*geometry* driver: auto-detecting
+*geometry* detected driver: pdftex
+*geometry* verbose mode - [ preamble ] result:
+* driver: pdftex
+* paper: a4paper
+* layout: <same size as paper>
+* layoutoffset:(h,v)=(0.0pt,0.0pt)
+* modes: 
+* h-part:(L,W,R)=(68.28644pt, 460.935pt, 68.28644pt)
+* v-part:(T,H,B)=(68.28644pt, 708.47397pt, 68.28644pt)
+* \paperwidth=597.50787pt
+* \paperheight=845.04684pt
+* \textwidth=460.935pt
+* \textheight=708.47397pt
+* \oddsidemargin=-3.98355pt
+* \evensidemargin=-3.98355pt
+* \topmargin=-40.98355pt
+* \headheight=12.0pt
+* \headsep=25.0pt
+* \topskip=11.0pt
+* \footskip=30.0pt
+* \marginparwidth=50.0pt
+* \marginparsep=10.0pt
+* \columnsep=10.0pt
+* \skip\footins=10.0pt plus 4.0pt minus 2.0pt
+* \hoffset=0.0pt
+* \voffset=0.0pt
+* \mag=1000
+* \@twocolumnfalse
+* \@twosidefalse
+* \@mparswitchfalse
+* \@reversemarginfalse
+* (1in=72.27pt=25.4mm, 1cm=28.453pt)
+
+Package hyperref Info: Link coloring ON on input line 127.
+\@outlinefile=\write3
+\openout3 = `audit.out'.
+
+(/usr/share/texmf-dist/tex/context/base/mkii/supp-pdf.mkii
+[Loading MPS to PDF converter (version 2006.09.02).]
+\scratchcounter=\count315
+\scratchdimen=\dimen187
+\scratchbox=\box108
+\nofMPsegments=\count316
+\nofMParguments=\count317
+\everyMPshowfont=\toks26
+\MPscratchCnt=\count318
+\MPscratchDim=\dimen188
+\MPnumerator=\count319
+\makeMPintoPDFobject=\count320
+\everyMPtoPDFconversion=\toks27
+)
+\c@lstlisting=\count321
+LaTeX Font Info:    Trying to load font information for T1+lmtt on input line 1
+29.
+ (/usr/share/texmf-dist/tex/latex/lm/t1lmtt.fd
+File: t1lmtt.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <17.28> not available
+(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 129.
+LaTeX Font Info:    Trying to load font information for OT1+lmr on input line 1
+29.
+
+(/usr/share/texmf-dist/tex/latex/lm/ot1lmr.fd
+File: ot1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    Trying to load font information for OML+lmm on input line 1
+29.
+
+(/usr/share/texmf-dist/tex/latex/lm/omllmm.fd
+File: omllmm.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    Trying to load font information for OMS+lmsy on input line 
+129.
+
+(/usr/share/texmf-dist/tex/latex/lm/omslmsy.fd
+File: omslmsy.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    Trying to load font information for OMX+lmex on input line 
+129.
+
+(/usr/share/texmf-dist/tex/latex/lm/omxlmex.fd
+File: omxlmex.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <12> on input line 129.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <8> on input line 129.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <6> on input line 129.
+
+No file audit.toc.
+\tf@toc=\write4
+\openout4 = `audit.toc'.
+
+
+
+[1
+
+{/var/lib/texmf/fonts/map/pdftex/updmap/pdftex.map}{/usr/share/texmf-dist/fonts
+/enc/dvips/lm/lm-ec.enc}]
+LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <10.95> not available
+(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 143.
+LaTeX Font Info:    Trying to load font information for TS1+lmr on input line 1
+73.
+ (/usr/share/texmf-dist/tex/latex/lm/ts1lmr.fd
+File: ts1lmr.fd 2015/05/01 v1.6.1 Font defs for Latin Modern
+)
+Overfull \hbox (19.1005pt too wide) in paragraph at lines 173--177
+\T1/lmr/m/n/10.95 value rep-re-sen-ta-tion (\T1/lmtt/m/n/10.95 Value.v\T1/lmr/m
+/n/10.95 ), and helper func-tions (\T1/lmtt/m/n/10.95 do_raise\T1/lmr/m/n/10.95
+ , \T1/lmtt/m/n/10.95 z_flip_sign\T1/lmr/m/n/10.95 , \T1/lmtt/m/n/10.95 field_o
+r_heap\T1/lmr/m/n/10.95 ,
+ []
+
+
+Underfull \hbox (badness 10000) in paragraph at lines 190--191
+[]|\T1/lmr/m/n/10.95 Algebraic type (\T1/lmtt/m/n/10.95 Val_int\T1/lmr/m/n/10.9
+5 ,
+ []
+
+[2{/usr/share/texmf-dist/fonts/enc/dvips/lm/lm-ts1.enc}]
+(/usr/share/texmf-dist/tex/latex/listings/lstlang1.sty
+File: lstlang1.sty 2024/09/23 1.10c listings language file
+)
+(/usr/share/texmf-dist/tex/latex/listings/lstlang2.sty
+File: lstlang2.sty 2024/09/23 1.10c listings language file
+)
+(/usr/share/texmf-dist/tex/latex/listings/lstlang1.sty
+File: lstlang1.sty 2024/09/23 1.10c listings language file
+)
+(/usr/share/texmf-dist/tex/latex/listings/lstlang2.sty
+File: lstlang2.sty 2024/09/23 1.10c listings language file
+)
+(/usr/share/texmf-dist/tex/latex/listings/lstmisc.sty
+File: lstmisc.sty 2024/09/23 1.10c (Carsten Heinz)
+)
+LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <10> not available
+(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 212.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <10> on input line 212.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <7> on input line 212.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <5> on input line 212.
+
+./audit.tex:212: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.212 Record state : Type :=
+                             mk_state {
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+(/usr/share/texmf-dist/tex/latex/listings/lstlang1.sty
+File: lstlang1.sty 2024/09/23 1.10c listings language file
+)
+./audit.tex:254: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.254 Inductive value : Type :=
+                               
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[3]
+LaTeX Font Info:    Font shape `T1/lmtt/bx/n' in size <12> not available
+(Font)              Font shape `T1/lmtt/b/n' tried instead on input line 274.
+LaTeX Font Info:    External font `lmex10' loaded for size
+(Font)              <10.95> on input line 277.
+ (./snippets/c/ACC.tex) (./snippets/rocq/ACC.tex) (./snippets/c/PUSH.tex)
+(./snippets/rocq/PUSH.tex)
+
+[4{/usr/share/texmf-dist/fonts/enc/dvips/lm/lm-mathit.enc}{/usr/share/texmf-dis
+t/fonts/enc/dvips/lm/lm-mathsy.enc}] (./snippets/c/PUSHACC.tex)
+(./snippets/rocq/PUSHACC.tex
+./snippets/rocq/PUSHACC.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/POP.tex) (./snippets/rocq/POP.tex) (./snippets/c/ASSIGN.tex
+
+[5]) (./snippets/rocq/ASSIGN.tex) (./snippets/c/ENVACC.tex)
+(./snippets/rocq/ENVACC.tex)
+Overfull \hbox (5.75049pt too wide) in paragraph at lines 404--408
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmtt/m/n/10.95 Field(env, $\OML/lmm/m
+/it/10.95 n$\T1/lmtt/m/n/10.95 ) \T1/lmr/m/n/10.95 cor-re-sponds to \T1/lmtt/m/
+n/10.95 field_or_heap s env $\OML/lmm/m/it/10.95 n$\T1/lmr/m/n/10.95 . The \T1/
+lmtt/m/n/10.95 field_or_heap \T1/lmr/m/n/10.95 helper
+ []
+
+(./snippets/c/PUSHENVACC.tex
+
+[6]) (./snippets/rocq/PUSHENVACC.tex
+./snippets/rocq/PUSHENVACC.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (6.35477pt too wide) in paragraph at lines 438--442
+[] []\T1/lmr/bx/n/10.95 PDF Spec.[] \T1/lmtt/m/n/10.95 OFFSETCLOSURE $\OML/lmm/
+m/it/10.95 n$\T1/lmr/m/n/10.95 : Sets \T1/lmtt/m/n/10.95 accu = env + $\OML/lmm
+/m/it/10.95 n$ \T1/lmtt/m/n/10.95 * sizeof(value)\T1/lmr/m/n/10.95 . This nav-i
+-gates within
+ []
+
+(./snippets/c/OFFSETCLOSURE.tex) (./snippets/rocq/OFFSETCLOSURE.tex
+./snippets/rocq/OFFSETCLOSURE.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let new_ofs :=
+                         Z.to_nat (Z.of_nat base_ofs + ofs) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[7{/usr/share/texmf-dist/fonts/enc/dvips/lm/lm-rm.enc}]
+(./snippets/c/PUSHOFFSETCLOSURE.tex) (./snippets/rocq/PUSHOFFSETCLOSURE.tex
+./snippets/rocq/PUSHOFFSETCLOSURE.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/PUSHOFFSETCLOSURE.tex:7: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.7       let new_ofs :=
+                         Z.to_nat (Z.of_nat base_ofs + ofs) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/PUSH_RETADDR.tex) (./snippets/rocq/PUSH_RETADDR.tex
+./snippets/rocq/PUSH_RETADDR.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let frame :=
+                     Val_int ret_addr :: s.(env) :: Val_int (Z.of_nat s.(ext...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[8])
+Overfull \hbox (37.47833pt too wide) in paragraph at lines 504--509
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 The C code pushes \T1/l
+mtt/m/n/10.95 sp[0]=(value)(pc+*pc), sp[1]=env, sp[2]=Val_long(extra_args)\T1/l
+mr/m/n/10.95 .
+ []
+
+
+Overfull \hbox (6.81146pt too wide) in paragraph at lines 504--509
+\T1/lmr/m/n/10.95 Our code pushes \T1/lmtt/m/n/10.95 Val_int ret_addr :: env ::
+ Val_int(Z.of_nat extra_args) :: stack\T1/lmr/m/n/10.95 .
+ []
+
+(./snippets/c/APPLY.tex) (./snippets/rocq/APPLY.tex)
+
+[9] (./snippets/c/APPLY1.tex) (./snippets/rocq/APPLY1.tex
+./snippets/rocq/APPLY1.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8         let new_stack :=
+                             arg1 :: Val_int pc' :: s.(env) :: Val_int (Z.of...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (14.50517pt too wide) in paragraph at lines 557--560
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 s
+p[0]=arg1, sp[1]=pc, sp[2]=env, sp[3]=Val_long(extra_args)\T1/lmr/m/n/10.95 . R
+ocq: \T1/lmtt/m/n/10.95 arg1
+ []
+
+(./snippets/c/APPLY2.tex
+
+[10]) (./snippets/rocq/APPLY2.tex
+./snippets/rocq/APPLY2.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8         let new_stack :=
+                             arg1 :: arg2 :: Val_int pc' :: s.(env) :: Val_i...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/APPLY3.tex) (./snippets/rocq/APPLY3.tex
+./snippets/rocq/APPLY3.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8         let new_stack :=
+                             arg1 :: arg2 :: arg3 :: Val_int pc' :: s.(env) ...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[11]) (./snippets/c/APPTERM.tex) (./snippets/rocq/APPTERM.tex
+./snippets/rocq/APPTERM.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let args :=
+                    firstn nargs s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/APPTERM.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let base :=
+                    skipn slotsize s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[12] (./snippets/c/APPTERM1.tex) (./snippets/rocq/APPTERM1.tex
+./snippets/rocq/APPTERM1.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let base :=
+                      skipn slotsize s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (0.30061pt too wide) in paragraph at lines 645--648
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 s
+p = sp + *pc - 1; sp[0] = arg1\T1/lmr/m/n/10.95 . Rocq: \T1/lmtt/m/n/10.95 arg1
+ :: skipn slotsize stack\T1/lmr/m/n/10.95 .
+ []
+
+(./snippets/c/APPTERM2.tex) (./snippets/rocq/APPTERM2.tex
+
+[13]
+./snippets/rocq/APPTERM2.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let base :=
+                      skipn slotsize s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/APPTERM3.tex) (./snippets/rocq/APPTERM3.tex
+./snippets/rocq/APPTERM3.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let base :=
+                      skipn slotsize s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[14] (./snippets/c/RETURN.tex) (./snippets/rocq/RETURN.tex
+./snippets/rocq/RETURN.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let stk :=
+                   skipn stacksize s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (10.46115pt too wide) in paragraph at lines 709--712
+\T1/lmtt/m/n/10.95 env = accu } else { pc = sp[0]; env = sp[1]; extra_args = Lo
+ng_val(sp[2]); sp += 3
+ []
+
+
+
+[15] (./snippets/c/RESTART.tex) (./snippets/rocq/RESTART.tex
+./snippets/rocq/RESTART.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4 ... : list value) (ofs : nat) : step_result :=
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/RESTART.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5       let fields :=
+                        skipn ofs all_fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/RESTART.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let num_args :=
+                          Nat.sub (length fields) 3 in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/RESTART.tex:7: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.7       let args :=
+                      skipn 3 fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/RESTART.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8       let new_stack :=
+                           args ++ s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[16] (./snippets/c/GRAB.tex) (./snippets/rocq/GRAB.tex
+./snippets/rocq/GRAB.tex:7: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.7       let num_args :=
+                          S s.(extra_args) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GRAB.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8       let saved_args :=
+                            firstn num_args s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GRAB.tex:9: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.9       let rest_stack :=
+                            skipn num_args s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GRAB.tex:11: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.11       let closinfo :=
+                           Val_int 0 in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GRAB.tex:12: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.12       let fields :=
+                         Val_int (s.(pc) - 1) :: closinfo :: s.(env) :: save...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GRAB.tex:13: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.13       let '(s', base_ptr) :=
+                                  heap_alloc s Closure_tag fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GRAB.tex:14: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.14       let addr :=
+                       match base_ptr with Val_ptr a => a | _ => 0%nat end in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[17]
+./snippets/rocq/GRAB.tex:15: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.15       let closure :=
+                          Val_closure addr 0%nat in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (30.25273pt too wide) in paragraph at lines 788--790
+[]\T1/lmr/m/n/10.95 Rocq: Al-lo-cates with fields \T1/lmtt/m/n/10.95 Val_int(pc
+-1) :: closinfo :: env :: saved_args\T1/lmr/m/n/10.95 . \T1/lmtt/m/n/10.95 clos
+info
+ []
+
+(./snippets/c/CLOSURE.tex
+
+[18]) (./snippets/rocq/CLOSURE.tex
+./snippets/rocq/CLOSURE.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let stk :=
+                   if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(sta...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSURE.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let vars :=
+                    firstn nvars stk in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSURE.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6     let rest :=
+                    skipn nvars stk in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSURE.tex:7: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.7     let closinfo :=
+                        Val_int 0 in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSURE.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8     let fields :=
+                      Val_int code_ofs :: closinfo :: vars in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSURE.tex:9: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.9     let '(s', base_ptr) :=
+                               heap_alloc s Closure_tag fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSURE.tex:10: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.10     let addr :=
+                     match base_ptr with Val_ptr a => a | _ => 0%nat end in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSURE.tex:11: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.11     let closure :=
+                        Val_closure addr 0%nat in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[19] (./snippets/c/CLOSUREREC.tex) (./snippets/rocq/CLOSUREREC.tex
+./snippets/rocq/CLOSUREREC.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let stk :=
+                   if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(sta...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let vars :=
+                    firstn nvars stk in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6     let rest :=
+                    skipn nvars stk in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:10: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.10       let closinfo :=
+                           Val_int 0 in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:11: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.11       let infix_hdr :=
+                            Val_block Infix_tag [] in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:12: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.12 ... : nat) (offsets : list Z) : list value :=
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[20]
+./snippets/rocq/CLOSUREREC.tex:21: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.21       let fields :=
+                         build_closure_fields 0%nat code_offsets in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:22: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.22       let '(s', base_ptr) :=
+                                  heap_alloc s Closure_tag fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:23: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.23       let addr :=
+                       match base_ptr with Val_ptr a => a | _ => 0%nat end in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:24: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.24       let closure_at (i : nat) : value :=
+                                              
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:29: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.29 ... : nat) (stk : list value) : list value :=
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:33: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.33           let stk' :=
+                           push_closures i' stk in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:36: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.36       let new_stack :=
+                            push_closures nfuncs rest in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/CLOSUREREC.tex:39: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.39   (* OFFSETCLOSURE n: accu :=
+                                   env offset by n fields (within the same h...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[21] (./snippets/c/GETGLOBAL.tex) (./snippets/rocq/GETGLOBAL.tex)
+(./snippets/c/PUSHGETGLOBAL.tex) (./snippets/rocq/PUSHGETGLOBAL.tex
+./snippets/rocq/PUSHGETGLOBAL.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[22]) (./snippets/c/GETGLOBALFIELD.tex) (./snippets/rocq/GETGLOBALFIELD.tex)
+(./snippets/c/PUSHGETGLOBALFIELD.tex) (./snippets/rocq/PUSHGETGLOBALFIELD.tex
+
+[23]
+./snippets/rocq/PUSHGETGLOBALFIELD.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/SETGLOBAL.tex) (./snippets/rocq/SETGLOBAL.tex
+./snippets/rocq/SETGLOBAL.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_global :=
+                          match set_nth s.(global) n s.(accu) with
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (21.74431pt too wide) in paragraph at lines 1003--1007
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 c
+aml_modify(&Field(caml_global_data, *pc), accu); accu = Val_unit\T1/lmr/m/n/10.
+95 . Rocq:
+ []
+
+(./snippets/c/ATOM.tex)
+
+[24] (./snippets/rocq/ATOM.tex
+./snippets/rocq/ATOM.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let '(s', ptr) :=
+                          heap_alloc s t [] in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (8.7577pt too wide) in paragraph at lines 1031--1036
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 A
+tom(*pc++) \T1/lmr/m/n/10.95 re-turns a pointer to a pre-allocated zero-size bl
+ock. Rocq: \T1/lmtt/m/n/10.95 heap_alloc
+ []
+
+(./snippets/c/PUSHATOM.tex) (./snippets/rocq/PUSHATOM.tex
+./snippets/rocq/PUSHATOM.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/PUSHATOM.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let '(s', ptr) :=
+                          heap_alloc s t [] in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/MAKEBLOCK.tex
+
+[25]) (./snippets/rocq/MAKEBLOCK.tex
+./snippets/rocq/MAKEBLOCK.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let fields :=
+                      s.(accu) :: firstn (Nat.sub size 1) s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/MAKEBLOCK.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let new_stack :=
+                         skipn (Nat.sub size 1) s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/MAKEBLOCK.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6     let '(s', ptr) :=
+                          heap_alloc s t fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (24.2484pt too wide) in paragraph at lines 1076--1078
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 F
+ield(block, 0) = accu; for (i=1; i<wosize; i++) Field(block,i) = *sp++\T1/lmr/m
+/n/10.95 .
+ []
+
+(./snippets/c/MAKEBLOCK1.tex) (./snippets/rocq/MAKEBLOCK1.tex
+./snippets/rocq/MAKEBLOCK1.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let '(s', ptr) :=
+                          heap_alloc s t [s.(accu)] in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[26] (./snippets/c/MAKEBLOCK2.tex) (./snippets/rocq/MAKEBLOCK2.tex
+./snippets/rocq/MAKEBLOCK2.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let '(s', ptr) :=
+                            heap_alloc s t [s.(accu); v1] in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/MAKEBLOCK3.tex
+
+[27]) (./snippets/rocq/MAKEBLOCK3.tex
+./snippets/rocq/MAKEBLOCK3.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let '(s', ptr) :=
+                            heap_alloc s t [s.(accu); v1; v2] in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (2.64267pt too wide) in paragraph at lines 1153--1155
+[] []\T1/lmr/bx/n/10.95 PDF Spec.[] \T1/lmtt/m/n/10.95 MAKEFLOATBLOCK $\OML/lmm
+/m/it/10.95 n$\T1/lmr/m/n/10.95 : Al-lo-cates a block of $\OML/lmm/m/it/10.95 n
+$ \T1/lmr/m/n/10.95 boxed floats with tag \T1/lmtt/m/n/10.95 Double_array_tag
+ []
+
+(./snippets/c/MAKEFLOATBLOCK.tex) (./snippets/rocq/MAKEFLOATBLOCK.tex
+
+[28]
+./snippets/rocq/MAKEFLOATBLOCK.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let fields :=
+                      s.(accu) :: firstn (Nat.sub n 1) s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/MAKEFLOATBLOCK.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let new_stack :=
+                         skipn (Nat.sub n 1) s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/MAKEFLOATBLOCK.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6     let '(s', ptr) :=
+                          heap_alloc s 254 fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/GETFIELD.tex) (./snippets/rocq/GETFIELD.tex)
+(./snippets/c/GETFLOATFIELD.tex
+
+[29]) (./snippets/rocq/GETFLOATFIELD.tex) (./snippets/c/SETFIELD.tex)
+(./snippets/rocq/SETFIELD.tex
+./snippets/rocq/SETFIELD.tex:12: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.12             let new_hp :=
+                               heap_update s.(hp) addr new_fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[30]
+Overfull \hbox (59.55383pt too wide) in paragraph at lines 1258--1260
+[] []\T1/lmr/bx/n/10.95 PDF Spec.[] \T1/lmtt/m/n/10.95 SETFLOATFIELD $\OML/lmm/
+m/it/10.95 n$\T1/lmr/m/n/10.95 : Stores a float into field $\OML/lmm/m/it/10.95
+ n$ \T1/lmr/m/n/10.95 of a float ar-ray. \T1/lmtt/m/n/10.95 Store_double_flat_f
+ield(accu,
+ []
+
+(./snippets/c/SETFLOATFIELD.tex) (./snippets/rocq/SETFLOATFIELD.tex
+./snippets/rocq/SETFLOATFIELD.tex:12: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.12             let new_hp :=
+                               heap_update s.(hp) addr new_fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[31]
+Overfull \hbox (25.87407pt too wide) in paragraph at lines 1309--1311
+[] []\T1/lmr/bx/n/10.95 PDF Spec.[] \T1/lmtt/m/n/10.95 VECTLENGTH\T1/lmr/m/n/10
+.95 : \T1/lmtt/m/n/10.95 accu = Wosize_val(accu)\T1/lmr/m/n/10.95 . For dou-ble
+ ar-rays, di-vides by \T1/lmtt/m/n/10.95 Double_wosize\T1/lmr/m/n/10.95 . 
+ []
+
+(./snippets/c/VECTLENGTH.tex) (./snippets/rocq/VECTLENGTH.tex)
+(./snippets/c/GETVECTITEM.tex)
+
+[32] (./snippets/rocq/GETVECTITEM.tex) (./snippets/c/SETVECTITEM.tex)
+(./snippets/rocq/SETVECTITEM.tex
+./snippets/rocq/SETVECTITEM.tex:12: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.12             let new_hp :=
+                               heap_update s.(hp) addr new_fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+
+[33]
+Overfull \hbox (27.25577pt too wide) in paragraph at lines 1375--1377
+[] []\T1/lmr/bx/n/10.95 PDF Spec.[] \T1/lmtt/m/n/10.95 GETSTRINGCHAR\T1/lmr/m/n
+/10.95 /\T1/lmtt/m/n/10.95 GETBYTESCHAR\T1/lmr/m/n/10.95 : \T1/lmtt/m/n/10.95 a
+ccu = Val_int(Byte_u(accu, Long_val(sp[0])));
+ []
+
+(./snippets/c/GETSTRINGCHAR.tex) (./snippets/rocq/GETBYTESCHAR.tex)
+(./snippets/c/SETBYTESCHAR.tex)
+
+[34] (./snippets/rocq/SETBYTESCHAR.tex
+./snippets/rocq/SETBYTESCHAR.tex:12: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.12             let new_hp :=
+                               heap_update s.(hp) addr new_fields in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/BRANCH.tex) (./snippets/rocq/BRANCH.tex)
+Overfull \hbox (3.5873pt too wide) in paragraph at lines 1452--1455
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 p
+c += *pc \T1/lmr/m/n/10.95 (rel-a-tive off-set). Rocq: \T1/lmtt/m/n/10.95 pc = 
+target \T1/lmr/m/n/10.95 (ab-so-lute, pre-resolved by loader).
+ []
+
+
+
+[35] (./snippets/c/BRANCHIF.tex) (./snippets/rocq/BRANCHIF.tex)
+(./snippets/c/BRANCHIFNOT.tex) (./snippets/rocq/BRANCHIFNOT.tex)
+
+[36] (./snippets/c/SWITCH.tex) (./snippets/rocq/SWITCH.tex)
+Overfull \hbox (32.70422pt too wide) in paragraph at lines 1520--1523
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 s
+izes = *pc++; if (Is_block(accu)) index = Tag_val(accu), pc += pc[(sizes
+ []
+
+
+
+[37] (./snippets/c/BOOLNOT.tex) (./snippets/rocq/BOOLNOT.tex)
+(./snippets/c/PUSHTRAP.tex) (./snippets/rocq/PUSHTRAP.tex
+./snippets/rocq/PUSHTRAP.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let prev_tsp :=
+                        Val_int (Z.of_nat s.(trap_sp)) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/PUSHTRAP.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let new_stack :=
+                         Val_int handler_pc :: prev_tsp :: s.(env) :: Val_in...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[38]
+./snippets/rocq/PUSHTRAP.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6     let new_tsp :=
+                       length new_stack in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+)
+Overfull \hbox (48.08357pt too wide) in paragraph at lines 1585--1587
+[]\T1/lmr/m/n/10.95 Rocq trap frame: \T1/lmtt/m/n/10.95 Val_int handler_pc :: V
+al_int(trap_sp) :: env :: Val_int(extra_args)
+ []
+
+(./snippets/c/POPTRAP.tex) (./snippets/rocq/POPTRAP.tex
+
+[39])
+Overfull \hbox (96.29567pt too wide) in paragraph at lines 1621--1623
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 t
+rapsp = sp + Long_val(Trap_link_offset(sp)); sp += 4\T1/lmr/m/n/10.95 . Also ch
+ecks \T1/lmtt/m/n/10.95 caml_something_to_do
+ []
+
+(./snippets/c/RAISE.tex) (./snippets/rocq/RAISE.tex
+
+[40])
+Overfull \hbox (53.4962pt too wide) in paragraph at lines 1657--1660
+[]\T1/lmr/m/n/10.95 The C code: \T1/lmtt/m/n/10.95 sp = trapsp; pc = Trap_pc(sp
+); trapsp = sp + Long_val(Trap_link_offset(sp));
+ []
+
+(./snippets/c/CHECK_SIGNALS.tex) (./snippets/rocq/CHECK_SIGNALS.tex
+
+[41])
+Overfull \hbox (39.30504pt too wide) in paragraph at lines 1719--1722
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 Mod-eled as no-op (just
+ ad-vance PC). In the C in-ter-preter, this checks \T1/lmtt/m/n/10.95 caml_some
+thing_to_do
+ []
+
+(./snippets/c/C_CALL.tex) (./snippets/rocq/C_CALL.tex
+./snippets/rocq/C_CALL.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let args :=
+                    s.(accu) :: firstn (Nat.sub nargs 1) s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/C_CALL.tex:5: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.5     let new_stack :=
+                         skipn (Nat.sub nargs 1) s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/C_CALL.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6     let cont :=
+                    st s pc' val_unit new_stack s.(env) s.(extra_args) s.(gl...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/CONSTINT.tex
+
+[42]) (./snippets/rocq/CONSTINT.tex) (./snippets/c/PUSHCONSTINT.tex)
+(./snippets/rocq/PUSHCONSTINT.tex
+./snippets/rocq/PUSHCONSTINT.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/NEGINT.tex) (./snippets/rocq/NEGINT.tex
+
+[43])
+Overfull \hbox (11.62634pt too wide) in paragraph at lines 1820--1823
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 (
+value)(2 - (intnat)accu) \T1/lmr/m/n/10.95 --- this works be-cause for tagged i
+n-te-gers, \T1/lmtt/m/n/10.95 Val_int(n)
+ []
+
+(./snippets/c/ADDINT.tex) (./snippets/rocq/ADDINT.tex) (./snippets/c/SUBINT.tex
+) (./snippets/rocq/SUBINT.tex)
+
+[44] (./snippets/c/MULINT.tex) (./snippets/rocq/MULINT.tex)
+(./snippets/c/DIVINT.tex) (./snippets/rocq/DIVINT.tex)
+Overfull \hbox (18.9963pt too wide) in paragraph at lines 1908--1911
+[]\T1/lmr/m/n/10.95 Both raise an ex-cep-tion on zero. The Rocq ex-cep-tion is 
+a man-u-ally con-structed \T1/lmtt/m/n/10.95 Division_by_zero
+ []
+
+
+
+[45] (./snippets/c/MODINT.tex) (./snippets/rocq/MODINT.tex)
+(./snippets/c/ANDINT.tex) (./snippets/rocq/ANDINT.tex)
+
+[46] (./snippets/c/ORINT.tex) (./snippets/rocq/ORINT.tex)
+(./snippets/c/XORINT.tex) (./snippets/rocq/XORINT.tex)
+
+[47] (./snippets/c/LSLINT.tex) (./snippets/rocq/LSLINT.tex)
+(./snippets/c/LSRINT.tex) (./snippets/rocq/LSRINT.tex)
+
+[48] (./snippets/c/ASRINT.tex) (./snippets/rocq/ASRINT.tex)
+Overfull \hbox (8.09682pt too wide) in paragraph at lines 2064--2067
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 (
+(intnat)accu) >> Long_val(*sp++) | 1 \T1/lmr/m/n/10.95 --- signed shift (implem
+entation-defined
+ []
+
+(./snippets/c/EQ.tex) (./snippets/rocq/EQ.tex)
+
+[49] (./snippets/c/NEQ.tex) (./snippets/rocq/NEQ.tex) (./snippets/c/LTINT.tex)
+(./snippets/rocq/LTINT.tex)
+
+[50] (./snippets/c/LEINT.tex) (./snippets/rocq/LEINT.tex)
+(./snippets/c/GTINT.tex) (./snippets/rocq/GTINT.tex) (./snippets/c/GEINT.tex)
+(./snippets/rocq/GEINT.tex
+
+[51]) (./snippets/c/OFFSETINT.tex) (./snippets/rocq/OFFSETINT.tex)
+(./snippets/c/OFFSETREF.tex) (./snippets/rocq/OFFSETREF.tex
+
+[52]
+./snippets/rocq/OFFSETREF.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8         let new_hp :=
+                          heap_update s.(hp) addr (Val_int (old + n) :: rest...
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/ISINT.tex) (./snippets/rocq/ISINT.tex) (./snippets/c/ULTINT.tex
+) (./snippets/rocq/ULTINT.tex
+
+[53])
+Overfull \hbox (9.42494pt too wide) in paragraph at lines 2292--2297
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C uses \T1/lmtt/m/n/10.
+95 uintnat \T1/lmr/m/n/10.95 cast for un-signed com-par-i-son on tagged val-ues
+. Rocq uses \T1/lmtt/m/n/10.95 z_flip_sign
+ []
+
+(./snippets/c/UGEINT.tex) (./snippets/rocq/UGEINT.tex) (./snippets/c/BEQ.tex
+
+[54]) (./snippets/rocq/BEQ.tex)
+Overfull \hbox (15.38718pt too wide) in paragraph at lines 2346--2350
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 C: \T1/lmtt/m/n/10.95 i
+f (*pc++ == Long_val(accu)) pc += *pc; else pc++\T1/lmr/m/n/10.95 . Rocq: match
+es \T1/lmtt/m/n/10.95 Val_int
+ []
+
+(./snippets/c/BNEQ.tex) (./snippets/rocq/BNEQ.tex)
+
+[55] (./snippets/c/BLTINT.tex) (./snippets/rocq/BLTINT.tex)
+(./snippets/c/BLEINT.tex) (./snippets/rocq/BLEINT.tex) (./snippets/c/BGTINT.tex
+)
+
+[56] (./snippets/rocq/BGTINT.tex) (./snippets/c/BGEINT.tex)
+(./snippets/rocq/BGEINT.tex) (./snippets/c/BULTINT.tex)
+(./snippets/rocq/BULTINT.tex
+
+[57]) (./snippets/c/BUGEINT.tex) (./snippets/rocq/BUGEINT.tex)
+Overfull \hbox (15.13979pt too wide) in paragraph at lines 2510--2512
+[] []\T1/lmr/bx/n/10.95 PDF Spec.[] \T1/lmtt/m/n/10.95 GETMETHOD\T1/lmr/m/n/10.
+95 : \T1/lmtt/m/n/10.95 accu = Field(Field(sp[0], 0), Int_val(accu))\T1/lmr/m/n
+/10.95 . Looks up a method
+ []
+
+(./snippets/c/GETMETHOD.tex) (./snippets/rocq/GETMETHOD.tex
+
+[58]) (./snippets/c/GETPUBMET.tex) (./snippets/rocq/GETPUBMET.tex
+./snippets/rocq/GETPUBMET.tex:4: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.4     let new_stack :=
+                         s.(accu) :: s.(stack) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GETPUBMET.tex:8: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.8       let fields :=
+                       
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+
+
+[59]
+./snippets/rocq/GETPUBMET.tex:16: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.16 ... (remaining : list value) : step_result :=
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/GETDYNMET.tex
+
+[60]) (./snippets/rocq/GETDYNMET.tex
+./snippets/rocq/GETDYNMET.tex:6: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.6       let tag :=
+                     s.(accu) in
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GETDYNMET.tex:9: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.9         let fields :=
+                         
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+./snippets/rocq/GETDYNMET.tex:17: Undefined control sequence.
+<argument> \coloneq 
+                    
+l.17 ... (remaining : list value) : step_result :=
+                                                  
+The control sequence at the end of the top line
+of your error message was never \def'ed. If you have
+misspelled it (e.g., `\hobx'), type `I' and the correct
+spelling (e.g., `I\hbox'). Otherwise just continue,
+and I'll forget about whatever was undefined.
+
+) (./snippets/c/STOP.tex
+
+[61]) (./snippets/rocq/STOP.tex) (./snippets/c/EVENT.tex)
+(./snippets/rocq/EVENT.tex) (./snippets/rocq/BREAK.tex)
+
+[62] (./snippets/rocq/PERFORM.tex)
+Overfull \hbox (6.99246pt too wide) in paragraph at lines 2666--2669
+[] []\T1/lmr/bx/n/10.95 Anal-y-sis.[] \T1/lmr/m/n/10.95 Re-turns \T1/lmtt/m/n/1
+0.95 Error "PERFORM: effects not supported"\T1/lmr/m/n/10.95 . Cor-rect for OCa
+ml 4.14 (these
+ []
+
+
+
+[63]
+Overfull \hbox (4.67049pt too wide) in alignment at lines 2730--2845
+ [] [] [] [] 
+ []
+
+
+Package longtable Warning: Column widths have changed
+(longtable)                in table 2 on input line 2845.
+
+[64] [65]
+Overfull \hbox (69.65065pt too wide) in paragraph at lines 2880--2884
+[]\T1/lmr/m/n/10.95 The \T1/lmtt/m/n/10.95 closinfo \T1/lmr/m/n/10.95 field in 
+clo-sure blocks is hard-coded to \T1/lmtt/m/n/10.95 Val_int 0 \T1/lmr/m/n/10.95
+ in-stead of the proper \T1/lmtt/m/n/10.95 Make_closinfo(arity,
+ []
+
+
+
+[66]
+Overfull \hbox (21.86678pt too wide) in paragraph at lines 2927--2930
+\T1/lmr/bx/n/10.95 Severity: Low--Medium. \T1/lmr/m/n/10.95 Af-fects: \T1/lmtt/
+m/n/10.95 MAKEFLOATBLOCK\T1/lmr/m/n/10.95 , \T1/lmtt/m/n/10.95 GETFLOATFIELD\T1
+/lmr/m/n/10.95 , \T1/lmtt/m/n/10.95 SETFLOATFIELD\T1/lmr/m/n/10.95 , \T1/lmtt/m
+/n/10.95 VECTLENGTH\T1/lmr/m/n/10.95 . 
+ []
+
+
+Package longtable Warning: Table widths have changed. Rerun LaTeX.
+
+
+
+[67] (./audit.aux)
+ ***********
+LaTeX2e <2024-11-01> patch level 2
+L3 programming layer <2025-01-18>
+ ***********
+
+
+LaTeX Warning: Label(s) may have changed. Rerun to get cross-references right.
+
+
+Package rerunfilecheck Warning: File `audit.out' has changed.
+(rerunfilecheck)                Rerun to get outlines right
+(rerunfilecheck)                or use package `bookmark'.
+
+Package rerunfilecheck Info: Checksums for `audit.out':
+(rerunfilecheck)             Before: <no file>
+(rerunfilecheck)             After:  20D4FA6BC9C488B7764A57575C183454;15633.
+ ) 
+Here is how much of TeX's memory you used:
+ 16150 strings out of 474376
+ 257230 string characters out of 5745125
+ 971203 words of memory out of 5000000
+ 36946 multiletter control sequences out of 15000+600000
+ 622149 words of font info for 79 fonts, out of 8000000 for 9000
+ 417 hyphenation exceptions out of 8191
+ 75i,6n,79p,358b,2041s stack positions out of 10000i,1000n,20000p,200000b,200000s
+</usr/share/texmf-dist/fonts/type1/public/lm/lmbx10.pfb></usr/share/texmf-dis
+t/fonts/type1/public/lm/lmbx12.pfb></usr/share/texmf-dist/fonts/type1/public/lm
+/lmmi10.pfb></usr/share/texmf-dist/fonts/type1/public/lm/lmmi8.pfb></usr/share/
+texmf-dist/fonts/type1/public/lm/lmr10.pfb></usr/share/texmf-dist/fonts/type1/p
+ublic/lm/lmr12.pfb></usr/share/texmf-dist/fonts/type1/public/lm/lmr6.pfb></usr/
+share/texmf-dist/fonts/type1/public/lm/lmr8.pfb></usr/share/texmf-dist/fonts/ty
+pe1/public/lm/lmri10.pfb></usr/share/texmf-dist/fonts/type1/public/lm/lmsy10.pf
+b></usr/share/texmf-dist/fonts/type1/public/lm/lmsy8.pfb></usr/share/texmf-dist
+/fonts/type1/public/lm/lmtk10.pfb></usr/share/texmf-dist/fonts/type1/public/lm/
+lmtt10.pfb></usr/share/texmf-dist/fonts/type1/public/lm/lmtti10.pfb>
+Output written on audit.pdf (67 pages, 543274 bytes).
+PDF statistics:
+ 2296 PDF objects out of 2487 (max. 8388607)
+ 2175 compressed objects within 22 object streams
+ 1641 named destinations out of 1728 (max. 500000)
+ 1 words of extra memory for PDF output out of 10000 (max. 10000000)
+
