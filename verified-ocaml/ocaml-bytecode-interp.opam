@@ -1,0 +1,38 @@
+opam-version: "2.0"
+name: "ocaml-bytecode-interp"
+version: "0.1.0"
+synopsis: "Formally verified OCaml bytecode interpreter in Rocq"
+description: """
+A formally verified OCaml bytecode interpreter written in Rocq (Coq),
+with Rocq-to-OCaml extraction and property-based testing against ocamlrun.
+The core correctness theorem:
+  forall source, interpret(source) = (interpret-bytecode . compile)(source)
+"""
+maintainer: ["Yannick Forster <yannick.forster@inria.fr>"]
+authors: ["Yannick Forster"]
+license: "MIT"
+homepage: "https://github.com/yforster/verified-ocaml"
+bug-reports: "https://github.com/yforster/verified-ocaml/issues"
+
+depends: [
+  "ocaml" {>= "4.14.0"}
+  "dune" {>= "3.16"}
+  "coq" {>= "9.0.0"}
+  "coq-stdlib"
+  "coq-record-update" {>= "0.3.0"}
+  "coq-vst" {>= "2.16"}
+  "coq-compcert" {>= "3.17"}
+  "coq-flocq" {>= "4.2.0"}
+  "qcheck-core" {with-test}
+  "ppxlib" {with-test}
+  "unix"
+  "str"
+]
+
+build: [
+  ["dune" "build" "-p" name "-j" jobs]
+]
+
+run-test: [
+  ["dune" "exec" "manual/test/bytecode-pbt/harness.exe"]
+]
