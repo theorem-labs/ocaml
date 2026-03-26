@@ -5,11 +5,8 @@
    3. Run bytecode through our interpreter to get actual output
    4. Compare outputs
 
-   Usage: ocaml_testsuite_runner.exe [--skip-conf FILE] [--dashboard FILE] [directory ...]
-   If no directories given, runs on test/ocaml-testsuite/basic
-
-   --skip-conf FILE   Read skip list from FILE (default: testsuite.conf in project root)
-   --dashboard FILE   Write dashboard results to FILE after running *)
+   Usage: ocaml_testsuite_runner.exe [directory ...]
+   If no directories given, runs on test/ocaml-testsuite/basic *)
 
 open Test_common
 
@@ -100,7 +97,7 @@ let parse_test_header path =
     let content = Bytes.sub_string buf 0 n in
     (* Find (* TEST ... *) at start of file *)
     let test_start = "(* TEST" in
-    let _test_end = "*)" in
+    let test_end = "*)" in
     if not (String.length content >= String.length test_start &&
             String.sub content 0 (String.length test_start) = test_start) then
       empty_header
@@ -183,7 +180,7 @@ let run_our_interp exe_file =
   let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
   let prims = load_prims data sections in
   let buf = Buffer.create 256 in
-  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value) = make_handler ~raw_globals ~globals_list:globals prims buf in
+  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value, _minor_words_ref, _last_next_addr_ref) = make_handler ~raw_globals ~globals_list:globals prims buf in
   let open Interp_extracted in
   (* Initialize state with pre-populated heap for mutable global objects *)
   let s = ref { (initial_state globals) with hp = init_heap; next_addr = init_next_addr } in
@@ -256,7 +253,7 @@ let run_our_interp exe_file =
     else begin
       (* No Printexc handler registered: simulate default_fatal_uncaught_exception.
          The C runtime prints the error to stderr (we don't capture that) and exits.
-         Treat as a clean exit -- the stdout output captured so far is the result. *)
+         Treat as a clean exit — the stdout output captured so far is the result. *)
       raise Clean_exit
     end
   in
@@ -478,176 +475,32 @@ let collect_ml_files dir =
     Printf.eprintf "Warning: cannot read directory %s: %s\n" dir msg);
   List.rev !files
 
-(* --- Skip config file parsing --- *)
-
-(* Parse a skip config file. Returns a hashtable mapping filename -> reason. *)
-let parse_skip_conf path =
-  let tbl = Hashtbl.create 32 in
-  if Sys.file_exists path then begin
-    let ic = open_in path in
-    (try while true do
-      let line = input_line ic in
-      let line = String.trim line in
-      if line <> "" && line.[0] <> '#' then begin
-        (* Split on first whitespace: filename reason *)
-        let len = String.length line in
-        let i = ref 0 in
-        while !i < len && line.[!i] <> ' ' && line.[!i] <> '\t' do incr i done;
-        let filename = String.sub line 0 !i in
-        while !i < len && (line.[!i] = ' ' || line.[!i] = '\t') do incr i done;
-        let reason = if !i < len then String.sub line !i (len - !i) else "skipped by config" in
-        Hashtbl.replace tbl filename reason
-      end
-    done with End_of_file -> ());
-    close_in ic
-  end;
-  tbl
-
-(* --- Dashboard output --- *)
-
-let get_git_commit () =
-  let ic = Unix.open_process_in "git rev-parse --short HEAD 2>/dev/null" in
-  let line = try String.trim (input_line ic) with End_of_file -> "unknown" in
-  ignore (Unix.close_process_in ic);
-  line
-
-let get_date_string () =
-  let t = Unix.localtime (Unix.gettimeofday ()) in
-  Printf.sprintf "%04d-%02d-%02d" (t.Unix.tm_year + 1900) (t.Unix.tm_mon + 1) t.Unix.tm_mday
-
-(* Detailed result type for dashboard *)
-type detailed_result = {
-  dr_path: string;       (* relative path like "basic-more/div_by_zero.ml" *)
-  dr_result: result;
-  dr_config_skip: bool;  (* true if skipped due to config *)
-}
-
-let write_dashboard path results =
-  let oc = open_out path in
-  let pass_count = ref 0 in
-  let fail_count = ref 0 in
-  let skip_count = ref 0 in
-  let failures = ref [] in
-  let config_skips = ref [] in
-  let auto_skips = ref [] in
-  List.iter (fun r ->
-    match r.dr_result with
-    | Pass -> incr pass_count
-    | Fail msg ->
-      incr fail_count;
-      (* Extract short reason: first line or up to 80 chars *)
-      let short_msg =
-        let first_line = match String.index_opt msg '\n' with
-          | Some i -> String.sub msg 0 i
-          | None -> msg
-        in
-        if String.length first_line > 80 then String.sub first_line 0 80 ^ "..."
-        else first_line
-      in
-      failures := (r.dr_path, short_msg) :: !failures
-    | Skip reason ->
-      incr skip_count;
-      if r.dr_config_skip then
-        config_skips := (r.dr_path, reason) :: !config_skips
-      else
-        auto_skips := (r.dr_path, reason) :: !auto_skips
-  ) results;
-  let total = !pass_count + !fail_count + !skip_count in
-  Printf.fprintf oc "=== OCaml Bytecode Interpreter Testsuite Dashboard ===\n";
-  Printf.fprintf oc "Date: %s\n" (get_date_string ());
-  Printf.fprintf oc "Commit: %s\n" (get_git_commit ());
-  Printf.fprintf oc "\nOverall: %d PASS / %d FAIL / %d SKIP (%d total)\n"
-    !pass_count !fail_count !skip_count total;
-  if !failures <> [] then begin
-    Printf.fprintf oc "\n--- Failures ---\n";
-    List.iter (fun (p, msg) ->
-      Printf.fprintf oc "  %-40s %s\n" p msg
-    ) (List.rev !failures)
-  end;
-  if !config_skips <> [] then begin
-    Printf.fprintf oc "\n--- Config-skipped (testsuite.conf) ---\n";
-    List.iter (fun (p, reason) ->
-      Printf.fprintf oc "  %-40s %s\n" p reason
-    ) (List.rev !config_skips)
-  end;
-  if !auto_skips <> [] then begin
-    Printf.fprintf oc "\n--- Auto-skipped (timeout/expect/other) ---\n";
-    List.iter (fun (p, reason) ->
-      Printf.fprintf oc "  %-40s %s\n" p reason
-    ) (List.rev !auto_skips)
-  end;
-  close_out oc
-
-(* --- Main --- *)
-
 let () =
   let dirs = ref [] in
-  let skip_conf_path = ref "" in
-  let dashboard_path = ref "" in
   let args = Array.to_list Sys.argv |> List.tl in
-  let rec parse_args = function
-    | "--skip-conf" :: path :: rest ->
-      skip_conf_path := path;
-      parse_args rest
-    | "--dashboard" :: path :: rest ->
-      dashboard_path := path;
-      parse_args rest
-    | other :: rest ->
-      dirs := !dirs @ [other];
-      parse_args rest
-    | [] -> ()
-  in
-  parse_args args;
-  if !dirs = [] then dirs := ["test/ocaml-testsuite/basic"];
-  (* Find skip config: explicit arg, or testsuite.conf in project root *)
-  let skip_conf =
-    if !skip_conf_path <> "" then !skip_conf_path
-    else
-      let candidates = [
-        "testsuite.conf";
-        Filename.concat (Filename.dirname Sys.executable_name) "../../../testsuite.conf";
-      ] in
-      match List.find_opt Sys.file_exists candidates with
-      | Some p -> p
-      | None -> "testsuite.conf"  (* will just produce empty table *)
-  in
-  let skip_table = parse_skip_conf skip_conf in
+  (match args with
+   | [] ->
+     (* Default: basic test directory *)
+     dirs := ["test/ocaml-testsuite/basic"]
+   | l -> dirs := l);
   let pass = ref 0 and fail = ref 0 and skip = ref 0 in
   let failures = ref [] in
-  let all_results = ref [] in
   List.iter (fun dir ->
     Printf.printf "=== Testing directory: %s ===\n%!" dir;
-    let dir_basename = Filename.basename dir in
     let files = collect_ml_files dir in
     List.iter (fun path ->
       let basename = Filename.basename path in
-      let display_path = Filename.concat dir_basename basename in
-      (* Check skip config first *)
-      match Hashtbl.find_opt skip_table basename with
-      | Some reason ->
+      match test_file path with
+      | Pass ->
+        incr pass;
+        Printf.printf "  PASS  %s\n%!" basename
+      | Fail msg ->
+        incr fail;
+        Printf.printf "  FAIL  %s: %s\n%!" basename msg;
+        failures := (basename, msg) :: !failures
+      | Skip reason ->
         incr skip;
-        Printf.printf "  SKIP  %s (config: %s)\n%!" basename reason;
-        all_results := { dr_path = display_path;
-                         dr_result = Skip (Printf.sprintf "config: %s" reason);
-                         dr_config_skip = true } :: !all_results
-      | None ->
-        match test_file path with
-        | Pass ->
-          incr pass;
-          Printf.printf "  PASS  %s\n%!" basename;
-          all_results := { dr_path = display_path; dr_result = Pass;
-                           dr_config_skip = false } :: !all_results
-        | Fail msg ->
-          incr fail;
-          Printf.printf "  FAIL  %s: %s\n%!" basename msg;
-          failures := (basename, msg) :: !failures;
-          all_results := { dr_path = display_path; dr_result = Fail msg;
-                           dr_config_skip = false } :: !all_results
-        | Skip reason ->
-          incr skip;
-          Printf.printf "  SKIP  %s (%s)\n%!" basename reason;
-          all_results := { dr_path = display_path; dr_result = Skip reason;
-                           dr_config_skip = false } :: !all_results
+        Printf.printf "  SKIP  %s (%s)\n%!" basename reason
     ) files
   ) !dirs;
   Printf.printf "\n=== Summary ===\n";
@@ -658,10 +511,5 @@ let () =
     List.iter (fun (name, msg) ->
       Printf.printf "  %s: %s\n" name msg
     ) (List.rev !failures)
-  end;
-  (* Write dashboard if requested *)
-  if !dashboard_path <> "" then begin
-    write_dashboard !dashboard_path (List.rev !all_results);
-    Printf.printf "\nDashboard written to %s\n%!" !dashboard_path
   end;
   exit (if !fail > 0 then 1 else 0)

@@ -1,7 +1,7 @@
 SHELL := /bin/bash
 
 .PHONY: all build build-manual extract extract-full test test-manual \
-        testsuite testsuite-all clean
+        testsuite testsuite-all dashboard clean
 
 # ---- Default: manual-only (no semi-auto/automatic needed) ----
 
@@ -146,6 +146,10 @@ testsuite: extract
 testsuite-all: extract
 	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
 	ulimit -s unlimited && $(RUNNER) $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
+
+dashboard: extract
+	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
+	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf --dashboard testsuite-results.txt $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
 
 clean:
 	dune clean
