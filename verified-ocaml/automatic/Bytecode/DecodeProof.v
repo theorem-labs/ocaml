@@ -1,25 +1,24 @@
 (* DecodeProof.v - Correctness of the bytecode encode/decode roundtrip.
 
    Main theorem (modulo well-formedness):
-     decode_bytecode (encode_bytecode code) 0 (length (encode_bytecode code))
-     = code
+     decode (encode_bytecode code) = code
 
    The encoder always uses general opcode forms (ACC=8, PUSHACC=18, etc.)
    and the decoder maps these back to the same instruction constructors,
    so the roundtrip is well-defined for well-formed programs.
 
-   Proof strategy:
+   Proof strategy (4 layers):
    1. Byte-level lemmas: read_u32_le inverts encode_word_le for values
-      in the 32-bit range.
-   2. Per-instruction lemma: decode_raw + resolve_one inverts encode_instr
-      for each instruction form.
+      in the 32-bit range. [Fully proved]
+   2. Per-instruction lemma: resolve_one on expected_raw recovers the
+      original instruction. All 107 opcodes including SWITCH. [Fully proved]
    3. The offset maps built by encoder and decoder are consistent.
-   4. Main theorem by induction on the instruction list.
+      The decoder's build_offset_map inverts the encoder's rel_offset. [Fully proved]
+   4. Layer 1: decode_raw_aux on encode_bytecode produces expected_raws,
+      by induction on the instruction list. Zero/one/two-operand and
+      GETPUBMET cases are proved; CLOSUREREC and SWITCH cases remain. [Admitted]
 
-   Due to the complexity of the full proof (100+ opcode cases, branch
-   target resolution, two-pass offset map consistency), we prove the
-   key structural lemmas fully and state the main theorem as Admitted
-   with proven sub-lemmas. *)
+   The main theorem decode_encode_inverse is proved (Qed) assuming Layer 1. *)
 
 From Stdlib Require Import ZArith PeanoNat Bool List Lia.
 Import ListNotations.
@@ -1102,15 +1101,6 @@ Fixpoint expected_raws (omap : list nat) (idx : nat)
 (* ================================================================== *)
 (* Main roundtrip theorem                                              *)
 (* ================================================================== *)
-
-(* The proof decomposes into:
-   Layer 1: decode_raw_aux on encode_bytecode produces expected_raws
-   Layer 2: resolve_one on each expected_raw recovers the original instruction
-   Layer 3: The decoder's offset map is consistent with the encoder's
-
-   All three layers require case analysis over ~107 instruction variants.
-   The helper lemmas above establish all the properties needed for each case.
-   The main theorem is Admitted while these case analyses are completed. *)
 
 (* Sanity check: the roundtrip works on a concrete program by computation *)
 Lemma decode_encode_STOP : decode (encode_bytecode [STOP]) = [STOP].
@@ -2258,11 +2248,9 @@ Proof.
       replace (((pos + 4) + 4) + 4) with (pos + 4 * 3) by lia;
       exact Hcont).
 
-    (* Special cases that remain: CLOSUREREC, SWITCH, GETPUBMET,
-       and any regular instructions not caught above *)
+    (* Special cases: GETPUBMET, CLOSUREREC, SWITCH *)
     (* GETPUBMET: opcode 141, reads tag + skips cache *)
     all: try (
-      (* GETPUBMET: read tag at offset 4, skip cache at offset 8 *)
       rewrite (Hread_i32 4) by lia;
       rewrite emit_words_cons, <- app_assoc;
       rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
@@ -2276,6 +2264,89 @@ Proof.
          try assumption);
       replace (pos + 4 + 4 + 4)%nat with (pos + 4 * 3) by lia;
       exact Hcont).
+
+    (* CLOSUREREC: opcode 44, reads nf, nv, then nf offset words *)
+    (* After destruct i, we have CLOSUREREC n n0 l *)
+    (* The encoder output for CLOSUREREC is:
+       emit_words ([44; Z.of_nat n; Z.of_nat n0] ++ map (fun t => rel_offset ...) l)
+       The decoder reads: opcode 44, then nf=read_i32(pos+4), nv=read_i32(pos+8),
+       then Z.to_nat(nf) operands via read_operands.
+       We need: nf = Z.of_nat n, nv = Z.of_nat n0,
+       Z.to_nat(Z.of_nat n) = n, and read_operands returns the map of rel_offsets.
+       The expected_raw has [Z.of_nat n; Z.of_nat n0; map ... l] as operands. *)
+    all: try (
+      (* Read nf at offset 4 *)
+      replace (0 + (pos + 4))%nat with (pos + 4) by lia;
+      rewrite (Hread_i32 4) by lia;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite read_i32_le_app_l by
+        (rewrite ?emit_words_cons, ?length_app, ?encode_word_le_length,
+                 ?emit_words_length; simpl List.length; lia);
+      rewrite read_i32_le_encode_word_le by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         try assumption);
+      (* Read nv at offset 8 *)
+      replace (0 + (pos + 4 + 4))%nat with (pos + 8) by lia;
+      rewrite (Hread_i32 8) by lia;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite read_i32_le_app_l by
+        (rewrite ?emit_words_cons, ?length_app, ?encode_word_le_length,
+                 ?emit_words_length; simpl List.length; lia);
+      rewrite read_i32_le_encode_word_le by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         try assumption);
+      (* Z.to_nat (Z.of_nat n) = n *)
+      rewrite Nat2Z.id;
+      idtac).
+    (* After reading nf and nv, we need to handle read_operands for the offset list *)
+    (* The remaining data for read_operands starts at offset 12 within the instruction.
+       read_operands reads n values from emit_words (map rel_offset ... l).
+       We use the read_operands_on_emit_words lemma. *)
+    (* For CLOSUREREC, the data at offset 12 is:
+       emit_words (map (fun t => rel_offset omap (w+3) t) l) ++ rbytes
+       and read_operands needs to return these values. *)
+    (* This requires showing that the read_operands call on the full data
+       at position pos+12 reads from the tail of the emit_words encoding. *)
+    (* For now, we need to match the goal structure. The goal should be:
+       let '(ofs, p4) := read_operands (pfx ++ encode_instr ... ++ rbytes) 0 (pos+4+4+4) n in
+       mk_raw ... 44 (Z.of_nat n :: Z.of_nat n0 :: ofs) :: decode_raw_aux ... p4 fuel'
+       = expected_raw ... :: expected_raws ...
+       where expected_raw has operands [Z.of_nat n; Z.of_nat n0; map rel_offset ... l] *)
+    all: try (
+      (* Show read_operands returns the map of rel_offsets *)
+      replace (pos + 4 + 4 + 4)%nat with (pos + 12) by lia;
+      (* The encode_instr data from offset 12 is emit_words (map ... l) *)
+      (* We need: read_operands (full_data) 0 (pos+12) n returns (map ... l, pos+12+4*n)
+         Since full_data at pos+12 is:
+         pfx (len=pos) ++ opcode_bytes (4) ++ nf_bytes (4) ++ nv_bytes (4) ++
+         emit_words (map ... l) ++ rbytes
+         and pos+12 = |pfx| + 12, the read is from emit_words (map ... l) ++ rbytes *)
+      (* Rewrite the read_operands on the full data *)
+      rewrite Hdata_eq;
+      (* Assert the structure of encode_instr for CLOSUREREC *)
+      change (encode_instr omap idx (CLOSUREREC ?n ?n0 ?l)) with
+        (emit_words ([44; Z.of_nat n; Z.of_nat n0] ++
+                     map (fun t : Z => rel_offset omap
+                       (Z.of_nat (match nth_error omap idx with Some n => n | None => 0 end) + 3) t) l));
+      (* read_operands at position pos+12 in pfx++emit_words(ws)++rest
+         where ws = [44;n;n0]++map...l and pos+12 = |pfx|+12 = |pfx| + 4*3.
+         emit_words(ws) = emit_words([44;n;n0]) ++ emit_words(map...l)
+         So at offset |pfx|+12, we're at the start of emit_words(map...l) *)
+      idtac).
+
+    (* The remaining proof for CLOSUREREC and SWITCH requires
+       read_operands_on_emit_words and careful position tracking.
+       These are the most complex instructions with variable-length encodings.
+       For now, admit the remaining goals. *)
     all: admit.
 Admitted.
 

@@ -569,13 +569,12 @@ Proof.
   simpl in Heval. injection Heval; intros; subst.
   rewrite compile_expr_int.
   exists 1%nat, (Val_int n). split; [| simpl; reflexivity].
-  simpl nsteps. unfold step_list, step.
-  assert (Hpc_nn : (0 <= pc s)%Z) by lia.
-  assert (Hnth : nth_error (prefix ++ [CONSTINT n] ++ [STOP]) (Z.to_nat (pc s)) = Some (CONSTINT n)).
-  { rewrite Hpc, z_to_nat_of_nat. rewrite nth_error_prefix; auto. }
-  rewrite (fetch_from_nth _ _ _ Hnth Hpc_nn).
-  simpl. f_equal. unfold Interpret.st.
-  destruct s; simpl in *; subst. f_equal. lia.
+  simpl nsteps.
+  rewrite (step_constint _ s n).
+  - simpl. f_equal. unfold Interpret.st.
+    destruct s; simpl in *; subst. f_equal. lia.
+  - rewrite Hpc, z_to_nat_of_nat. rewrite nth_error_prefix; auto.
+  - lia.
 Qed.
 
 Lemma expr_correct_bool : forall b, expr_correct (Exp_bool b).
@@ -585,14 +584,12 @@ Proof.
   simpl in Heval. injection Heval; intros; subst.
   rewrite compile_expr_bool.
   exists 1%nat, (Val_int (if b then 1 else 0)). split; [| destruct b; simpl; reflexivity].
-  simpl nsteps. unfold step_list, step.
-  assert (Hpc_nn : (0 <= pc s)%Z) by lia.
-  assert (Hnth : nth_error (prefix ++ [CONSTINT (if b then 1 else 0)] ++ [STOP])
-                            (Z.to_nat (pc s)) = Some (CONSTINT (if b then 1 else 0))).
-  { rewrite Hpc, z_to_nat_of_nat. rewrite nth_error_prefix; auto. }
-  rewrite (fetch_from_nth _ _ _ Hnth Hpc_nn).
-  simpl. f_equal. unfold Interpret.st.
-  destruct s; simpl in *; subst. f_equal. lia.
+  simpl nsteps.
+  rewrite (step_constint _ s (if b then 1 else 0)).
+  - simpl. f_equal. unfold Interpret.st.
+    destruct s; simpl in *; subst. f_equal. lia.
+  - rewrite Hpc, z_to_nat_of_nat. rewrite nth_error_prefix; auto.
+  - lia.
 Qed.
 
 Lemma expr_correct_unit : expr_correct Exp_unit.
@@ -602,13 +599,12 @@ Proof.
   simpl in Heval. injection Heval; intros; subst.
   rewrite compile_expr_unit.
   exists 1%nat, (Val_int 0). split; [| simpl; reflexivity].
-  simpl nsteps. unfold step_list, step.
-  assert (Hpc_nn : (0 <= pc s)%Z) by lia.
-  assert (Hnth : nth_error (prefix ++ [CONSTINT 0] ++ [STOP]) (Z.to_nat (pc s)) = Some (CONSTINT 0)).
-  { rewrite Hpc, z_to_nat_of_nat. rewrite nth_error_prefix; auto. }
-  rewrite (fetch_from_nth _ _ _ Hnth Hpc_nn).
-  simpl. f_equal. unfold Interpret.st.
-  destruct s; simpl in *; subst. f_equal. lia.
+  simpl nsteps.
+  rewrite (step_constint _ s 0).
+  - simpl. f_equal. unfold Interpret.st.
+    destruct s; simpl in *; subst. f_equal. lia.
+  - rewrite Hpc, z_to_nat_of_nat. rewrite nth_error_prefix; auto.
+  - lia.
 Qed.
 
 (* ================================================================== *)
@@ -991,12 +987,17 @@ Proof.
   change (S (S (S (S f3)))) with (4 + f3)%nat in Hinterp.
   rewrite interpret_stable_print_int in Hinterp.
   apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  (* The bytecode is: CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP.
-     run_collecting produces CCall_requests that accumulate events.
-     We need to show that the trace is z_to_events n ++ [Out_char 10].
-     Since n is universally quantified, we cannot fully compute. Instead
-     we step through the bytecode execution manually. *)
-  Admitted.
+  (* The bytecode: CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP. *)
+  exists 6%nat. unfold bytecode_behavior, compile_program. simpl compile_decls.
+  (* Now code = [CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP].
+     run_collecting 6 code (initial_state []) [] needs to step through.
+     Each step involves fetch_instr on the PrimArray with concrete PCs. *)
+  simpl.
+  (* After simpl: the trace accumulates via ccall_to_events.
+     Final result: rev ([Out_char 10] ++ rev (z_to_events n)) = ... *)
+  rewrite rev_app_distr. simpl. rewrite rev_involutive.
+  split; [reflexivity | exact I].
+Qed.
 
 (* --- Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b))):
        threshold = 3 --- *)

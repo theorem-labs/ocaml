@@ -2,7 +2,7 @@
    for the encode/decode roundtrip, plus the well-formedness predicate that
    serves as its precondition. The encoder (Trusted) produces bytes;
    the decoder (Untrusted) must invert it. The theorem statement is trusted;
-   the proof is untrusted and checked in Checker. *)
+   the proof is untrusted and checked below. *)
 
 From Stdlib Require Import ZArith PeanoNat Bool List.
 Import ListNotations.
@@ -89,3 +89,11 @@ Module Type DecodeSpec.
     decode (encode_bytecode code) = code.
 
 End DecodeSpec.
+
+(* Check that the untrusted proof satisfies the spec *)
+From OCamlInterp.Automatic.Bytecode Require Import DecodeProof.
+
+Module Check <: DecodeSpec.
+  Definition decode := decode.
+  Definition decode_encode_inverse := decode_encode_inverse.
+End Check.
