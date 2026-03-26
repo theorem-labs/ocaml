@@ -69,13 +69,34 @@ TESTSUITE_PHASE1 = \
 	$(TESTSUITE_DIR)/lib-atomic \
 	$(TESTSUITE_DIR)/lib-uchar \
 	$(TESTSUITE_DIR)/lib-filename \
-	$(TESTSUITE_DIR)/lib-obj
+	$(TESTSUITE_DIR)/lib-obj \
+	$(TESTSUITE_DIR)/misc-kb \
+	$(TESTSUITE_DIR)/misc-unsafe \
+	$(TESTSUITE_DIR)/lazy \
+	$(TESTSUITE_DIR)/functors \
+	$(TESTSUITE_DIR)/exotic-syntax \
+	$(TESTSUITE_DIR)/let-syntax \
+	$(TESTSUITE_DIR)/extension-constructor \
+	$(TESTSUITE_DIR)/generalized-open \
+	$(TESTSUITE_DIR)/letrec-check \
+	$(TESTSUITE_DIR)/match-exception-warnings \
+	$(TESTSUITE_DIR)/raise-counts \
+	$(TESTSUITE_DIR)/prim-revapply \
+	$(TESTSUITE_DIR)/prim-bswap \
+	$(TESTSUITE_DIR)/float-unboxing \
+	$(TESTSUITE_DIR)/fma \
+	$(TESTSUITE_DIR)/int64-unboxing \
+	$(TESTSUITE_DIR)/basic-multdef
+
+RUNNER = _build/default/manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
 
 testsuite: extract
-	dune exec manual/test/bytecode-pbt/ocaml_testsuite_runner.exe -- $(TESTSUITE_BASIC)
+	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
+	ulimit -s unlimited && $(RUNNER) $(TESTSUITE_BASIC)
 
 testsuite-all: extract
-	dune exec manual/test/bytecode-pbt/ocaml_testsuite_runner.exe -- $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
+	dune build manual/test/bytecode-pbt/ocaml_testsuite_runner.exe
+	ulimit -s unlimited && $(RUNNER) $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
 
 clean:
 	dune clean
