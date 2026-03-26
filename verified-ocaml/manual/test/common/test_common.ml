@@ -307,6 +307,8 @@ let resolve_string heap v =
 let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
   let heap_ref : heap ref = ref PositiveMap.empty in
   let next_addr_ref = ref 0 in
+  let minor_words_ref = ref 0.0 in
+  let last_next_addr_ref = ref 0 in
   (* Build a lookup table from exception name -> descriptor.
      After heap_allocate_globals, tag-248 blocks become Val_ptr (heap-allocated),
      so we need to use the processed globals_list for identity-correct descriptors.
@@ -340,6 +342,7 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
     let addr = !next_addr_ref in
     next_addr_ref := addr + 1;
     heap_ref := PositiveMap.add (Coq_Pos.of_succ_nat addr) (tag, fields) !heap_ref;
+    minor_words_ref := !minor_words_ref +. float_of_int (1 + List.length fields);
     Val_ptr addr
   in
   (* Update fields of an existing heap object. *)
@@ -1229,6 +1232,12 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
     | "caml_int64_float_of_bits", [Val_block (1002, [Val_int lo; Val_int hi])] ->
       let bits = Int64.(logor (logand (of_int lo) 0xFFFFFFFFL) (shift_left (of_int hi) 32)) in
       Some (float_to_val (Int64.float_of_bits bits))
+    | "caml_int64_bits_of_float", [fv] ->
+      let f = val_to_float fv in
+      let bits = Int64.bits_of_float f in
+      let lo = Int64.(to_int (logand bits 0xFFFFFFFFL)) in
+      let hi = Int64.(to_int (shift_right_logical bits 32)) in
+      Some (Val_block (1002, [Val_int lo; Val_int hi]))
     (* Plain int parsing *)
     | "caml_int_of_string", [sv] ->
       (match resolve_string_or_bytes heap sv with
@@ -1504,10 +1513,15 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
             match List.nth_opt cs i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000')
         | None -> "0."
       in
-      (try Some (float_to_val (float_of_string s))
+      (* OCaml's caml_float_of_string rejects strings with embedded null bytes *)
+      let s_clean = match String.index_opt s '\000' with
+        | Some _ -> "\000"  (* will fail float_of_string *)
+        | None -> s
+      in
+      (try Some (float_to_val (float_of_string s_clean))
        with _ ->
          let failure_desc = exn_desc "Failure" (-5) in
-         ccall_raise (Val_block (0, [failure_desc; string_val ("float_of_string " ^ s)])))
+         ccall_raise (Val_block (0, [failure_desc; string_val "float_of_string"])))
     | "caml_make_float_vect", [Val_int n] ->
       Some (heap_alloc_local 254 (List.init n (fun _ -> float_to_val 0.0)))
     (* --- Int32/Int64/Nativeint missing ops --- *)
@@ -1762,16 +1776,20 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
       walk v;
       Some (Val_int !count)
     | "caml_obj_with_tag", [Val_int new_tag; v] ->
+      (* Matches OCaml runtime: allocates a new block with the new tag.
+         For size-0 blocks, returns an atom (no allocation). *)
       (match v with
        | Val_ptr addr ->
          (match heap_lookup heap addr with
           | Some (old_tag, fields) ->
             if new_tag = old_tag then Some v
+            else if fields = [] then Some (Val_block (new_tag, []))
             else Some (heap_alloc_local new_tag fields)
           | None -> Some v)
        | Val_block (old_tag, fields) ->
          if new_tag = old_tag then Some v
-         else Some (Val_block (new_tag, fields))
+         else if fields = [] then Some (Val_block (new_tag, []))
+         else Some (heap_alloc_local new_tag fields)
        | _ -> Some v)
     | "caml_obj_new_block", [Val_int tag; Val_int size] ->
       if tag = 255 || (tag = 252 && size = 0) then
@@ -1789,7 +1807,7 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
     | "caml_gc_set", _ -> Some (Val_int 0)
     | "caml_gc_compaction", _ -> Some (Val_int 0)
     | "caml_gc_major_slice", _ -> Some (Val_int 0)
-    | "caml_gc_minor_words", _ -> Some (float_to_val 0.0)
+    | "caml_gc_minor_words", _ -> Some (float_to_val !minor_words_ref)
     (* --- Sys stubs --- *)
     | "caml_sys_system_command", _ -> Some (Val_int (-1))
     | "caml_sys_isatty", _ -> Some (Val_int 0)
@@ -2272,7 +2290,7 @@ let make_handler ?(raw_globals=[||]) ?(globals_list=[]) prims buf =
       Printf.eprintf "WARNING: unimplemented C-call %S (idx=%d, %d args)\n%!" name idx (List.length args);
       None
   in
-  (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value)
+  (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value, minor_words_ref, last_next_addr_ref)
 
 (* Result type for source interpreter / compiler test helpers.
    The helpers themselves (run_source_interp, run_our_compiler) live in
@@ -2288,10 +2306,11 @@ let run_ocamlc_bytecode exe_file =
   let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
   let prims = load_prims data sections in
   let buf = Buffer.create 256 in
-  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, _get_named_value) = make_handler ~raw_globals ~globals_list:globals prims buf in
+  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, _get_named_value, minor_words_ref, last_next_addr_ref) = make_handler ~raw_globals ~globals_list:globals prims buf in
   let s = ref { (initial_state globals) with hp = init_heap; next_addr = init_next_addr } in
   heap_ref := init_heap;
   next_addr_ref := init_next_addr;
+  last_next_addr_ref := init_next_addr;
   let remaining = ref 10000000 in
   let result = ref None in
   let is_exit_exn exn = match exn with
@@ -2312,9 +2331,22 @@ let run_ocamlc_bytecode exe_file =
       | CCall_request (idx, args, cont) ->
         heap_ref := cont.hp;
         next_addr_ref := cont.next_addr;
+        (* Count words allocated by the interpreter (MAKEBLOCK etc.) since last C-call *)
+        let prev_addr = !last_next_addr_ref in
+        let cur_addr = cont.next_addr in
+        if cur_addr > prev_addr then begin
+          for a = prev_addr to cur_addr - 1 do
+            match heap_lookup cont.hp a with
+            | Some (_, fields) ->
+              minor_words_ref := !minor_words_ref +. float_of_int (1 + List.length fields)
+            | None -> ()
+          done
+        end;
+        last_next_addr_ref := cur_addr;
         pending_raise_ref := None;
         (match handler idx args with
          | Some v ->
+           last_next_addr_ref := !next_addr_ref;
            s := { cont with accu = v;
                   hp = !heap_ref; next_addr = !next_addr_ref };
            loop ()
@@ -2323,6 +2355,7 @@ let run_ocamlc_bytecode exe_file =
             | Some exn ->
               if is_exit_exn exn then ()
               else begin
+                last_next_addr_ref := !next_addr_ref;
                 let cont' = { cont with hp = !heap_ref; next_addr = !next_addr_ref } in
                 (match perform_raise cont' exn with
                  | Step s' -> s := s'; loop ()
