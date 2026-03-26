@@ -1,4 +1,4 @@
-.PHONY: all build extract test clean
+.PHONY: all build extract test testsuite testsuite-all clean
 
 all: build extract test
 
@@ -31,6 +31,51 @@ test: extract
 	dune exec manual/test/bytecode-pbt/harness.exe
 	@echo "--- Compile vs ocamlc PBT (QCheck) ---"
 	dune exec manual/test/compile-pbt/harness.exe
+
+TESTSUITE_DIR = manual/test/ocaml-testsuite
+
+TESTSUITE_BASIC = \
+	$(TESTSUITE_DIR)/basic \
+	$(TESTSUITE_DIR)/basic-more \
+	$(TESTSUITE_DIR)/basic-modules \
+	$(TESTSUITE_DIR)/basic-private \
+	$(TESTSUITE_DIR)/basic-float \
+	$(TESTSUITE_DIR)/basic-io \
+	$(TESTSUITE_DIR)/basic-io-2 \
+	$(TESTSUITE_DIR)/basic-manyargs
+
+TESTSUITE_PHASE1 = \
+	$(TESTSUITE_DIR)/misc \
+	$(TESTSUITE_DIR)/letrec-compilation \
+	$(TESTSUITE_DIR)/match-exception \
+	$(TESTSUITE_DIR)/array-functions \
+	$(TESTSUITE_DIR)/local-functions \
+	$(TESTSUITE_DIR)/lib-list \
+	$(TESTSUITE_DIR)/lib-string \
+	$(TESTSUITE_DIR)/lib-hashtbl \
+	$(TESTSUITE_DIR)/lib-int \
+	$(TESTSUITE_DIR)/lib-int64 \
+	$(TESTSUITE_DIR)/lib-float \
+	$(TESTSUITE_DIR)/lib-option \
+	$(TESTSUITE_DIR)/lib-result \
+	$(TESTSUITE_DIR)/lib-set \
+	$(TESTSUITE_DIR)/lib-queue \
+	$(TESTSUITE_DIR)/lib-stack \
+	$(TESTSUITE_DIR)/lib-seq \
+	$(TESTSUITE_DIR)/lib-buffer \
+	$(TESTSUITE_DIR)/lib-fun \
+	$(TESTSUITE_DIR)/lib-bool \
+	$(TESTSUITE_DIR)/lib-random \
+	$(TESTSUITE_DIR)/lib-atomic \
+	$(TESTSUITE_DIR)/lib-uchar \
+	$(TESTSUITE_DIR)/lib-filename \
+	$(TESTSUITE_DIR)/lib-obj
+
+testsuite: extract
+	dune exec manual/test/bytecode-pbt/ocaml_testsuite_runner.exe -- $(TESTSUITE_BASIC)
+
+testsuite-all: extract
+	dune exec manual/test/bytecode-pbt/ocaml_testsuite_runner.exe -- $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
 
 clean:
 	dune clean

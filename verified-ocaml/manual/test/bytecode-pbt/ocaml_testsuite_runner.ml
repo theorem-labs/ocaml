@@ -316,9 +316,37 @@ let test_file path =
         (* Build list of source files for compilation *)
         let extra_files =
           (if header.include_testing then
-            [Filename.concat test_dir "testing.ml"]
+            (* testing.ml may be in test dir or testsuite lib dir *)
+            let local = Filename.concat test_dir "testing.ml" in
+            let parent = Filename.dirname test_dir in
+            let candidates = [
+              local;
+              Filename.concat parent "../lib/testing.ml";
+              Filename.concat parent "lib/testing.ml";
+              Filename.concat (Filename.dirname parent) "lib/testing.ml";
+            ] in
+            (match List.find_opt Sys.file_exists candidates with
+             | Some p -> [p]
+             | None -> [local])
           else []) @
           (List.map (fun m -> Filename.concat test_dir m) header.modules)
+        in
+        (* For each extra .ml file, include its .mli if present *)
+        let expand_with_mli files =
+          List.concat_map (fun f ->
+            if Filename.check_suffix f ".ml" then
+              let mli = (Filename.chop_suffix f ".ml") ^ ".mli" in
+              if Sys.file_exists mli then [mli; f] else [f]
+            else [f]
+          ) files
+        in
+        let extra_files_expanded = expand_with_mli extra_files in
+        let extra_dirs =
+          List.filter_map (fun f ->
+            let d = Filename.dirname f in
+            if d <> test_dir then Some d else None
+          ) extra_files_expanded
+          |> List.sort_uniq String.compare
         in
         (* Include .mli file before .ml if it exists (needed when interface is present) *)
         let mli_path = (Filename.chop_suffix path ".ml") ^ ".mli" in
@@ -326,7 +354,7 @@ let test_file path =
           if Sys.file_exists mli_path then [mli_path; path]
           else [path]
         in
-        let all_files = String.concat " " (extra_files @ main_files) in
+        let all_files = String.concat " " (extra_files_expanded @ main_files) in
         let exe = Filename.concat dir "test.byte" in
         (* If the file uses [%%expect blocks, add the ppx strip rewriter *)
         let ppx_flag =
@@ -336,9 +364,11 @@ let test_file path =
             | Some ppx -> Printf.sprintf "-ppx %s " (Filename.quote ppx)
           else ""
         in
+        let include_flags = String.concat " "
+          (List.map (fun d -> "-I " ^ d) (test_dir :: extra_dirs)) in
         let compile_cmd =
-          Printf.sprintf "ocamlc -I %s %s-o %s %s 2>/dev/null"
-            test_dir ppx_flag exe all_files in
+          Printf.sprintf "ocamlc %s %s-o %s %s 2>/dev/null"
+            include_flags ppx_flag exe all_files in
         let compile_failed_reason =
           if file_has_expect path then "expect test (compile errors expected)"
           else "compile failed"
