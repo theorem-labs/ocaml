@@ -707,6 +707,39 @@ Proof.
   rewrite <- ascii_eqb_sym. rewrite H. reflexivity.
 Qed.
 
+Lemma strip_nil_no_bracket : forall c s,
+  Ascii.eqb c "["%char = false -> strip_prefix "[]" (String c s) = None.
+Proof.
+  intros. simpl. rewrite <- ascii_eqb_sym. rewrite H. reflexivity.
+Qed.
+
+Lemma digit_not_bracket : forall c,
+  is_digit c = true -> Ascii.eqb c "["%char = false.
+Proof.
+  intros c Hd. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+  unfold is_digit in Hd. simpl in Hd.
+  destruct b0, b1, b2, b3, b4, b5, b6, b7;
+    simpl in Hd; try discriminate; reflexivity.
+Qed.
+
+Lemma alpha_not_bracket : forall c,
+  is_alpha c = true -> Ascii.eqb c "["%char = false.
+Proof.
+  intros c Ha. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+  unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
+  destruct b0, b1, b2, b3, b4, b5, b6, b7;
+    simpl in Ha; try discriminate; reflexivity.
+Qed.
+
+Lemma upper_not_bracket : forall c,
+  is_upper c = true -> Ascii.eqb c "["%char = false.
+Proof.
+  intros c Hu. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+  unfold is_upper in Hu. simpl in Hu.
+  destruct b0, b1, b2, b3, b4, b5, b6, b7;
+    simpl in Hu; try discriminate; reflexivity.
+Qed.
+
 (* ================================================================ *)
 (* try_binop roundtrip                                              *)
 (* ================================================================ *)
@@ -784,23 +817,646 @@ Fixpoint expr_size (e : expr) : nat :=
    (lists of patterns/exprs), these are left Admitted for now.
    Each Admitted lemma follows from the helpers above. *)
 
-Lemma parse_pattern_pp : forall p rest fuel,
-  wf_pattern p = true -> fuel >= pattern_size p ->
-  non_ident_start rest ->
-  parse_pattern fuel (pp_pattern p ++ rest) = Some (p, rest).
+(* pp_pattern first character properties *)
+Lemma pp_pattern_nonempty : forall p,
+  wf_pattern p = true -> pp_pattern p <> "".
+Proof.
+  intros p Hwf. destruct p; simpl; try discriminate.
+  - (* Pat_var *) destruct i; [simpl in Hwf; discriminate | discriminate].
+  - (* Pat_int *) destruct z; [discriminate | |].
+    + intro H. apply (nat_to_string_nonempty (Pos.to_nat p0)). exact H.
+    + discriminate.
+  - (* Pat_bool *) destruct b; discriminate.
+  - (* Pat_constr *) destruct o; [discriminate|].
+    destruct i; [simpl in Hwf; discriminate | discriminate].
+Qed.
+
+Lemma pp_pattern_first_char : forall p,
+  wf_pattern p = true ->
+  match pp_pattern p with
+  | EmptyString => False
+  | String c _ =>
+    is_digit c = true \/ Ascii.eqb c "("%char = true \/
+    is_alpha c = true \/ Ascii.eqb c "_"%char = true \/
+    Ascii.eqb c "{"%char = true \/ Ascii.eqb c "["%char = true
+  end.
+Proof.
+  intros p Hwf. destruct p; simpl.
+  - (* Pat_var *) destruct i as [|c irest]; [simpl in Hwf; discriminate|].
+    destruct (valid_var_ident_facts _ Hwf) as [His _].
+    unfold is_ident_start in His.
+    apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+    + right. right. left. exact Ha.
+    + right. right. right. left. exact Hu.
+  - (* Pat_int *) destruct z.
+    + left. reflexivity.
+    + left. apply nat_to_string_starts_digit.
+    + right. left. reflexivity.
+  - (* Pat_bool *) destruct b.
+    + right. right. left. reflexivity.
+    + right. right. left. reflexivity.
+  - (* Pat_unit *) right. left. reflexivity.
+  - (* Pat_tuple *) right. left. reflexivity.
+  - (* Pat_constr *) destruct o.
+    + right. left. reflexivity.
+    + destruct i as [|c irest]; [simpl in Hwf; discriminate|].
+      destruct (valid_constr_ident_facts _ Hwf) as [_ [_ [Hu _]]].
+      right. right. left. apply upper_is_alpha. exact Hu.
+  - (* Pat_wild *) right. right. right. left. reflexivity.
+  - (* Pat_or *) right. left. reflexivity.
+  - (* Pat_record *) right. right. right. right. left. reflexivity.
+  - (* Pat_nil *) right. right. right. right. right. reflexivity.
+  - (* Pat_cons *) right. left. reflexivity.
+Qed.
+
+(* pp_pattern never starts with "|" *)
+Lemma pp_pattern_not_pipe : forall p,
+  wf_pattern p = true ->
+  match pp_pattern p with
+  | EmptyString => True
+  | String c _ => Ascii.eqb c "|"%char = false
+  end.
+Proof.
+  intros p Hwf.
+  destruct (pp_pattern_first_char p Hwf) as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
+    (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
+    destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
+    (try (unfold is_digit in Hd; simpl in Hd;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
+    (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
+Qed.
+
+(* pp_pattern never starts with ":" *)
+Lemma pp_pattern_not_colon : forall p,
+  wf_pattern p = true ->
+  match pp_pattern p with
+  | EmptyString => True
+  | String c _ => Ascii.eqb c ":"%char = false
+  end.
+Proof.
+  intros p Hwf.
+  destruct (pp_pattern_first_char p Hwf) as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
+    (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
+    destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
+    (try (unfold is_digit in Hd; simpl in Hd;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
+    (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
+Qed.
+
+(* strip_prefix " | " fails when next char after space is not "|" *)
+Lemma strip_or_pp : forall p suffix,
+  wf_pattern p = true ->
+  strip_prefix " | " (" " ++ pp_pattern p ++ suffix) = None.
+Proof.
+  intros p suffix Hwf.
+  assert (Hnp := pp_pattern_not_pipe p Hwf).
+  assert (Hne := pp_pattern_nonempty p Hwf).
+  destruct (pp_pattern p) as [|c s] eqn:Epp; [contradiction|].
+  simpl in Hnp.
+  simpl. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+  simpl in Hnp. simpl. rewrite Hnp. reflexivity.
+Qed.
+
+(* strip_prefix " :: " fails when next char after space is not ":" *)
+Lemma strip_cons_pp : forall p suffix,
+  wf_pattern p = true ->
+  strip_prefix " :: " (" " ++ pp_pattern p ++ suffix) = None.
+Proof.
+  intros p suffix Hwf.
+  assert (Hnc := pp_pattern_not_colon p Hwf).
+  assert (Hne := pp_pattern_nonempty p Hwf).
+  destruct (pp_pattern p) as [|c s] eqn:Epp; [contradiction|].
+  simpl in Hnc.
+  simpl. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+  simpl in Hnc. simpl. rewrite Hnc. reflexivity.
+Qed.
+
+(* try_neg_int on "(" ++ pp_pattern p ++ ... *)
+Lemma pp_pattern_not_minus : forall p,
+  wf_pattern p = true ->
+  match pp_pattern p with
+  | EmptyString => True
+  | String c _ => Ascii.eqb c "-"%char = false
+  end.
+Proof.
+  intros p Hwf.
+  destruct (pp_pattern_first_char p Hwf) as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
+    (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
+    destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
+    (try (unfold is_digit in Hd; simpl in Hd;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
+    (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
+Qed.
+
+Lemma try_neg_int_paren_pp_pat : forall p suffix,
+  wf_pattern p = true ->
+  try_neg_int ("(" ++ pp_pattern p ++ suffix) = None.
+Proof.
+  intros p suffix Hwf.
+  assert (Hnm := pp_pattern_not_minus p Hwf).
+  assert (Hne := pp_pattern_nonempty p Hwf).
+  destruct (pp_pattern p) as [|c s] eqn:Epp; [contradiction|].
+  simpl in Hnm.
+  assert (Hnm' : Ascii.eqb "-"%char c = false) by (rewrite ascii_eqb_sym; exact Hnm).
+  unfold try_neg_int.
+  change (("(" ++ String c s ++ suffix)%string) with (String "("%char (String c (s ++ suffix)%string)).
+  change ("(-"%string) with (String "("%char (String "-"%char ""%string)).
+  destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+  simpl in Hnm'. simpl. rewrite Hnm'. reflexivity.
+Qed.
+
+(* pp_pattern never starts with ")" *)
+Lemma pp_pattern_not_cparen : forall p,
+  wf_pattern p = true ->
+  match pp_pattern p with
+  | EmptyString => True
+  | String c _ => Ascii.eqb c ")"%char = false
+  end.
+Proof.
+  intros p Hwf.
+  destruct (pp_pattern_first_char p Hwf) as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
+    (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
+    destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
+    (try (unfold is_digit in Hd; simpl in Hd;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
+    (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
+Qed.
+
+Lemma strip_unit_paren_pp_pat : forall p suffix,
+  wf_pattern p = true ->
+  strip_prefix "()" ("(" ++ pp_pattern p ++ suffix) = None.
+Proof.
+  intros p suffix Hwf.
+  assert (Hfc := pp_pattern_not_cparen p Hwf).
+  assert (Hne := pp_pattern_nonempty p Hwf).
+  destruct (pp_pattern p) as [|c s] eqn:Epp; [contradiction|].
+  simpl in Hfc.
+  assert (Hfc' : Ascii.eqb ")"%char c = false) by (rewrite ascii_eqb_sym; exact Hfc).
+  change (("(" ++ String c s ++ suffix)%string) with (String "("%char (String c (s ++ suffix)%string)).
+  change ("()"%string) with (String "("%char (String ")"%char ""%string)).
+  destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+  simpl in Hfc'. simpl. rewrite Hfc'. reflexivity.
+Qed.
+
+(* Helper: parse_pattern on "(" ++ s where s doesn't start with "-" or ")" *)
+Lemma parse_pattern_paren : forall fuel s,
+  fuel >= 1 ->
+  try_neg_int ("(" ++ s) = None ->
+  strip_prefix "()" ("(" ++ s) = None ->
+  parse_pattern fuel ("(" ++ s) =
+  match strip_prefix "(" ("(" ++ s) with
+  | Some rest1 =>
+    match parse_pattern (fuel - 1) rest1 with
+    | Some (p1, rest2) =>
+      match strip_prefix ", " rest2 with
+      | Some rest3 =>
+        let fix parse_more (n : nat) (s0 : string) : option (list pattern * string) :=
+          match n with O => None | S n' =>
+            match parse_pattern (fuel - 1) s0 with
+            | Some (p, rest4) =>
+              match strip_prefix ", " rest4 with
+              | Some rest5 => match parse_more n' rest5 with
+                | Some (ps, rest6) => Some (p :: ps, rest6) | None => None end
+              | None => match strip_prefix ")" rest4 with
+                | Some rest5 => Some ([p], rest5) | None => None end
+              end
+            | None => None end end
+        in
+        match parse_more (fuel - 1) rest3 with
+        | Some (ps, rest4) => Some (Pat_tuple (p1 :: ps), rest4)
+        | None => None end
+      | None =>
+        match strip_prefix " | " rest2 with
+        | Some rest3 =>
+          match parse_pattern (fuel - 1) rest3 with
+          | Some (p2, rest4) =>
+            match strip_prefix ")" rest4 with
+            | Some rest5 => Some (Pat_or p1 p2, rest5)
+            | None => None end
+          | None => None end
+        | None =>
+          match strip_prefix " :: " rest2 with
+          | Some rest3 =>
+            match parse_pattern (fuel - 1) rest3 with
+            | Some (p2, rest4) =>
+              match strip_prefix ")" rest4 with
+              | Some rest5 => Some (Pat_cons p1 p2, rest5)
+              | None => None end
+            | None => None end
+          | None =>
+            match strip_prefix " " rest2 with
+            | Some rest3 =>
+              match p1 with
+              | Pat_constr c None =>
+                match parse_pattern (fuel - 1) rest3 with
+                | Some (arg, rest4) =>
+                  match strip_prefix ")" rest4 with
+                  | Some rest5 => Some (Pat_constr c (Some arg), rest5)
+                  | None => None end
+                | None => None end
+              | _ => None end
+            | None => None end
+          end end
+      end
+    | None => None end
+  | None => None end.
+Proof.
+  intros fuel s Hfuel Hni Hunit.
+  destruct fuel; [lia|].
+  simpl parse_pattern. fold parse_pattern.
+  rewrite Hni. rewrite Hunit.
+  change (fuel - 0) with fuel.
+  reflexivity.
+Qed.
+Proof.
+  intros p. induction p; intros rest fuel Hwf Hfuel Hni.
+  - (* Pat_var x *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl pp_pattern. simpl.
+    assert (Hnidr := non_ident_implies_non_digit Hni).
+    destruct i as [|c xrest]; [simpl in Hwf; discriminate|].
+    assert (Hfacts := valid_var_ident_facts _ Hwf).
+    destruct Hfacts as [His [Hall [Hic [Hkw Hnu]]]].
+    (* try_neg_int: x starts with ident char, not "(" *)
+    assert (Hnp : Ascii.eqb c "("%char = false).
+    { apply Bool.orb_true_iff in (ident_start_is_ident_char c His : is_ident_char c = true).
+      unfold is_ident_start in His. apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+      - apply alpha_not_oparen. exact Ha.
+      - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
+    rewrite try_neg_int_no_paren by exact Hnp.
+    rewrite strip_unit_no_paren by exact Hnp.
+    rewrite strip_open_no_paren by exact Hnp.
+    (* strip_prefix "{ " fails *)
+    assert (Hnb : Ascii.eqb c "{"%char = false).
+    { unfold is_ident_start in His. apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+      - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity.
+      - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
+    assert (Hbrace : strip_prefix "{ " (String c xrest ++ rest) = None).
+    { simpl. rewrite <- ascii_eqb_sym. rewrite Hnb. reflexivity. }
+    rewrite Hbrace.
+    (* Now at the atom branch *)
+    assert (Hnd : is_digit c = false).
+    { unfold is_ident_start in His. apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+      - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_alpha, is_lower, is_upper, is_digit in *. simpl in *.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in *; try discriminate; reflexivity.
+      - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
+    simpl.
+    rewrite Ascii.eqb_refl.
+    (* Need to check: is c "_"? *)
+    destruct (Ascii.eqb c "_"%char) eqn:Huc.
+    + (* c = "_" *)
+      apply Ascii.eqb_eq in Huc. subst c.
+      (* Pat_var starting with _: valid_var_name requires not just "_" *)
+      (* After "_", check if next char is ident_char *)
+      destruct xrest as [|c' xrest'].
+      * (* x = "_" but valid_var_name "_" = false *)
+        simpl in Hnu. discriminate.
+      * (* x = "_" ++ String c' xrest' *)
+        assert (Hic' : is_ident_char c' = true).
+        { simpl in Hall. apply Bool.andb_true_iff in Hall. destruct Hall. exact H. }
+        simpl. rewrite Hic'.
+        rewrite parse_ident_var; [|exact Hwf|exact Hni].
+        rewrite (valid_var_not_true _ Hwf).
+        rewrite (valid_var_not_false _ Hwf).
+        (* is_upper c = false for vars *)
+        assert (Hnup := valid_var_not_upper _ Hwf). simpl in Hnup.
+        rewrite Hnup. reflexivity.
+    + (* c is alpha, not "_" *)
+      rewrite Hnd.
+      assert (Ha : is_alpha c = true).
+      { unfold is_ident_start in His. apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+        - exact Ha.
+        - rewrite Hu in Huc. discriminate. }
+      rewrite Ha.
+      rewrite parse_ident_var; [|exact Hwf|exact Hni].
+      rewrite (valid_var_not_true _ Hwf).
+      rewrite (valid_var_not_false _ Hwf).
+      assert (Hnup := valid_var_not_upper _ Hwf). simpl in Hnup.
+      destruct (is_upper c); [discriminate|].
+      reflexivity.
+  - (* Pat_int z *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    assert (Hnidr := non_ident_implies_non_digit Hni).
+    simpl pp_pattern. simpl wf_pattern in Hwf.
+    destruct z as [|p|p].
+    + (* Z0 *) simpl. resolve_nds.
+    + (* Zpos p *)
+      simpl Z_to_string.
+      assert (Hsd : match nat_to_string (Pos.to_nat p) with
+                    | EmptyString => False
+                    | String c _ => is_digit c = true
+                    end) by apply nat_to_string_starts_digit.
+      destruct (nat_to_string (Pos.to_nat p)) as [|c nrest] eqn:Ens; [contradiction|].
+      assert (Hnp : Ascii.eqb c "("%char = false) by (apply digit_not_oparen; exact Hsd).
+      simpl. rewrite try_neg_int_no_paren by exact Hnp.
+      rewrite strip_unit_no_paren by exact Hnp.
+      rewrite strip_open_no_paren by exact Hnp.
+      assert (Hbrace : strip_prefix "{ " (String c nrest ++ rest) = None).
+      { simpl. rewrite <- ascii_eqb_sym.
+        destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_digit in Hsd. simpl in Hsd.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hsd; try discriminate; reflexivity. }
+      rewrite Hbrace. simpl.
+      assert (Huc : Ascii.eqb c "_"%char = false).
+      { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_digit in Hsd. simpl in Hsd.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hsd; try discriminate; reflexivity. }
+      rewrite Huc. rewrite Hsd. rewrite <- Ens.
+      assert (Hbound := wf_int_bound (Zpos p) Hwf).
+      rewrite parse_nat_nat_to_string; [|exact Hnidr|lia].
+      f_equal. f_equal. rewrite Nat2Z.id. reflexivity.
+    + (* Zneg p *)
+      simpl Z_to_string.
+      assert (Hbound := wf_int_bound (Zneg p) Hwf).
+      assert (Hsd : match nat_to_string (Pos.to_nat p) with
+                    | EmptyString => False
+                    | String c _ => is_digit c = true
+                    end) by apply nat_to_string_starts_digit.
+      destruct (nat_to_string (Pos.to_nat p)) as [|c nrest] eqn:Ens; [contradiction|].
+      simpl.
+      unfold try_neg_int. simpl strip_prefix at 1.
+      rewrite Hsd.
+      assert (Hndp : non_digit_start (")" ++ rest)%string).
+      { apply non_ident_implies_non_digit. apply nis_cparen. }
+      rewrite <- Ens.
+      rewrite parse_nat_nat_to_string; [|exact Hndp|lia].
+      simpl. rewrite strip_prefix_app.
+      f_equal. f_equal.
+      rewrite Nat2Z.id.
+      rewrite positive_nat_Z. reflexivity.
+  - (* Pat_bool b *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    destruct b.
+    + simpl. rewrite read_ident_chars_correct by (try reflexivity; exact Hni). simpl. reflexivity.
+    + simpl. rewrite read_ident_chars_correct by (try reflexivity; exact Hni). simpl. reflexivity.
+  - (* Pat_unit *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl. reflexivity.
+  - (* Pat_tuple ps *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl wf_pattern in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlen Hwfall].
+    simpl pp_pattern. rewrite !append_assoc.
+    simpl pattern_size in Hfuel.
+    (* pp_pattern (Pat_tuple ps) = "(" ++ intercalate ", " (map pp_pattern ps) ++ ")"
+       parse_pattern sees "(", parses first pattern, then ", " dispatches to tuple loop *)
+    admit.
+  - (* Pat_constr c opt_p *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    destruct o as [p'|].
+    + (* Pat_constr c (Some p') -- compound, starts with "(" *)
+      admit.
+    + (* Pat_constr c None -- just the constructor name *)
+      simpl pp_pattern. simpl wf_pattern in Hwf.
+      destruct i as [|c crest]; [simpl in Hwf; discriminate|].
+      assert (Hfacts := valid_constr_ident_facts _ Hwf).
+      destruct Hfacts as [His [Hall [Hu Hic]]].
+      assert (Hnp : Ascii.eqb c "("%char = false) by (apply upper_not_oparen; exact Hu).
+      assert (Hnd : is_digit c = false) by (apply upper_not_digit; exact Hu).
+      simpl. rewrite try_neg_int_no_paren by exact Hnp.
+      rewrite strip_unit_no_paren by exact Hnp.
+      rewrite strip_open_no_paren by exact Hnp.
+      assert (Hnb : Ascii.eqb c "{"%char = false).
+      { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+      assert (Hbrace : strip_prefix "{ " (String c crest ++ rest) = None).
+      { simpl. rewrite <- ascii_eqb_sym. rewrite Hnb. reflexivity. }
+      rewrite Hbrace.
+      simpl.
+      assert (Huc : Ascii.eqb c "_"%char = false).
+      { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+      rewrite Huc. rewrite Hnd.
+      assert (Ha : is_alpha c = true) by (apply upper_is_alpha; exact Hu).
+      rewrite Ha.
+      rewrite parse_ident_constr; [|exact Hwf|exact Hni].
+      rewrite (valid_constr_not_true _ Hwf).
+      rewrite (valid_constr_not_false _ Hwf).
+      rewrite Hu. reflexivity.
+  - (* Pat_wild *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl.
+    destruct Hni as [-> | [c [r [-> Hnic]]]].
+    + simpl. reflexivity.
+    + simpl.
+      assert (Hnic' : is_ident_char c = false) by exact Hnic.
+      rewrite Hnic'. reflexivity.
+  - (* Pat_or p1 p2 *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl wf_pattern in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf1 Hwf2].
+    simpl pp_pattern. rewrite !append_assoc.
+    simpl pattern_size in Hfuel.
+    (* Unfold parse_pattern one level *)
+    simpl parse_pattern. fold parse_pattern.
+    (* try_neg_int on "(" ++ pp_pattern p1 ++ " | " ++ ... *)
+    rewrite try_neg_int_paren_pp_pat by exact Hwf1.
+    (* strip_prefix "()" fails *)
+    rewrite strip_unit_paren_pp_pat by exact Hwf1.
+    (* strip_prefix "(" matches *)
+    rewrite strip_prefix_app.
+    (* Now parse_pattern fuel on pp_pattern p1 ++ " | " ++ pp_pattern p2 ++ ")" ++ rest *)
+    rewrite IHp1; [|exact Hwf1|lia|apply nis_space].
+    (* rest2 = " | " ++ pp_pattern p2 ++ ")" ++ rest *)
+    (* strip_prefix ", " fails: "," vs " " *)
+    simpl strip_prefix at 1.
+    (* strip_prefix " | " matches *)
+    rewrite strip_prefix_app.
+    (* parse_pattern fuel on pp_pattern p2 ++ ")" ++ rest *)
+    rewrite IHp2; [|exact Hwf2|lia|apply nis_cparen].
+    (* strip_prefix ")" matches *)
+    rewrite strip_prefix_app.
+    reflexivity.
+  - (* Pat_record *) admit.
+  - (* Pat_nil *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl. destruct Hni as [-> | [c [r [-> Hnic]]]]; simpl; reflexivity.
+  - (* Pat_cons *) admit.
 Admitted.
+
+(* Helper: pp_type_expr never starts with ")" or "," *)
+Lemma pp_type_expr_first_not_cparen : forall t,
+  wf_type_expr t = true ->
+  match pp_type_expr t with
+  | EmptyString => True
+  | String c _ => Ascii.eqb c ")"%char = false
+  end.
+Proof.
+  intros t Hwf. destruct t; simpl.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
+  - destruct l; simpl.
+    + destruct i as [|c irest]; [simpl in Hwf; discriminate|].
+      simpl in Hwf.
+      apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf _].
+      apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf _].
+      apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hvt _].
+      destruct (valid_type_ident_facts _ Hvt) as [His _].
+      unfold is_ident_start in His.
+      apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+      * destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
+        unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
+        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity.
+      * apply Ascii.eqb_eq in Hu. subst c. reflexivity.
+    + reflexivity.
+Qed.
+
+(* Helper: pp_type_expr is never empty for well-formed types *)
+Lemma pp_type_expr_nonempty : forall t,
+  wf_type_expr t = true ->
+  pp_type_expr t <> "".
+Proof.
+  intros t Hwf. destruct t; simpl; try discriminate.
+  - (* Ty_constr name [] *)
+    destruct l; [|destruct l; discriminate].
+    destruct i as [|c irest]; [simpl in Hwf; discriminate|].
+    discriminate.
+Qed.
+
+(* Helper: for arrow/tuple/single-arg-constr types, pp starts with "(" *)
+Lemma pp_type_expr_paren_start : forall t,
+  match t with
+  | Ty_arrow _ _ | Ty_tuple _ | Ty_constr _ (_ :: _) => True
+  | _ => False
+  end ->
+  exists s, pp_type_expr t = ("(" ++ s)%string.
+Proof.
+  intros t Ht. destruct t; try contradiction; simpl.
+  - eexists; reflexivity.
+  - eexists; reflexivity.
+  - destruct l; [contradiction|]. destruct l; simpl; eexists; reflexivity.
+Qed.
+
+(* Helper: after simpl+fold of parse_type_expr(S fuel)("(" ++ rest1),
+   we handle the "((" multi-arg check and fallthrough to parse_paren_type.
+   parse_paren_type processes arrow, tuple, or single-arg constr. *)
+
+(* When parse_type_expr's "(" branch is entered:
+   The "((" check either succeeds (multi-arg attempted then fallback) or fails (direct to parse_paren_type).
+   In either case, parse_paren_type rest1 gives the correct result IF:
+   - parse_type_expr fuel rest1 correctly parses the first type
+   - The appropriate separator (" -> ", " * ", " name)") matches
+   - The sub-types parse correctly by IH *)
 
 Lemma parse_type_expr_pp : forall t rest fuel,
   wf_type_expr t = true -> fuel >= type_size t ->
   non_ident_start rest ->
   parse_type_expr fuel (pp_type_expr t ++ rest) = Some (t, rest).
 Proof.
-  induction t using type_size_ind; intros rest fuel Hwf Hfuel Hni.
+  (* Structural induction on type_expr with nested list induction is complex.
+     For now, we prove the base cases and admit the recursive cases. *)
+  intros t. induction t; intros rest fuel Hwf Hfuel Hni.
+  - (* Ty_int *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl pp_type_expr. simpl parse_type_expr.
+    (* "int" ++ rest: strip_prefix "((" fails, strip_prefix "(" fails *)
+    simpl. rewrite read_ident_chars_correct by (try reflexivity; exact Hni).
+    simpl. reflexivity.
+  - (* Ty_bool *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl pp_type_expr. simpl parse_type_expr.
+    simpl. rewrite read_ident_chars_correct by (try reflexivity; exact Hni).
+    simpl.
+    (* After parse_ident "bool" ++ rest, need eqb "bool" "int" = false, etc. *)
+    reflexivity.
+  - (* Ty_unit *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl pp_type_expr. simpl parse_type_expr.
+    simpl. rewrite read_ident_chars_correct by (try reflexivity; exact Hni).
+    simpl. reflexivity.
+  - (* Ty_arrow t1 t2 *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl wf_type_expr in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf1 Hwf2].
+    simpl pp_type_expr. rewrite !append_assoc.
+    simpl type_size in Hfuel.
+    (* Unfold parse_type_expr one level *)
+    simpl parse_type_expr. fold parse_type_expr.
+    rewrite strip_prefix_app. simpl strip_prefix.
+    (* Handle the "((" multi-arg check by case split on first char of pp_type_expr t1 *)
+    destruct (pp_type_expr t1) as [|c1 s1] eqn:Epp1.
+    { exfalso. apply (pp_type_expr_nonempty t1 Hwf1). exact Epp1. }
+    destruct (Ascii.eqb c1 "("%char) eqn:Hc1p.
+    + (* pp_type_expr t1 starts with "(" -> "((" multi-arg attempted *)
+      apply Ascii.eqb_eq in Hc1p. subst c1. simpl strip_prefix. rewrite Ascii.eqb_refl.
+      (* parse_type_args on inner content fails; fallthrough to parse_paren_type *)
+      (* parse_paren_type uses parse_type_expr fuel on rest1 = pp_type_expr t1 ++ " -> " ++ ... *)
+      (* By IH, this correctly parses t1, then arrow separator matches *)
+      (* Proving parse_type_args fails requires detailed analysis of inner structure *)
+      admit.
+    + (* pp_type_expr t1 doesn't start with "(" -> direct to parse_paren_type *)
+      simpl strip_prefix. rewrite <- ascii_eqb_sym in Hc1p. rewrite Hc1p.
+      (* parse_paren_type: parse t1, then " -> " matches, parse t2, then ")" matches *)
+      rewrite <- Epp1. rewrite <- !append_assoc.
+      rewrite IHt1; [|exact Hwf1|lia|apply nis_space].
+      rewrite strip_prefix_app.
+      rewrite IHt2; [|exact Hwf2|lia|apply nis_cparen].
+      rewrite strip_prefix_app.
+      reflexivity.
+  - (* Ty_tuple ts *)
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl pp_type_expr. rewrite !append_assoc.
+    simpl type_size in Hfuel.
+    (* Unfold parse_type_expr one level *)
+    simpl parse_type_expr. fold parse_type_expr.
+    rewrite strip_prefix_app. simpl strip_prefix.
+    (* Similar "((" multi-arg analysis as Ty_arrow *)
+    admit.
+  - (* Ty_constr name args *)
+    destruct l as [|t1 args'].
+    + (* Ty_constr name [] *)
+      simpl in Hwf.
+      apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf Hni1].
+      apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf Hnb].
+      apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hvt Hnu].
+      apply Bool.negb_true_iff in Hni1. apply Bool.negb_true_iff in Hnb. apply Bool.negb_true_iff in Hnu.
+      destruct fuel; [simpl in Hfuel; lia|].
+      simpl pp_type_expr.
+      simpl parse_type_expr.
+      (* name starts with alpha/underscore (from valid_type_name) *)
+      destruct i as [|c irest]; [simpl in Hvt; discriminate|].
+      assert (Hfacts := valid_type_ident_facts _ Hvt).
+      destruct Hfacts as [His [Hall Hkw]].
+      assert (Hnp : Ascii.eqb c "("%char = false).
+      { unfold is_ident_start, is_alpha in His.
+        apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+        - apply alpha_not_oparen. exact Ha.
+        - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
+      simpl. rewrite <- ascii_eqb_sym. rewrite Hnp.
+      assert (Haou : (is_alpha c || Ascii.eqb c "_"%char)%bool = true).
+      { unfold is_ident_start in His.
+        apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
+        - apply Bool.orb_true_iff. left. exact Ha.
+        - apply Bool.orb_true_iff. right. exact Hu. }
+      rewrite Haou.
+      rewrite His. rewrite read_ident_chars_correct; [|exact Hall|exact Hni].
+      rewrite Hnu. rewrite Hnb. rewrite Hni1.
+      reflexivity.
+    + (* Ty_constr name (t1 :: args') -- compound types, admit for now *)
+      admit.
 Admitted.
-
-(* We need a custom induction principle for type_expr since the standard one
-   doesn't handle the list cases well. For now, admit and focus on other proofs. *)
-
 
 (* ================================================================ *)
 (* pp_expr never starts with "-"                                    *)
@@ -1054,6 +1710,7 @@ Lemma parse_expr_atoms : forall fuel s,
   strip_prefix "()" s = None ->
   strip_prefix "{ " s = None ->
   strip_prefix "(" s = None ->
+  strip_prefix "[]" s = None ->
   parse_expr fuel s =
   match s with
   | String c _ =>
@@ -1072,9 +1729,9 @@ Lemma parse_expr_atoms : forall fuel s,
     else None
   | EmptyString => None end.
 Proof.
-  intros fuel s Hfuel Hni Hunit Hrec Hparen.
+  intros fuel s Hfuel Hni Hunit Hrec Hparen Hnil.
   destruct fuel; [lia|].
-  simpl. rewrite Hni. rewrite Hunit. rewrite Hrec. rewrite Hparen.
+  simpl. rewrite Hni. rewrite Hunit. rewrite Hrec. rewrite Hparen. rewrite Hnil.
   reflexivity.
 Qed.
 
@@ -1132,7 +1789,9 @@ Proof.
       destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hsd; try discriminate; reflexivity. }
     assert (Hpo : strip_prefix "(" (String c nrest ++ rest) = None).
     { apply strip_open_no_paren. exact Hnp. }
-    rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo].
+    assert (Hnil : strip_prefix "[]" (String c nrest ++ rest) = None).
+    { apply strip_nil_no_bracket. apply digit_not_bracket. exact Hsd. }
+    rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo | exact Hnil].
     simpl. rewrite Hsd. rewrite <- Ens.
     assert (Hbound := wf_int_bound (Zpos p) Hwf).
     rewrite parse_nat_nat_to_string; [|exact Hnidr|lia].
@@ -1214,7 +1873,13 @@ Proof.
     rewrite Hnb. reflexivity. }
   assert (Hpo : strip_prefix "(" (String c xrest ++ rest) = None).
   { apply strip_open_no_paren. exact Hnp. }
-  rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo].
+  assert (Hnil : strip_prefix "[]" (String c xrest ++ rest) = None).
+  { apply strip_nil_no_bracket.
+    apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
+    - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower in Hl. simpl in Hl.
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hl; try discriminate; reflexivity.
+    - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
+  rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo | exact Hnil].
   simpl. rewrite Hnd. rewrite Haou.
   rewrite parse_ident_var; [|exact Hvv|exact Hni].
   rewrite (valid_var_not_true _ Hvv).
@@ -1249,7 +1914,9 @@ Proof.
     rewrite Hnb. reflexivity. }
   assert (Hpo : strip_prefix "(" (String c crest ++ rest) = None).
   { apply strip_open_no_paren. exact Hnp. }
-  rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo].
+  assert (Hnil : strip_prefix "[]" (String c crest ++ rest) = None).
+  { apply strip_nil_no_bracket. apply upper_not_bracket. exact Hu. }
+  rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo | exact Hnil].
   simpl. rewrite Hnd. rewrite Haou.
   rewrite parse_ident_constr; [|exact Hvc|exact Hni].
   rewrite (valid_constr_not_true _ Hvc).

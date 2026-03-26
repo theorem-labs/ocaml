@@ -171,6 +171,18 @@ Fixpoint parse_pattern (fuel : nat) (s : string) : option (pattern * string) :=
             | None => None
             end
           | None =>
+          (* Check for " :: " -> Pat_cons *)
+          match strip_prefix " :: " rest2 with
+          | Some rest3 =>
+            match parse_pattern fuel' rest3 with
+            | Some (p2, rest4) =>
+              match strip_prefix ")" rest4 with
+              | Some rest5 => Some (Pat_cons p1 p2, rest5)
+              | None => None
+              end
+            | None => None
+            end
+          | None =>
           match strip_prefix " " rest2 with
           | Some rest3 =>
             (* Constructor with argument: (C pattern) *)
@@ -187,7 +199,7 @@ Fixpoint parse_pattern (fuel : nat) (s : string) : option (pattern * string) :=
             | _ => None
             end
           | None => None
-          end end
+          end end end
         end
       | None => None
       end
@@ -231,6 +243,10 @@ Fixpoint parse_pattern (fuel : nat) (s : string) : option (pattern * string) :=
       | None => None
       end
     | None =>
+    (* Try "[]" for Pat_nil *)
+    match strip_prefix "[]" s with
+    | Some rest => Some (Pat_nil, rest)
+    | None =>
     (* Try atom: digit, keyword, identifier, wildcard *)
     match s with
     | String c rest =>
@@ -263,7 +279,7 @@ Fixpoint parse_pattern (fuel : nat) (s : string) : option (pattern * string) :=
       else None
     | EmptyString => None
     end
-    end end end end
+    end end end end end
   end.
 
 (* ========== Type Expression Parsing ========== *)
@@ -272,48 +288,8 @@ Fixpoint parse_type_expr (fuel : nat) (s : string) : option (type_expr * string)
   match fuel with
   | O => None
   | S fuel' =>
-    (* Try "((" for multi-arg type constructor *)
-    match strip_prefix "((" s with
-    | Some rest1 =>
-      (* Parse comma-separated type args until ") name)" *)
-      let fix parse_type_args (n : nat) (s0 : string) : option (list type_expr * string) :=
-        match n with
-        | O => None
-        | S n' =>
-          match parse_type_expr fuel' s0 with
-          | Some (t, rest2) =>
-            match strip_prefix ", " rest2 with
-            | Some rest3 =>
-              match parse_type_args n' rest3 with
-              | Some (ts, rest4) => Some (t :: ts, rest4)
-              | None => None
-              end
-            | None =>
-              match strip_prefix ") " rest2 with
-              | Some rest3 => Some ([t], rest3)
-              | None => None
-              end
-            end
-          | None => None
-          end
-        end
-      in
-      match parse_type_args fuel' rest1 with
-      | Some (args, rest2) =>
-        match parse_ident rest2 with
-        | Some (name, rest3) =>
-          match strip_prefix ")" rest3 with
-          | Some rest4 => Some (Ty_constr name args, rest4)
-          | None => None
-          end
-        | None => None
-        end
-      | None => None
-      end
-    | None =>
-    (* Try "(" for arrow, tuple, or single-arg constr *)
-    match strip_prefix "(" s with
-    | Some rest1 =>
+    (* Helper for parsing "(" branches *)
+    let parse_paren_type (rest1 : string) : option (type_expr * string) :=
       match parse_type_expr fuel' rest1 with
       | Some (t1, rest2) =>
         (* Check for " -> " (arrow) *)
@@ -373,6 +349,53 @@ Fixpoint parse_type_expr (fuel : nat) (s : string) : option (type_expr * string)
         end end end
       | None => None
       end
+    in
+    (* Try "(" for compound types *)
+    match strip_prefix "(" s with
+    | Some rest1 =>
+      (* Check for "((" -- multi-arg type constructor *)
+      match strip_prefix "(" rest1 with
+      | Some rest1_inner =>
+        let fix parse_type_args (n : nat) (s0 : string) : option (list type_expr * string) :=
+          match n with
+          | O => None
+          | S n' =>
+            match parse_type_expr fuel' s0 with
+            | Some (t, rest2) =>
+              match strip_prefix ", " rest2 with
+              | Some rest3 =>
+                match parse_type_args n' rest3 with
+                | Some (ts, rest4) => Some (t :: ts, rest4)
+                | None => None
+                end
+              | None =>
+                match strip_prefix ") " rest2 with
+                | Some rest3 => Some ([t], rest3)
+                | None => None
+                end
+              end
+            | None => None
+            end
+          end
+        in
+        match parse_type_args fuel' rest1_inner with
+        | Some (args, rest2) =>
+          match parse_ident rest2 with
+          | Some (name, rest3) =>
+            match strip_prefix ")" rest3 with
+            | Some rest4 => Some (Ty_constr name args, rest4)
+            | None => None
+            end
+          | None => None
+          end
+        | None =>
+          (* "((" multi-arg parse failed; fall through to regular "(" handling *)
+          parse_paren_type rest1
+        end
+      | None =>
+        (* Single "(" -- arrow, tuple, or single-arg constr *)
+        parse_paren_type rest1
+      end
     | None =>
     (* Try identifier or base type *)
     match s with
@@ -389,7 +412,7 @@ Fixpoint parse_type_expr (fuel : nat) (s : string) : option (type_expr * string)
       else None
     | EmptyString => None
     end
-    end end
+    end
   end.
 
 (* ========== String Content Parsing ========== *)
@@ -757,6 +780,18 @@ Fixpoint parse_expr (fuel : nat) (s : string) : option (expr * string) :=
               | None => None
               end
             | None =>
+              (* Check for " :: " -> cons *)
+              match strip_prefix " :: " rest2 with
+              | Some rest3 =>
+                match parse_expr fuel' rest3 with
+                | Some (e2, rest4) =>
+                  match strip_prefix ")" rest4 with
+                  | Some rest5 => Some (Exp_cons e1 e2, rest5)
+                  | None => None
+                  end
+                | None => None
+                end
+              | None =>
               (* Check for "; " -> sequence *)
               match strip_prefix "; " rest2 with
               | Some rest3 =>
@@ -787,12 +822,16 @@ Fixpoint parse_expr (fuel : nat) (s : string) : option (expr * string) :=
                   end
                 | None => None
                 end
-              end
+              end end
             end
           end end
         | None => None
         end
       end end end end end end end end end
+    | None =>
+    (* Try "[]" for Exp_nil *)
+    match strip_prefix "[]" s with
+    | Some rest => Some (Exp_nil, rest)
     | None =>
     (* Not parenthesized: try atoms *)
     match s with
@@ -814,7 +853,7 @@ Fixpoint parse_expr (fuel : nat) (s : string) : option (expr * string) :=
       else None
     | EmptyString => None
     end
-    end end end end
+    end end end end end
   end.
 
 (* ========== Type Definition Parsing ========== *)
