@@ -2319,7 +2319,7 @@ let run_our_compiler prog =
       | Error msg -> result := Some (sc msg)
       | CCall_request (idx, args, cont) ->
         (match handler idx args with
-         | Some v -> s := set_accu cont v; loop ()
+         | Some v -> s := { cont with accu = v }; loop ()
          | None -> result := Some "ccall failed")
     end
   in
@@ -2364,7 +2364,7 @@ let run_ocamlc_bytecode exe_file =
         pending_raise_ref := None;
         (match handler idx args with
          | Some v ->
-           s := { (set_accu cont v) with
+           s := { cont with accu = v;
                   hp = !heap_ref; next_addr = !next_addr_ref };
            loop ()
          | None ->
