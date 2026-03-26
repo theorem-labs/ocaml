@@ -142,19 +142,29 @@ let parse_test_header path =
     end
   with _ -> empty_header
 
-(* Read .reference file if it exists next to the .ml file *)
+(* Read .reference file if it exists next to the .ml file.
+   Checks for .reference first, then .ocaml.reference (used by OCaml testsuite
+   for tests with different expected output per backend). *)
 let read_reference path =
-  let ref_path = (Filename.chop_suffix path ".ml") ^ ".reference" in
-  if Sys.file_exists ref_path then
+  let base = Filename.chop_suffix path ".ml" in
+  let candidates = [
+    base ^ ".reference";
+    base ^ ".ocaml.reference";
+  ] in
+  let read_file p =
     try
-      let ic = open_in ref_path in
+      let ic = open_in p in
       let buf = Buffer.create 256 in
       (try while true do Buffer.add_char buf (input_char ic) done
        with End_of_file -> ());
       close_in ic;
       Some (Buffer.contents buf)
     with _ -> None
-  else None
+  in
+  List.fold_left (fun acc p ->
+    match acc with Some _ -> acc | None ->
+      if Sys.file_exists p then read_file p else None
+  ) None candidates
 
 (* Run ocamlc bytecode through our interpreter, with step limit *)
 exception Clean_exit
