@@ -16,7 +16,7 @@
       The decoder's build_offset_map inverts the encoder's rel_offset. [Fully proved]
    4. Layer 1: decode_raw_aux on encode_bytecode produces expected_raws,
       by induction on the instruction list. Zero/one/two-operand and
-      GETPUBMET cases are proved; CLOSUREREC and SWITCH cases remain. [Admitted]
+      GETPUBMET, CLOSUREREC, and SWITCH cases are proved. [Fully proved]
 
    The main theorem decode_encode_inverse is proved (Qed) assuming Layer 1. *)
 
@@ -680,7 +680,13 @@ Lemma wf_instrb_from_well_formed : forall code i,
   well_formed code = true ->
   In i code ->
   wf_instrb (List.length code) i = true.
-Proof. Admitted.
+Proof.
+  intros code i Hwf Hin.
+  unfold well_formed in Hwf.
+  apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf _].
+  rewrite forallb_forall in Hwf.
+  apply Hwf. exact Hin.
+Qed.
 
 (* ================================================================== *)
 (* Fuel sufficiency                                                    *)
@@ -819,6 +825,137 @@ Proof.
       apply Hwf. lia. }
     rewrite Heq in Hfst. simpl in Hfst.
     simpl. rewrite Hfst. reflexivity.
+Qed.
+
+(* Helper: emit_words distributes over app *)
+Lemma emit_words_app : forall ws1 ws2,
+  emit_words (ws1 ++ ws2) = emit_words ws1 ++ emit_words ws2.
+Proof. intros. unfold emit_words. apply flat_map_app. Qed.
+
+(* Helper: fst of read_operands is invariant under a prefix *)
+Lemma read_operands_fst_app_r : forall pfx data n pos,
+  fst (read_operands (pfx ++ data) 0 (List.length pfx + pos) n) =
+  fst (read_operands data 0 pos n).
+Proof.
+  intros pfx data n.
+  induction n as [|n' IH]; intros pos.
+  - simpl. reflexivity.
+  - simpl.
+    replace (0 + (List.length pfx + pos))%nat with (List.length pfx + pos) by lia.
+    replace (0 + pos)%nat with pos by lia.
+    rewrite read_i32_le_app_r by lia.
+    replace (List.length pfx + pos - List.length pfx) with pos by lia.
+    destruct (read_operands (pfx ++ data) 0 (List.length pfx + pos + 4) n') as [ops1 p1] eqn:E1.
+    destruct (read_operands data 0 (pos + 4) n') as [ops2 p2] eqn:E2.
+    simpl. f_equal.
+    replace (List.length pfx + pos + 4) with (List.length pfx + (pos + 4)) in E1 by lia.
+    assert (Hfst : fst (read_operands (pfx ++ data) 0 (List.length pfx + (pos + 4)) n') =
+                   fst (read_operands data 0 (pos + 4) n')).
+    { apply IH. }
+    rewrite E1 in Hfst. rewrite E2 in Hfst. simpl in Hfst. exact Hfst.
+Qed.
+
+(* Helper: read_operands on emit_words through a prefix *)
+Lemma read_operands_on_emit_words_with_prefix :
+  forall pfx ws start rest n,
+    n <= List.length ws ->
+    (forall k, k < n -> z_fits_i32b (nth (start + k) ws 0%Z) = true) ->
+    start + n <= List.length ws ->
+    fst (read_operands (pfx ++ emit_words ws ++ rest) 0
+           (List.length pfx + 4 * start) n) =
+      map (fun k => nth k ws 0%Z) (seq start n).
+Proof.
+  intros pfx ws start rest n Hle Hwf Hle2.
+  rewrite read_operands_fst_app_r.
+  apply read_operands_on_emit_words; assumption.
+Qed.
+
+(* Helper: map nth over seq on a prefix-appended list extracts the suffix *)
+Lemma map_nth_seq_app : forall {A : Type} (pfx sfx : list A) (d : A),
+  map (fun k => nth k (pfx ++ sfx) d)
+      (seq (List.length pfx) (List.length sfx))
+  = sfx.
+Proof.
+  intros A pfx sfx d.
+  apply nth_ext with (d := d) (d' := d).
+  { rewrite map_length, length_seq. reflexivity. }
+  intros k Hk.
+  rewrite map_length, length_seq in Hk.
+  (* Use nth_error to avoid default issues *)
+  (* LHS: nth k (map f (seq (length pfx) (length sfx))) d *)
+  (* nth k (map f l) d where k < length l *)
+  (* We use nth_error to compute both sides *)
+  assert (Hlhs : nth_error (map (fun j => nth j (pfx ++ sfx) d)
+                                (seq (length pfx) (length sfx))) k =
+                 Some (nth (length pfx + k) (pfx ++ sfx) d)).
+  { rewrite nth_error_map.
+    rewrite nth_error_seq.
+    replace (k <? length sfx) with true by (symmetry; apply Nat.ltb_lt; lia).
+    simpl. reflexivity. }
+  assert (Hrhs : nth_error sfx k = Some (nth k sfx d))
+    by (apply nth_error_nth'; lia).
+  pose proof (nth_error_nth _ k d Hlhs) as H1.
+  pose proof (nth_error_nth _ k d Hrhs) as H2.
+  rewrite H1.
+  rewrite app_nth2 by lia.
+  replace (length pfx + k - length pfx) with k by lia.
+  exact H2.
+Qed.
+
+(* Helper: z_fits_i32b for sizes packed via Z.lor *)
+Lemma z_fits_i32b_lor_sizes : forall nc nb : nat,
+  nc < 65536 ->
+  nb < 32768 ->
+  z_fits_i32b (Z.lor (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16)) = true.
+Proof.
+  intros nc nb Hnc Hnb.
+  (* Convert numeric bounds to Z for easier reasoning *)
+  assert (Hnc_z : (Z.of_nat nc < 2 ^ 16)%Z).
+  { change (2 ^ 16)%Z with 65536%Z. lia. }
+  assert (Hnb_z : (Z.of_nat nb < 2 ^ 15)%Z).
+  { change (2 ^ 15)%Z with 32768%Z. lia. }
+  unfold z_fits_i32b.
+  (* Z.land nc (nb << 16) = 0 because bits don't overlap *)
+  assert (Hdisjoint : Z.land (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16) = 0%Z).
+  { apply Z.bits_inj'. intros j Hj.
+    rewrite Z.land_spec, Z.shiftl_spec, Z.bits_0 by lia.
+    destruct (Z_lt_dec j 16).
+    + rewrite (Z.testbit_neg_r (Z.of_nat nb) (j - 16)) by lia.
+      apply Bool.andb_false_r.
+    + assert (Hncj : Z.testbit (Z.of_nat nc) j = false).
+      { apply Z.bits_above_log2; try lia.
+        destruct (Z.eq_dec (Z.of_nat nc) 0).
+        - rewrite e. simpl. lia.
+        - assert (Hpos : (0 < Z.of_nat nc)%Z) by lia.
+          apply (proj1 (Z.log2_lt_pow2 (Z.of_nat nc) 16 Hpos)) in Hnc_z. lia. }
+      rewrite Hncj. reflexivity. }
+  (* lor = nc + nb * 2^16 when bits are disjoint *)
+  assert (Heq : Z.lor (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16) =
+                (Z.of_nat nc + Z.shiftl (Z.of_nat nb) 16)%Z).
+  { transitivity (Z.lxor (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16)).
+    - apply Z.bits_inj'. intros j Hj.
+      rewrite Z.lor_spec, Z.lxor_spec.
+      pose proof (Z.land_spec (Z.of_nat nc) (Z.shiftl (Z.of_nat nb) 16) j) as Hls.
+      rewrite Hdisjoint in Hls. rewrite Z.bits_0 in Hls.
+      destruct (Z.testbit (Z.of_nat nc) j), (Z.testbit (Z.shiftl (Z.of_nat nb) 16) j);
+        simpl in Hls; try discriminate; reflexivity.
+    - apply Z.add_nocarry_lxor. exact Hdisjoint. }
+  rewrite Heq.
+  rewrite Z.shiftl_mul_pow2 by lia.
+  apply Bool.andb_true_iff. split; apply Z.leb_le; lia.
+Qed.
+
+(* Helper: nth on a map via nth_error *)
+Lemma nth_map_in_range : forall {A B : Type} (f : A -> B) (l : list A) k (d : B) (d' : A),
+  k < List.length l ->
+  nth k (map f l) d = f (nth k l d').
+Proof.
+  intros A B f l k d d' Hk.
+  destruct (nth_error l k) eqn:E.
+  - rewrite <- (nth_error_nth l k d' E).
+    pose proof (map_nth_error f k l E) as Hm.
+    apply nth_error_nth with (d := d) in Hm. exact Hm.
+  - apply nth_error_None in E. lia.
 Qed.
 
 (* ================================================================== *)
@@ -1489,17 +1626,13 @@ Lemma resolve_one_expected_raw :
        Z.to_nat t < List.length code ->
        resolve_branch dec_omap from (rel_offset enc_omap from t) = t) ->
     resolve_one dec_omap (expected_raw enc_omap idx i woff) = i.
-Proof. Admitted.
-
-(* Original proof disabled due to hypothesis naming mismatch after
-   wf_instrb restructuring.  Needs fixing: the SWITCH case breaks
-   because repeat destruct generates H/H0/.../H3 in a different order
-   than the rename assumes. *)
-
-(* Original proof body removed — it was ~200 lines of per-instruction
-   case analysis that broke when wf_instrb was restructured. *)
-
-(*
+Proof.
+  intros code enc_omap dec_omap idx i woff Henc Hwoff Hidx Hwf Hbranch.
+  subst enc_omap woff.
+  assert (Hw : Z.of_nat (match nth_error (offset_map code) idx with
+                          | Some n => n | None => 0 end) =
+               Z.of_nat (word_offset_of code idx)).
+  { apply enc_w_eq. exact Hidx. }
   set (W := word_offset_of code idx) in *.
   (* Useful Z arithmetic facts for matching resolve_one's Z.of_nat (W + k + n)
      with expected_raw's (Z.of_nat W + k)%Z *)
@@ -1686,7 +1819,8 @@ Proof. Admitted.
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
-*)
+    reflexivity.
+Qed.
 
 (* Corollary: resolve_one works for each instruction in the full program *)
 Lemma resolve_one_expected_raw_in_code :
@@ -2348,12 +2482,200 @@ Proof.
          So at offset |pfx|+12, we're at the start of emit_words(map...l) *)
       idtac).
 
-    (* The remaining proof for CLOSUREREC and SWITCH requires
-       read_operands_on_emit_words and careful position tracking.
-       These are the most complex instructions with variable-length encodings.
-       For now, admit the remaining goals. *)
-    all: admit.
-Admitted.
+    (* ---- Complete CLOSUREREC: show read_operands returns the map of rel_offsets ---- *)
+    (* At this point, the CLOSUREREC goal has Hdata_eq rewritten and
+       encode_instr changed to emit_words form. We need to show that
+       read_operands at pos+12 for n words gives back the map of rel_offsets. *)
+    all: try (
+      set (ws_cr := [44; Z.of_nat n; Z.of_nat n0] ++
+                     map (fun t : Z => rel_offset omap
+                       (Z.of_nat (match nth_error omap idx with Some n => n | None => 0 end) + 3) t) l);
+      (* Extract wf conditions *)
+      assert (Hlen_cr : length l = n) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         apply Nat.eqb_eq in Hwfi; exact Hwfi);
+      assert (Hvalid_cr : all_valid_targetsb (length code) l = true) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         assumption);
+      replace (pos + 12) with (List.length pfx + 4 * 3) by (subst pfx; rewrite Hpfx_len; lia);
+      (* Use snd for position tracking *)
+      assert (Hsnd_cr : snd (read_operands
+        (encode_instrs omap 0 (firstn idx code) ++ emit_words ws_cr ++ rbytes)
+        0 (List.length pfx + 4 * 3) n) = List.length pfx + 4 * 3 + 4 * n)
+        by apply read_operands_length;
+      destruct (read_operands
+        (encode_instrs omap 0 (firstn idx code) ++ emit_words ws_cr ++ rbytes)
+        0 (List.length pfx + 4 * 3) n) as [ofs_cr p4_cr] eqn:Hro_cr;
+      simpl fst in *; simpl snd in *;
+      assert (Hp4_cr : p4_cr = List.length pfx + 4 * 3 + 4 * n)
+        by (rewrite <- Hsnd_cr; rewrite Hro_cr; reflexivity);
+      (* Show ofs_cr = map rel_offset l *)
+      assert (Hfst_cr : ofs_cr =
+        map (fun t : Z => rel_offset omap
+          (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 3) t) l);
+      [ assert (Hfst_cr' : fst (read_operands
+          (encode_instrs omap 0 (firstn idx code) ++ emit_words ws_cr ++ rbytes)
+          0 (List.length pfx + 4 * 3) n) = ofs_cr)
+          by (rewrite Hro_cr; reflexivity);
+        rewrite <- Hfst_cr';
+        rewrite read_operands_on_emit_words_with_prefix;
+        [ (* map produces right values *)
+          subst ws_cr;
+          set (pfx_cr := [44%Z; Z.of_nat n; Z.of_nat n0]);
+          set (sfx_cr := map (fun t : Z => rel_offset omap
+                (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 3) t) l);
+          change ([44%Z; Z.of_nat n; Z.of_nat n0] ++ sfx_cr) with (pfx_cr ++ sfx_cr);
+          replace n with (List.length sfx_cr) by (subst sfx_cr; rewrite map_length; lia);
+          replace 3 with (List.length pfx_cr) by reflexivity;
+          rewrite (map_nth_seq_app pfx_cr sfx_cr 0%Z);
+          reflexivity
+        | subst ws_cr; rewrite app_length; simpl length; rewrite map_length; lia
+        | subst ws_cr; intros k Hk;
+          rewrite app_nth2 by (simpl; lia); simpl length;
+          rewrite nth_map_in_range with (d' := 0%Z) by lia;
+          eapply rel_offset_fits_i32b; eauto;
+          [ eapply forallb_forall in Hvalid_cr;
+            [ apply valid_targetb_props in Hvalid_cr; tauto | apply nth_In; lia ]
+          | eapply forallb_forall in Hvalid_cr;
+            [ apply valid_targetb_props in Hvalid_cr; tauto | apply nth_In; lia ]
+          | lia
+          | rewrite encode_bytecode_length;
+            pose proof (well_formed_byte_bound code Hwf); lia ]
+        | subst ws_cr; rewrite app_length; simpl length; rewrite map_length; lia ]
+      | rewrite Hfst_cr;
+        replace p4_cr with (pos + 4 * (3 + length l))
+          by (subst pfx; rewrite Hpfx_len in Hp4_cr; lia);
+        rewrite <- Hlen_cr;
+        replace (pos + 4 * (3 + n)) with (pos + 4 * instr_word_size (CLOSUREREC n n0 l))
+          by (simpl instr_word_size; lia);
+        rewrite <- Hdata_eq;
+        exact Hcont ]).
+
+    (* ---- SWITCH case (opcode 87) ---- *)
+    all: (
+      (* Read sizes at offset 4 *)
+      replace (0 + (pos + 4))%nat with (pos + 4) by lia;
+      rewrite (Hread_i32 4) by lia;
+      rewrite emit_words_cons, <- app_assoc;
+      rewrite read_i32_le_app_r by (rewrite encode_word_le_length; lia);
+      rewrite encode_word_le_length;
+      rewrite read_i32_le_app_l by
+        (rewrite ?emit_words_cons, ?length_app, ?encode_word_le_length,
+                 ?emit_words_length; simpl List.length; rewrite ?map_length, ?app_length, ?map_length; lia);
+      (* Extract wf conditions with explicit names *)
+      assert (Hlen_ct_sw : length l = n) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         apply Nat.eqb_eq in Hwfi; exact Hwfi);
+      assert (Hlen_bt_sw : length l0 = n0) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         apply Nat.eqb_eq; assumption);
+      assert (Hvalid_ct_sw : all_valid_targetsb (length code) l = true) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         assumption);
+      assert (Hvalid_bt_sw : all_valid_targetsb (length code) l0 = true) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         assumption);
+      assert (Hnc_sw : n < 65536) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         apply Nat.ltb_lt; assumption);
+      assert (Hnb_sw : n0 < 32768) by
+        (simpl wf_instrb in Hwfi;
+         repeat (try (apply Bool.andb_true_iff in Hwfi; destruct Hwfi as [Hwfi ?]));
+         apply Nat.ltb_lt; assumption);
+      rewrite read_i32_le_encode_word_le by (apply z_fits_i32b_lor_sizes; assumption);
+      rewrite lor_land_low16 by lia;
+      rewrite lor_shiftr_high16 by lia;
+      rewrite !Nat2Z.id;
+      replace (pos + 4 + 4)%nat with (pos + 8) by lia;
+      (* Handle read_operands for n+n0 table entries *)
+      set (full_data_sw := encode_instrs omap 0 (firstn idx code) ++
+                            encode_instr omap idx (SWITCH n n0 l l0) ++ rbytes);
+      assert (Hsnd_sw : snd (read_operands full_data_sw 0 (pos + 8) (n + n0)) =
+                          pos + 8 + 4 * (n + n0))
+        by apply read_operands_length;
+      destruct (read_operands full_data_sw 0 (pos + 8) (n + n0)) as [tbl p3] eqn:Hro_sw;
+      simpl fst in *; simpl snd in *;
+      assert (Hp3_sw : p3 = pos + 8 + 4 * (n + n0))
+        by (rewrite <- Hsnd_sw; rewrite Hro_sw; reflexivity);
+      assert (Htbl_sw : tbl =
+        List.map (fun t : Z => rel_offset omap
+          (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l ++
+        List.map (fun t : Z => rel_offset omap
+          (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l0);
+      [ subst full_data_sw;
+        assert (Hfst_sw : fst (read_operands
+          (encode_instrs omap 0 (firstn idx code) ++
+           encode_instr omap idx (SWITCH n n0 l l0) ++ rbytes)
+          0 (pos + 8) (n + n0)) = tbl)
+          by (rewrite Hro_sw; reflexivity);
+        rewrite <- Hfst_sw;
+        change (encode_instr omap idx (SWITCH n n0 l l0)) with
+          (emit_words ([87; Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)] ++
+                       map (fun t : Z => rel_offset omap
+                         (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l ++
+                       map (fun t : Z => rel_offset omap
+                         (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l0));
+        set (ws_sw := [87; Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)] ++
+                       map (fun t : Z => rel_offset omap
+                         (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l ++
+                       map (fun t : Z => rel_offset omap
+                         (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l0);
+        replace (pos + 8) with (List.length pfx + 4 * 2) by (subst pfx; rewrite Hpfx_len; lia);
+        rewrite read_operands_on_emit_words_with_prefix;
+        [ subst ws_sw;
+          set (pfx_z := [87%Z; Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)]);
+          set (sfx_z := map (fun t : Z => rel_offset omap
+                (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l ++
+              map (fun t : Z => rel_offset omap
+                (Z.of_nat (match nth_error omap idx with Some nn => nn | None => 0 end) + 2) t) l0);
+          change ([87%Z; Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)] ++ sfx_z)
+            with (pfx_z ++ sfx_z);
+          replace (n + n0) with (List.length sfx_z)
+            by (subst sfx_z; rewrite length_app, !map_length; lia);
+          replace 2 with (List.length pfx_z) by reflexivity;
+          rewrite (map_nth_seq_app pfx_z sfx_z 0%Z);
+          reflexivity
+        | subst ws_sw; rewrite !app_length; simpl length; rewrite !map_length; lia
+        | subst ws_sw; intros k Hk;
+          rewrite app_nth2 by (simpl; lia); simpl length;
+          destruct (Nat.lt_ge_cases k (length l)) as [Hkl | Hkl];
+          [ rewrite app_nth1 by (rewrite map_length; lia);
+            rewrite nth_map_in_range with (d' := 0%Z) by lia;
+            eapply rel_offset_fits_i32b; eauto;
+            [ eapply forallb_forall in Hvalid_ct_sw;
+              [ apply valid_targetb_props in Hvalid_ct_sw; tauto | apply nth_In; lia ]
+            | eapply forallb_forall in Hvalid_ct_sw;
+              [ apply valid_targetb_props in Hvalid_ct_sw; tauto | apply nth_In; lia ]
+            | lia
+            | rewrite encode_bytecode_length;
+              pose proof (well_formed_byte_bound code Hwf); lia ]
+          | rewrite app_nth2 by (rewrite map_length; lia);
+            rewrite map_length;
+            rewrite nth_map_in_range with (d' := 0%Z) by lia;
+            eapply rel_offset_fits_i32b; eauto;
+            [ eapply forallb_forall in Hvalid_bt_sw;
+              [ apply valid_targetb_props in Hvalid_bt_sw; tauto | apply nth_In; lia ]
+            | eapply forallb_forall in Hvalid_bt_sw;
+              [ apply valid_targetb_props in Hvalid_bt_sw; tauto | apply nth_In; lia ]
+            | lia
+            | rewrite encode_bytecode_length;
+              pose proof (well_formed_byte_bound code Hwf); lia ] ]
+        | subst ws_sw; rewrite !app_length; simpl length; rewrite !map_length; lia ]
+      | rewrite Htbl_sw;
+        replace p3 with (pos + 4 * (2 + length l + length l0)) by lia;
+        rewrite <- Hlen_ct_sw; rewrite <- Hlen_bt_sw;
+        replace (pos + 4 * (2 + n + n0)) with (pos + 4 * instr_word_size (SWITCH n n0 l l0))
+          by (simpl instr_word_size; lia);
+        rewrite <- Hdata_eq;
+        exact Hcont ]).
+Qed.
 
 Theorem decode_encode_inverse :
   forall code,
