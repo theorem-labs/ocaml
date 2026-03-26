@@ -1,7 +1,13 @@
-[submodule "system-ocaml-compiler"]
-	path = system-ocaml-compiler
+[submodule "system-ocaml"]
+	path = system-ocaml
 	url = https://github.com/ocaml/ocaml
 	branch = 4.14
 [submodule "camlboot"]
 	path = camlboot
 	url = https://github.com/Ekdohibs/camlboot.git
+[submodule "efftester"]
+	path = efftester
+	url = https://github.com/jmid/efftester
+[submodule "osiris"]
+	path = osiris
+	url = https://gitlab.aliens-lyon.fr/verislo/osiris.git
