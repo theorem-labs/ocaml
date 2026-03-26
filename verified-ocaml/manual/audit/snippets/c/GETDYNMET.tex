@@ -1,0 +1,14 @@
+% Auto-generated from c source, line 1132
+\begin{ccode}[firstnumber=1132]
+    Instruct(GETDYNMET): {
+      /* accu == tag, sp[0] == object, *pc == cache */
+      value meths = Field (sp[0], 0);
+      int li = 3, hi = Field(meths,0), mi;
+      while (li < hi) {
+        mi = ((li+hi) >> 1) | 1;
+        if (accu < Field(meths,mi)) hi = mi-2;
+        else li = mi;
+      }
+      accu = Field (meths, li-1);
+      Next;
+\end{ccode}

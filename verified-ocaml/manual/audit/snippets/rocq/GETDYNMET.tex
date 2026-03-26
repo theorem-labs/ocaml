@@ -1,0 +1,31 @@
+% Auto-generated from rocq source, line 863
+\begin{rocqcode}[firstnumber=863]
+  | GETDYNMET =>
+    match s.(stack) with
+    | obj :: _ =>
+      let tag := s.(accu) in
+      match field_or_heap s obj 0 with
+      | Some class_tbl =>
+        let fields :=
+          match class_tbl with
+          | Val_block _ fs => fs
+          | Val_ptr addr => match heap_lookup s.(hp) addr with Some (_, fs) => fs | None => [] end
+          | _ => []
+        in
+        (* Linear scan: skip meths[0] (count) and meths[1] (padding),
+           then scan pairs (closure, tag). *)
+        let fix scan (remaining : list value) : step_result :=
+          match remaining with
+          | [] => Error "GETDYNMET: method not found"
+          | _ :: [] => Error "GETDYNMET: method not found"
+          | method_fn :: tag_val :: rest =>
+            if value_eqb tag_val tag then
+              Step (st s pc' method_fn s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+            else scan rest
+        in scan (skipn 2 fields)
+      | None => Error "GETDYNMET: no class table"
+    | _ => Error "GETDYNMET: stack underflow"
+
+  (* B-comparison instructions: the spec says "increments pc by ofs-1 if val CMP accu".
+     In interp.c the operand is an absolute instruction index (after decode). *)
+\end{rocqcode}

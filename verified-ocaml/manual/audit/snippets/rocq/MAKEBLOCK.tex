@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 436
+\begin{rocqcode}[firstnumber=436]
+  | MAKEBLOCK t size =>
+    let fields := s.(accu) :: firstn (Nat.sub size 1) s.(stack) in
+    let new_stack := skipn (Nat.sub size 1) s.(stack) in
+    let '(s', ptr) := heap_alloc s t fields in
+    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+\end{rocqcode}

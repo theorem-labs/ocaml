@@ -1,0 +1,12 @@
+% Auto-generated from rocq source, line 793
+\begin{rocqcode}[firstnumber=793]
+  | OFFSETREF n =>
+    match s.(accu) with
+    | Val_ptr addr =>
+      match heap_lookup s.(hp) addr with
+      | Some (_, Val_int old :: rest) =>
+        let new_hp := heap_update s.(hp) addr (Val_int (old + n) :: rest) in
+        Step (mk_state pc' val_unit s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+      | _ => Error "OFFSETREF: not a ref"
+    | _ => Error "OFFSETREF: not a ref"
+\end{rocqcode}

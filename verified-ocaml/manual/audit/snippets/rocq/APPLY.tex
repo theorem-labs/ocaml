@@ -1,0 +1,10 @@
+% Auto-generated from rocq source, line 155
+\begin{rocqcode}[firstnumber=155]
+  | APPLY n =>
+    match get_code_ptr_s s s.(accu) with
+    | Some target_pc =>
+      Step (st s target_pc s.(accu) s.(stack) s.(accu) (Nat.sub n 1) s.(global) s.(trap_sp))
+    | None => Error "APPLY: accu is not a closure"
+
+  (* APPLY1/2/3: save return frame then call closure. *)
+\end{rocqcode}

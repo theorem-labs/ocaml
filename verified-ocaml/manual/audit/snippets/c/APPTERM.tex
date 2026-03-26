@@ -1,0 +1,18 @@
+% Auto-generated from c source, line 457
+\begin{ccode}[firstnumber=457]
+    Instruct(APPTERM): {
+      int nargs = *pc++;
+      int slotsize = *pc;
+      value * newsp;
+      int i;
+      /* Slide the nargs bottom words of the current frame to the top
+         of the frame, and discard the remainder of the frame */
+      newsp = sp + slotsize - nargs;
+      for (i = nargs - 1; i >= 0; i--) newsp[i] = sp[i];
+      sp = newsp;
+      pc = Code_val(accu);
+      env = accu;
+      extra_args += nargs - 1;
+      goto check_stacks;
+    }
+\end{ccode}

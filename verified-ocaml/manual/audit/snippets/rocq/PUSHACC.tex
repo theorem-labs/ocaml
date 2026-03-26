@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 119
+\begin{rocqcode}[firstnumber=119]
+  | PUSHACC n =>
+    let new_stack := s.(accu) :: s.(stack) in
+    match nth_error new_stack n with
+    | Some v => Step (st s pc' v new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | None => Error "PUSHACC: stack underflow"
+\end{rocqcode}

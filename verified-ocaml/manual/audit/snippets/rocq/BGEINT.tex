@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 935
+\begin{rocqcode}[firstnumber=935]
+  | BGEINT n target =>
+    match s.(accu) with
+    | Val_int a => if Z.geb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Error "BGEINT: not an integer"
+\end{rocqcode}

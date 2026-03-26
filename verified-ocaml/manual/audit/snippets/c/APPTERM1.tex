@@ -1,0 +1,11 @@
+% Auto-generated from c source, line 472
+\begin{ccode}[firstnumber=472]
+    Instruct(APPTERM1): {
+      value arg1 = sp[0];
+      sp = sp + *pc - 1;
+      sp[0] = arg1;
+      pc = Code_val(accu);
+      env = accu;
+      goto check_stacks;
+    }
+\end{ccode}

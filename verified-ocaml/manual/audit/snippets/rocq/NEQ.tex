@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 757
+\begin{rocqcode}[firstnumber=757]
+  | NEQ =>
+    match s.(stack) with
+    | b :: rest => Step (st s pc' (if value_eqb s.(accu) b then val_false else val_true) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Error "NEQ: stack underflow"
+\end{rocqcode}

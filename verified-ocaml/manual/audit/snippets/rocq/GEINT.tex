@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 781
+\begin{rocqcode}[firstnumber=781]
+  | GEINT =>
+    match s.(accu), s.(stack) with
+    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (a >=? b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _, _ => Error "GEINT: type error or stack underflow"
+\end{rocqcode}

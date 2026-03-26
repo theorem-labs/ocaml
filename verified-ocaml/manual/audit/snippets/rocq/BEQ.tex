@@ -1,0 +1,9 @@
+% Auto-generated from rocq source, line 895
+\begin{rocqcode}[firstnumber=895]
+  | BEQ n target =>
+    match s.(accu) with
+    | Val_int a => if Z.eqb a n then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    (* Non-integer values are never equal to Val_int n, so don't branch *)
+    | _ => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+\end{rocqcode}

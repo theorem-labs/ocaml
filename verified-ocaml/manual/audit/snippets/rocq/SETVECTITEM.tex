@@ -1,0 +1,18 @@
+% Auto-generated from rocq source, line 540
+\begin{rocqcode}[firstnumber=540]
+  | SETVECTITEM =>
+    match s.(stack) with
+    | Val_int idx :: newval :: rest =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          match set_nth fields (Z.to_nat idx) newval with
+          | Some new_fields =>
+            let new_hp := heap_update s.(hp) addr new_fields in
+            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+          | None => Error "SETVECTITEM: index out of bounds"
+        | None => Error "SETVECTITEM: dangling pointer"
+      | _ => Error "SETVECTITEM: not a heap block"
+    | _ => Error "SETVECTITEM: stack underflow"
+\end{rocqcode}

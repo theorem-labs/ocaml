@@ -1,0 +1,10 @@
+% Auto-generated from rocq source, line 200
+\begin{rocqcode}[firstnumber=200]
+  | APPTERM nargs slotsize =>
+    let args := firstn nargs s.(stack) in
+    let base := skipn slotsize s.(stack) in
+    match get_code_ptr_s s s.(accu) with
+    | Some target_pc =>
+      Step (st s target_pc s.(accu) (args ++ base) s.(accu) (Nat.add s.(extra_args) (Nat.sub nargs 1)) s.(global) s.(trap_sp))
+    | None => Error "APPTERM: accu is not a closure"
+\end{rocqcode}

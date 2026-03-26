@@ -1,0 +1,9 @@
+% Auto-generated from c source, line 645
+\begin{ccode}[firstnumber=645]
+    Instruct(GETGLOBALFIELD): {
+      accu = Field(caml_global_data, *pc);
+      pc++;
+      accu = Field(accu, *pc);
+      pc++;
+      Next;
+\end{ccode}

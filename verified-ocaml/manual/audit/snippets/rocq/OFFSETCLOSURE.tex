@@ -1,0 +1,13 @@
+% Auto-generated from rocq source, line 362
+\begin{rocqcode}[firstnumber=362]
+  | OFFSETCLOSURE ofs =>
+    match s.(env) with
+    | Val_closure addr base_ofs =>
+      let new_ofs := Z.to_nat (Z.of_nat base_ofs + ofs) in
+      Step (st s pc' (Val_closure addr new_ofs) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | Val_block t _ =>
+      if Z.eqb ofs 0 then
+        Step (st s pc' s.(env) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      else Error "OFFSETCLOSURE: non-zero offset on non-closure env"
+    | _ => Error "OFFSETCLOSURE: invalid env"
+\end{rocqcode}

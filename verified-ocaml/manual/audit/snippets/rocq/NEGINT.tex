@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 675
+\begin{rocqcode}[firstnumber=675]
+  | NEGINT =>
+    match s.(accu) with
+    | Val_int n => Step (st s pc' (Val_int (- n)) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Error "NEGINT: not an integer"
+\end{rocqcode}

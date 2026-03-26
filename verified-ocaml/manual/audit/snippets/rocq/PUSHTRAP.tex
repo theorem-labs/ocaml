@@ -1,0 +1,11 @@
+% Auto-generated from rocq source, line 637
+\begin{rocqcode}[firstnumber=637]
+  | PUSHTRAP handler_pc =>
+    let prev_tsp := Val_int (Z.of_nat s.(trap_sp)) in
+    let new_stack := Val_int handler_pc :: prev_tsp :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: s.(stack) in
+    let new_tsp := length new_stack in
+    Step (st s pc' s.(accu) new_stack s.(env) s.(extra_args) s.(global) new_tsp)
+
+  (* POPTRAP: restore trap_sp from the trap link (sp[1]) and pop 4 values.
+     For well-formed code the trap frame is always at the current stack top. *)
+\end{rocqcode}

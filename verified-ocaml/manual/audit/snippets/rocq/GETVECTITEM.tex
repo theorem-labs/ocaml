@@ -1,0 +1,10 @@
+% Auto-generated from rocq source, line 530
+\begin{rocqcode}[firstnumber=530]
+  | GETVECTITEM =>
+    match s.(stack) with
+    | Val_int idx :: rest =>
+      match field_or_heap s s.(accu) (Z.to_nat idx) with
+      | Some v => Step (st s pc' v rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | None => Error "GETVECTITEM: index out of bounds"
+    | _ => Error "GETVECTITEM: bad index or stack underflow"
+\end{rocqcode}

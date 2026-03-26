@@ -1,0 +1,25 @@
+% Auto-generated from c source, line 881
+\begin{ccode}[firstnumber=881]
+    Instruct(RAISE):
+      Check_trap_barrier;
+      if (Caml_state->backtrace_active) {
+        *--sp = (value)(pc - 1);
+        caml_stash_backtrace(accu, sp, 0);
+      }
+    raise_notrace:
+      if ((char *) Caml_state->trapsp
+          >= (char *) Caml_state->stack_high - initial_sp_offset) {
+        Caml_state->external_raise = initial_external_raise;
+        Caml_state->extern_sp = (value *) ((char *) Caml_state->stack_high
+                                    - initial_sp_offset);
+        caml_callback_depth--;
+        return Make_exception_result(accu);
+      }
+      sp = Caml_state->trapsp;
+      pc = Trap_pc(sp);
+      Caml_state->trapsp = sp + Long_val(Trap_link_offset(sp));
+      env = sp[2];
+      extra_args = Long_val(sp[3]);
+      sp += 4;
+      Next;
+\end{ccode}

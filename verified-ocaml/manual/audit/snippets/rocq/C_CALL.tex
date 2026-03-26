@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 662
+\begin{rocqcode}[firstnumber=662]
+  | C_CALL nargs prim_idx =>
+    let args := s.(accu) :: firstn (Nat.sub nargs 1) s.(stack) in
+    let new_stack := skipn (Nat.sub nargs 1) s.(stack) in
+    let cont := st s pc' val_unit new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp) in
+    CCall_request prim_idx args cont
+\end{rocqcode}

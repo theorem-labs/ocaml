@@ -1,0 +1,12 @@
+% Auto-generated from rocq source, line 163
+\begin{rocqcode}[firstnumber=163]
+  | APPLY1 =>
+    match s.(stack) with
+    | arg1 :: rest =>
+      match get_code_ptr_s s s.(accu) with
+      | Some target_pc =>
+        let new_stack := arg1 :: Val_int pc' :: s.(env) :: Val_int (Z.of_nat s.(extra_args)) :: rest in
+        Step (st s target_pc s.(accu) new_stack s.(accu) 0 s.(global) s.(trap_sp))
+      | None => Error "APPLY1: accu is not a closure"
+    | _ => Error "APPLY1: stack underflow"
+\end{rocqcode}

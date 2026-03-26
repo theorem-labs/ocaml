@@ -1,0 +1,11 @@
+% Auto-generated from rocq source, line 948
+\begin{rocqcode}[firstnumber=948]
+  | UGEINT =>
+    match s.(accu), s.(stack) with
+    | Val_int a, Val_int b :: rest => Step (st s pc' (val_bool (Z.geb (z_flip_sign a) (z_flip_sign b))) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _, _ => Error "UGEINT: type error or stack underflow"
+
+  (* BULTINT(n, target): branch if n < accu (unsigned). "n is ULT the integer accu."
+     BUGEINT(n, target): branch if n >= accu (unsigned). "n is UGE the integer accu."
+     Like signed B-ops (which use n CMP accu), both use z_flip_sign for unsigned order. *)
+\end{rocqcode}

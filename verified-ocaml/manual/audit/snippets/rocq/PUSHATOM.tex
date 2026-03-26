@@ -1,0 +1,9 @@
+% Auto-generated from rocq source, line 430
+\begin{rocqcode}[firstnumber=430]
+  | PUSHATOM t =>
+    let new_stack := s.(accu) :: s.(stack) in
+    let '(s', ptr) := heap_alloc s t [] in
+    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+
+  (* MAKEBLOCK tag size: accu=field0, pop (size-1) from stack. *)
+\end{rocqcode}

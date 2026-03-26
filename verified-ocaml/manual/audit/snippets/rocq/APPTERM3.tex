@@ -1,0 +1,14 @@
+% Auto-generated from rocq source, line 233
+\begin{rocqcode}[firstnumber=233]
+  | APPTERM3 slotsize =>
+    match s.(stack) with
+    | arg1 :: arg2 :: arg3 :: _ =>
+      let base := skipn slotsize s.(stack) in
+      match get_code_ptr_s s s.(accu) with
+      | Some target_pc =>
+        Step (st s target_pc s.(accu) (arg1 :: arg2 :: arg3 :: base) s.(accu) (Nat.add s.(extra_args) 2) s.(global) s.(trap_sp))
+      | None => Error "APPTERM3: accu is not a closure"
+    | _ => Error "APPTERM3: stack underflow"
+
+  (* RETURN n: pop n locals; if extra_args > 0 tail-call accu, else restore return frame. *)
+\end{rocqcode}

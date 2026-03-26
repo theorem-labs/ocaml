@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 805
+\begin{rocqcode}[firstnumber=805]
+  | ISINT =>
+    Step (st s pc' (if is_int s.(accu) then val_true else val_false) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+
+  (* GETMETHOD: accu is the method index, stack top is the object.
+     Look up method at position accu in the object's class table. *)
+\end{rocqcode}

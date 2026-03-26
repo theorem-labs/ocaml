@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 957
+\begin{rocqcode}[firstnumber=957]
+  | BULTINT n target =>
+    match s.(accu) with
+    | Val_int a => if Z.ltb (z_flip_sign n) (z_flip_sign a) then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Error "BULTINT: not an integer"
+\end{rocqcode}

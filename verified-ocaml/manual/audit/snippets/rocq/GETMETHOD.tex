@@ -1,0 +1,24 @@
+% Auto-generated from rocq source, line 810
+\begin{rocqcode}[firstnumber=810]
+  | GETMETHOD =>
+    match s.(stack) with
+    | obj :: _ =>
+      match field_or_heap s obj 0 with
+      | Some class_tbl =>
+        match s.(accu) with
+        | Val_int n =>
+          match field_or_heap s class_tbl (Z.to_nat n) with
+          | Some method_fn => Step (st s pc' method_fn s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+          | None => Error "GETMETHOD: method not found"
+        | _ => Error "GETMETHOD: not an integer index"
+      | None => Error "GETMETHOD: no class table"
+    | _ => Error "GETMETHOD: stack underflow"
+
+  (* OCaml class table layout (from caml_get_public_method):
+     meths[0] = count (index of last+1 tag slot, always odd).
+     meths[1] = padding (0).
+     meths[2k]   = closure of method k (even indices >= 2).
+     meths[2k+1] = tag    of method k (odd  indices >= 3).
+     The method for tag T is found by scanning pairs (closure, tag) starting
+     after the first two header words. *)
+\end{rocqcode}

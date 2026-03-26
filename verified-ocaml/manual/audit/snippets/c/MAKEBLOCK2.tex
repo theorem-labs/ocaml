@@ -1,0 +1,12 @@
+% Auto-generated from c source, line 698
+\begin{ccode}[firstnumber=698]
+    Instruct(MAKEBLOCK2): {
+      tag_t tag = *pc++;
+      value block;
+      Alloc_small(block, 2, tag);
+      Field(block, 0) = accu;
+      Field(block, 1) = sp[0];
+      sp += 1;
+      accu = block;
+      Next;
+\end{ccode}

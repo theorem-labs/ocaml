@@ -1,0 +1,10 @@
+% Auto-generated from rocq source, line 560
+\begin{rocqcode}[firstnumber=560]
+  | GETBYTESCHAR | GETSTRINGCHAR =>
+    match s.(stack) with
+    | Val_int idx :: rest =>
+      match field_or_heap s s.(accu) (Z.to_nat idx) with
+      | Some (Val_int c) => Step (st s pc' (Val_int c) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | _ => Error "GETSTRINGCHAR: index out of bounds or not a char"
+    | _ => Error "GETSTRINGCHAR: stack underflow"
+\end{rocqcode}

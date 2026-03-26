@@ -1,0 +1,11 @@
+% Auto-generated from rocq source, line 141
+\begin{rocqcode}[firstnumber=141]
+  | PUSHENVACC n =>
+    let new_stack := s.(accu) :: s.(stack) in
+    match field_or_heap s s.(env) n with
+    | Some v => Step (st s pc' v new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | None => Error "PUSHENVACC: env access out of bounds"
+
+  (* PUSH_RETADDR: pushes [ret_addr, env, extra_args] onto the stack.
+     In interp.c: sp[0]=pc+ofs, sp[1]=env, sp[2]=Long_val(extra_args). *)
+\end{rocqcode}

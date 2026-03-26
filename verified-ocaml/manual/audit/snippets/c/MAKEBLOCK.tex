@@ -1,0 +1,19 @@
+% Auto-generated from c source, line 673
+\begin{ccode}[firstnumber=673]
+    Instruct(MAKEBLOCK): {
+      mlsize_t wosize = *pc++;
+      tag_t tag = *pc++;
+      mlsize_t i;
+      value block;
+      if (wosize <= Max_young_wosize) {
+        Alloc_small(block, wosize, tag);
+        Field(block, 0) = accu;
+        for (i = 1; i < wosize; i++) Field(block, i) = *sp++;
+      } else {
+        block = caml_alloc_shr(wosize, tag);
+        caml_initialize(&Field(block, 0), accu);
+        for (i = 1; i < wosize; i++) caml_initialize(&Field(block, i), *sp++);
+      }
+      accu = block;
+      Next;
+\end{ccode}

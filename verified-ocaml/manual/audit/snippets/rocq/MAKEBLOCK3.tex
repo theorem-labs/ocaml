@@ -1,0 +1,12 @@
+% Auto-generated from rocq source, line 454
+\begin{rocqcode}[firstnumber=454]
+  | MAKEBLOCK3 t =>
+    match s.(stack) with
+    | v1 :: v2 :: rest =>
+      let '(s', ptr) := heap_alloc s t [s.(accu); v1; v2] in
+      Step (st s' pc' ptr rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Error "MAKEBLOCK3: stack underflow"
+
+  (* MAKEFLOATBLOCK n: accu=field0, pop (n-1) from stack.
+     Use tag 254 (double array) to hold float fields. *)
+\end{rocqcode}

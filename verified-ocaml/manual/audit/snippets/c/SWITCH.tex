@@ -1,0 +1,15 @@
+% Auto-generated from c source, line 828
+\begin{ccode}[firstnumber=828]
+    Instruct(SWITCH): {
+      uint32_t sizes = *pc++;
+      if (Is_block(accu)) {
+        intnat index = Tag_val(accu);
+        CAMLassert ((uintnat) index < (sizes >> 16));
+        pc += pc[(sizes & 0xFFFF) + index];
+      } else {
+        intnat index = Long_val(accu);
+        CAMLassert ((uintnat) index < (sizes & 0xFFFF)) ;
+        pc += pc[index];
+      }
+      Next;
+\end{ccode}

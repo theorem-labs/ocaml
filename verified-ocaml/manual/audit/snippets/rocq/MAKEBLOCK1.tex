@@ -1,0 +1,6 @@
+% Auto-generated from rocq source, line 442
+\begin{rocqcode}[firstnumber=442]
+  | MAKEBLOCK1 t =>
+    let '(s', ptr) := heap_alloc s t [s.(accu)] in
+    Step (st s' pc' ptr s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+\end{rocqcode}

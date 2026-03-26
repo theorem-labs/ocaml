@@ -1,0 +1,20 @@
+% Auto-generated from rocq source, line 605
+\begin{rocqcode}[firstnumber=605]
+  | SWITCH _nc _nb const_targets block_targets =>
+    match s.(accu) with
+    | Val_int n =>
+      match nth_error const_targets (Z.to_nat n) with
+      | Some target => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | None => Error "SWITCH: constant index out of range"
+    | Val_block t _ =>
+      match nth_error block_targets t with
+      | Some target => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | None => Error "SWITCH: block tag out of range"
+    | Val_ptr addr | Val_closure addr _ =>
+      match tag_or_heap s s.(accu) with
+      | Some t =>
+        match nth_error block_targets t with
+        | Some target => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+        | None => Error "SWITCH: block tag out of range"
+      | None => Error "SWITCH: dangling pointer"
+\end{rocqcode}

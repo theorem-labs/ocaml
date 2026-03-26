@@ -1,0 +1,28 @@
+% Auto-generated from rocq source, line 262
+\begin{rocqcode}[firstnumber=262]
+  | RESTART =>
+    let restart_fields (all_fields : list value) (ofs : nat) : step_result :=
+      let fields := skipn ofs all_fields in
+      let num_args := Nat.sub (length fields) 3 in
+      let args := skipn 3 fields in
+      let new_stack := args ++ s.(stack) in
+      match nth_error fields 2 with
+      | Some saved_env =>
+        Step (st s pc' s.(accu) new_stack saved_env (Nat.add s.(extra_args) num_args) s.(global) s.(trap_sp))
+      | None => Error "RESTART: malformed closure"
+      end in
+    match s.(env) with
+    | Val_closure addr ofs =>
+      match heap_lookup s.(hp) addr with
+      | Some (t, all_fields) =>
+        if Nat.eqb t Closure_tag then restart_fields all_fields ofs
+        else Error "RESTART: env is not a closure"
+      | None => Error "RESTART: dangling pointer"
+    | Val_block t fields =>
+      if Nat.eqb t Closure_tag then restart_fields fields 0%nat
+      else Error "RESTART: env is not a closure"
+    | _ => Error "RESTART: env is not a block"
+
+  (* GRAB n: if extra_args >= n, consume n and continue;
+     else build partial application closure and return to caller. *)
+\end{rocqcode}

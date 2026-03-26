@@ -1,0 +1,40 @@
+% Auto-generated from rocq source, line 324
+\begin{rocqcode}[firstnumber=324]
+  | CLOSUREREC nfuncs nvars code_offsets =>
+    let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
+    let vars := firstn nvars stk in
+    let rest := skipn nvars stk in
+    match code_offsets with
+    | [] => Error "CLOSUREREC: no code offsets"
+    | _ =>
+      let closinfo := Val_int 0 in
+      let infix_hdr := Val_block Infix_tag [] in
+      let fix build_closure_fields (i : nat) (offsets : list Z) : list value :=
+        match offsets with
+        | [] => vars
+        | ofs :: rest_ofs =>
+          if Nat.eqb i 0 then
+            Val_int ofs :: closinfo :: build_closure_fields 1%nat rest_ofs
+          else
+            infix_hdr :: Val_int ofs :: closinfo :: build_closure_fields (S i) rest_ofs
+        end in
+      let fields := build_closure_fields 0%nat code_offsets in
+      let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+      let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+      let closure_at (i : nat) : value :=
+        if Nat.eqb i 0 then Val_closure addr 0%nat
+        else Val_closure addr (3 * i) in
+      (* Push closures: closure_{nf-1} on top, closure_0 at bottom.
+         After this instruction accu = closure_0. *)
+      let fix push_closures (i : nat) (stk : list value) : list value :=
+        match i with
+        | O => stk
+        | S i' =>
+          let stk' := push_closures i' stk in
+          closure_at i' :: stk'
+        end in
+      let new_stack := push_closures nfuncs rest in
+      Step (st s' pc' (closure_at 0%nat) new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+
+  (* OFFSETCLOSURE n: accu := env offset by n fields (within the same heap block). *)
+\end{rocqcode}

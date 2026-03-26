@@ -1,0 +1,17 @@
+% Auto-generated from c source, line 426
+\begin{ccode}[firstnumber=426]
+    Instruct(APPLY2): {
+      value arg1 = sp[0];
+      value arg2 = sp[1];
+      sp -= 3;
+      sp[0] = arg1;
+      sp[1] = arg2;
+      sp[2] = (value)pc;
+      sp[3] = env;
+      sp[4] = Val_long(extra_args);
+      pc = Code_val(accu);
+      env = accu;
+      extra_args = 1;
+      goto check_stacks;
+    }
+\end{ccode}

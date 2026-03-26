@@ -1,0 +1,28 @@
+% Auto-generated from rocq source, line 835
+\begin{rocqcode}[firstnumber=835]
+  | GETPUBMET tag =>
+    let new_stack := s.(accu) :: s.(stack) in
+    match field_or_heap s s.(accu) 0 with
+    | Some class_tbl =>
+      (* collect all fields of class_tbl *)
+      let fields :=
+        match class_tbl with
+        | Val_block _ fs => fs
+        | Val_ptr addr => match heap_lookup s.(hp) addr with Some (_, fs) => fs | None => [] end
+        | _ => []
+      in
+      (* Linear scan: skip meths[0] (count) and meths[1] (padding),
+         then scan pairs (closure, tag). *)
+      let fix scan (remaining : list value) : step_result :=
+        match remaining with
+        | [] => Error "GETPUBMET: method not found"
+        | _ :: [] => Error "GETPUBMET: method not found"
+        | method_fn :: tag_val :: rest =>
+          if value_eqb tag_val (Val_int tag) then
+            Step (st s pc' method_fn new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+          else scan rest
+      in scan (skipn 2 fields)
+    | None => Error "GETPUBMET: no class table"
+
+  (* GETDYNMET: accu is method tag (val), stack top is object. *)
+\end{rocqcode}

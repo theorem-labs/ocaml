@@ -1,0 +1,14 @@
+% Auto-generated from c source, line 857
+\begin{ccode}[firstnumber=857]
+    Instruct(POPTRAP):
+      if (caml_something_to_do) {
+        /* We must check here so that if a signal is pending and its
+           handler triggers an exception, the exception is trapped
+           by the current try...with, not the enclosing one. */
+        pc--; /* restart the POPTRAP after processing the signal */
+        goto process_actions;
+      }
+      Caml_state->trapsp = sp + Long_val(Trap_link_offset(sp));
+      sp += 4;
+      Next;
+\end{ccode}

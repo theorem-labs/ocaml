@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 733
+\begin{rocqcode}[firstnumber=733]
+  | LSLINT =>
+    match s.(accu), s.(stack) with
+    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.shiftl a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _, _ => Error "LSLINT: type error or stack underflow"
+\end{rocqcode}

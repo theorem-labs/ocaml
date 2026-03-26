@@ -1,0 +1,8 @@
+% Auto-generated from c source, line 749
+\begin{ccode}[firstnumber=749]
+    Instruct(GETFLOATFIELD): {
+      double d = Double_flat_field(accu, *pc++);
+      Alloc_small(accu, Double_wosize, Double_tag);
+      Store_double_val(accu, d);
+      Next;
+\end{ccode}

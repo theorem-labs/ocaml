@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 464
+\begin{rocqcode}[firstnumber=464]
+  | MAKEFLOATBLOCK n =>
+    let fields := s.(accu) :: firstn (Nat.sub n 1) s.(stack) in
+    let new_stack := skipn (Nat.sub n 1) s.(stack) in
+    let '(s', ptr) := heap_alloc s 254 fields in
+    Step (st s' pc' ptr new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+\end{rocqcode}

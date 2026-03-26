@@ -1,0 +1,17 @@
+% Auto-generated from rocq source, line 246
+\begin{rocqcode}[firstnumber=246]
+  | RETURN stacksize =>
+    let stk := skipn stacksize s.(stack) in
+    if Nat.ltb 0 s.(extra_args) then
+      match get_code_ptr_s s s.(accu) with
+      | Some target_pc =>
+        Step (st s target_pc s.(accu) stk s.(accu) (Nat.sub s.(extra_args) 1) s.(global) s.(trap_sp))
+      | None => Error "RETURN: accu is not a closure"
+    else
+      match stk with
+      | Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest =>
+        Step (st s ret_pc s.(accu) rest saved_env (Z.to_nat saved_ea) s.(global) s.(trap_sp))
+      | _ => Error "RETURN: malformed return frame"
+
+  (* RESTART: restore args from partial application closure in env. *)
+\end{rocqcode}

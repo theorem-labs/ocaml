@@ -1,0 +1,10 @@
+% Auto-generated from c source, line 1153
+\begin{ccode}[firstnumber=1153]
+    Instruct(EVENT):
+      if (--caml_event_count == 0) {
+        Setup_for_debugger;
+        caml_debugger(EVENT_COUNT, Val_unit);
+        Restore_after_debugger;
+      }
+      Restart_curr_instr;
+\end{ccode}

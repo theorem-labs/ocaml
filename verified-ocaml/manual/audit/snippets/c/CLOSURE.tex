@@ -1,0 +1,25 @@
+% Auto-generated from c source, line 551
+\begin{ccode}[firstnumber=551]
+    Instruct(CLOSURE): {
+      int nvars = *pc++;
+      int i;
+      if (nvars > 0) *--sp = accu;
+      if (nvars <= Max_young_wosize - 2) {
+        /* nvars + 2 <= Max_young_wosize, can allocate in minor heap */
+        Alloc_small(accu, 2 + nvars, Closure_tag);
+        for (i = 0; i < nvars; i++) Field(accu, i + 2) = sp[i];
+      } else {
+        /* PR#6385: must allocate in major heap */
+        /* caml_alloc_shr and caml_initialize never trigger a GC,
+           so no need to Setup_for_gc */
+        accu = caml_alloc_shr(2 + nvars, Closure_tag);
+        for (i = 0; i < nvars; i++) caml_initialize(&Field(accu, i + 2), sp[i]);
+      }
+      /* The code pointer is not in the heap, so no need to go through
+         caml_initialize. */
+      Code_val(accu) = pc + *pc;
+      Closinfo_val(accu) = Make_closinfo(0, 2);
+      pc++;
+      sp += nvars;
+      Next;
+\end{ccode}

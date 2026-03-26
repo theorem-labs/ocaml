@@ -1,0 +1,8 @@
+% Auto-generated from c source, line 1012
+\begin{ccode}[firstnumber=1012]
+    Instruct(DIVINT): {
+      intnat divisor = Long_val(*sp++);
+      if (divisor == 0) { Setup_for_c_call; caml_raise_zero_divide(); }
+      accu = Val_long(Long_val(accu) / divisor);
+      Next;
+\end{ccode}

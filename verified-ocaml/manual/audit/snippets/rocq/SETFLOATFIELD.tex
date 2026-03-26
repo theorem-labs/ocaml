@@ -1,0 +1,18 @@
+% Auto-generated from rocq source, line 504
+\begin{rocqcode}[firstnumber=504]
+  | SETFLOATFIELD n =>
+    match s.(stack) with
+    | arr_val :: rest =>
+      match arr_val with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          match set_nth fields n s.(accu) with
+          | Some new_fields =>
+            let new_hp := heap_update s.(hp) addr new_fields in
+            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+          | None => Error "SETFLOATFIELD: index out of bounds"
+        | None => Error "SETFLOATFIELD: dangling pointer"
+      | _ => Error "SETFLOATFIELD: not a heap float array"
+    | _ => Error "SETFLOATFIELD: stack underflow"
+\end{rocqcode}

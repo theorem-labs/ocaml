@@ -1,0 +1,20 @@
+% Auto-generated from rocq source, line 483
+\begin{rocqcode}[firstnumber=483]
+  | SETFIELD n =>
+    match s.(stack) with
+    | newval :: rest =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          match set_nth fields n newval with
+          | Some new_fields =>
+            let new_hp := heap_update s.(hp) addr new_fields in
+            Step (mk_state pc' val_unit rest s.(env) s.(extra_args) s.(global) s.(trap_sp) new_hp s.(next_addr))
+          | None => Error "SETFIELD: index out of bounds"
+        | None => Error "SETFIELD: dangling pointer"
+      | _ => Error "SETFIELD: not a mutable block"
+    | _ => Error "SETFIELD: stack underflow"
+
+  (* SETFLOATFIELD n: stack top is the float array (tag 254), accu is the new float value. *)
+\end{rocqcode}

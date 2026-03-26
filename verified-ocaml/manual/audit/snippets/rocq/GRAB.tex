@@ -1,0 +1,23 @@
+% Auto-generated from rocq source, line 289
+\begin{rocqcode}[firstnumber=289]
+  | GRAB required =>
+    if Nat.leb required s.(extra_args) then
+      Step (st s pc' s.(accu) s.(stack) s.(env) (Nat.sub s.(extra_args) required) s.(global) s.(trap_sp))
+    else
+      let num_args := S s.(extra_args) in
+      let saved_args := firstn num_args s.(stack) in
+      let rest_stack := skipn num_args s.(stack) in
+      (* Partial application closure: [code=RESTART, closinfo, saved_env, arg1, ...] *)
+      let closinfo := Val_int 0 in
+      let fields := Val_int (s.(pc) - 1) :: closinfo :: s.(env) :: saved_args in
+      let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+      let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+      let closure := Val_closure addr 0%nat in
+      match rest_stack with
+      | Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest =>
+        Step (st s' ret_pc closure rest saved_env (Z.to_nat saved_ea) s.(global) s.(trap_sp))
+      | _ => Error "GRAB: malformed return frame"
+
+  (* CLOSURE n ofs: build closure of n+1 fields [code, closinfo, v0, ..., vn-1].
+     If n > 0 the accumulator is pushed first (it becomes v0). *)
+\end{rocqcode}

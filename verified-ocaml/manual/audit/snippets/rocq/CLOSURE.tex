@@ -1,0 +1,17 @@
+% Auto-generated from rocq source, line 310
+\begin{rocqcode}[firstnumber=310]
+  | CLOSURE nvars code_ofs =>
+    let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
+    let vars := firstn nvars stk in
+    let rest := skipn nvars stk in
+    let closinfo := Val_int 0 in
+    let fields := Val_int code_ofs :: closinfo :: vars in
+    let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+    let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+    let closure := Val_closure addr 0%nat in
+    Step (st s' pc' closure rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+
+  (* CLOSUREREC nf nv [ofs0;ofs1;...]: build flat closure block of
+     (nf*3-1+nv) fields.  Layout: [code0,ci0, infix,code1,ci1, ..., v0,v1,...]
+     Each closure_i is pushed as Val_closure(addr, 3*i). *)
+\end{rocqcode}

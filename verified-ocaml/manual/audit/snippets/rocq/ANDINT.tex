@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 715
+\begin{rocqcode}[firstnumber=715]
+  | ANDINT =>
+    match s.(accu), s.(stack) with
+    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.land a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _, _ => Error "ANDINT: type error or stack underflow"
+\end{rocqcode}

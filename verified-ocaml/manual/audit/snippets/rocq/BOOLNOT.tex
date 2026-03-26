@@ -1,0 +1,11 @@
+% Auto-generated from rocq source, line 628
+\begin{rocqcode}[firstnumber=628]
+  | BOOLNOT =>
+    match s.(accu) with
+    | Val_int 0 => Step (st s pc' val_true s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Step (st s pc' val_false s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+
+  (* PUSHTRAP: push trap frame [handler_pc, prev_trap_sp, env, extra_args] onto
+     the stack, then set trap_sp = length(new_stack).
+     Layout mirrors interp.c: sp[0]=handler_pc, sp[1]=trap_link, sp[2]=env, sp[3]=extra_args. *)
+\end{rocqcode}

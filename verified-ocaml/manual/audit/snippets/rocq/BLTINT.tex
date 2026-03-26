@@ -1,0 +1,8 @@
+% Auto-generated from rocq source, line 914
+\begin{rocqcode}[firstnumber=914]
+  | BLTINT n target =>
+    match s.(accu) with
+    | Val_int a => if Z.ltb n a then Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+                   else Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Error "BLTINT: not an integer"
+\end{rocqcode}

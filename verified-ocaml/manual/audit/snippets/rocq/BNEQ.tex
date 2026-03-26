@@ -1,0 +1,12 @@
+% Auto-generated from rocq source, line 903
+\begin{rocqcode}[firstnumber=903]
+  | BNEQ n target =>
+    match s.(accu) with
+    | Val_int a => if Z.eqb a n then Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+                   else Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    (* Non-integer values are never equal to Val_int n, so always branch *)
+    | _ => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+
+  (* B-comparison instructions: semantics is *pc++ CMP Long_val(accu),
+     i.e., the OPERAND is on the LEFT and ACCU on the RIGHT. *)
+\end{rocqcode}

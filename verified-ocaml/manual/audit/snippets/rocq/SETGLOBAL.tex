@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 421
+\begin{rocqcode}[firstnumber=421]
+  | SETGLOBAL n =>
+    let new_global := match set_nth s.(global) n s.(accu) with
+                      | Some g => g | None => s.(global) end in
+    Step (st s pc' val_unit s.(stack) s.(env) s.(extra_args) new_global s.(trap_sp))
+\end{rocqcode}

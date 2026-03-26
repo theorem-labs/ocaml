@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 593
+\begin{rocqcode}[firstnumber=593]
+  | BRANCHIF target =>
+    match s.(accu) with
+    | Val_int 0 => Step (st s pc' s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Step (st s target s.(accu) s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+\end{rocqcode}

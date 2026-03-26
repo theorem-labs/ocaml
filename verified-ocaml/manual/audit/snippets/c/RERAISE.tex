@@ -1,0 +1,10 @@
+% Auto-generated from c source, line 873
+\begin{ccode}[firstnumber=873]
+    Instruct(RERAISE):
+      Check_trap_barrier;
+      if (Caml_state->backtrace_active) {
+        *--sp = (value)(pc - 1);
+        caml_stash_backtrace(accu, sp, 1);
+      }
+      goto raise_notrace;
+\end{ccode}

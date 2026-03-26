@@ -1,0 +1,19 @@
+% Auto-generated from c source, line 719
+\begin{ccode}[firstnumber=719]
+    Instruct(MAKEFLOATBLOCK): {
+      mlsize_t size = *pc++;
+      mlsize_t i;
+      value block;
+      if (size <= Max_young_wosize / Double_wosize) {
+        Alloc_small(block, size * Double_wosize, Double_array_tag);
+      } else {
+        block = caml_alloc_shr(size * Double_wosize, Double_array_tag);
+      }
+      Store_double_flat_field(block, 0, Double_val(accu));
+      for (i = 1; i < size; i++){
+        Store_double_flat_field(block, i, Double_val(*sp));
+        ++ sp;
+      }
+      accu = block;
+      Next;
+\end{ccode}

@@ -1,0 +1,7 @@
+% Auto-generated from rocq source, line 745
+\begin{rocqcode}[firstnumber=745]
+  | ASRINT =>
+    match s.(accu), s.(stack) with
+    | Val_int a, Val_int b :: rest => Step (st s pc' (Val_int (Z.shiftr a b)) rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _, _ => Error "ASRINT: type error or stack underflow"
+\end{rocqcode}

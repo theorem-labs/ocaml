@@ -1,0 +1,11 @@
+% Auto-generated from rocq source, line 410
+\begin{rocqcode}[firstnumber=410]
+  | PUSHGETGLOBALFIELD n p =>
+    let new_stack := s.(accu) :: s.(stack) in
+    match nth_error s.(global) n with
+    | Some glob =>
+      match field_or_heap s glob p with
+      | Some v => Step (st s pc' v new_stack s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | None => Error "PUSHGETGLOBALFIELD: field access failed"
+    | None => Error "PUSHGETGLOBALFIELD: index out of bounds"
+\end{rocqcode}

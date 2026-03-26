@@ -1,0 +1,10 @@
+% Auto-generated from rocq source, line 400
+\begin{rocqcode}[firstnumber=400]
+  | GETGLOBALFIELD n p =>
+    match nth_error s.(global) n with
+    | Some glob =>
+      match field_or_heap s glob p with
+      | Some v => Step (st s pc' v s.(stack) s.(env) s.(extra_args) s.(global) s.(trap_sp))
+      | None => Error "GETGLOBALFIELD: field access failed"
+    | None => Error "GETGLOBALFIELD: index out of bounds"
+\end{rocqcode}

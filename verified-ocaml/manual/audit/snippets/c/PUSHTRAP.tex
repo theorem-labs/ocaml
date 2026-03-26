@@ -1,0 +1,12 @@
+% Auto-generated from c source, line 847
+\begin{ccode}[firstnumber=847]
+    Instruct(PUSHTRAP):
+      sp -= 4;
+      Trap_pc(sp) = pc + *pc;
+      Trap_link_offset(sp) = Val_long(Caml_state->trapsp - sp);
+      sp[2] = env;
+      sp[3] = Val_long(extra_args);
+      Caml_state->trapsp = sp;
+      pc++;
+      Next;
+\end{ccode}

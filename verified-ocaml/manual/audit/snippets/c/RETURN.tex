@@ -1,0 +1,16 @@
+% Auto-generated from c source, line 505
+\begin{ccode}[firstnumber=505]
+    Instruct(RETURN): {
+      sp += *pc++;
+      if (extra_args > 0) {
+        extra_args--;
+        pc = Code_val(accu);
+        env = accu;
+      } else {
+        pc = (code_t)(sp[0]);
+        env = sp[1];
+        extra_args = Long_val(sp[2]);
+        sp += 3;
+      }
+      Next;
+\end{ccode}

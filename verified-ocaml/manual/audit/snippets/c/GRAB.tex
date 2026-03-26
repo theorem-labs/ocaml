@@ -1,0 +1,22 @@
+% Auto-generated from c source, line 530
+\begin{ccode}[firstnumber=530]
+    Instruct(GRAB): {
+      int required = *pc++;
+      if (extra_args >= required) {
+        extra_args -= required;
+      } else {
+        mlsize_t num_args, i;
+        num_args = 1 + extra_args; /* arg1 + extra args */
+        Alloc_small(accu, num_args + 3, Closure_tag);
+        Field(accu, 2) = env;
+        for (i = 0; i < num_args; i++) Field(accu, i + 3) = sp[i];
+        Code_val(accu) = pc - 3; /* Point to the preceding RESTART instr. */
+        Closinfo_val(accu) = Make_closinfo(0, 2);
+        sp += num_args;
+        pc = (code_t)(sp[0]);
+        env = sp[1];
+        extra_args = Long_val(sp[2]);
+        sp += 3;
+      }
+      Next;
+\end{ccode}

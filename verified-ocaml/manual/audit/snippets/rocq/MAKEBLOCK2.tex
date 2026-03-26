@@ -1,0 +1,9 @@
+% Auto-generated from rocq source, line 446
+\begin{rocqcode}[firstnumber=446]
+  | MAKEBLOCK2 t =>
+    match s.(stack) with
+    | v1 :: rest =>
+      let '(s', ptr) := heap_alloc s t [s.(accu); v1] in
+      Step (st s' pc' ptr rest s.(env) s.(extra_args) s.(global) s.(trap_sp))
+    | _ => Error "MAKEBLOCK2: stack underflow"
+\end{rocqcode}

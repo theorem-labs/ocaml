@@ -1,0 +1,12 @@
+% Auto-generated from rocq source, line 645
+\begin{rocqcode}[firstnumber=645]
+  | POPTRAP =>
+    match s.(stack) with
+    | _ :: Val_int prev_tsp :: _ :: _ :: rest =>
+      Step (st s pc' s.(accu) rest s.(env) s.(extra_args) s.(global) (Z.to_nat prev_tsp))
+    | _ => Error "POPTRAP: malformed trap frame"
+
+  (* RAISE/RERAISE/RAISE_NOTRACE: restore sp to the trap frame, extract
+     handler_pc / prev_trap_sp / env / extra_args from the frame, and jump.
+     In interp.c: sp = trapsp; pc = Trap_pc(sp); trapsp = sp+link; env=sp[2]; ea=sp[3]; sp+=4. *)
+\end{rocqcode}

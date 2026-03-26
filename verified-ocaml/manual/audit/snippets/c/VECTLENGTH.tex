@@ -1,0 +1,11 @@
+% Auto-generated from c source, line 786
+\begin{ccode}[firstnumber=786]
+    Instruct(VECTLENGTH): {
+      /* Todo: when FLAT_FLOAT_ARRAY is false, this instruction should
+         be split into VECTLENGTH and FLOATVECTLENGTH because we know
+         statically which one it is. */
+      mlsize_t size = Wosize_val(accu);
+      if (Tag_val(accu) == Double_array_tag) size = size / Double_wosize;
+      accu = Val_long(size);
+      Next;
+\end{ccode}

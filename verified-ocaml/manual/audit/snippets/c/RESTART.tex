@@ -1,0 +1,11 @@
+% Auto-generated from c source, line 520
+\begin{ccode}[firstnumber=520]
+    Instruct(RESTART): {
+      int num_args = Wosize_val(env) - 3;
+      int i;
+      sp -= num_args;
+      for (i = 0; i < num_args; i++) sp[i] = Field(env, i + 3);
+      env = Field(env, 2);
+      extra_args += num_args;
+      Next;
+\end{ccode}
