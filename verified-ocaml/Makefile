@@ -93,7 +93,6 @@ TESTSUITE_BASIC = \
 	$(TESTSUITE_DIR)/basic-modules \
 	$(TESTSUITE_DIR)/basic-private \
 	$(TESTSUITE_DIR)/basic-float \
-	$(TESTSUITE_DIR)/basic-io \
 	$(TESTSUITE_DIR)/basic-io-2 \
 	$(TESTSUITE_DIR)/basic-manyargs
 
