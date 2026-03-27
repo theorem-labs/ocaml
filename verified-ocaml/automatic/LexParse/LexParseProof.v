@@ -2426,12 +2426,24 @@ Proof.
   intros e suffix Hwf.
   assert (Hne := pp_expr_nonempty e Hwf).
   assert (Hfc := pp_expr_first_char e Hwf).
-  assert (Hnm := pp_expr_not_starts_minus e Hwf).
   destruct (pp_expr e) as [|c s] eqn:Epp; [contradiction|].
-  simpl in Hnm.
+  assert (Hnm := pp_expr_not_starts_minus e Hwf). rewrite Epp in Hnm. simpl in Hnm.
+  assert (Hdq := pp_expr_not_dquote e Hwf). rewrite Epp in Hdq. simpl in Hdq.
   destruct Hfc as [Habs | [cc [ss [Hcs Hccat]]]]; [discriminate|].
-  injection Hcs. intros -> ->. clear Hcs.
-  exact (char_not_kw_prefix c s suffix Hccat Hnm).
+  injection Hcs. intros Hseq Hceq. subst cc ss.
+  repeat split; (
+    destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
+    destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
+    (try (unfold is_digit in Hd; simpl in Hd;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+    (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
+    (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
+      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
+      simpl; try reflexivity));
+    (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
+    (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity))
+  ).
 Qed.
 
 (* Tactic that applies keyword failure and rewrites *)
