@@ -8,6 +8,16 @@ From OCamlInterp.Automatic.LexParse Require Import LexParse.
 
 Open Scope string_scope.
 
+(* Fast tactic for ASCII character case analysis — avoids 256-subgoal
+   explosion from destruct b0,...,b7 that causes 10+ hour compile times *)
+Ltac solve_ascii_cases :=
+  match goal with
+  | [ b0 : bool, b1 : bool, b2 : bool, b3 : bool,
+      b4 : bool, b5 : bool, b6 : bool, b7 : bool |- _ ] =>
+    destruct b0, b1, b2, b3, b4, b5, b6, b7;
+    vm_compute; first [ reflexivity | discriminate ]
+  end.
+
 (* ================================================================ *)
 (* Foundation: String manipulation lemmas                           *)
 (* ================================================================ *)
@@ -277,8 +287,7 @@ Proof.
   apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
   - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
     unfold is_lower, is_upper in *. simpl in *.
-    destruct b0, b1, b2, b3, b4, b5, b6, b7;
-      simpl in *; try discriminate; reflexivity.
+    solve_ascii_cases.
   - apply Ascii.eqb_eq in Hu. subst. reflexivity.
 Qed.
 
@@ -311,8 +320,7 @@ Lemma digit_not_oparen : forall c,
 Proof.
   intros c Hd. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
   unfold is_digit in Hd. simpl in Hd.
-  destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    simpl in Hd; try discriminate; reflexivity.
+  solve_ascii_cases.
 Qed.
 
 Lemma upper_not_digit : forall c,
@@ -320,8 +328,7 @@ Lemma upper_not_digit : forall c,
 Proof.
   intros c Hu. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
   unfold is_upper, is_digit in *. simpl in *.
-  destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    simpl in *; try discriminate; reflexivity.
+  solve_ascii_cases.
 Qed.
 
 Lemma upper_is_alpha : forall c,
@@ -335,8 +342,7 @@ Lemma upper_not_oparen : forall c,
 Proof.
   intros c Hu. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
   unfold is_upper in Hu. simpl in Hu.
-  destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    simpl in Hu; try discriminate; reflexivity.
+  solve_ascii_cases.
 Qed.
 
 Lemma alpha_not_oparen : forall c,
@@ -344,8 +350,7 @@ Lemma alpha_not_oparen : forall c,
 Proof.
   intros c Ha. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
   unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
-  destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    simpl in Ha; try discriminate; reflexivity.
+  solve_ascii_cases.
 Qed.
 
 (* ================================================================ *)
@@ -639,7 +644,7 @@ Proof.
     rewrite Hd in Hrd.
     rewrite digit_char_nat_val in Hrd.
     2: { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]; unfold is_digit in Hd; simpl in Hd;
-         destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; simpl; lia. }
+         solve_ascii_cases. }
     rewrite <- Es in Hrd.
     simpl String.length in Hrd.
     (* Hrd : read_digits (srest ++ rest) (0 * 10 + (nat_of_ascii c - 48)) =
@@ -718,8 +723,7 @@ Lemma digit_not_bracket : forall c,
 Proof.
   intros c Hd. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
   unfold is_digit in Hd. simpl in Hd.
-  destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    simpl in Hd; try discriminate; reflexivity.
+  solve_ascii_cases.
 Qed.
 
 Lemma alpha_not_bracket : forall c,
@@ -727,8 +731,7 @@ Lemma alpha_not_bracket : forall c,
 Proof.
   intros c Ha. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
   unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
-  destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    simpl in Ha; try discriminate; reflexivity.
+  solve_ascii_cases.
 Qed.
 
 Lemma upper_not_bracket : forall c,
@@ -736,8 +739,7 @@ Lemma upper_not_bracket : forall c,
 Proof.
   intros c Hu. destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
   unfold is_upper in Hu. simpl in Hu.
-  destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    simpl in Hu; try discriminate; reflexivity.
+  solve_ascii_cases.
 Qed.
 
 (* ================================================================ *)
@@ -889,10 +891,10 @@ Proof.
     (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -911,10 +913,10 @@ Proof.
     (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -961,10 +963,10 @@ Proof.
     (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -1000,10 +1002,10 @@ Proof.
     (destruct (pp_pattern p) as [|c s]; [exact (pp_pattern_nonempty p Hwf eq_refl)|]);
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -1118,7 +1120,7 @@ Proof.
     assert (Hnb : Ascii.eqb c "{"%char = false).
     { unfold is_ident_start in His. apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
       - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity.
+        solve_ascii_cases.
       - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
     assert (Hbrace : strip_prefix "{ " (String c xrest ++ rest) = None).
     { simpl. rewrite <- ascii_eqb_sym. rewrite Hnb. reflexivity. }
@@ -1127,7 +1129,7 @@ Proof.
     assert (Hnd : is_digit c = false).
     { unfold is_ident_start in His. apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
       - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_alpha, is_lower, is_upper, is_digit in *. simpl in *.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in *; try discriminate; reflexivity.
+        solve_ascii_cases.
       - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
     simpl.
     rewrite Ascii.eqb_refl.
@@ -1183,11 +1185,11 @@ Proof.
       assert (Hbrace : strip_prefix "{ " (String c nrest ++ rest) = None).
       { simpl. rewrite <- ascii_eqb_sym.
         destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_digit in Hsd. simpl in Hsd.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hsd; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       rewrite Hbrace. simpl.
       assert (Huc : Ascii.eqb c "_"%char = false).
       { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_digit in Hsd. simpl in Hsd.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hsd; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       rewrite Huc. rewrite Hsd. rewrite <- Ens.
       assert (Hbound := wf_int_bound (Zpos p) Hwf).
       rewrite parse_nat_nat_to_string; [|exact Hnidr|lia].
@@ -1325,7 +1327,7 @@ Proof.
       destruct Hfacts as [His [Hall [Hu Hic]]].
       assert (Hnm : Ascii.eqb cc "-"%char = false).
       { destruct cc as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       assert (Hnm' : Ascii.eqb "-"%char cc = false) by (rewrite ascii_eqb_sym; exact Hnm).
       (* try_neg_int "(" ++ String cc crest ++ ... : strip "(-" fails at second char *)
       unfold try_neg_int at 1. simpl strip_prefix at 1.
@@ -1334,7 +1336,7 @@ Proof.
       (* strip_prefix "()" fails: cc <> ")" *)
       assert (Hncr : Ascii.eqb (Ascii b0 b1 b2 b3 b4 b5 b6 b7) ")"%char = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       assert (Hncr' : Ascii.eqb ")"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false)
         by (rewrite ascii_eqb_sym; exact Hncr).
       simpl. rewrite Hncr'.
@@ -1352,12 +1354,12 @@ Proof.
       (* try_neg_int on String cc ... : cc is upper, not "(" *)
       assert (Hnp : Ascii.eqb (Ascii b0 b1 b2 b3 b4 b5 b6 b7) "("%char = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       rewrite try_neg_int_no_paren by exact Hnp.
       rewrite strip_unit_no_paren by exact Hnp.
       assert (Hnb : Ascii.eqb (Ascii b0 b1 b2 b3 b4 b5 b6 b7) "{"%char = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       assert (Hbrace : strip_prefix "{ " (String (Ascii b0 b1 b2 b3 b4 b5 b6 b7) (crest ++ " " ++ pp_pattern p' ++ ")" ++ rest)) = None).
       { simpl. rewrite <- ascii_eqb_sym. rewrite Hnb. reflexivity. }
       rewrite strip_open_no_paren by exact Hnp.
@@ -1365,7 +1367,7 @@ Proof.
       (* strip_prefix "[]" fails: cc is upper, not "[" *)
       assert (Hnbr : Ascii.eqb (Ascii b0 b1 b2 b3 b4 b5 b6 b7) "["%char = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       assert (Hnil_strip : strip_prefix "[]" (String (Ascii b0 b1 b2 b3 b4 b5 b6 b7) (crest ++ " " ++ pp_pattern p' ++ ")" ++ rest)) = None).
       { simpl. rewrite <- ascii_eqb_sym. rewrite Hnbr. reflexivity. }
       rewrite Hnil_strip.
@@ -1373,7 +1375,7 @@ Proof.
       simpl.
       assert (Huc : Ascii.eqb (Ascii b0 b1 b2 b3 b4 b5 b6 b7) "_"%char = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       rewrite Huc.
       assert (Hnd : is_digit (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false).
       { apply upper_not_digit. exact Hu. }
@@ -1431,14 +1433,14 @@ Proof.
       rewrite strip_open_no_paren by exact Hnp.
       assert (Hnb : Ascii.eqb c "{"%char = false).
       { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       assert (Hbrace : strip_prefix "{ " (String c crest ++ rest) = None).
       { simpl. rewrite <- ascii_eqb_sym. rewrite Hnb. reflexivity. }
       rewrite Hbrace.
       simpl.
       assert (Huc : Ascii.eqb c "_"%char = false).
       { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       rewrite Huc. rewrite Hnd.
       assert (Ha : is_alpha c = true) by (apply upper_is_alpha; exact Hu).
       rewrite Ha.
@@ -1598,7 +1600,7 @@ Proof.
       apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
       * destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
         unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity.
+        solve_ascii_cases.
       * apply Ascii.eqb_eq in Hu. subst c. reflexivity.
     + reflexivity.
 Qed.
@@ -2130,13 +2132,11 @@ Proof.
   - destruct Hc as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]].
     + destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
       unfold is_digit in Hd. simpl in Hd.
-      destruct b0, b1, b2, b3, b4, b5, b6, b7;
-        simpl in Hd; try discriminate; reflexivity.
+      solve_ascii_cases.
     + apply Ascii.eqb_eq in Hp. subst c. reflexivity.
     + destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
       unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
-      destruct b0, b1, b2, b3, b4, b5, b6, b7;
-        simpl in Ha; try discriminate; reflexivity.
+      solve_ascii_cases.
     + apply Ascii.eqb_eq in Hu. subst c. reflexivity.
     + apply Ascii.eqb_eq in Hb. subst c. reflexivity.
     + apply Ascii.eqb_eq in Hbr. subst c. reflexivity.
@@ -2217,13 +2217,11 @@ Proof.
   - destruct Hc as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]].
     + destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
       unfold is_digit in Hd. simpl in Hd.
-      destruct b0, b1, b2, b3, b4, b5, b6, b7;
-        simpl in Hd; try discriminate; reflexivity.
+      solve_ascii_cases.
     + apply Ascii.eqb_eq in Hp. subst c. reflexivity.
     + destruct c as [b0 b1 b2 b3 b4 b5 b6 b7].
       unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
-      destruct b0, b1, b2, b3, b4, b5, b6, b7;
-        simpl in Ha; try discriminate; reflexivity.
+      solve_ascii_cases.
     + apply Ascii.eqb_eq in Hu. subst c. reflexivity.
     + apply Ascii.eqb_eq in Hb. subst c. reflexivity.
     + apply Ascii.eqb_eq in Hbr. subst c. reflexivity.
@@ -2337,7 +2335,7 @@ Proof.
     assert (Hbrace : strip_prefix "{ " (String c nrest ++ rest) = None).
     { simpl. rewrite <- ascii_eqb_sym.
       destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_digit in Hsd. simpl in Hsd.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hsd; try discriminate; reflexivity. }
+      solve_ascii_cases. }
     assert (Hpo : strip_prefix "(" (String c nrest ++ rest) = None).
     { apply strip_open_no_paren. exact Hnp. }
     assert (Hnil : strip_prefix "[]" (String c nrest ++ rest) = None).
@@ -2393,12 +2391,12 @@ Proof.
   assert (Hnp : Ascii.eqb c "("%char = false).
   { apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
     - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower in Hl. simpl in Hl.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hl; try discriminate; reflexivity.
+      solve_ascii_cases.
     - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
   assert (Hnd : is_digit c = false).
   { apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
     - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower, is_digit in *. simpl in *.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in *; try discriminate; reflexivity.
+      solve_ascii_cases.
     - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
   assert (Haou : (is_alpha c || Ascii.eqb c "_"%char)%bool = true).
   { apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
@@ -2407,7 +2405,7 @@ Proof.
   assert (Hnup : is_upper c = false).
   { apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
     - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower, is_upper in *. simpl in *.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in *; try discriminate; reflexivity.
+      solve_ascii_cases.
     - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
   (* Show the negative conditions for parse_expr_atoms *)
   assert (Htn : try_neg_int (String c xrest ++ rest) = None).
@@ -2419,7 +2417,7 @@ Proof.
     assert (Hnb : Ascii.eqb c "{"%char = false).
     { apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
       - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower in Hl. simpl in Hl.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hl; try discriminate; reflexivity.
+        solve_ascii_cases.
       - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
     rewrite Hnb. reflexivity. }
   assert (Hpo : strip_prefix "(" (String c xrest ++ rest) = None).
@@ -2428,7 +2426,7 @@ Proof.
   { apply strip_nil_no_bracket.
     apply Bool.orb_true_iff in Hlou. destruct Hlou as [Hl|Hu].
     - destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_lower in Hl. simpl in Hl.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hl; try discriminate; reflexivity.
+      solve_ascii_cases.
     - apply Ascii.eqb_eq in Hu. subst c. reflexivity. }
   rewrite parse_expr_atoms; [| lia | exact Htn | exact Hsu | exact Hbrace | exact Hpo | exact Hnil].
   simpl. rewrite Hnd. rewrite Haou.
@@ -2461,7 +2459,7 @@ Proof.
   { simpl. rewrite <- ascii_eqb_sym.
     assert (Hnb : Ascii.eqb c "{"%char = false).
     { destruct c as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+      solve_ascii_cases. }
     rewrite Hnb. reflexivity. }
   assert (Hpo : strip_prefix "(" (String c crest ++ rest) = None).
   { apply strip_open_no_paren. exact Hnp. }
@@ -2490,10 +2488,10 @@ Proof.
   destruct Hc as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -2661,10 +2659,10 @@ Proof.
   destruct Hc as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -2682,10 +2680,10 @@ Proof.
   destruct Hc as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -2703,10 +2701,10 @@ Proof.
   destruct Hc as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -2724,10 +2722,10 @@ Proof.
   destruct Hc as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)).
@@ -2866,11 +2864,10 @@ Proof.
     destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
     destruct c as [b0 b1 b2 b3 b4 b5 b6 b7];
     (try (unfold is_digit in Hd; simpl in Hd;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
     (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-      simpl; try reflexivity));
+      solve_ascii_cases));
     (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
     (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity))
@@ -3109,11 +3106,10 @@ Proof.
       destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
         destruct c2 as [b0 b1 b2 b3 b4 b5 b6 b7];
         (try (unfold is_digit in Hd; simpl in Hd;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
         (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-          simpl; try reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)). }
@@ -3246,7 +3242,7 @@ Proof.
       (* try_neg_int: after "(", c starts with upper, not "-" *)
       assert (Hnm : Ascii.eqb cc "-"%char = false).
       { destruct cc as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       assert (Hnm' : Ascii.eqb "-"%char cc = false) by (rewrite ascii_eqb_sym; exact Hnm).
       unfold try_neg_int at 1. simpl strip_prefix at 1.
       destruct cc as [b0 b1 b2 b3 b4 b5 b6 b7].
@@ -3254,7 +3250,7 @@ Proof.
       (* strip_prefix "()" fails *)
       assert (Hncr : Ascii.eqb (Ascii b0 b1 b2 b3 b4 b5 b6 b7) ")"%char = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       assert (Hncr' : Ascii.eqb ")"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false)
         by (rewrite ascii_eqb_sym; exact Hncr).
       simpl. rewrite Hncr'.
@@ -3265,30 +3261,30 @@ Proof.
       (* All keyword prefixes fail: constructor starts with upper, not matching any keyword first char *)
       assert (Hdq : Ascii.eqb """"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       simpl strip_prefix at 1. rewrite Hdq.
       assert (Hfc_not_f : Ascii.eqb "f"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       simpl strip_prefix at 1. rewrite Hfc_not_f.
       simpl strip_prefix at 1. rewrite Hnm'.
       assert (Hfc_not_n : Ascii.eqb "n"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       simpl strip_prefix at 1. rewrite Hfc_not_n.
       assert (Hfc_not_i : Ascii.eqb "i"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       simpl strip_prefix at 1. rewrite Hfc_not_i.
       assert (Hfc_not_l : Ascii.eqb "l"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       simpl strip_prefix at 1. rewrite Hfc_not_l.
       simpl strip_prefix at 1. rewrite Hfc_not_l.
       simpl strip_prefix at 1. rewrite Hfc_not_f.
       assert (Hfc_not_m : Ascii.eqb "m"%char (Ascii b0 b1 b2 b3 b4 b5 b6 b7) = false).
       { unfold is_upper in Hu. simpl in Hu.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+        solve_ascii_cases. }
       simpl strip_prefix at 1. rewrite Hfc_not_m.
       (* Now at the fallthrough: parse_expr fuel' on String (Ascii ...) (crest ++ " " ++ ...) *)
       (* This should parse as Exp_constr (String cc crest) None *)
@@ -3768,7 +3764,7 @@ Proof.
     apply Bool.orb_true_iff in His. destruct His as [Ha|Hu].
     + destruct ci as [b0 b1 b2 b3 b4 b5 b6 b7].
       unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate; reflexivity.
+      solve_ascii_cases.
     + apply Ascii.eqb_eq in Hu. subst ci. reflexivity.
 Qed.
 
@@ -3794,9 +3790,9 @@ Proof.
       unfold is_alpha, is_lower, is_upper in Ha. simpl in Ha.
       apply Bool.orb_true_iff in Ha. destruct Ha as [Hl|Hup].
       * unfold is_upper.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hl; try discriminate; reflexivity.
+        solve_ascii_cases.
       * unfold is_upper.
-        destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hup; try discriminate; reflexivity.
+        solve_ascii_cases.
     + apply Ascii.eqb_eq in Hu. subst ci. reflexivity.
 Qed.
 
@@ -3824,7 +3820,7 @@ Proof.
     (* The first char of the first constructor is upper, so "{" check fails and is_upper check succeeds *)
     assert (Hnb : Ascii.eqb "{"%char (Ascii.ascii_of_nat (nat_of_ascii cc)) = false).
     { destruct cc as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
-      destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
+      solve_ascii_cases. }
     (* Prove parse_variant on the full constructor list *)
     assert (HVar : forall constrs fuel0 rest0,
       forallb (fun c =>
@@ -3934,7 +3930,9 @@ Proof.
     rewrite Hnup. rewrite <- Eppt.
     apply parse_type_expr_pp; [exact Hwf|exact Hfuel|exact Hni].
   - (* Td_record fields *)
-    simpl pp_type_def. simpl wf_type_def in Hwf. rewrite !append_assoc.
+    simpl pp_type_def. simpl wf_type_def in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlen Hwfall].
+    rewrite !append_assoc.
     unfold parse_type_def.
     simpl strip_prefix. rewrite strip_prefix_app.
     (* Now parse_td_record_fields fuel on the intercalated fields *)
@@ -3971,17 +3969,18 @@ Proof.
           rewrite !append_assoc.
           rewrite strip_prefix_app. simpl.
           rewrite IHflds; [reflexivity|exact Hwfall''|simpl in Hfuel0; lia|exact Hni0|discriminate]. }
-    rewrite HRec; [reflexivity|exact Hwf|simpl in Hfuel; lia|exact Hni|].
-    destruct l; [simpl in Hwf; discriminate|discriminate].
+    rewrite HRec; [reflexivity|exact Hwfall|simpl in Hfuel; lia|exact Hni|].
+    destruct l; [simpl in Hlen; discriminate|discriminate].
 Qed.
 
 Lemma parse_decl_pp : forall d rest fuel,
   wf_decl d = true -> fuel >= 1 ->
   non_ident_start rest ->
   strip_prefix " of " rest = None ->
+  strip_prefix " | " rest = None ->
   parse_decl fuel (pp_decl d ++ rest) = Some (d, rest).
 Proof.
-  intros d rest fuel Hwf Hfuel Hni Hnof.
+  intros d rest fuel Hwf Hfuel Hni Hnof Hnpipe.
   destruct fuel; [lia|].
   induction d; simpl in Hwf.
   - (* Decl_let x e *)
@@ -4011,7 +4010,7 @@ Proof.
     + (* No params *)
       simpl. rewrite parse_ident_type; [|exact Hvtn|apply nis_space].
       rewrite strip_prefix_app. simpl.
-      rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni].
+      rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni|exact Hnof|exact Hnpipe].
     + (* params *)
       destruct params' as [|p2 params''].
       * (* Single param 'p1 *)
@@ -4021,7 +4020,7 @@ Proof.
         rewrite strip_prefix_app. simpl.
         rewrite parse_ident_type; [|exact Hvtn|apply nis_space].
         rewrite strip_prefix_app. simpl.
-        rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni].
+        rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni|exact Hnof|exact Hnpipe].
       * (* Multiple params ('p1, 'p2, ...) *)
         simpl forallb in Hwfparams. apply Bool.andb_true_iff in Hwfparams. destruct Hwfparams as [Hvp1 Hwfparams'].
         apply Bool.andb_true_iff in Hwfparams'. destruct Hwfparams' as [Hvp2 Hwfparams''].
@@ -4075,7 +4074,7 @@ Proof.
         rewrite HParams; [|exact (Bool.andb_true_iff _ _ |>.2 (conj Hvp2 Hwfparams''))|lia|discriminate].
         rewrite parse_ident_type; [|exact Hvtn|apply nis_space].
         rewrite strip_prefix_app. simpl.
-        rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni].
+        rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni|exact Hnof|exact Hnpipe].
   - (* Decl_expr e *)
     simpl pp_decl.
     simpl parse_decl.
@@ -4089,11 +4088,10 @@ Proof.
     { destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
         destruct ce as [b0 b1 b2 b3 b4 b5 b6 b7];
         (try (unfold is_digit in Hd; simpl in Hd;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
         (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-          simpl; try reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)). }
@@ -4102,11 +4100,10 @@ Proof.
     { destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
         destruct ce as [b0 b1 b2 b3 b4 b5 b6 b7];
         (try (unfold is_digit in Hd; simpl in Hd;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
         (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-          simpl; try reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)). }
@@ -4115,11 +4112,10 @@ Proof.
     { destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
         destruct ce as [b0 b1 b2 b3 b4 b5 b6 b7];
         (try (unfold is_digit in Hd; simpl in Hd;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
         (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-          simpl; try reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)). }
@@ -4128,11 +4124,10 @@ Proof.
     { destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
         destruct ce as [b0 b1 b2 b3 b4 b5 b6 b7];
         (try (unfold is_digit in Hd; simpl in Hd;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
         (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-          simpl; try reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)). }
@@ -4141,11 +4136,10 @@ Proof.
     { destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
         destruct ce as [b0 b1 b2 b3 b4 b5 b6 b7];
         (try (unfold is_digit in Hd; simpl in Hd;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
         (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-          simpl; try reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)). }
@@ -4154,11 +4148,10 @@ Proof.
     { destruct Hccat as [Hd | [Hp | [Ha | [Hu | [Hb | Hbr]]]]];
         destruct ce as [b0 b1 b2 b3 b4 b5 b6 b7];
         (try (unfold is_digit in Hd; simpl in Hd;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hd; try discriminate; reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hp; subst; reflexivity));
         (try (unfold is_alpha, is_lower, is_upper in Ha; simpl in Ha;
-          destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Ha; try discriminate;
-          simpl; try reflexivity));
+          solve_ascii_cases));
         (try (apply Ascii.eqb_eq in Hu; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hb; subst; reflexivity));
         (try (apply Ascii.eqb_eq in Hbr; subst; reflexivity)). }
@@ -4179,6 +4172,7 @@ Proof.
         wf_decl d = true -> fuel1 >= 1 ->
         non_ident_start rest1 ->
         strip_prefix " of " rest1 = None ->
+        strip_prefix " | " rest1 = None ->
         parse_decl fuel1 (pp_decl d ++ rest1) = Some (d, rest1)) ds ->
       n >= length ds -> ds <> [] ->
       (fix parse_module_decls (n0 : nat) (s0 : string) :
@@ -4207,12 +4201,12 @@ Proof.
         destruct ds' as [|d1 ds''].
         + (* Last declaration *)
           simpl intercalate. simpl List.map. rewrite !append_assoc.
-          rewrite Hd0; [| exact Hwd0 | lia | apply nis_semicol | reflexivity].
+          rewrite Hd0; [| exact Hwd0 | lia | apply nis_semicol | reflexivity | reflexivity].
           rewrite strip_prefix_app. simpl. rewrite strip_prefix_app. reflexivity.
         + (* More declarations *)
           simpl intercalate at 1. rewrite !append_assoc.
           rewrite <- !append_assoc at 1.
-          rewrite Hd0; [| exact Hwd0 | lia | apply nis_semicol | reflexivity].
+          rewrite Hd0; [| exact Hwd0 | lia | apply nis_semicol | reflexivity | reflexivity].
           rewrite !append_assoc. rewrite strip_prefix_app. simpl.
           rewrite strip_prefix_app.
           inversion Htl' as [|? ? Hd1 Htl'']; subst.
@@ -4286,6 +4280,9 @@ Proof. intro. apply nis_cons. exact semicol_nic. Qed.
 Lemma semicol_no_of : forall s, strip_prefix " of " (";;" ++ s) = None.
 Proof. reflexivity. Qed.
 
+Lemma semicol_no_pipe : forall s, strip_prefix " | " (";;" ++ s) = None.
+Proof. reflexivity. Qed.
+
 Lemma parse_program_pp : forall prog fuel dfuel,
   wf_program prog = true -> fuel >= length prog -> dfuel >= 1 ->
   parse_program_aux fuel dfuel (pp_program prog) = Some (prog, "").
@@ -4301,13 +4298,13 @@ Proof.
       rewrite pp_program_singleton.
       simpl parse_program_aux.
       rewrite append_assoc.
-      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel | apply nis_semicol | apply semicol_no_of].
+      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel | apply nis_semicol | apply semicol_no_of | apply semicol_no_pipe].
       simpl. reflexivity.
     + (* d :: d2 :: rest' *)
       rewrite pp_program_cons.
       simpl parse_program_aux.
       rewrite !append_assoc.
-      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel | | apply semicol_no_of].
+      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel | | apply semicol_no_of | apply semicol_no_pipe].
       2: {
         (* non_ident_start (";;" ++ newline_str_local ++ pp_program (d2 :: rest')) *)
         apply nis_semicol.
