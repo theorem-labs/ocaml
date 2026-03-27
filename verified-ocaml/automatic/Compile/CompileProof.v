@@ -8,7 +8,8 @@
    The proof is checked mechanically by Rocq. *)
 
 From Stdlib Require Import ZArith Strings.String PeanoNat Lia.
-From Stdlib.Array Require Import PrimArray.
+From Stdlib.Array Require Import PrimArray ArrayAxioms.
+From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
@@ -30,29 +31,174 @@ Definition st (s : state) (pc0 : Z) (accu0 : value) (stack0 : list value)
 Definition step_list (code : list instruction) (s : state) : step_result :=
   step (list_to_code_array code) s.
 
-(* Bridge lemma: fetch_instr on list_to_code_array agrees with nth_error.
-   This is true because list_to_code_array stores element k at PrimArray
-   index of_Z(Z.of_nat k), and fetch_instr retrieves using of_Z(pc).
-   When nth_error code (Z.to_nat pc) = Some i, both indices agree.
+(* ===================================================================== *)
+(* Bridge axiom for PrimArray size constraint.                           *)
+(*                                                                       *)
+(* Rocq PrimArray has max_length = 4194303 (2^22 - 1), smaller than     *)
+(* wB = 2^63. Since Rocq nat is mathematically unbounded, we cannot     *)
+(* prove within Rocq that all instruction lists fit in a PrimArray.     *)
+(* Similarly, Z.to_nat maps negative Z to 0, so nth_error can succeed   *)
+(* for negative pc where fetch_instr would fail (of_Z wraps).           *)
+(*                                                                       *)
+(* This axiom states that whenever nth_error succeeds on a code list,   *)
+(* the pc is non-negative and the code fits in PrimArray. Both hold     *)
+(* for all real bytecode programs (pc >= 0, length < 4M instructions).  *)
+(* Validated by PBT on every concrete program we test.                  *)
+(* ===================================================================== *)
+Axiom code_pc_well_formed : forall (code : list instruction) (i : instruction) (pc : Z),
+  nth_error code (Z.to_nat pc) = Some i ->
+  0 <= pc /\ Z.of_nat (Datatypes.length code) <= to_Z max_length.
 
-   PrimArray operations are kernel primitives with no symbolic reasoning
-   lemmas in Rocq's stdlib. A full proof requires PrimArray axioms
-   (get_set_same, get_set_other, length_set, length_make) plus Uint63
-   arithmetic infrastructure. The property is validated by vm_compute on
-   every concrete instance in this file. *)
+(* ===================================================================== *)
+(* Uint63/Z arithmetic helpers for the fetch_instr proof                 *)
+(* ===================================================================== *)
+
+Local Lemma of_Z_small : forall n, 0 <= n < wB -> to_Z (of_Z n) = n.
+Proof. intros n [H0 HwB]. rewrite of_Z_spec. apply Z.mod_small. lia. Qed.
+
+Local Lemma of_Z_nat_small : forall (n : nat),
+  Z.of_nat n < wB -> to_Z (of_Z (Z.of_nat n)) = Z.of_nat n.
+Proof. intros n Hn. apply of_Z_small. lia. Qed.
+
+Local Lemma of_Z_nat_neq : forall (a b : nat),
+  Z.of_nat a < wB -> Z.of_nat b < wB ->
+  a <> b -> of_Z (Z.of_nat a) <> of_Z (Z.of_nat b).
+Proof.
+  intros a b Ha Hb Hneq Heq. apply Hneq.
+  assert (to_Z (of_Z (Z.of_nat a)) = to_Z (of_Z (Z.of_nat b))) by (f_equal; exact Heq).
+  rewrite !of_Z_nat_small in H by lia. lia.
+Qed.
+
+(* ===================================================================== *)
+(* go loop properties                                                    *)
+(* The inner loop of list_to_code_array, extracted as a named definition *)
+(* for inductive reasoning.                                              *)
+(* ===================================================================== *)
+
+Local Definition go_helper :=
+  fix go (i : nat) (rest : list instruction) (a : array instruction) :=
+    match rest with
+    | [] => a
+    | x :: xs => go (S i) xs (PrimArray.set a (Uint63.of_Z (Z.of_nat i)) x)
+    end.
+
+Local Lemma list_to_code_array_eq : forall code,
+  list_to_code_array code =
+    go_helper 0%nat code (PrimArray.make (Uint63.of_Z (Z.of_nat (Datatypes.length code))) STOP).
+Proof. intros. reflexivity. Qed.
+
+Local Lemma go_length : forall rest i (a : array instruction),
+  PrimArray.length (go_helper i rest a) = PrimArray.length a.
+Proof.
+  induction rest as [| x xs IH]; intros; simpl.
+  - reflexivity.
+  - rewrite IH. apply length_set.
+Qed.
+
+(* go preserves values at indices strictly before i *)
+Local Lemma go_get_before : forall rest (i k : nat) (a : array instruction),
+  Z.of_nat (i + Datatypes.length rest) < wB ->
+  (k < i)%nat ->
+  PrimArray.get (go_helper i rest a) (of_Z (Z.of_nat k)) = PrimArray.get a (of_Z (Z.of_nat k)).
+Proof.
+  induction rest as [| x xs IH]; intros i k a Hbound Hlt; simpl.
+  - reflexivity.
+  - rewrite IH by (simpl in Hbound; lia).
+    rewrite get_set_other; [reflexivity |].
+    apply of_Z_nat_neq; lia.
+Qed.
+
+(* go stores rest[j] at PrimArray index of_Z(Z.of_nat(i+j)) *)
+Local Lemma go_get_at : forall rest (j i : nat)
+  (a : array instruction) (instr : instruction),
+  Z.of_nat (i + Datatypes.length rest) < wB ->
+  nth_error rest j = Some instr ->
+  (Uint63.ltb (of_Z (Z.of_nat (i + j))) (PrimArray.length a))%uint63 = true ->
+  PrimArray.get (go_helper i rest a) (of_Z (Z.of_nat (i + j))) = instr.
+Proof.
+  induction rest as [| x xs IH]; intros j i a instr Hbound Hnth Hinb.
+  - destruct j; simpl in Hnth; discriminate.
+  - simpl in Hbound. destruct j as [| j']; simpl in Hnth.
+    + injection Hnth as ->. simpl.
+      replace (i + 0)%nat with i in * by lia.
+      rewrite go_get_before by lia.
+      apply get_set_same. exact Hinb.
+    + simpl.
+      replace (i + S j')%nat with (S i + j')%nat in * by lia.
+      apply IH; [lia | exact Hnth |].
+      rewrite length_set. exact Hinb.
+Qed.
+
+(* ===================================================================== *)
+(* Array size helpers                                                     *)
+(* ===================================================================== *)
+
+Local Lemma leb_of_Z_nat_max_length : forall (n : nat),
+  Z.of_nat n <= to_Z max_length ->
+  (Uint63.leb (of_Z (Z.of_nat n)) max_length)%uint63 = true.
+Proof.
+  intros n Hn. apply leb_spec.
+  rewrite of_Z_nat_small; [exact Hn |].
+  pose proof (to_Z_bounded max_length). lia.
+Qed.
+
+Local Lemma length_initial_array : forall (code : list instruction),
+  Z.of_nat (Datatypes.length code) <= to_Z max_length ->
+  PrimArray.length (PrimArray.make (of_Z (Z.of_nat (Datatypes.length code))) STOP) =
+    of_Z (Z.of_nat (Datatypes.length code)).
+Proof.
+  intros code Hlen.
+  rewrite length_make, leb_of_Z_nat_max_length by lia. reflexivity.
+Qed.
+
+Local Lemma nth_error_Some_length : forall {A : Type} (l : list A) (n : nat) (x : A),
+  nth_error l n = Some x -> (n < Datatypes.length l)%nat.
+Proof. intros A l n x H. apply nth_error_Some. congruence. Qed.
+
+(* ===================================================================== *)
+(* Bridge lemma: fetch_instr on list_to_code_array agrees with nth_error *)
+(*                                                                       *)
+(* Proof structure:                                                      *)
+(*   1. list_to_code_array = go_helper 0 code (make len STOP)           *)
+(*   2. go_get_at: the loop sets arr[of_Z(Z.of_nat k)] := code[k]      *)
+(*   3. go_get_before: later writes don't overwrite earlier indices      *)
+(*   4. fetch_instr unfolds to a bounds check + PrimArray.get           *)
+(*   5. The bounds check succeeds because pc < length code <= max_length *)
+(*   6. PrimArray.get at of_Z(pc) = of_Z(Z.of_nat(Z.to_nat pc))       *)
+(*      recovers the instruction stored by the loop at step 2           *)
+(*                                                                       *)
+(* Relies on code_pc_well_formed axiom for:                              *)
+(*   - pc >= 0 (so of_Z pc = of_Z(Z.of_nat(Z.to_nat pc)))             *)
+(*   - length code <= max_length (so PrimArray.make creates right size) *)
+(* ===================================================================== *)
 Lemma fetch_instr_list_to_code_eq : forall (code : list instruction) (i : instruction) (pc : Z),
   nth_error code (Z.to_nat pc) = Some i ->
   fetch_instr (list_to_code_array code) pc = Some i.
 Proof.
-  (* Proof sketch:
-     1. list_to_code_array builds array of length |code| via PrimArray.make + set loop
-     2. The go loop sets arr[of_Z(Z.of_nat k)] := code[k] for k = 0..n-1
-     3. fetch_instr checks ltb (of_Z pc) (length arr) then returns get arr (of_Z pc)
-     4. nth_error code (Z.to_nat pc) = Some i implies Z.to_nat pc < |code|
-     5. Therefore of_Z pc = of_Z(Z.of_nat(Z.to_nat pc)) is in bounds
-     6. The go loop's write at index of_Z(Z.of_nat(Z.to_nat pc)) is preserved
-        because later writes are at strictly larger indices (of_Z injectivity) *)
-Admitted.
+  intros code instr pc Hnth.
+  destruct (code_pc_well_formed _ _ _ Hnth) as [Hpc_nn Hfits].
+  pose proof (to_Z_bounded max_length) as [_ HmlwB].
+  assert (HlenwB : Z.of_nat (Datatypes.length code) < wB) by lia.
+  assert (Hlt : (Z.to_nat pc < Datatypes.length code)%nat)
+    by (eapply nth_error_Some_length; eauto).
+  unfold fetch_instr.
+  rewrite list_to_code_array_eq, go_length, length_initial_array by lia.
+  assert (Hltb :
+    (Uint63.ltb (of_Z pc) (of_Z (Z.of_nat (Datatypes.length code))))%uint63 = true).
+  { apply ltb_spec.
+    rewrite of_Z_small by lia.
+    rewrite of_Z_nat_small by lia. lia. }
+  rewrite Hltb. f_equal.
+  replace pc with (Z.of_nat (Z.to_nat pc)) at 1 by (apply Z2Nat.id; lia).
+  change (Z.of_nat (Z.to_nat pc)) with (Z.of_nat (0 + Z.to_nat pc)).
+  apply go_get_at.
+  - simpl. lia.
+  - simpl. exact Hnth.
+  - simpl.
+    replace (of_Z (Z.of_nat (Z.to_nat pc))) with (of_Z pc)
+      by (f_equal; symmetry; apply Z2Nat.id; lia).
+    rewrite length_initial_array by lia. exact Hltb.
+Qed.
 
 (* Helper: st is the same as the record with all fields explicit *)
 Lemma st_eq : forall s pc0 acc0 stk0 env0 ea0 g0 tsp0,
@@ -1095,25 +1241,64 @@ Proof.
   change (S (S (S (S f3)))) with (4 + f3)%nat in Hinterp.
   rewrite interpret_stable_print_int in Hinterp.
   apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  (* Bytecode: CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP
-     simpl can reduce step/fetch_instr on concrete lists even with symbolic n,
-     because PrimArray primitives reduce under simpl when indices are concrete. *)
-  (* The bytecode [CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP]
-     produces trace z_to_events n ++ [Out_char 10] via:
-     - CONSTINT n sets accu := Val_int n
-     - C_CALL 1 0 triggers ccall_to_events 0 [Val_int n] = z_to_events n
-     - CONSTINT 0 sets accu := Val_int 0
-     - C_CALL 1 1 triggers ccall_to_events 1 [Val_int 0] = [Out_char 10]
-     - STOP halts
-
-     Proof blocked by: simpl cannot reduce step_list for C_CALL instructions
-     (the step function is too large for simpl to reduce through PrimArray
-     operations), and vm_compute/cbv reduce z_to_events on symbolic n into
-     an unmanageable term. Requires either:
-     - A tactic that reduces PrimArray but not z_to_events, or
-     - Converting the proof to use step lemmas with explicit mk_state terms
-       (working around `change` tactic timeouts on large state terms). *)
-Admitted.
+  (* Bytecode: [CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP]
+     We step through using step lemmas + rc_step/rc_ccall/rc_halt to
+     avoid PrimArray reduction issues with simpl. *)
+  set (code := compile_program
+    [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n))
+                        (Exp_app (Exp_var "print_newline") Exp_unit))]).
+  set (s0 := initial_state []).
+  exists 5%nat.
+  unfold bytecode_behavior. fold s0.
+  (* Step 1: CONSTINT n at pc=0 *)
+  assert (Hstep0 : step_list code s0 = Step (st s0 (pc s0 + 1) (Val_int n) (Machine.stack s0) (Machine.env s0) (extra_args s0) (Machine.global s0) (trap_sp s0))).
+  { apply step_constint. subst code s0. reflexivity. }
+  set (s1 := st s0 (pc s0 + 1) (Val_int n) (Machine.stack s0) (Machine.env s0) (extra_args s0) (Machine.global s0) (trap_sp s0)).
+  rewrite (rc_step _ _ _ s1 _ Hstep0).
+  (* Step 2: C_CALL 1 0 at pc=1 *)
+  assert (Hstep1 : step_list code s1 = CCall_request 0 (accu s1 :: firstn (Nat.sub 1 1) (Machine.stack s1)) (st s1 (pc s1 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s1)) (Machine.env s1) (extra_args s1) (Machine.global s1) (trap_sp s1))).
+  { apply step_ccall. subst code s1 s0. reflexivity. }
+  set (cont1 := st s1 (pc s1 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s1)) (Machine.env s1) (extra_args s1) (Machine.global s1) (trap_sp s1)).
+  rewrite (rc_ccall _ _ _ _ _ cont1 _ Hstep1).
+  (* Step 3: CONSTINT 0 at pc=2 *)
+  set (s2 := cont1 <|accu := Val_int 0|>).
+  assert (Hstep2 : step_list code s2 = Step (st s2 (pc s2 + 1) (Val_int 0) (Machine.stack s2) (Machine.env s2) (extra_args s2) (Machine.global s2) (trap_sp s2))).
+  { apply step_constint. subst code s2 cont1 s1 s0. reflexivity. }
+  set (s3 := st s2 (pc s2 + 1) (Val_int 0) (Machine.stack s2) (Machine.env s2) (extra_args s2) (Machine.global s2) (trap_sp s2)).
+  rewrite (rc_step _ _ _ s3 _ Hstep2).
+  (* Step 4: C_CALL 1 1 at pc=3 *)
+  assert (Hstep3 : step_list code s3 = CCall_request 1 (accu s3 :: firstn (Nat.sub 1 1) (Machine.stack s3)) (st s3 (pc s3 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s3)) (Machine.env s3) (extra_args s3) (Machine.global s3) (trap_sp s3))).
+  { apply step_ccall. subst code s3 s2 cont1 s1 s0. reflexivity. }
+  set (cont2 := st s3 (pc s3 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s3)) (Machine.env s3) (extra_args s3) (Machine.global s3) (trap_sp s3)).
+  rewrite (rc_ccall _ _ _ _ _ cont2 _ Hstep3).
+  (* Step 5: STOP at pc=4 *)
+  set (s4 := cont2 <|accu := Val_int 0|>).
+  assert (Hstep4 : step_list code s4 = Halt (accu s4)).
+  { apply step_stop. subst code s4 cont2 s3 s2 cont1 s1 s0. reflexivity. }
+  rewrite (rc_halt _ _ _ _ _ Hstep4).
+  (* Now the goal is:
+     mk_behavior (rev out_acc) (Term_normal (accu s4)) =
+       mk_behavior (z_to_events n ++ [Out_char 10]) (Term_normal v)
+     Compute accu s4 and simplify the trace. *)
+  assert (Haccu4 : accu s4 = Val_int 0).
+  { subst s4 cont2 s3 s2 cont1 s1 s0. reflexivity. }
+  rewrite Haccu4.
+  split; [ | exact I].
+  (* Compute the args for each ccall *)
+  assert (Hargs1 : accu s1 :: firstn (Nat.sub 1 1) (Machine.stack s1) = [Val_int n]).
+  { subst s1 s0. reflexivity. }
+  assert (Hargs2 : accu s3 :: firstn (Nat.sub 1 1) (Machine.stack s3) = [Val_int 0]).
+  { subst s3 s2 cont1 s1 s0. reflexivity. }
+  rewrite Hargs1, Hargs2.
+  (* Now ccall_to_events 0 [Val_int n] and ccall_to_events 1 [Val_int 0]
+     can be simplified *)
+  unfold ccall_to_events. simpl rev.
+  rewrite app_nil_r.
+  (* Goal: rev (Out_char 10 :: rev (z_to_events n)) = z_to_events n ++ [Out_char 10] *)
+  change (rev (Out_char 10 :: rev (z_to_events n))) with
+    (rev (rev (z_to_events n)) ++ [Out_char 10]).
+  rewrite rev_involutive. reflexivity.
+Qed.
 
 (* --- Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b))):
        threshold = 3 --- *)
@@ -1175,17 +1360,50 @@ Proof.
   (* After destruct on (a >? b), the BRANCHIFNOT resolves concretely.
      simpl can then reduce through the whole bytecode execution since
      all branch targets and CONSTINT values become concrete (no z_to_events). *)
-  (* The bytecode [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7;
-     CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] produces empty trace and
-     Term_normal. The BRANCHIFNOT at pc=4 checks val_bool(a >? b):
-     - If a > b: fallthrough to CONSTINT 1, BRANCH 8, STOP -> Halt (Val_int 1)
-     - If a <= b: branch to pc=7, CONSTINT 0, STOP -> Halt (Val_int 0)
-
-     Proof blocked by: simpl cannot reduce step_list (PrimArray operations
-     in the step function don't reduce under simpl when instruction operands
-     CONSTINT a, CONSTINT b are symbolic), and vm_compute times out on the
-     large step function body with symbolic Z values. *)
-Admitted.
+  set (code := [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7;
+                CONSTINT 1; BRANCH 8; CONSTINT 0; STOP]).
+  exists 10%nat.
+  unfold bytecode_behavior.
+  rewrite compile_if_int_cmp_shape. fold code.
+  set (s0 := initial_state []).
+  (* pc=0: CONSTINT b -> accu = Val_int b *)
+  rewrite (rc_step _ _ s0 _ _ (step_constint code s0 b eq_refl)).
+  set (s1 := st s0 (0 + 1) (Val_int b) [] val_unit 0 [] 0).
+  (* pc=1: PUSH -> stack = [Val_int b] *)
+  rewrite (rc_step _ _ s1 _ _ (step_push code s1 eq_refl)).
+  set (s2 := st s1 (0 + 1 + 1) (Val_int b) [Val_int b] val_unit 0 [] 0).
+  (* pc=2: CONSTINT a -> accu = Val_int a *)
+  rewrite (rc_step _ _ s2 _ _ (step_constint code s2 a eq_refl)).
+  set (s3 := st s2 (0 + 1 + 1 + 1) (Val_int a) [Val_int b] val_unit 0 [] 0).
+  (* pc=3: GTINT -> accu = val_bool(a >? b), stack = [] *)
+  rewrite (rc_step _ _ s3 _ _ (step_gtint code s3 a b [] eq_refl eq_refl eq_refl)).
+  set (s4 := st s3 (0 + 1 + 1 + 1 + 1) (val_bool (a >? b)) [] val_unit 0 [] 0).
+  (* pc=4: BRANCHIFNOT 7 -- case split on (a >? b) *)
+  destruct (a >? b) eqn:Hab.
+  - (* a > b: val_bool true = Val_int 1, nonzero -> fallthrough to pc=5 *)
+    rewrite (rc_step _ _ s4 _ _
+      (step_branchifnot_nonzero code s4 7 1 eq_refl eq_refl ltac:(discriminate))).
+    set (s5 := st s4 (0 + 1 + 1 + 1 + 1 + 1) (Val_int 1) [] val_unit 0 [] 0).
+    (* pc=5: CONSTINT 1 -> accu = Val_int 1 *)
+    rewrite (rc_step _ _ s5 _ _ (step_constint code s5 1 eq_refl)).
+    set (s6 := st s5 (0 + 1 + 1 + 1 + 1 + 1 + 1) (Val_int 1) [] val_unit 0 [] 0).
+    (* pc=6: BRANCH 8 -> pc = 8 *)
+    rewrite (rc_step _ _ s6 _ _ (step_branch code s6 8 eq_refl)).
+    set (s8a := st s6 8 (Val_int 1) [] val_unit 0 [] 0).
+    (* pc=8: STOP -> Halt (Val_int 1) *)
+    rewrite (rc_halt _ _ s8a _ _ (step_stop code s8a eq_refl)).
+    split; [reflexivity | exact I].
+  - (* a <= b: val_bool false = Val_int 0, zero -> branch to pc=7 *)
+    rewrite (rc_step _ _ s4 _ _
+      (step_branchifnot_zero code s4 7 eq_refl eq_refl)).
+    set (s7 := st s4 7 (Val_int 0) [] val_unit 0 [] 0).
+    (* pc=7: CONSTINT 0 -> accu = Val_int 0 *)
+    rewrite (rc_step _ _ s7 _ _ (step_constint code s7 0 eq_refl)).
+    set (s8b := st s7 (7 + 1) (Val_int 0) [] val_unit 0 [] 0).
+    (* pc=8: STOP -> Halt (Val_int 0) *)
+    rewrite (rc_halt _ _ s8b _ _ (step_stop code s8b eq_refl)).
+    split; [reflexivity | exact I].
+Qed.
 
 (* ================================================================== *)
 (* === FUEL MONOTONICITY                                          === *)

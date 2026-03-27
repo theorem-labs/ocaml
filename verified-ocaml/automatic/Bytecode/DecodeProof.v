@@ -1642,195 +1642,170 @@ Proof.
   assert (HW2 : Z.of_nat (W + 2) = (Z.of_nat W + 2)%Z) by lia.
   assert (HW3 : Z.of_nat (W + 3) = (Z.of_nat W + 3)%Z) by lia.
   destruct i; simpl expected_raw; rewrite ?Hw;
-    resolve_simpl;
-    try reflexivity.
+    try (resolve_simpl; reflexivity).
   (* Branch-target instructions remain. For each, we need to apply Hbranch. *)
   (* PUSH_RETADDR t -- branch at br 0, from = Z.of_nat (W+1+0) *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* CLOSURE nv codeptr -- from = Z.of_nat (W+2) *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hnv Hcp].
     apply valid_targetb_props in Hcp. destruct Hcp as [Hcp0 Hcplt].
     rewrite HW2.
     rewrite Hbranch by assumption.
     reflexivity.
   (* CLOSUREREC nf nv ofs *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-    (* Hwf : nat_fits_i32b n, H0 : all_valid_targetsb ... l = true,
-       H : Nat.eqb (length l) n = true *)
-    (* After resolve_simpl, the fix resolve_list is applied to
-       map (rel_offset ...) l, with base = Z.of_nat (W + 3).
-       The rel_offset uses (Z.of_nat W + 3)%Z. Unify them. *)
     replace (Z.of_nat (W + 3)) with (Z.of_nat W + 3)%Z by lia.
     rewrite resolve_list_is_map.
     apply f_equal.
     apply resolve_branch_map_rel_offset with (n := List.length code); auto.
   (* BRANCH t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BRANCHIF t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BRANCHIFNOT t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* SWITCH nc nb ct bt *)
-  - (* Extract all wf conditions before destructuring *)
+  - (* resolve_simpl reduces the if-then-else chain but iota-expands
+       Z.shiftl/Z.lor/Z.land/Z.shiftr/Z.ones on concrete Z arguments.
+       We fold them back before applying the roundtrip lemmas. *)
+    resolve_simpl.
+    change 65535%Z with (Z.ones 16).
+    fold (Z.shiftl (Z.of_nat n0) 16).
+    fold (Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)).
+    fold (Z.land (Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) (Z.ones 16)).
+    fold (Z.to_nat (Z.land (Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) (Z.ones 16))).
+    fold (Z.shiftr (Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) 16).
+    fold (Z.to_nat (Z.shiftr (Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) 16)).
+    (* Extract wf conditions *)
+    simpl wf_instrb in Hwf.
+    repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
     assert (Hnc16 : n < 65536).
-    { simpl wf_instrb in Hwf.
-      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-      match goal with H : Nat.ltb n _ = true |- _ => apply Nat.ltb_lt in H; exact H end. }
+    { match goal with H : Nat.ltb n _ = true |- _ => apply Nat.ltb_lt in H; exact H end. }
     assert (Hnb15 : n0 < 32768).
-    { simpl wf_instrb in Hwf.
-      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-      match goal with H : Nat.ltb n0 _ = true |- _ => apply Nat.ltb_lt in H; exact H end. }
-    assert (Hwf_eq : length l = n).
-    { simpl wf_instrb in Hwf.
-      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-      apply Nat.eqb_eq in Hwf. exact Hwf. }
-    assert (H2 : length l0 = n0).
-    { simpl wf_instrb in Hwf.
-      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-      match goal with H : Nat.eqb (length l0) n0 = true |- _ =>
-        apply Nat.eqb_eq in H; exact H end. }
-    assert (Hwf_ct : all_valid_targetsb (length code) l = true).
-    { simpl wf_instrb in Hwf.
-      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-      assumption. }
-    assert (Hwf_bt : all_valid_targetsb (length code) l0 = true).
-    { simpl wf_instrb in Hwf.
-      repeat (apply Bool.andb_true_iff in Hwf; destruct Hwf as [Hwf ?]).
-      assumption. }
-    (* Hwf_eq : length l = n, H2 : length l0 = n0 *)
-    clear Hwf. rename Hwf_eq into Hwf.
-    (* Now we have nc < 2^16, nb < 2^15 < 2^16 *)
-    set (sizes := Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) in *.
-    (* Show Z.to_nat (Z.land sizes (Z.ones 16)) = n *)
-    assert (Hnc_eq : Z.to_nat (Z.land sizes (Z.ones 16)) = n).
-    { subst sizes.
-      assert (Hnc_z : (Z.of_nat n < 2 ^ 16)%Z).
-      { change (2 ^ 16)%Z with (Z.of_nat 65536). apply Nat2Z.inj_lt. exact Hnc16. }
-      assert (Hnb_z : (Z.of_nat n0 < 2 ^ 16)%Z).
-      { change (2 ^ 16)%Z with (Z.of_nat 65536).
-        apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
-        apply Nat.leb_le. native_compute. reflexivity. }
-      rewrite lor_land_low16 by assumption. apply Nat2Z.id. }
-    (* Show Z.to_nat (Z.shiftr sizes 16) = n0 *)
-    assert (Hnb_eq : Z.to_nat (Z.shiftr sizes 16) = n0).
-    { subst sizes.
-      assert (Hnc_z : (Z.of_nat n < 2 ^ 16)%Z).
-      { change (2 ^ 16)%Z with (Z.of_nat 65536). apply Nat2Z.inj_lt. exact Hnc16. }
-      assert (Hnb_z : (Z.of_nat n0 < 2 ^ 16)%Z).
-      { change (2 ^ 16)%Z with (Z.of_nat 65536).
-        apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
-        apply Nat.leb_le. native_compute. reflexivity. }
-      rewrite lor_shiftr_high16 by assumption. apply Nat2Z.id. }
-    subst sizes. rewrite Hnc_eq, Hnb_eq.
-    (* Now we need resolve_n to recover l and l0 *)
-    rewrite !resolve_n_is_map.
-    (* The ops list is: sizes :: map (rel_offset ...) l ++ map (rel_offset ...) l0.
-       We need to show that resolve_branch applied to each element recovers the targets. *)
+    { match goal with H : Nat.ltb n0 _ = true |- _ => apply Nat.ltb_lt in H; exact H end. }
+    assert (Hlen_ct : length l = n).
+    { match goal with H : Nat.eqb (length l) n = true |- _ => apply Nat.eqb_eq in H; exact H end. }
+    assert (Hlen_bt : length l0 = n0).
+    { match goal with H : Nat.eqb (length l0) n0 = true |- _ => apply Nat.eqb_eq in H; exact H end. }
+    assert (Hwf_ct : all_valid_targetsb (length code) l = true) by assumption.
+    assert (Hwf_bt : all_valid_targetsb (length code) l0 = true) by assumption.
+    assert (Hnc_z : (Z.of_nat n < 2 ^ 16)%Z).
+    { change (2 ^ 16)%Z with (Z.of_nat 65536). apply Nat2Z.inj_lt. exact Hnc16. }
+    assert (Hnb_z : (Z.of_nat n0 < 2 ^ 16)%Z).
+    { change (2 ^ 16)%Z with (Z.of_nat 65536).
+      apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
+      apply Nat.leb_le. native_compute. reflexivity. }
+    (* The expanded forms of Z.land/Z.shiftr can't be folded back due to
+       match-variable naming differences. Instead, prove the roundtrip
+       by converting to Z.shiftl form using change with a proof obligation. *)
+    (* After resolve_simpl, Z.shiftl/Z.lor/Z.land/Z.shiftr are iota-expanded.
+       Use match goal to capture the expanded nc/nb terms, then prove them
+       equal to n/n0. The expanded terms are convertible to the clean forms
+       that lor_land_low16/lor_shiftr_high16 work on. *)
+    match goal with
+    | |- SWITCH ?nc ?nb _ _ = SWITCH _ _ _ _ =>
+      replace nc with n;
+      [| change nc with (Z.to_nat (Z.land (Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) (Z.ones 16)));
+         rewrite lor_land_low16 by assumption; symmetry; apply Nat2Z.id];
+      replace nb with n0;
+      [| change nb with (Z.to_nat (Z.shiftr (Z.lor (Z.of_nat n) (Z.shiftl (Z.of_nat n0) 16)) 16));
+         rewrite lor_shiftr_high16 by assumption; symmetry; apply Nat2Z.id]
+    end.
+    rewrite <- Hlen_ct, <- Hlen_bt.
     replace (Z.of_nat (W + 2)) with (Z.of_nat W + 2)%Z by lia.
     f_equal.
-    + (* const table: map over seq 0 n *)
-      apply map_ext_in. intros k Hk.
-      apply in_seq in Hk. destruct Hk as [_ Hk].
-      (* znth (S k) (sizes :: ct_rels ++ bt_rels) = nth k ct_rels 0 *)
-      unfold znth. simpl nth_error.
-      rewrite nth_error_app1 by (rewrite map_length; lia).
-      rewrite nth_error_map.
-      destruct (nth_error l k) eqn:Ek.
-      * simpl. apply Hbranch.
-        -- apply valid_targetb_props.
-           eapply forallb_forall; [exact Hwf_ct | eapply nth_error_In; exact Ek].
-        -- apply valid_targetb_props.
-           eapply forallb_forall; [exact Hwf_ct | eapply nth_error_In; exact Ek].
-      * apply nth_error_None in Ek. lia.
-    + (* block table: map over seq n n0 *)
-      apply map_ext_in. intros k Hk.
-      apply in_seq in Hk. destruct Hk as [Hkge Hklt].
-      unfold znth. simpl nth_error.
-      rewrite nth_error_app2 by (rewrite map_length; lia).
-      rewrite map_length. replace (k - n) with (k - n) by lia.
-      rewrite nth_error_map.
-      destruct (nth_error l0 (k - n)) eqn:Ek.
-      * simpl. apply Hbranch.
-        -- apply valid_targetb_props.
-           eapply forallb_forall; [exact Hwf_bt | eapply nth_error_In; exact Ek].
-        -- apply valid_targetb_props.
-           eapply forallb_forall; [exact Hwf_bt | eapply nth_error_In; exact Ek].
-      * apply nth_error_None in Ek. lia.
+    + apply resolve_n_recover with
+        (enc_omap := offset_map code) (n := List.length code); auto.
+      intros k Hk. unfold znth. simpl nth_error.
+      rewrite nth_error_app1 by (rewrite length_map; lia).
+      (* Goal: match nth_error (map ... l) k with ... end = nth k (map ... l) 0 *)
+      destruct (nth_error (map (fun t : Z => rel_offset (offset_map code) (Z.of_nat W + 2)%Z t) l) k) eqn:Ek.
+      * symmetry. apply nth_error_nth. exact Ek.
+      * apply nth_error_None in Ek. rewrite length_map in Ek. lia.
+    + apply resolve_n_recover with
+        (enc_omap := offset_map code) (n := List.length code); auto.
+      intros k Hk. unfold znth. simpl nth_error.
+      rewrite nth_error_app2 by (rewrite length_map; lia).
+      rewrite length_map.
+      replace (length l + k - length l) with k by lia.
+      destruct (nth_error (map (fun t : Z => rel_offset (offset_map code) (Z.of_nat W + 2)%Z t) l0) k) eqn:Ek.
+      * symmetry. apply nth_error_nth. exact Ek.
+      * apply nth_error_None in Ek. rewrite length_map in Ek. lia.
   (* PUSHTRAP t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply valid_targetb_props in Hwf. destruct Hwf as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BEQ n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BNEQ n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BLTINT n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BLEINT n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BGTINT n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BGEINT n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BULTINT n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
     rewrite Hbranch by assumption.
     reflexivity.
   (* BUGEINT n t *)
-  - simpl wf_instrb in Hwf.
+  - resolve_simpl. simpl wf_instrb in Hwf.
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hv Ht].
     apply valid_targetb_props in Ht. destruct Ht as [Ht0 Htlt].
     rewrite HWn. simpl Nat.add.
