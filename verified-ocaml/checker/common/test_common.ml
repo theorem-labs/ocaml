@@ -43,5 +43,22 @@ let print_int_nl e =
   Exp_seq (Exp_app (Exp_var (cl "print_int"), e),
            Exp_app (Exp_var (cl "print_newline"), Exp_unit))
 
+(* Run a bytecode file through our extracted Rocq pipeline (pipeline_runner.exe).
+   Looks for the runner next to the current executable, then falls back to _build. *)
+let run_our_pipeline exe_file =
+  let find_runner () =
+    let local = Filename.concat (Filename.dirname Sys.executable_name) "pipeline_runner.exe" in
+    if Sys.file_exists local then local
+    else "_build/default/checker/Bytecode/test/pipeline_runner.exe"
+  in
+  let runner = find_runner () in
+  let ic = Unix.open_process_in (Printf.sprintf "timeout 5 %s %s 2>/dev/null" runner exe_file) in
+  let buf = Buffer.create 256 in
+  (try while true do Buffer.add_char buf (input_char ic) done with End_of_file -> ());
+  let status = Unix.close_process_in ic in
+  match status with
+  | Unix.WEXITED 0 -> Ok (Buffer.contents buf)
+  | _ -> Error (Buffer.contents buf)
+
 (* Result type for source interpreter / compiler test helpers. *)
 type interp_result = Interp_ok of string | Interp_err of string

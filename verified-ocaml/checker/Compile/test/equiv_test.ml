@@ -270,7 +270,7 @@ let bytecode_equiv_test =
          match compile_ocamlc dir source with
          | None -> true  (* skip *)
          | Some exe ->
-           let ocamlc_result = run_ocamlc_bytecode exe in
+           let ocamlc_result = run_our_pipeline exe in
            (match our_result, ocamlc_result with
             | Ok ours, Ok theirs -> ours = theirs
             | _ -> false)))

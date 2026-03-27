@@ -6,7 +6,7 @@
 
 (executable
  (name equiv_test)
- (libraries unix qcheck-core qcheck-core.runner checker_common bytecode_test_common)
+ (libraries unix qcheck-core qcheck-core.runner checker_common)
  (flags (:standard -w -a))
  (modules equiv_test))
 

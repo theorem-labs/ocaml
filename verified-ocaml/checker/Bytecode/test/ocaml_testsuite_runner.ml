@@ -10,17 +10,11 @@
 
 open Test_common
 
-(* Path to the ppx_strip_expect executable, relative to the build root.
-   When run via dune exec, the cwd is the project root. *)
-let ppx_strip_expect_exe =
-  (* Try to find the exe relative to the current binary location first,
-     then fall back to a path relative to cwd. *)
+(* Path to the strip_expect_ppx executable (same build directory). *)
+let strip_expect_ppx_exe =
   let candidates = [
-    (* When run via dune exec from project root *)
-    Filename.concat (Filename.dirname Sys.executable_name)
-      "../ppx_strip_expect/ppx_strip_expect_exe.exe";
-    (* Absolute path in _build *)
-    "_build/default/test/harness/ppx_strip_expect/ppx_strip_expect_exe.exe";
+    Filename.concat (Filename.dirname Sys.executable_name) "strip_expect_ppx.exe";
+    "_build/default/checker/Bytecode/test/strip_expect_ppx.exe";
   ] in
   List.fold_left (fun acc p ->
     match acc with Some _ -> acc | None -> if Sys.file_exists p then Some p else None
@@ -54,12 +48,6 @@ let file_has_expect path =
 
 (* Timeout in seconds for both ocamlrun and our interpreter *)
 let timeout_secs = 5
-
-(* Step limit for our interpreter - keep modest since Coq-extracted code is slow *)
-let step_limit = 5_000_000
-
-(* Wall-clock timeout for our interpreter in seconds *)
-let interp_timeout = 30.0
 
 let run_with_timeout cmd =
   let ic = Unix.open_process_in
@@ -169,149 +157,7 @@ let read_reference path =
     with _ -> None
   else None
 
-(* Run ocamlc bytecode through our interpreter, with step limit *)
-exception Clean_exit
-
-let run_our_interp exe_file =
-  let data = Loader.read_file exe_file in
-  let sections = Loader.parse_sections data in
-  let code = Array.of_list (Loader.load_bytecode_from_sections data sections) in
-  let raw_globals = load_globals data sections in
-  let (globals, init_heap, init_next_addr) = heap_allocate_globals raw_globals in
-  let prims = load_prims data sections in
-  let buf = Buffer.create 256 in
-  let (heap_ref, next_addr_ref, pending_raise_ref, perform_raise, handler, get_named_value, _minor_words_ref, _last_next_addr_ref) = make_handler ~raw_globals ~globals_list:globals prims buf in
-  let open Interp_extracted in
-  (* Initialize state with pre-populated heap for mutable global objects *)
-  let s = ref { (initial_state globals) with hp = init_heap; next_addr = init_next_addr } in
-  heap_ref := init_heap;
-  next_addr_ref := init_next_addr;
-  let remaining = ref step_limit in
-  let result = ref None in
-  let deadline = Unix.gettimeofday () +. interp_timeout in
-  let check_count = ref 0 in
-  (* Helper: check if an exception value is "Exit" (from caml_sys_exit) *)
-  let is_exit_exn exn =
-    match exn with
-    | Val_block (248, (Val_block (252, chars)) :: _) ->
-      let name = String.init (List.length chars) (fun i ->
-        match List.nth_opt chars i with Some (Val_int c) -> Char.chr (c land 0xFF) | _ -> '\000') in
-      name = "Exit"
-    | _ -> false
-  in
-  (* Get code pointer from a closure value *)
-  let get_closure_pc fn =
-    match fn with
-    | Val_block (247, Val_int pc :: _) -> Some pc
-    | Val_ptr addr ->
-      (match heap_lookup !heap_ref addr with
-       | Some (247, Val_int pc :: _) -> Some pc
-       | _ -> None)
-    | Val_closure (addr, ofs) ->
-      (match heap_lookup !heap_ref addr with
-       | Some (247, fields) ->
-         (match List.nth_opt fields ofs with
-          | Some (Val_int pc) -> Some pc
-          | _ -> None)
-       | _ -> None)
-    | _ -> None
-  in
-  (* Invoke the Printexc uncaught exception handler if one was registered.
-     When RAISE fires with trap_sp=0, OCaml's runtime calls the closure registered
-     via caml_register_named_value("Printexc.handle_uncaught_exception", fn).
-     The handler signature is fn(exn, raw_backtrace). We pass Val_int 0 as backtrace.
-     Sets up the interpreter state for the call, returns true if successful. *)
-  let invoke_uncaught_handler exn =
-    match get_named_value "Printexc.handle_uncaught_exception" with
-    | None -> false
-    | Some handler_fn ->
-      (match get_closure_pc handler_fn with
-       | None -> false
-       | Some target_pc ->
-         let stop_pc = ref (-1) in
-         Array.iteri (fun i instr -> if instr = STOP && !stop_pc = -1 then stop_pc := i) code;
-         if !stop_pc = -1 then false
-         else begin
-           (* Set up as 2-arg call: stack=[exn; dummy_bt; ret_pc; saved_env; saved_ea; ...] *)
-           let dummy_bt = Val_int 0 in
-           let new_stack = exn :: dummy_bt :: Val_int (Z.of_nat !stop_pc)
-                           :: !s.env :: Val_int (Z.of_nat !s.extra_args) :: !s.stack in
-           s := { !s with
-                  pc = target_pc;
-                  accu = handler_fn;
-                  stack = new_stack;
-                  env = handler_fn;
-                  extra_args = 1;
-                  hp = !heap_ref;
-                  next_addr = !next_addr_ref };
-           true
-         end)
-  in
-  let handle_unhandled_exn exn =
-    if is_exit_exn exn then raise Clean_exit
-    else if invoke_uncaught_handler exn then ()
-    else begin
-      (* No Printexc handler registered: simulate default_fatal_uncaught_exception.
-         The C runtime prints the error to stderr (we don't capture that) and exits.
-         Treat as a clean exit — the stdout output captured so far is the result. *)
-      raise Clean_exit
-    end
-  in
-  let rec loop () =
-    if !remaining <= 0 then result := Some "step limit"
-    else begin
-      decr remaining;
-      (* Check wall-clock every 1000 steps to avoid syscall overhead *)
-      incr check_count;
-      if !check_count mod 1000 = 0 && Unix.gettimeofday () > deadline then
-        result := Some "wall-clock timeout"
-      else
-        match step code !s with
-        | Step s' -> s := s'; loop ()
-        | Halt _ -> ()
-        | Error msg ->
-          let msg_str = sc msg in
-          if msg_str = "unhandled exception" then
-            (handle_unhandled_exn !s.accu; if !result = None then loop ())
-          else
-            result := Some msg_str
-        | CCall_request (idx, args, cont) ->
-          heap_ref := cont.hp;
-          next_addr_ref := cont.next_addr;
-          pending_raise_ref := None;
-          (match handler idx args with
-           | Some v ->
-             s := { cont with accu = v;
-                    hp = !heap_ref; next_addr = !next_addr_ref };
-             loop ()
-           | None ->
-             (match !pending_raise_ref with
-              | Some exn ->
-                (* Check for sys_exit sentinel before trying to raise *)
-                if is_exit_exn exn then raise Clean_exit
-                else begin
-                  let cont' = { cont with hp = !heap_ref; next_addr = !next_addr_ref } in
-                  (match perform_raise cont' exn with
-                   | Step s' -> s := s'; loop ()
-                   | Halt _ -> ()
-                   | Error msg ->
-                     let msg_str = sc msg in
-                     if msg_str = "unhandled exception" then
-                       (handle_unhandled_exn exn; if !result = None then loop ())
-                     else
-                       result := Some msg_str
-                   | CCall_request _ -> result := Some "nested ccall in raise")
-                end
-              | None -> result := Some "ccall failed"))
-    end
-  in
-  (try loop ()
-   with
-   | Clean_exit -> ()
-   | e -> result := Some (Printexc.to_string e));
-  match !result with
-  | None -> Ok (Buffer.contents buf)
-  | Some err -> Error err
+let run_our_interp exe_file = run_our_pipeline exe_file
 
 type result = Pass | Fail of string | Skip of string
 
@@ -372,7 +218,7 @@ let test_file path =
         (* If the file uses [%%expect blocks, add the ppx strip rewriter *)
         let ppx_flag =
           if file_has_expect path then
-            match ppx_strip_expect_exe with
+            match strip_expect_ppx_exe with
             | None -> ""
             | Some ppx -> Printf.sprintf "-ppx %s " (Filename.quote ppx)
           else ""

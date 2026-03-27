@@ -48,25 +48,19 @@ extract: build
 # ---- Tests ----
 
 # Bytecode interpreter PBT
-test-manual: extract
+test: extract
 	dune build \
 		checker/Bytecode/test/pbt.exe \
-		checker/Bytecode/test/manual_test.exe
-	@echo "--- Manual bytecode tests ---"
-	dune exec checker/Bytecode/test/manual_test.exe
+		checker/Bytecode/test/pipeline_runner.exe
 	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
 	dune exec checker/Bytecode/test/pbt.exe
-
-test: test-manual
 
 # Full tests: includes compiler PBT
 test-full: extract
 	dune build \
 		checker/Bytecode/test/pbt.exe \
-		checker/Bytecode/test/manual_test.exe \
+		checker/Bytecode/test/pipeline_runner.exe \
 		checker/Compile/test/pbt.exe
-	@echo "--- Manual bytecode tests ---"
-	dune exec checker/Bytecode/test/manual_test.exe
 	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
 	dune exec checker/Bytecode/test/pbt.exe
 	@echo "--- Compile vs ocamlc PBT (QCheck) ---"

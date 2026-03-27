@@ -1,4 +1,5 @@
-(* ppx_strip_expect.ml - PPX rewriter that strips [%%expect{| ... |}] blocks *)
+(* strip_expect_ppx.ml - Standalone PPX that strips [%%expect ...] blocks.
+   Used by ocaml_testsuite_runner to compile expect-test files. *)
 open Ppxlib
 
 let () =
@@ -8,5 +9,6 @@ let () =
         match item.pstr_desc with
         | Pstr_extension (({ txt = "expect"; _ }, _), _) -> false
         | _ -> true
-      ) structure
-    )
+      ) structure)
+
+let () = Driver.standalone ()

@@ -1,22 +1,8 @@
-(* harness.ml - [TRUSTED] PBT harness: interpret-bytecode vs ocamlrun
-   Migrated to QCheck. Uses test_common infrastructure for proper heap
-   allocation and C-call handling. *)
+(* pbt.ml - [TRUSTED] PBT harness: interpret-bytecode vs ocamlrun
+   Runs programs through our extracted Rocq pipeline (Decode.v + Interpret.v)
+   and compares output against ocamlrun. *)
 
-open Interp_extracted
 open Test_common
-
-let compile_and_run = compile_and_run_ocamlc
-
-(* === Run our interpreter using proper heap-allocated globals === *)
-let run_ours exe_file =
-  match Bytecode_runtime.run_ocamlc_bytecode exe_file with
-  | Ok output -> (Finished (Val_int 0), output)
-  | Error msg -> (Run_error (List.init (String.length msg) (fun i -> msg.[i])), "")
-
-(* === char list -> string (extracted errors use char list) === *)
-let string_of_chars cl =
-  let buf = Buffer.create (List.length cl) in
-  List.iter (Buffer.add_char buf) cl; Buffer.contents buf
 
 (* === QCheck generators === *)
 
@@ -489,21 +475,14 @@ let harness_test =
     (QCheck.make gen_source ~print:Fun.id)
     (fun source ->
        with_temp_dir (fun dir ->
-         match compile_and_run dir source with
-         | None ->
-           (* Skip: compile failed, assume valid *)
-           true
+         match compile_and_run_ocamlc dir source with
+         | None -> true  (* ocamlc failed, skip *)
          | Some expected ->
-           try
-             let result, output = run_ours (Filename.concat dir "test.byte") in
-             (match result with
-              | Finished _ -> output = expected
-              | Run_error msg ->
-                Printf.eprintf "Run error: %s\nsource:\n%s\n%!" (string_of_chars msg) source; false
-              | Out_of_fuel _ ->
-                Printf.eprintf "Out of fuel\nsource:\n%s\n%!" source; false)
-           with exn ->
-             Printf.eprintf "Exception: %s\nsource:\n%s\n%!" (Printexc.to_string exn) source; false))
+           let exe = Filename.concat dir "test.byte" in
+           match run_our_pipeline exe with
+           | Ok output -> output = expected
+           | Error msg ->
+             Printf.eprintf "Pipeline error: %s\nsource:\n%s\n%!" msg source; false))
 
 let () =
   exit (QCheck_base_runner.run_tests ~verbose:true [harness_test])
