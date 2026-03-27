@@ -1,6 +1,6 @@
 (library
  (name checker_common)
- (libraries unix str)
+ (libraries unix)
  (flags (:standard -w -a))
  (wrapped false)
- (modules interp_extracted loader code_arr uint63 test_common compile_test_common lexer parser))
+ (modules interp_extracted code_arr uint63 test_common))

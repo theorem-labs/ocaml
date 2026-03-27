@@ -9,7 +9,7 @@ let compile_and_run = compile_and_run_ocamlc
 
 (* === Run our interpreter using proper heap-allocated globals === *)
 let run_ours exe_file =
-  match Test_common.run_ocamlc_bytecode exe_file with
+  match Bytecode_runtime.run_ocamlc_bytecode exe_file with
   | Ok output -> (Finished (Val_int 0), output)
   | Error msg -> (Run_error (List.init (String.length msg) (fun i -> msg.[i])), "")
 

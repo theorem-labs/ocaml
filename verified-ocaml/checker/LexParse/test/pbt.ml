@@ -394,9 +394,9 @@ let expr_roundtrip_test =
        Printf.sprintf "original pp: %s\nnormalized pp: %s" printed printed_norm))
     (fun expr ->
        let expr = normalize_expr expr in
-       let printed = sc (pp_expr expr) in
-       match Parser.parse printed with
-       | Result.Ok [Decl_expr parsed_expr] ->
+       let prog_str = pp_program [Decl_expr expr] in
+       match lex_parse prog_str with
+       | Some [Decl_expr parsed_expr] ->
          let parsed_norm = normalize_expr parsed_expr in
          if not (expr_eq expr parsed_norm) then
            (Printf.eprintf "AST MISMATCH\npp(original):  %s\npp(parsed):    %s\ndump(orig):    %s\ndump(parsed):  %s\n%!"
@@ -404,11 +404,11 @@ let expr_roundtrip_test =
               (dump_expr expr) (dump_expr parsed_norm);
             false)
          else true
-       | Result.Ok decls ->
+       | Some decls ->
          Printf.eprintf "WRONG DECLS (got %d)\n%!" (List.length decls);
          false
-       | Result.Error msg ->
-         Printf.eprintf "PARSE ERROR on: %s\nerror: %s\n%!" printed msg;
+       | None ->
+         Printf.eprintf "PARSE ERROR on: %s\n%!" (sc prog_str);
          false)
 
 let decl_roundtrip_test =
@@ -420,9 +420,9 @@ let decl_roundtrip_test =
        Printf.sprintf "original pp: %s\nnormalized pp: %s" printed printed_norm))
     (fun decl ->
        let decl = normalize_decl decl in
-       let printed = sc (pp_decl decl) ^ ";;" in
-       match Parser.parse printed with
-       | Result.Ok [parsed_decl] ->
+       let prog_str = pp_program [decl] in
+       match lex_parse prog_str with
+       | Some [parsed_decl] ->
          let parsed_norm = normalize_decl parsed_decl in
          if not (decl_eq decl parsed_norm) then
            (Printf.eprintf "DECL AST MISMATCH\npp(original):  %s\npp(parsed):    %s\ndump(orig):    %s\ndump(parsed):  %s\n%!"
@@ -430,11 +430,11 @@ let decl_roundtrip_test =
               (dump_decl decl) (dump_decl parsed_norm);
             false)
          else true
-       | Result.Ok decls ->
-         Printf.eprintf "WRONG DECL COUNT (got %d)\nfor: %s\n%!" (List.length decls) printed;
+       | Some decls ->
+         Printf.eprintf "WRONG DECL COUNT (got %d)\nfor: %s\n%!" (List.length decls) (sc prog_str);
          false
-       | Result.Error msg ->
-         Printf.eprintf "DECL PARSE ERROR on: %s\nerror: %s\n%!" printed msg;
+       | None ->
+         Printf.eprintf "DECL PARSE ERROR on: %s\n%!" (sc prog_str);
          false)
 
 let () =

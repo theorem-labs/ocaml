@@ -50,31 +50,31 @@ extract: build
 # Bytecode interpreter PBT
 test-manual: extract
 	dune build \
-		checker/Bytecode/tests/harness.exe \
-		checker/Bytecode/tests/manual_test.exe
+		checker/Bytecode/test/pbt.exe \
+		checker/Bytecode/test/manual_test.exe
 	@echo "--- Manual bytecode tests ---"
-	dune exec checker/Bytecode/tests/manual_test.exe
+	dune exec checker/Bytecode/test/manual_test.exe
 	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
-	dune exec checker/Bytecode/tests/harness.exe
+	dune exec checker/Bytecode/test/pbt.exe
 
 test: test-manual
 
 # Full tests: includes compiler PBT
 test-full: extract
 	dune build \
-		checker/Bytecode/tests/harness.exe \
-		checker/Bytecode/tests/manual_test.exe \
-		checker/Compile/compile-pbt/harness.exe
+		checker/Bytecode/test/pbt.exe \
+		checker/Bytecode/test/manual_test.exe \
+		checker/Compile/test/pbt.exe
 	@echo "--- Manual bytecode tests ---"
-	dune exec checker/Bytecode/tests/manual_test.exe
+	dune exec checker/Bytecode/test/manual_test.exe
 	@echo "--- Bytecode PBT: interpret-bytecode vs ocamlrun (QCheck) ---"
-	dune exec checker/Bytecode/tests/harness.exe
+	dune exec checker/Bytecode/test/pbt.exe
 	@echo "--- Compile vs ocamlc PBT (QCheck) ---"
-	dune exec checker/Compile/compile-pbt/harness.exe
+	dune exec checker/Compile/test/pbt.exe
 
 # ---- Testsuite ----
 
-TESTSUITE_DIR = checker/Bytecode/tests/ocaml-testsuite
+TESTSUITE_DIR = checker/Bytecode/test/ocaml-testsuite
 
 TESTSUITE_BASIC = \
 	$(TESTSUITE_DIR)/basic \
@@ -130,14 +130,14 @@ TESTSUITE_PHASE1 = \
 	$(TESTSUITE_DIR)/int64-unboxing \
 	$(TESTSUITE_DIR)/basic-multdef
 
-RUNNER = _build/default/checker/Bytecode/tests/ocaml_testsuite_runner.exe
+RUNNER = _build/default/checker/Bytecode/test/ocaml_testsuite_runner.exe
 
 testsuite: extract
-	dune build checker/Bytecode/tests/ocaml_testsuite_runner.exe
+	dune build checker/Bytecode/test/ocaml_testsuite_runner.exe
 	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC)
 
 testsuite-all: extract
-	dune build checker/Bytecode/tests/ocaml_testsuite_runner.exe
+	dune build checker/Bytecode/test/ocaml_testsuite_runner.exe
 	ulimit -s unlimited && $(RUNNER) --skip-conf testsuite.conf $(TESTSUITE_BASIC) $(TESTSUITE_PHASE1)
 
 clean:

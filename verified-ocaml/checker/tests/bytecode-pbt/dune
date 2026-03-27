@@ -1,4 +1,0 @@
-(executables
- (names harness runner manual_test ocaml_testsuite_runner)
- (libraries unix qcheck-core qcheck-core.runner checker_common)
- (flags (:standard -w -a)))

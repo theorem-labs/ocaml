@@ -1,0 +1,12 @@
+(library
+ (name bytecode_test_common)
+ (libraries unix checker_common)
+ (flags (:standard -w -a))
+ (wrapped false)
+ (modules loader bytecode_runtime))
+
+(executables
+ (names pbt pipeline_runner manual_test ocaml_testsuite_runner)
+ (libraries unix qcheck-core qcheck-core.runner checker_common bytecode_test_common)
+ (flags (:standard -w -a))
+ (modules pbt pipeline_runner manual_test ocaml_testsuite_runner))

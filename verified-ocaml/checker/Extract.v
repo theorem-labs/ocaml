@@ -31,6 +31,7 @@ From OCamlInterp.SemiAutomatic.LexParse Require Import PrettyPrint.
 From OCamlInterp.SemiAutomatic.Interpret Require Import Interpret.
 From OCamlInterp.Automatic.Compile Require Import Compile.
 From OCamlInterp.Automatic.Bytecode Require Import Decode.
+From OCamlInterp.Automatic.LexParse Require Import LexParse.
 
 Extract Constant byte_string => "bytes".
 
@@ -168,4 +169,5 @@ Extraction "Interp_extracted.ml"
   decode_bytecode load_code_section
   parse_sections find_section section
   read_u32_le read_i32_le read_u32_be
+  lex_parse
   main.
