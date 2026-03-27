@@ -1728,7 +1728,7 @@ Proof.
       { change (2 ^ 16)%Z with (Z.of_nat 65536).
         apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
         apply Nat.leb_le. native_compute. reflexivity. }
-      rewrite lor_land_low16 by assumption. lia. }
+      rewrite lor_land_low16 by assumption. apply Nat2Z.id. }
     (* Show Z.to_nat (Z.shiftr sizes 16) = n0 *)
     assert (Hnb_eq : Z.to_nat (Z.shiftr sizes 16) = n0).
     { subst sizes.
@@ -1738,8 +1738,8 @@ Proof.
       { change (2 ^ 16)%Z with (Z.of_nat 65536).
         apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
         apply Nat.leb_le. native_compute. reflexivity. }
-      rewrite lor_shiftr_high16 by assumption. lia. }
-    rewrite Hnc_eq, Hnb_eq.
+      rewrite lor_shiftr_high16 by assumption. apply Nat2Z.id. }
+    subst sizes. rewrite Hnc_eq, Hnb_eq.
     (* Now we need resolve_n to recover l and l0 *)
     rewrite !resolve_n_is_map.
     (* The ops list is: sizes :: map (rel_offset ...) l ++ map (rel_offset ...) l0.

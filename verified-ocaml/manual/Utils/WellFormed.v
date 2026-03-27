@@ -67,6 +67,13 @@ Definition valid_type_name (s : string) : bool :=
     negb (is_keyword s)
   end.
 
+(* String well-formedness: no embedded double-quote characters *)
+Fixpoint wf_string (s : string) : bool :=
+  match s with
+  | EmptyString => true
+  | String c rest => negb (Ascii.eqb c """"%char) && wf_string rest
+  end.
+
 (* Integer representability: nat_to_string uses fuel 20, so n < 10^20 *)
 Definition wf_int (z : Z) : bool :=
   match z with
@@ -128,7 +135,7 @@ Fixpoint wf_expr (e : expr) : bool :=
   | Exp_seq e1 e2 => wf_expr e1 && wf_expr e2
   | Exp_record fields => forallb (fun f => valid_var_name (fst f) && wf_expr (snd f)) fields
   | Exp_field e' name => wf_expr e' && valid_var_name name
-  | Exp_string _ => true
+  | Exp_string s => wf_string s
   | Exp_function cases =>
     (Nat.leb 1 (length cases)) &&
     forallb (fun c => wf_pattern (fst c) && wf_expr (snd c)) cases
@@ -145,6 +152,7 @@ Definition wf_type_def (td : type_def) : bool :=
       match snd c with None => true | Some t => wf_type_expr t end) constrs
   | Td_alias t => wf_type_expr t
   | Td_record fields =>
+    (Nat.leb 1 (length fields)) &&
     forallb (fun f => valid_var_name (fst f) && wf_type_expr (snd f)) fields
   end.
 
