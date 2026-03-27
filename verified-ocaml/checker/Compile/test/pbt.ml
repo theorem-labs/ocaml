@@ -2293,7 +2293,7 @@ let compile_vs_ocamlc_test =
     (QCheck.make gen_test_case ~print:print_test_case)
     (fun (prog, source) ->
        with_temp_dir (fun dir ->
-         let our_result = run_our_compiler prog in
+         let our_result = run_compiled prog in
          match compile_and_run_ocamlc dir source with
          | None -> true
          | Some expected ->
@@ -2306,7 +2306,7 @@ let random_compile_vs_ocamlc_test =
     (QCheck.make gen_random_program_with_source ~print:(fun (_prog, src) -> src))
     (fun (prog, source) ->
        with_temp_dir (fun dir ->
-         let our_result = run_our_compiler prog in
+         let our_result = run_compiled prog in
          match compile_and_run_ocamlc dir source with
          | None -> true
          | Some expected ->

@@ -62,3 +62,54 @@ let run_our_pipeline exe_file =
 
 (* Result type for source interpreter / compiler test helpers. *)
 type interp_result = Interp_ok of string | Interp_err of string
+
+(* Run a program through our compiler + bytecode interpreter.
+   Uses compile_program (Compile.v) and step (Interpret.v) with a minimal
+   C-call handler matching our compiler's conventions (idx 0 = print_int,
+   idx 1 = print_newline). *)
+let run_compiled prog =
+  let code = list_to_code_array (compile_program prog) in
+  let buf = Buffer.create 64 in
+  let handler idx args =
+    match idx, args with
+    | 0, [Val_int n] ->
+      String.iter (Buffer.add_char buf) (string_of_int n);
+      Some (Val_int 0)
+    | 1, [_] ->
+      Buffer.add_char buf '\n';
+      Some (Val_int 0)
+    | _ -> Some (Val_int 0)
+  in
+  let s = ref (initial_state []) in
+  let remaining = ref 1000000 in
+  let result = ref None in
+  let rec loop () =
+    if !remaining <= 0 then result := Some "timeout"
+    else begin
+      decr remaining;
+      match step code !s with
+      | Step s' -> s := s'; loop ()
+      | Halt _ -> ()
+      | Error msg -> result := Some (sc msg)
+      | CCall_request (idx, args, cont) ->
+        (match handler idx args with
+         | Some v -> s := set_accu cont v; loop ()
+         | None -> result := Some "ccall failed")
+    end
+  in
+  loop ();
+  match !result with
+  | None -> Ok (Buffer.contents buf)
+  | Some err -> Error err
+
+(* Run a program through the source interpreter (Interpret.v).
+   Uses the extracted interpret function with the given fuel. *)
+let run_source_interp ?(fuel=10000) prog =
+  let result = interpret fuel prog in
+  match result.result with
+  | Term_timeout -> Interp_err "timeout"
+  | Term_error msg -> Interp_err (sc msg)
+  | Term_normal _ ->
+    let buf = Buffer.create (List.length result.trace) in
+    List.iter (fun c -> Buffer.add_char buf (Char.chr c)) result.trace;
+    Interp_ok (Buffer.contents buf)

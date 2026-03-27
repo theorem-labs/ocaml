@@ -266,7 +266,7 @@ let bytecode_equiv_test =
     (QCheck.make gen_test_case ~print:print_test_case)
     (fun (prog, source) ->
        with_temp_dir (fun dir ->
-         let our_result = run_our_compiler prog in
+         let our_result = run_compiled prog in
          match compile_ocamlc dir source with
          | None -> true  (* skip *)
          | Some exe ->

@@ -9,27 +9,3 @@
  (libraries unix qcheck-core qcheck-core.runner checker_common)
  (flags (:standard -w -a))
  (modules equiv_test))
-
-(executable
- (name advanced_test)
- (libraries unix checker_common)
- (flags (:standard -w -a))
- (modules advanced_test))
-
-(executable
- (name rocq_source_test)
- (libraries unix checker_common)
- (flags (:standard -w -a))
- (modules rocq_source_test))
-
-(executable
- (name correctness_test)
- (libraries unix qcheck-core qcheck-core.runner checker_common)
- (flags (:standard -w -a))
- (modules correctness_test))
-
-(executable
- (name source_interp_test)
- (libraries unix qcheck-core qcheck-core.runner checker_common)
- (flags (:standard -w -a))
- (modules source_interp_test))

@@ -9,69 +9,15 @@
    against each other, which is exactly the correctness theorem. *)
 
 open Interp_extracted
+open Test_common
 
 (* === Utilities === *)
 
 let cl s = List.init (String.length s) (fun i -> s.[i])
-let sc l = let buf = Buffer.create (List.length l) in List.iter (Buffer.add_char buf) l; Buffer.contents buf
 
 let print_int_nl e =
   Exp_seq (Exp_app (Exp_var (cl "print_int"), e),
            Exp_app (Exp_var (cl "print_newline"), Exp_unit))
-
-(* === Bytecode path: compile + interpret-bytecode === *)
-
-let run_our_compiler prog =
-  let code = list_to_code_array (compile_program prog) in
-  let buf = Buffer.create 64 in
-  let handler idx args =
-    match idx, args with
-    | 0, [Val_int n] ->
-      String.iter (Buffer.add_char buf) (string_of_int n);
-      Some (Val_int 0)
-    | 1, [_] ->
-      Buffer.add_char buf '\n';
-      Some (Val_int 0)
-    | _ -> Some (Val_int 0)
-  in
-  let s = ref (initial_state []) in
-  let remaining = ref 1000000 in
-  let result = ref None in
-  let rec loop () =
-    if !remaining <= 0 then result := Some "timeout"
-    else begin
-      decr remaining;
-      match step code !s with
-      | Step s' -> s := s'; loop ()
-      | Halt _ -> ()
-      | Error msg -> result := Some (sc msg)
-      | CCall_request (idx, args, cont) ->
-        (match handler idx args with
-         | Some v -> s := set_accu cont v; loop ()
-         | None -> result := Some "ccall failed")
-    end
-  in
-  loop ();
-  match !result with
-  | None -> Ok (Buffer.contents buf)
-  | Some err -> Error err
-
-(* === Source path: interpret === *)
-
-type interp_result = Interp_ok of string | Interp_err of string
-
-let run_source_interp prog =
-  let result = interpret 10000 prog in
-  match result.result with
-  | Term_timeout -> Interp_err "timeout"
-  | Term_error msg ->
-    let buf = Buffer.create (List.length msg) in
-    List.iter (Buffer.add_char buf) msg;
-    Interp_err (Buffer.contents buf)
-  | Term_normal _ ->
-    let buf = Buffer.create (List.length result.trace) in
-    List.iter (fun c -> Buffer.add_char buf (Char.chr c)) result.trace;
-    Interp_ok (Buffer.contents buf)
 
 (* === Random AST generator === *)
 
@@ -1384,7 +1330,7 @@ let cross_test =
     (QCheck.make gen_test_case ~print:print_test_case)
     (fun (prog, _desc) ->
        let interp_result = run_source_interp prog in
-       let compiled_result = run_our_compiler prog in
+       let compiled_result = run_compiled prog in
        match interp_result, compiled_result with
        | Interp_ok interp_out, Ok compiled_out ->
          if interp_out = compiled_out then true
@@ -1417,7 +1363,7 @@ let random_cross_test =
     (QCheck.make gen_random_program ~print:(fun (_prog, desc) -> desc))
     (fun (prog, _desc) ->
        let interp_result = run_source_interp prog in
-       let compiled_result = run_our_compiler prog in
+       let compiled_result = run_compiled prog in
        match interp_result, compiled_result with
        | Interp_ok interp_out, Ok compiled_out ->
          if interp_out = compiled_out then true
