@@ -801,6 +801,13 @@ Fixpoint expr_size (e : expr) : nat :=
   | Exp_cons e1 e2 => 1 + expr_size e1 + expr_size e2
   end.
 
+Definition type_def_size (td : type_def) : nat :=
+  match td with
+  | Td_variant constrs => length constrs
+  | Td_alias t => type_size t
+  | Td_record fields => length fields
+  end.
+
 (* ================================================================ *)
 (* Structural roundtrip lemmas                                      *)
 (* ================================================================ *)
@@ -813,9 +820,9 @@ Fixpoint expr_size (e : expr) : nat :=
    4. Show each prefix match succeeds/fails
    5. Apply IH for recursive sub-terms
 
-   Due to the complexity of structural induction with nested types
-   (lists of patterns/exprs), these are left Admitted for now.
-   Each Admitted lemma follows from the helpers above. *)
+   For nested types (lists of patterns/exprs), the proofs use
+   assert-ed lemmas with list induction inside the structural
+   induction on the AST. *)
 
 (* pp_pattern first character properties *)
 Lemma pp_pattern_nonempty : forall p,
@@ -1638,8 +1645,8 @@ Lemma parse_type_expr_pp : forall t rest fuel,
   non_ident_start rest ->
   parse_type_expr fuel (pp_type_expr t ++ rest) = Some (t, rest).
 Proof.
-  (* Structural induction on type_expr with nested list induction is complex.
-     For now, we prove the base cases and admit the recursive cases. *)
+  (* Structural induction on type_expr with nested list induction.
+     Recursive cases use assert-ed lemmas with list induction. *)
   intros t. induction t; intros rest fuel Hwf Hfuel Hni.
   - (* Ty_int *)
     destruct fuel; [simpl in Hfuel; lia|].
@@ -3135,7 +3142,94 @@ Proof.
     (* Exp_constr case: wf requires this is not None for app *)
     simpl in Hnotc. destruct o; [reflexivity|discriminate].
   - (* Exp_tuple *)
-    admit.
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl wf_expr in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlen Hwfall].
+    simpl pp_expr. rewrite !append_assoc.
+    simpl expr_size in Hfuel.
+    destruct l as [|e1 l']; [simpl in Hlen; discriminate|].
+    destruct l' as [|e2 l'']; [simpl in Hlen; discriminate|].
+    inversion H as [|? ? He1 Htl1]; subst. clear H.
+    inversion Htl1 as [|? ? He2 Htl2]; subst. clear Htl1.
+    simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hwf1 Hwfall'].
+    apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hwf2 Hwfall''].
+    simpl map. simpl intercalate. rewrite !append_assoc.
+    simpl parse_expr. fold parse_expr.
+    rewrite try_neg_int_paren_pp by exact Hwf1.
+    rewrite strip_unit_paren_pp by exact Hwf1.
+    simpl strip_prefix at 1.
+    rewrite strip_prefix_app.
+    change (fuel - 0) with fuel.
+    dispatch_keywords e1 Hwf1.
+    rewrite <- !append_assoc.
+    rewrite He1; [|exact Hwf1|simpl in Hfuel; lia|apply nis_comma_space].
+    rewrite !append_assoc.
+    rewrite try_binop_comma.
+    simpl strip_prefix at 1.
+    rewrite strip_prefix_app.
+    simpl list_sum in Hfuel.
+    (* Prove the parse_comma loop processes remaining elements *)
+    assert (HMore : forall es' fuel0 rest0,
+      forallb wf_expr es' = true ->
+      Forall (fun e => forall rest1 fuel1,
+        wf_expr e = true -> fuel1 >= expr_size e ->
+        non_ident_start rest1 ->
+        parse_expr fuel1 (pp_expr e ++ rest1) = Some (e, rest1)) es' ->
+      fuel0 >= list_sum (List.map expr_size es') ->
+      (fix parse_comma (n : nat) (s0 : string) : option (list expr * string) :=
+        match n with O => None | S n' =>
+          match parse_expr fuel s0 with
+          | Some (e, rest4) =>
+            match strip_prefix ", " rest4 with
+            | Some rest5 => match parse_comma n' rest5 with
+              | Some (es, rest6) => Some (e :: es, rest6) | None => None end
+            | None => match strip_prefix ")" rest4 with
+              | Some rest5 => Some ([e], rest5) | None => None end
+            end
+          | None => None end end) fuel0
+        (intercalate ", " (List.map pp_expr es') ++ ")" ++ rest0) =
+      Some (es', rest0)).
+    { clear He1 Hwf1 Hwf2 Hwfall'' e1 e2 l'' Htl2 Hlen Hfuel Hni rest fuel.
+      induction es'; intros fuel0 rest0 Hwfall HFA Hfuel0.
+      - simpl. discriminate.
+      - inversion HFA as [|? ? He' Htl']; subst. clear HFA.
+        simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hwfa Hwfall'].
+        destruct fuel0; [simpl in Hfuel0; lia|].
+        destruct es' as [|e'' es'''].
+        + (* Last element *)
+          simpl intercalate. simpl map.
+          rewrite <- !append_assoc.
+          rewrite He'; [|exact Hwfa|simpl in Hfuel0; lia|apply nis_cparen].
+          rewrite strip_prefix_app.
+          simpl strip_prefix at 1.
+          reflexivity.
+        + (* More elements *)
+          simpl map at 1. simpl intercalate at 1.
+          rewrite !append_assoc.
+          rewrite <- !append_assoc at 1.
+          rewrite He'; [|exact Hwfa|simpl in Hfuel0; lia|apply nis_comma_space].
+          rewrite !append_assoc.
+          rewrite strip_prefix_app.
+          inversion Htl' as [|? ? He'' Htl'']; subst. clear Htl'.
+          simpl forallb in Hwfall'. apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hwfa'' Hwfall''].
+          rewrite IHes'; [|exact (Bool.andb_true_iff _ _ |>.2 (conj Hwfa'' Hwfall''))|exact (Forall_cons _ He'' Htl'')|simpl in Hfuel0; lia].
+          reflexivity. }
+    rewrite <- !append_assoc.
+    rewrite He2; [|exact Hwf2|lia|].
+    2: { destruct l'' as [|e3 l''']; [apply nis_cparen | apply nis_comma_space]. }
+    rewrite !append_assoc.
+    destruct l'' as [|e3 l'''].
+    + (* Only e1, e2 *)
+      simpl intercalate. simpl map.
+      rewrite strip_prefix_app.
+      simpl strip_prefix at 1.
+      reflexivity.
+    + (* e1, e2, e3 :: l''' *)
+      simpl map at 1. simpl intercalate at 1.
+      rewrite !append_assoc.
+      rewrite strip_prefix_app.
+      simpl forallb in Hwfall''. apply Bool.andb_true_iff in Hwfall''. destruct Hwfall'' as [Hwf3 Hwfall3].
+      rewrite HMore; [reflexivity | exact (Bool.andb_true_iff _ _ |>.2 (conj Hwf3 Hwfall3)) | exact Htl2 | lia].
   - (* Exp_constr c oe *)
     destruct fuel; [simpl in Hfuel; lia|].
     destruct o as [e'|].
@@ -3246,7 +3340,114 @@ Proof.
       simpl pp_expr.
       apply parse_expr_constr_none; [exact Hwf|exact Hni].
   - (* Exp_match *)
-    admit.
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl wf_expr in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwfe_len Hwfall].
+    apply Bool.andb_true_iff in Hwfe_len. destruct Hwfe_len as [Hwfe Hlen].
+    simpl pp_expr. rewrite !append_assoc.
+    simpl expr_size in Hfuel.
+    simpl parse_expr. fold parse_expr.
+    rewrite try_neg_int_paren_pp by exact Hwfe.
+    rewrite strip_unit_paren_pp by exact Hwfe.
+    simpl strip_prefix at 1.
+    rewrite strip_prefix_app.
+    change (fuel - 0) with fuel.
+    dispatch_keywords e Hwfe.
+    rewrite <- !append_assoc.
+    rewrite IHe; [|exact Hwfe|lia|apply nis_space].
+    rewrite !append_assoc.
+    rewrite strip_prefix_app.
+    (* Now parse_cases loop on the cases *)
+    destruct l as [|[p1 b1] cases']; [simpl in Hlen; discriminate|].
+    simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hwf1 Hwfall'].
+    apply Bool.andb_true_iff in Hwf1. destruct Hwf1 as [Hwfp1 Hwfb1].
+    inversion H as [|? ? Hb1 Htl1]; subst. clear H. simpl in Hb1.
+    simpl list_sum in Hfuel.
+    (* Prove the parse_cases loop *)
+    assert (HCases : forall cs fuel0 rest0,
+      forallb (fun c => wf_pattern (fst c) && wf_expr (snd c)) cs = true ->
+      Forall (fun pe : pattern * expr => forall rest1 fuel1,
+        wf_expr (snd pe) = true -> fuel1 >= expr_size (snd pe) ->
+        non_ident_start rest1 ->
+        parse_expr fuel1 (pp_expr (snd pe) ++ rest1) = Some (snd pe, rest1)) cs ->
+      fuel0 >= list_sum (List.map (fun c => pattern_size (fst c) + expr_size (snd c)) cs) ->
+      cs <> [] ->
+      (fix parse_cases (n : nat) (s0 : string) :
+        option (list (pattern * expr) * string) :=
+        match n with O => None | S n' =>
+          match strip_prefix "| " s0 with
+          | Some rest5 =>
+            match parse_pattern fuel rest5 with
+            | Some (pat, rest6) =>
+              match strip_prefix " -> " rest6 with
+              | Some rest7 =>
+                match parse_expr fuel rest7 with
+                | Some (body, rest8) =>
+                  match strip_prefix " " rest8 with
+                  | Some rest9 =>
+                    match parse_cases n' rest9 with
+                    | Some (cases, rest10) =>
+                      Some ((pat, body) :: cases, rest10)
+                    | None => None end
+                  | None =>
+                    match strip_prefix ")" rest8 with
+                    | Some rest9 => Some ([(pat, body)], rest9)
+                    | None => None end end
+                | None => None end
+              | None => None end
+            | None => None end
+          | None => None end end) fuel0
+        (intercalate " " (List.map (fun c : pattern * expr =>
+          "| " ++ pp_pattern (fst c) ++ " -> " ++ pp_expr (snd c)) cs) ++ ")" ++ rest0) =
+      Some (cs, rest0)).
+    { clear IHe Hwfe Hwfp1 Hwfb1 Hb1 Htl1 p1 b1 cases' Hwfall' Hlen Hfuel Hni rest fuel e.
+      induction cs as [|[pi bi] cs' IHcs]; intros fuel0 rest0 Hwfall HFA Hfuel0 Hne.
+      - contradiction.
+      - simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hwf1' Hwfall'].
+        apply Bool.andb_true_iff in Hwf1'. destruct Hwf1' as [Hwfpi Hwfbi].
+        inversion HFA as [|? ? Hbi' Htl']; subst. clear HFA. simpl in Hbi'.
+        destruct fuel0; [simpl in Hfuel0; lia|].
+        simpl List.map at 1.
+        destruct cs' as [|[p2 b2] cs''].
+        + (* Last case *)
+          simpl intercalate. rewrite !append_assoc.
+          rewrite strip_prefix_app. simpl.
+          rewrite parse_pattern_pp; [|exact Hwfpi|lia|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite <- !append_assoc.
+          rewrite Hbi'; [|exact Hwfbi|lia|apply nis_cparen].
+          rewrite strip_prefix_app. reflexivity.
+        + (* More cases *)
+          simpl intercalate at 1. rewrite !append_assoc.
+          rewrite strip_prefix_app. simpl.
+          rewrite parse_pattern_pp; [|exact Hwfpi|lia|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite <- !append_assoc.
+          rewrite Hbi'; [|exact Hwfbi|lia|apply nis_space].
+          rewrite !append_assoc.
+          rewrite strip_prefix_app.
+          rewrite IHcs; [reflexivity|exact Hwfall'|exact Htl'|simpl in Hfuel0; lia|discriminate]. }
+    simpl List.map at 1.
+    destruct cases' as [|[p2 b2] cases''].
+    + (* Single case *)
+      simpl intercalate. rewrite !append_assoc.
+      rewrite strip_prefix_app. simpl.
+      rewrite parse_pattern_pp; [|exact Hwfp1|lia|apply nis_space].
+      rewrite strip_prefix_app. simpl.
+      rewrite <- !append_assoc.
+      rewrite Hb1; [|exact Hwfb1|lia|apply nis_cparen].
+      rewrite strip_prefix_app. reflexivity.
+    + (* Multiple cases *)
+      simpl intercalate at 1. rewrite !append_assoc.
+      rewrite strip_prefix_app. simpl.
+      rewrite parse_pattern_pp; [|exact Hwfp1|lia|apply nis_space].
+      rewrite strip_prefix_app. simpl.
+      rewrite <- !append_assoc.
+      rewrite Hb1; [|exact Hwfb1|lia|apply nis_space].
+      rewrite !append_assoc.
+      rewrite strip_prefix_app.
+      simpl forallb in Hwfall'. apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hwf2' Hwfall''].
+      rewrite HCases; [reflexivity | exact (Bool.andb_true_iff _ _ |>.2 (conj Hwf2' Hwfall'')) | exact Htl1 | lia | discriminate].
   - (* Exp_seq e1 e2 *)
     destruct fuel; [simpl in Hfuel; lia|].
     simpl wf_expr in Hwf.
@@ -3277,7 +3478,72 @@ Proof.
     rewrite strip_prefix_app.
     reflexivity.
   - (* Exp_record *)
-    admit.
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl wf_expr in Hwf. simpl expr_size in Hfuel.
+    simpl pp_expr. rewrite !append_assoc.
+    simpl parse_expr. fold parse_expr.
+    (* try_neg_int on "{ " ++ ... : "{" is not "(" so it fails *)
+    unfold try_neg_int at 1. simpl strip_prefix at 1. simpl.
+    (* strip_prefix "()" fails: "{" <> "(" *)
+    simpl strip_prefix at 1.
+    (* strip_prefix "{ " succeeds *)
+    rewrite strip_prefix_app.
+    change (fuel - 0) with fuel.
+    set (pfuel := fuel) in *.
+    assert (Hrec : forall flds rest0 n,
+      forallb (fun f => valid_var_name (fst f) && wf_expr (snd f)) flds = true ->
+      Forall (fun f : ident * expr => forall rest1 fuel1,
+        wf_expr (snd f) = true -> fuel1 >= expr_size (snd f) ->
+        non_ident_start rest1 ->
+        parse_expr fuel1 (pp_expr (snd f) ++ rest1) = Some (snd f, rest1)) flds ->
+      n >= length flds -> flds <> [] ->
+      (fix parse_rec_fields (n0 : nat) (s0 : string) :
+        option (list (ident * expr) * string) :=
+        match n0 with O => None | S n' =>
+          match parse_ident s0 with
+          | Some (fname, rest2) =>
+            match strip_prefix " = " rest2 with
+            | Some rest3 =>
+              match parse_expr pfuel rest3 with
+              | Some (e, rest4) =>
+                match strip_prefix "; " rest4 with
+                | Some rest5 => match parse_rec_fields n' rest5 with
+                  | Some (fs, rest6) => Some ((fname, e) :: fs, rest6) | None => None end
+                | None => match strip_prefix " }" rest4 with
+                  | Some rest5 => Some ([(fname, e)], rest5) | None => None end
+                end
+              | None => None end
+            | None => None end
+          | None => None end end) n
+        (intercalate "; " (List.map (fun f : ident * expr =>
+          fst f ++ " = " ++ pp_expr (snd f)) flds) ++ " }" ++ rest0) =
+      Some (flds, rest0)).
+    { induction flds as [|[fn fe] flds' IHflds]; intros rest0 n Hwfall' HFA Hn Hne.
+      - contradiction.
+      - destruct n; [lia|].
+        simpl forallb in Hwfall'. apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hwf1' Hwfall''].
+        apply Bool.andb_true_iff in Hwf1'. destruct Hwf1' as [Hvn' Hwfe'].
+        inversion HFA as [|? ? Hexpr' Htl']; subst. clear HFA.
+        simpl in Hexpr'.
+        simpl List.map at 1.
+        destruct flds' as [|[fn2 fe2] flds''].
+        + (* Last field *)
+          simpl intercalate. simpl List.map. rewrite !append_assoc.
+          rewrite parse_ident_var; [|exact Hvn'|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite Hexpr'; [|exact Hwfe'|lia|apply nis_space].
+          rewrite strip_prefix_app. reflexivity.
+        + (* More fields *)
+          simpl intercalate at 1. rewrite !append_assoc.
+          rewrite parse_ident_var; [|exact Hvn'|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite <- !append_assoc.
+          rewrite Hexpr'; [|exact Hwfe'|lia|apply nis_semicol].
+          rewrite !append_assoc.
+          rewrite strip_prefix_app. simpl.
+          rewrite IHflds; [reflexivity|exact Hwfall''|exact Htl'|simpl in Hn; lia|discriminate]. }
+    rewrite Hrec; [reflexivity|exact Hwf|exact H|lia|].
+    destruct l; [simpl in Hwf; discriminate|discriminate].
   - (* Exp_field e name *)
     destruct fuel; [simpl in Hfuel; lia|].
     simpl wf_expr in Hwf.
@@ -3329,15 +3595,126 @@ Proof.
         rewrite IHcontent; [|lia|intros c Hin; apply Hnq; right; exact Hin].
         (* acc ++ String a "" ++ content = acc ++ String a content *)
         rewrite <- append_assoc. simpl. reflexivity. }
-    (* We need wf_string to know s has no embedded quotes *)
-    (* Actually, wf_expr (Exp_string s) = true doesn't constrain s *)
-    (* The roundtrip only works if s has no embedded double-quote chars *)
-    (* But wf_expr for Exp_string is just true, so s could have quotes *)
-    (* This means the roundtrip might not work for strings with quotes! *)
-    (* For now, admit this case as it requires a wf_string constraint *)
-    admit.
+    (* wf_expr (Exp_string s) = wf_string s, which ensures no embedded quotes *)
+    simpl wf_expr in Hwf.
+    (* Prove that wf_string s implies no char in s is a double-quote *)
+    assert (Hnq : forall c, In c (list_ascii_of_string s) -> Ascii.eqb c """"%char = false).
+    { induction s as [|a s' IHs']; intros c0 Hin.
+      - simpl in Hin. contradiction.
+      - simpl in Hin. simpl in Hwf.
+        apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hna Hwf'].
+        apply Bool.negb_true_iff in Hna.
+        destruct Hin as [<-|Hin'].
+        + exact Hna.
+        + exact (IHs' Hwf' c0 Hin'). }
+    rewrite Hrsc; [|lia|exact Hnq].
+    simpl. rewrite strip_prefix_app. reflexivity.
   - (* Exp_function cases *)
-    admit.
+    destruct fuel; [simpl in Hfuel; lia|].
+    simpl wf_expr in Hwf.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlen Hwfall].
+    simpl pp_expr. rewrite !append_assoc.
+    simpl expr_size in Hfuel.
+    simpl parse_expr. fold parse_expr.
+    (* try_neg_int: starts with "(function", not "(-digit" *)
+    unfold try_neg_int at 1. simpl strip_prefix at 1. simpl.
+    (* strip_prefix "()" fails *)
+    simpl strip_prefix at 1.
+    change (fuel - 0) with fuel.
+    (* strip_prefix """" fails: "f" <> """" *)
+    simpl strip_prefix at 1.
+    (* strip_prefix "function " matches *)
+    rewrite strip_prefix_app.
+    destruct l as [|[p1 b1] cases']; [simpl in Hlen; discriminate|].
+    simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hwf1 Hwfall'].
+    apply Bool.andb_true_iff in Hwf1. destruct Hwf1 as [Hwfp1 Hwfb1].
+    inversion H as [|? ? Hb1 Htl1]; subst. clear H. simpl in Hb1.
+    simpl list_sum in Hfuel.
+    (* Prove the parse_func_cases loop *)
+    assert (HFCases : forall cs fuel0 rest0,
+      forallb (fun c => wf_pattern (fst c) && wf_expr (snd c)) cs = true ->
+      Forall (fun pe : pattern * expr => forall rest1 fuel1,
+        wf_expr (snd pe) = true -> fuel1 >= expr_size (snd pe) ->
+        non_ident_start rest1 ->
+        parse_expr fuel1 (pp_expr (snd pe) ++ rest1) = Some (snd pe, rest1)) cs ->
+      fuel0 >= list_sum (List.map (fun c => pattern_size (fst c) + expr_size (snd c)) cs) ->
+      cs <> [] ->
+      (fix parse_func_cases (n : nat) (s0 : string) :
+        option (list (pattern * expr) * string) :=
+        match n with O => None | S n' =>
+          match strip_prefix "| " s0 with
+          | Some rest3 =>
+            match parse_pattern fuel rest3 with
+            | Some (pat, rest4) =>
+              match strip_prefix " -> " rest4 with
+              | Some rest5 =>
+                match parse_expr fuel rest5 with
+                | Some (body, rest6) =>
+                  match strip_prefix " " rest6 with
+                  | Some rest7 =>
+                    match parse_func_cases n' rest7 with
+                    | Some (cases, rest8) =>
+                      Some ((pat, body) :: cases, rest8)
+                    | None => None end
+                  | None =>
+                    match strip_prefix ")" rest6 with
+                    | Some rest7 => Some ([(pat, body)], rest7)
+                    | None => None end end
+                | None => None end
+              | None => None end
+            | None => None end
+          | None => None end end) fuel0
+        (intercalate " " (List.map (fun c : pattern * expr =>
+          "| " ++ pp_pattern (fst c) ++ " -> " ++ pp_expr (snd c)) cs) ++ ")" ++ rest0) =
+      Some (cs, rest0)).
+    { clear Hwfp1 Hwfb1 Hb1 Htl1 p1 b1 cases' Hwfall' Hlen Hfuel Hni rest fuel.
+      induction cs as [|[pi bi] cs' IHcs]; intros fuel0 rest0 Hwfall HFA Hfuel0 Hne.
+      - contradiction.
+      - simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hwf1' Hwfall'].
+        apply Bool.andb_true_iff in Hwf1'. destruct Hwf1' as [Hwfpi Hwfbi].
+        inversion HFA as [|? ? Hbi' Htl']; subst. clear HFA. simpl in Hbi'.
+        destruct fuel0; [simpl in Hfuel0; lia|].
+        simpl List.map at 1.
+        destruct cs' as [|[p2 b2] cs''].
+        + (* Last case *)
+          simpl intercalate. rewrite !append_assoc.
+          rewrite strip_prefix_app. simpl.
+          rewrite parse_pattern_pp; [|exact Hwfpi|lia|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite <- !append_assoc.
+          rewrite Hbi'; [|exact Hwfbi|lia|apply nis_cparen].
+          rewrite strip_prefix_app. reflexivity.
+        + (* More cases *)
+          simpl intercalate at 1. rewrite !append_assoc.
+          rewrite strip_prefix_app. simpl.
+          rewrite parse_pattern_pp; [|exact Hwfpi|lia|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite <- !append_assoc.
+          rewrite Hbi'; [|exact Hwfbi|lia|apply nis_space].
+          rewrite !append_assoc.
+          rewrite strip_prefix_app.
+          rewrite IHcs; [reflexivity|exact Hwfall'|exact Htl'|simpl in Hfuel0; lia|discriminate]. }
+    simpl List.map at 1.
+    destruct cases' as [|[p2 b2] cases''].
+    + (* Single case *)
+      simpl intercalate. rewrite !append_assoc.
+      rewrite strip_prefix_app. simpl.
+      rewrite parse_pattern_pp; [|exact Hwfp1|lia|apply nis_space].
+      rewrite strip_prefix_app. simpl.
+      rewrite <- !append_assoc.
+      rewrite Hb1; [|exact Hwfb1|lia|apply nis_cparen].
+      rewrite strip_prefix_app. reflexivity.
+    + (* Multiple cases *)
+      simpl intercalate at 1. rewrite !append_assoc.
+      rewrite strip_prefix_app. simpl.
+      rewrite parse_pattern_pp; [|exact Hwfp1|lia|apply nis_space].
+      rewrite strip_prefix_app. simpl.
+      rewrite <- !append_assoc.
+      rewrite Hb1; [|exact Hwfb1|lia|apply nis_space].
+      rewrite !append_assoc.
+      rewrite strip_prefix_app.
+      simpl forallb in Hwfall'. apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hwf2' Hwfall''].
+      rewrite HFCases; [reflexivity | exact (Bool.andb_true_iff _ _ |>.2 (conj Hwf2' Hwfall'')) | exact Htl1 | lia | discriminate].
   - (* Exp_nil *)
     destruct fuel; [simpl in Hfuel; lia|].
     simpl pp_expr.
@@ -3369,7 +3746,7 @@ Proof.
     rewrite IHe2; [|exact Hwf2|lia|apply nis_cparen].
     rewrite strip_prefix_app.
     reflexivity.
-Admitted.
+Qed.
 
 Lemma pp_type_expr_not_brace : forall t,
   wf_type_expr t = true ->
@@ -3424,11 +3801,13 @@ Proof.
 Qed.
 
 Lemma parse_type_def_pp : forall td rest fuel,
-  wf_type_def td = true -> fuel >= 1 ->
+  wf_type_def td = true -> fuel >= type_def_size td ->
   non_ident_start rest ->
+  strip_prefix " of " rest = None ->
+  strip_prefix " | " rest = None ->
   parse_type_def fuel (pp_type_def td ++ rest) = Some (td, rest).
 Proof.
-  intros td rest fuel Hwf Hfuel Hni.
+  intros td rest fuel Hwf Hfuel Hni Hnof Hnpipe.
   destruct td.
   - (* Td_variant constrs *)
     simpl pp_type_def. simpl wf_type_def in Hwf.
@@ -3446,9 +3825,103 @@ Proof.
     assert (Hnb : Ascii.eqb "{"%char (Ascii.ascii_of_nat (nat_of_ascii cc)) = false).
     { destruct cc as [b0 b1 b2 b3 b4 b5 b6 b7]. unfold is_upper in Hu. simpl in Hu.
       destruct b0,b1,b2,b3,b4,b5,b6,b7; simpl in Hu; try discriminate; reflexivity. }
-    destruct ctype as [t|]; simpl; rewrite Hnb; rewrite Hu;
-    (* Now need to show parse_variant works *)
-    admit.
+    (* Prove parse_variant on the full constructor list *)
+    assert (HVar : forall constrs fuel0 rest0,
+      forallb (fun c =>
+        valid_constr_name (fst c) &&
+        match snd c with None => true | Some t => wf_type_expr t end) constrs = true ->
+      fuel0 >= length constrs ->
+      non_ident_start rest0 ->
+      strip_prefix " of " rest0 = None ->
+      strip_prefix " | " rest0 = None ->
+      constrs <> [] ->
+      parse_variant fuel0
+        (intercalate " | " (List.map (fun cd => match cd with
+          | (name, None) => name
+          | (name, Some t0) => name ++ " of " ++ pp_type_expr t0
+          end) constrs) ++ rest0) =
+      Some (constrs, rest0)).
+    { clear Hvc Hwct Hnb His Hall Hu Hic cc crest Hwfall' ctype Hlen Hfuel Hni rest fuel Hnof Hnpipe.
+      induction constrs as [|[cn ct] constrs' IHconstrs]; intros fuel0 rest0 Hwfall Hfuel0 Hni0 Hnof0 Hnpipe0 Hne.
+      - contradiction.
+      - simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hwf1' Hwfall'].
+        apply Bool.andb_true_iff in Hwf1'. destruct Hwf1' as [Hvc' Hwct'].
+        destruct fuel0; [lia|].
+        simpl List.map at 1.
+        destruct constrs' as [|[cn2 ct2] constrs''].
+        + (* Last constructor *)
+          destruct ct as [t0|].
+          * (* Some t0 *)
+            simpl intercalate. rewrite !append_assoc.
+            simpl parse_variant.
+            rewrite parse_ident_constr; [|exact Hvc'|apply nis_space].
+            rewrite strip_prefix_app. simpl.
+            rewrite parse_type_expr_pp; [|exact Hwct'|lia|exact Hni0].
+            rewrite Hnpipe0. reflexivity.
+          * (* None *)
+            simpl intercalate. simpl List.map.
+            simpl parse_variant.
+            rewrite parse_ident_constr; [|exact Hvc'|exact Hni0].
+            rewrite Hnof0. rewrite Hnpipe0. reflexivity.
+        + (* More constructors *)
+          destruct ct as [t0|].
+          * (* Some t0 *)
+            simpl intercalate at 1. rewrite !append_assoc.
+            simpl parse_variant.
+            rewrite parse_ident_constr; [|exact Hvc'|apply nis_space].
+            rewrite strip_prefix_app. simpl.
+            rewrite <- !append_assoc.
+            rewrite parse_type_expr_pp; [|exact Hwct'|lia|apply nis_space].
+            rewrite !append_assoc.
+            rewrite strip_prefix_app. simpl.
+            rewrite IHconstrs; [reflexivity|exact Hwfall'|simpl in Hfuel0; lia|exact Hni0|exact Hnof0|exact Hnpipe0|discriminate].
+          * (* None *)
+            simpl intercalate at 1. rewrite !append_assoc.
+            simpl parse_variant.
+            rewrite parse_ident_constr; [|exact Hvc'|apply nis_space].
+            (* strip_prefix " of " (" | " ++ ...) *)
+            simpl strip_prefix. simpl.
+            (* strip_prefix " | " matches *)
+            rewrite strip_prefix_app.
+            rewrite IHconstrs; [reflexivity|exact Hwfall'|simpl in Hfuel0; lia|exact Hni0|exact Hnof0|exact Hnpipe0|discriminate]. }
+    destruct ctype as [t|]; simpl; rewrite Hnb; rewrite Hu.
+    + (* Some t *)
+      simpl List.map.
+      destruct constrs' as [|[cn2 ct2] constrs''].
+      * (* Single typed constructor *)
+        simpl intercalate. rewrite !append_assoc.
+        simpl parse_variant.
+        rewrite parse_ident_constr; [|exact Hvc|apply nis_space].
+        rewrite strip_prefix_app. simpl.
+        rewrite parse_type_expr_pp; [|exact Hwct|lia|exact Hni].
+        rewrite Hnpipe. reflexivity.
+      * (* Typed constructor + more *)
+        simpl intercalate at 1. rewrite !append_assoc.
+        simpl parse_variant.
+        rewrite parse_ident_constr; [|exact Hvc|apply nis_space].
+        rewrite strip_prefix_app. simpl.
+        rewrite <- !append_assoc.
+        rewrite parse_type_expr_pp; [|exact Hwct|lia|apply nis_space].
+        rewrite !append_assoc.
+        rewrite strip_prefix_app. simpl.
+        rewrite HVar; [reflexivity|exact Hwfall'|simpl in Hfuel; lia|exact Hni|exact Hnof|exact Hnpipe|discriminate].
+    + (* None *)
+      simpl List.map.
+      destruct constrs' as [|[cn2 ct2] constrs''].
+      * (* Single untyped constructor *)
+        simpl intercalate.
+        simpl parse_variant.
+        rewrite parse_ident_constr; [|exact Hvc|exact Hni].
+        rewrite Hnof. rewrite Hnpipe. reflexivity.
+      * (* Untyped constructor + more *)
+        simpl intercalate at 1. rewrite !append_assoc.
+        simpl parse_variant.
+        rewrite parse_ident_constr; [|exact Hvc|apply nis_space].
+        (* strip_prefix " of " (" | " ++ ...) fails *)
+        simpl strip_prefix. simpl.
+        (* strip_prefix " | " matches *)
+        rewrite strip_prefix_app.
+        rewrite HVar; [reflexivity|exact Hwfall'|simpl in Hfuel; lia|exact Hni|exact Hnof|exact Hnpipe|discriminate].
   - (* Td_alias t *)
     simpl pp_type_def. simpl wf_type_def in Hwf.
     unfold parse_type_def.
@@ -3465,17 +3938,52 @@ Proof.
     unfold parse_type_def.
     simpl strip_prefix. rewrite strip_prefix_app.
     (* Now parse_td_record_fields fuel on the intercalated fields *)
-    admit.
-Admitted.
+    assert (HRec : forall flds rest0 fuel0,
+      forallb (fun f => valid_var_name (fst f) && wf_type_expr (snd f)) flds = true ->
+      fuel0 >= length flds ->
+      non_ident_start rest0 ->
+      flds <> [] ->
+      parse_td_record_fields fuel0
+        (intercalate "; " (List.map (fun f : ident * type_expr =>
+          fst f ++ " : " ++ pp_type_expr (snd f)) flds) ++ " }" ++ rest0) =
+      Some (flds, rest0)).
+    { induction flds as [|[fn ft] flds' IHflds]; intros rest0 fuel0 Hwfall' Hfuel0 Hni0 Hne.
+      - contradiction.
+      - destruct fuel0; [lia|].
+        simpl forallb in Hwfall'. apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hwf1' Hwfall''].
+        apply Bool.andb_true_iff in Hwf1'. destruct Hwf1' as [Hvn' Hwft'].
+        simpl List.map at 1.
+        destruct flds' as [|[fn2 ft2] flds''].
+        + (* Last field *)
+          simpl intercalate. simpl List.map. rewrite !append_assoc.
+          simpl parse_td_record_fields.
+          rewrite parse_ident_var; [|exact Hvn'|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite parse_type_expr_pp; [|exact Hwft'|lia|apply nis_space].
+          rewrite strip_prefix_app. reflexivity.
+        + (* More fields *)
+          simpl intercalate at 1. rewrite !append_assoc.
+          simpl parse_td_record_fields.
+          rewrite parse_ident_var; [|exact Hvn'|apply nis_space].
+          rewrite strip_prefix_app. simpl.
+          rewrite <- !append_assoc.
+          rewrite parse_type_expr_pp; [|exact Hwft'|lia|apply nis_semicol].
+          rewrite !append_assoc.
+          rewrite strip_prefix_app. simpl.
+          rewrite IHflds; [reflexivity|exact Hwfall''|simpl in Hfuel0; lia|exact Hni0|discriminate]. }
+    rewrite HRec; [reflexivity|exact Hwf|simpl in Hfuel; lia|exact Hni|].
+    destruct l; [simpl in Hwf; discriminate|discriminate].
+Qed.
 
 Lemma parse_decl_pp : forall d rest fuel,
   wf_decl d = true -> fuel >= 1 ->
   non_ident_start rest ->
+  strip_prefix " of " rest = None ->
   parse_decl fuel (pp_decl d ++ rest) = Some (d, rest).
 Proof.
-  intros d rest fuel Hwf Hfuel Hni.
+  intros d rest fuel Hwf Hfuel Hni Hnof.
   destruct fuel; [lia|].
-  destruct d; simpl in Hwf.
+  induction d; simpl in Hwf.
   - (* Decl_let x e *)
     apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hvv Hwe].
     simpl pp_decl. rewrite !append_assoc.
@@ -3493,8 +4001,81 @@ Proof.
     rewrite strip_prefix_app. simpl.
     rewrite parse_expr_pp; [reflexivity|exact Hwe|lia|exact Hni].
   - (* Decl_type name params td *)
-    (* This requires parse_type_params, parse_type_def_pp, etc. Complex. *)
-    admit.
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hwf' Hwftd].
+    apply Bool.andb_true_iff in Hwf'. destruct Hwf' as [Hvtn Hwfparams].
+    simpl pp_decl. rewrite !append_assoc.
+    simpl parse_decl.
+    rewrite strip_prefix_app. simpl.
+    (* parse_type_params on the params string *)
+    destruct l as [|p1 params'].
+    + (* No params *)
+      simpl. rewrite parse_ident_type; [|exact Hvtn|apply nis_space].
+      rewrite strip_prefix_app. simpl.
+      rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni].
+    + (* params *)
+      destruct params' as [|p2 params''].
+      * (* Single param 'p1 *)
+        simpl. rewrite !append_assoc.
+        simpl forallb in Hwfparams. apply Bool.andb_true_iff in Hwfparams. destruct Hwfparams as [Hvp1 _].
+        rewrite parse_ident_var; [|exact Hvp1|apply nis_space].
+        rewrite strip_prefix_app. simpl.
+        rewrite parse_ident_type; [|exact Hvtn|apply nis_space].
+        rewrite strip_prefix_app. simpl.
+        rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni].
+      * (* Multiple params ('p1, 'p2, ...) *)
+        simpl forallb in Hwfparams. apply Bool.andb_true_iff in Hwfparams. destruct Hwfparams as [Hvp1 Hwfparams'].
+        apply Bool.andb_true_iff in Hwfparams'. destruct Hwfparams' as [Hvp2 Hwfparams''].
+        simpl List.map at 1. simpl intercalate at 1. rewrite !append_assoc.
+        (* parse_type_params: strip_prefix "(" matches *)
+        simpl parse_type_params.
+        rewrite strip_prefix_app.
+        (* Now the inner parse_params loop *)
+        simpl strip_prefix at 1.
+        rewrite parse_ident_var; [|exact Hvp1|apply nis_comma_space].
+        rewrite strip_prefix_app.
+        (* parse_params loop for remaining params starting with p2 *)
+        assert (HParams : forall ps rest0 fuel0,
+          forallb valid_var_name ps = true ->
+          fuel0 >= length ps ->
+          ps <> [] ->
+          (fix parse_params (fuel1 : nat) (s0 : string) : option (list ident * string) :=
+            match fuel1 with O => None | S fuel1' =>
+              match strip_prefix "'" s0 with
+              | Some rest1 =>
+                match parse_ident rest1 with
+                | Some (p, rest2) =>
+                  match strip_prefix ", " rest2 with
+                  | Some rest3 => match parse_params fuel1' rest3 with
+                    | Some (ps', rest4) => Some (p :: ps', rest4) | None => None end
+                  | None => match strip_prefix ") " rest2 with
+                    | Some rest3 => Some ([p], rest3) | None => None end
+                  end
+                | None => None end
+              | None => None end end) fuel0
+            (intercalate ", " (List.map (fun p => "'" ++ p) ps) ++ ") " ++ rest0) =
+          Some (ps, rest0)).
+        { induction ps; intros rest0 fuel0 Hwfall Hfuel0 Hne.
+          - contradiction.
+          - simpl forallb in Hwfall. apply Bool.andb_true_iff in Hwfall. destruct Hwfall as [Hva Hwfall'].
+            destruct fuel0; [simpl in Hfuel0; lia|].
+            simpl List.map at 1.
+            destruct ps as [|p' ps'].
+            + simpl intercalate. simpl List.map. rewrite !append_assoc.
+              simpl strip_prefix. rewrite strip_prefix_app.
+              rewrite parse_ident_var; [|exact Hva|apply nis_cparen].
+              simpl strip_prefix at 1. rewrite strip_prefix_app. reflexivity.
+            + simpl intercalate at 1. rewrite !append_assoc.
+              simpl strip_prefix. rewrite strip_prefix_app.
+              rewrite <- !append_assoc.
+              rewrite parse_ident_var; [|exact Hva|apply nis_comma_space].
+              rewrite !append_assoc.
+              rewrite strip_prefix_app.
+              simpl forallb in Hwfall'. apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hva' Hwfall''].
+              rewrite IHps; [reflexivity|exact (Bool.andb_true_iff _ _ |>.2 (conj Hva' Hwfall''))|simpl in Hfuel0; lia|discriminate]. }
+        rewrite HParams; [|exact (Bool.andb_true_iff _ _ |>.2 (conj Hvp2 Hwfparams''))|lia|discriminate].
+        rewrite parse_ident_type; [|exact Hvtn|apply nis_space].
+        rewrite strip_prefix_app. simpl.
+        rewrite parse_type_def_pp; [reflexivity|exact Hwftd|lia|exact Hni].
   - (* Decl_expr e *)
     simpl pp_decl.
     simpl parse_decl.
@@ -3584,8 +4165,61 @@ Proof.
     rewrite Hex.
     rewrite <- Eppe.
     rewrite parse_expr_pp; [reflexivity|exact Hwf|lia|exact Hni].
-  - (* Decl_module *)
-    admit.
+  - (* Decl_module name decls *)
+    apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hvc Hwfall].
+    simpl pp_decl. rewrite !append_assoc.
+    simpl parse_decl. fold parse_decl.
+    rewrite strip_prefix_app. simpl.
+    rewrite parse_ident_constr; [|exact Hvc|apply nis_space].
+    rewrite strip_prefix_app. simpl.
+    (* Now with induction d, we have IH H for inner declarations *)
+    assert (HMod : forall ds rest0 n,
+      forallb wf_decl ds = true ->
+      Forall (fun d => forall rest1 fuel1,
+        wf_decl d = true -> fuel1 >= 1 ->
+        non_ident_start rest1 ->
+        strip_prefix " of " rest1 = None ->
+        parse_decl fuel1 (pp_decl d ++ rest1) = Some (d, rest1)) ds ->
+      n >= length ds -> ds <> [] ->
+      (fix parse_module_decls (n0 : nat) (s0 : string) :
+        option (list decl * string) :=
+        match n0 with O => None | S n' =>
+          match parse_decl (S fuel) s0 with
+          | Some (d0, rest3) =>
+            match strip_prefix ";;" rest3 with
+            | Some rest4 =>
+              match strip_prefix newline_str rest4 with
+              | Some rest5 => match parse_module_decls n' rest5 with
+                | Some (ds', rest6) => Some (d0 :: ds', rest6) | None => None end
+              | None => match strip_prefix " end" rest4 with
+                | Some rest5 => Some ([d0], rest5) | None => None end
+              end
+            | None => None end
+          | None => None end end) n
+        (intercalate newline_str (List.map (fun d0 => pp_decl d0 ++ ";;") ds) ++ " end" ++ rest0) =
+      Some (ds, rest0)).
+    { induction ds as [|d0 ds' IHds]; intros rest0 n0 Hwfall' HFA Hn0 Hne.
+      - contradiction.
+      - inversion HFA as [|? ? Hd0 Htl']; subst. clear HFA.
+        simpl forallb in Hwfall'. apply Bool.andb_true_iff in Hwfall'. destruct Hwfall' as [Hwd0 Hwfall0].
+        destruct n0; [lia|].
+        simpl List.map at 1.
+        destruct ds' as [|d1 ds''].
+        + (* Last declaration *)
+          simpl intercalate. simpl List.map. rewrite !append_assoc.
+          rewrite Hd0; [| exact Hwd0 | lia | apply nis_semicol | reflexivity].
+          rewrite strip_prefix_app. simpl. rewrite strip_prefix_app. reflexivity.
+        + (* More declarations *)
+          simpl intercalate at 1. rewrite !append_assoc.
+          rewrite <- !append_assoc at 1.
+          rewrite Hd0; [| exact Hwd0 | lia | apply nis_semicol | reflexivity].
+          rewrite !append_assoc. rewrite strip_prefix_app. simpl.
+          rewrite strip_prefix_app.
+          inversion Htl' as [|? ? Hd1 Htl'']; subst.
+          simpl forallb in Hwfall0. apply Bool.andb_true_iff in Hwfall0. destruct Hwfall0 as [Hwd1 Hwfall1].
+          rewrite IHds; [reflexivity | exact (Bool.andb_true_iff _ _ |>.2 (conj Hwd1 Hwfall1)) | exact (Forall_cons _ Hd1 Htl'') | simpl in Hn0; lia | discriminate]. }
+    rewrite HMod; [reflexivity | exact Hwfall | exact H | lia |].
+    destruct l; [simpl in Hwfall; discriminate|discriminate].
   - (* Decl_open name *)
     simpl pp_decl. rewrite !append_assoc.
     simpl parse_decl.
@@ -3613,54 +4247,8 @@ Proof.
       (* Actually, after parse_ident_constr, we get (name, rest). Then parse_decl checks strip_prefix " of " rest. *)
       (* If rest is non_ident_start, it could start with space... We need more info *)
       (* Actually, looking at parse_decl for exception: if strip_prefix " of " fails, it returns (Decl_exception name None, rest') *)
-      simpl.
-      destruct (strip_prefix " of " rest) eqn:Hof.
-      * (* strip_prefix " of " rest = Some s *)
-        (* This can happen if rest starts with " of ". But in the None case,
-           pp_decl produces "exception Name" ++ rest, and we need the parse to return
-           Decl_exception name None. But if rest has " of " prefix, parse_decl will
-           try to parse a type expr after " of ", which would be wrong.
-
-           Actually, looking more carefully: parse_decl already returned (name, rest').
-           The check is strip_prefix " of " rest'. In our case rest' = rest (the outer rest).
-           If strip_prefix " of " rest succeeds, parse_decl would try to parse a type
-           and might fail or succeed incorrectly.
-
-           But this is a problem only if rest can start with " of ". For the overall
-           roundtrip, rest in the actual usage is ";;" ++ ... which doesn't start with
-           " of ". The non_ident_start condition should help here.
-
-           Actually, non_ident_start means rest = "" or starts with non-ident-char.
-           " of " starts with space which is non-ident. So non_ident_start doesn't
-           prevent " of " prefix.
-
-           We need: strip_prefix " of " rest doesn't start a valid type parse.
-           Actually in the overall program, rest is always ";;" or newline etc.
-
-           The real issue: this lemma is too general. It should work for any rest
-           that is non_ident_start, but if rest starts with " of int;;" then
-           parse_decl would parse "exception Name of int" which is wrong.
-
-           This means the lemma as stated might not be provable for the None case
-           with arbitrary non_ident_start rest.
-
-           Wait -- let me re-read the spec. pp_decl (Decl_exception name None) = "exception " ++ name.
-           Then pp_decl d ++ rest = "exception " ++ name ++ rest.
-           parse_decl sees "exception ", parses name, then checks " of ".
-           If rest starts with " of ...", the parse would incorrectly try to parse a type.
-
-           So the non_ident_start condition IS important here: we need rest to not
-           start with " of ". But non_ident_start allows starting with space.
-
-           This is a genuine issue -- the lemma needs a stronger condition on rest,
-           or we need to be more careful. In the actual usage (from parse_program_pp),
-           rest is always ";;" which starts with ";", a non-ident char.
-
-           For now, let me admit this case. *)
-        admit.
-      * (* strip_prefix " of " rest = None *)
-        reflexivity.
-Admitted.
+      simpl. rewrite Hnof. reflexivity.
+Qed.
 
 (* ================================================================ *)
 (* Program-level helpers                                            *)
@@ -3695,6 +4283,9 @@ Proof. intros. destruct fuel; simpl; reflexivity. Qed.
 Lemma semicol_nis_nl : forall s, non_ident_start (";;" ++ s).
 Proof. intro. apply nis_cons. exact semicol_nic. Qed.
 
+Lemma semicol_no_of : forall s, strip_prefix " of " (";;" ++ s) = None.
+Proof. reflexivity. Qed.
+
 Lemma parse_program_pp : forall prog fuel dfuel,
   wf_program prog = true -> fuel >= length prog -> dfuel >= 1 ->
   parse_program_aux fuel dfuel (pp_program prog) = Some (prog, "").
@@ -3710,13 +4301,13 @@ Proof.
       rewrite pp_program_singleton.
       simpl parse_program_aux.
       rewrite append_assoc.
-      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel | apply nis_semicol].
+      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel | apply nis_semicol | apply semicol_no_of].
       simpl. reflexivity.
     + (* d :: d2 :: rest' *)
       rewrite pp_program_cons.
       simpl parse_program_aux.
       rewrite !append_assoc.
-      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel |].
+      rewrite parse_decl_pp; [| exact Hwd | exact Hdfuel | | apply semicol_no_of].
       2: {
         (* non_ident_start (";;" ++ newline_str_local ++ pp_program (d2 :: rest')) *)
         apply nis_semicol.
