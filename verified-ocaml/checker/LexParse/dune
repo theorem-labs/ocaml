@@ -1,6 +1,0 @@
-(coq.theory
- (name OCamlInterp.Checker.LexParse)
- (theories Stdlib
-  OCamlInterp.Manual
-  OCamlInterp.SemiAutomatic
-  OCamlInterp.Automatic))
