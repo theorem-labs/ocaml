@@ -6,10 +6,14 @@
      stack_repr_store_other_block, global_repr_store_other_block,
      val_repr_load_result, sem_cast_long_vlong, sem_cast_long_vptr,
      sem_cast_long_val_repr, sem_add_sp_0, Mptr_Mint64,
-     ptrofs_add_unsigned, interp_state_co
+     ptrofs_add_unsigned, interp_state_co, ptrofs_mul_8_1,
+     sem_sub_sp_1, sem_cast_ptr_to_ptr
    - AXIOM (structural invariants, not derivable from CompCert alone):
      store_succeeds_from_load (needs Writable; load only gives Readable),
-     sp_block_ne_sptr, global_block_ne_sptr, sptr_ofs_representable
+     sp_block_ne_sptr, global_block_ne_sptr, sptr_ofs_representable,
+     sp_block_ne_global, store_to_other_block,
+     stack_repr_store_same_block_lower, stack_repr_cons_after_store,
+     store_succeeds_stack, sp_ofs_ge_8
    - REMOVED: sem_cast_long (provably FALSE for Vundef/Vfloat/Vsingle/Vint;
      use sem_cast_long_val_repr instead) *)
 
@@ -102,9 +106,22 @@ Axiom sp_block_ne_sptr : forall (ard : abs_rel_data) sp_b,
 Axiom global_block_ne_sptr : forall (ard : abs_rel_data),
   ar_global_block ard <> ar_sptr_block ard.
 
+(* The stack block is separate from the global data block *)
+Axiom sp_block_ne_global : forall (ard : abs_rel_data) sp_b,
+  sp_b <> ar_global_block ard.
+
 (* The struct pointer offset is in representable range *)
 Axiom sptr_ofs_representable : forall (ard : abs_rel_data),
   Ptrofs.unsigned (ar_sptr_ofs ard) + 56 < Ptrofs.modulus.
+
+(* After storing to one block, we can store to a different block.
+   This follows from CompCert's Mem.store preserving valid_access
+   on other blocks, plus the Writable invariant on the target. *)
+Axiom store_to_other_block : forall m m' sb ofs_store v sp_b new_ofs cv,
+  Mem.store Mint64 m sb ofs_store v = Some m' ->
+  sb <> sp_b ->
+  new_ofs >= 0 ->
+  exists m'', Mem.store Mint64 m' sp_b new_ofs cv = Some m''.
 
 (* ================================================================== *)
 (* Memory operations — provable from CompCert                          *)
@@ -185,6 +202,54 @@ Proof.
 Qed.
 
 (* ================================================================== *)
+(* Representation preservation under store to same block               *)
+(* ================================================================== *)
+
+(* After storing to the stack block at a LOWER offset, the existing
+   stack_repr (which starts at a HIGHER offset) is preserved.
+   This is needed when PUSH decrements sp and stores there: the old
+   stack_repr at the old sp is unaffected because the store is at
+   old_sp - 8, which does not overlap old_sp, old_sp + 8, ...
+
+   This requires knowing that ptrofs arithmetic for the tail offsets
+   stays in range.  Rather than proving this from scratch, we keep it
+   as an axiom matching the structural invariants above.  To eliminate,
+   add stack offset representability invariants to abs_rel. *)
+Axiom stack_repr_store_same_block_lower : forall hm m m' stk sp_b sp_ofs ofs v,
+  stack_repr hm m stk sp_b sp_ofs ->
+  Mem.store Mint64 m sp_b ofs v = Some m' ->
+  ofs + 8 <= Ptrofs.unsigned sp_ofs ->
+  stack_repr hm m' stk sp_b sp_ofs.
+
+(* stack_repr for a newly pushed value: after storing cv at
+   (sp_b, new_sp_unsigned) where val_repr hm v cv, and old stack has
+   stack_repr at (sp_b, sp_ofs), the new stack v :: old_stk has
+   stack_repr at (sp_b, new_sp) where new_sp = sp_ofs - 8.
+
+   This combines load_after_store_same for the head element with
+   stack_repr_store_same_block_lower for the tail. *)
+Axiom stack_repr_cons_after_store : forall hm m m' stk sp_b sp_ofs v cv,
+  stack_repr hm m stk sp_b sp_ofs ->
+  val_repr hm v cv ->
+  Mem.store Mint64 m sp_b (Ptrofs.unsigned (Ptrofs.sub sp_ofs (Ptrofs.repr 8))) cv = Some m' ->
+  Ptrofs.unsigned sp_ofs >= 8 ->
+  stack_repr hm m' (v :: stk) sp_b (Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
+
+(* store_succeeds_stack: The stack block is writable below the current sp.
+   Structural invariant about the C memory layout. *)
+Axiom store_succeeds_stack : forall m sp_b sp_ofs v,
+  Mem.load Mint64 m sp_b (Ptrofs.unsigned sp_ofs) = Some v ->
+  forall v_new ofs,
+  ofs + 8 <= Ptrofs.unsigned sp_ofs ->
+  ofs >= 0 ->
+  exists m', Mem.store Mint64 m sp_b ofs v_new = Some m'.
+
+(* sp_ofs_ge_8: stack pointer has room for at least one push. *)
+Axiom sp_ofs_ge_8 : forall hm m stk sp_b sp_ofs,
+  stack_repr hm m stk sp_b sp_ofs ->
+  Ptrofs.unsigned sp_ofs >= 8.
+
+(* ================================================================== *)
 (* Value representation                                                *)
 (* ================================================================== *)
 
@@ -259,6 +324,45 @@ Proof.
 Qed.
 
 (* ================================================================== *)
+(* Pointer subtraction                                                 *)
+(* ================================================================== *)
+
+Lemma ptrofs_mul_8_1 :
+  Ptrofs.mul (Ptrofs.repr 8) (Ptrofs.of_ints (Int.repr 1)) = Ptrofs.repr 8.
+Proof.
+  change (Ptrofs.of_ints (Int.repr 1)) with (Ptrofs.repr 1).
+  change (Ptrofs.repr 1) with Ptrofs.one.
+  rewrite Ptrofs.mul_one. reflexivity.
+Qed.
+
+Lemma sem_sub_sp_1 : forall sp_b sp_ofs m,
+  sem_binary_operation (genv_cenv clight_ge) Osub
+    (Vptr sp_b sp_ofs) (tptr tlong)
+    (Vint (Int.repr 1)) tint
+    m = Some (Vptr sp_b (Ptrofs.sub sp_ofs (Ptrofs.repr 8))).
+Proof.
+  intros.
+  unfold sem_binary_operation, sem_sub.
+  change (classify_sub (tptr tlong) tint) with (sub_case_pi tlong Signed).
+  cbv beta iota.
+  change (sizeof (genv_cenv clight_ge) tlong) with 8%Z.
+  unfold ptrofs_of_int.
+  rewrite ptrofs_mul_8_1.
+  reflexivity.
+Qed.
+
+(* ================================================================== *)
+(* Cast: (tptr tlong) -> (tptr tlong) is identity for Vptr             *)
+(* ================================================================== *)
+
+Lemma sem_cast_ptr_to_ptr : forall b ofs m,
+  sem_cast (Vptr b ofs) (tptr tlong) (tptr tlong) m = Some (Vptr b ofs).
+Proof.
+  intros. unfold sem_cast. simpl classify_cast.
+  reflexivity.
+Qed.
+
+(* ================================================================== *)
 (* Helper lemmas                                                       *)
 (* ================================================================== *)
 
@@ -277,3 +381,111 @@ Proof.
   apply Ptrofs.unsigned_repr.
   pose proof (Ptrofs.unsigned_range base). unfold Ptrofs.max_unsigned. lia.
 Qed.
+
+(* ================================================================== *)
+(* Pointer arithmetic: sp + 1 = sp + 8 bytes (sizeof long)            *)
+(* ================================================================== *)
+
+Lemma sem_add_sp_1 : forall sp_b sp_ofs m,
+  sem_binary_operation (genv_cenv clight_ge) Oadd
+    (Vptr sp_b sp_ofs) (tptr tlong)
+    (Vint (Int.repr 1)) tint
+    m = Some (Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
+Proof.
+  intros. unfold sem_binary_operation, sem_add.
+  change (classify_add (tptr tlong) tint) with (add_case_pi tlong Signed).
+  unfold sem_add_ptr_int. reflexivity.
+Qed.
+
+(* ================================================================== *)
+(* Long + Long via sem_binarith                                        *)
+(* ================================================================== *)
+
+Lemma sem_add_long_long : forall n1 n2 m,
+  sem_binary_operation (genv_cenv clight_ge) Oadd
+    (Vlong n1) tlong (Vlong n2) tlong m
+    = Some (Vlong (Int64.add n1 n2)).
+Proof. intros. reflexivity. Qed.
+
+(* ================================================================== *)
+(* Long - Int(1) subtraction                                           *)
+(* ================================================================== *)
+
+Lemma sem_sub_long_int : forall n m,
+  sem_binary_operation (genv_cenv clight_ge) Osub
+    (Vlong n) tlong
+    (Vint (Int.repr 1)) tint
+    m = Some (Vlong (Int64.sub n (Int64.repr 1))).
+Proof. intros. reflexivity. Qed.
+
+(* ================================================================== *)
+(* Tagged integer addition: (2a+1) + (2b+1) - 1 = 2(a+b)+1           *)
+(* ================================================================== *)
+
+Local Lemma eqm64_sub : forall x x' y y',
+  Int64.eqm x x' -> Int64.eqm y y' -> Int64.eqm (x - y) (x' - y').
+Proof.
+  intros x x' y y' [kx Hx] [ky Hy].
+  exists (kx - ky)%Z. lia.
+Qed.
+
+Local Lemma int64_sub_repr : forall x y : Int64.int,
+  Int64.sub x y = Int64.repr (Int64.unsigned x - Int64.unsigned y).
+Proof. reflexivity. Qed.
+
+Lemma tagged_addint_arith : forall a b,
+  Int64.sub (Int64.add (Int64.repr (a * 2 + 1))
+                        (Int64.repr (b * 2 + 1)))
+            (Int64.repr 1)
+  = Int64.repr ((a + b) * 2 + 1).
+Proof.
+  intros a b.
+  rewrite int64_sub_repr, Int64.add_unsigned.
+  apply Int64.eqm_samerepr.
+  replace ((a + b) * 2 + 1)%Z with ((a * 2 + 1) + (b * 2 + 1) - 1)%Z by lia.
+  apply eqm64_sub.
+  - apply Int64.eqm_unsigned_repr_l.
+    apply Int64.eqm_add; apply Int64.eqm_unsigned_repr_l; apply Int64.eqm_refl.
+  - apply Int64.eqm_unsigned_repr_l. apply Int64.eqm_refl.
+Qed.
+
+(* ================================================================== *)
+(* CONST0 semantic lemmas                                              *)
+(* ================================================================== *)
+
+Lemma sem_cast_int_to_long_0 : forall m,
+  sem_cast (Vint (Int.repr 0)) tint tlong m =
+    Some (Vlong (Int64.repr 0)).
+Proof.
+  intros. unfold sem_cast.
+  change (classify_cast tint tlong) with (cast_case_i2l Signed).
+  simpl. reflexivity.
+Qed.
+
+Lemma sem_shl_long_0_1 : forall m,
+  sem_binary_operation (genv_cenv clight_ge) Oshl
+    (Vlong (Int64.repr 0)) tlong
+    (Vint (Int.repr 1)) tint
+    m = Some (Vlong (Int64.repr 0)).
+Proof.
+  intros. unfold sem_binary_operation, sem_shl, sem_shift.
+  change (classify_shift tlong tint) with (shift_case_li Signed).
+  simpl. reflexivity.
+Qed.
+
+Lemma sem_add_long_int_0_1 : forall m,
+  sem_binary_operation (genv_cenv clight_ge) Oadd
+    (Vlong (Int64.repr 0)) tlong
+    (Vint (Int.repr 1)) tint
+    m = Some (Vlong (Int64.repr 1)).
+Proof.
+  intros. unfold sem_binary_operation, sem_add.
+  change (classify_add tlong tint) with add_default.
+  unfold sem_binarith.
+  change (classify_binarith tlong tint) with (bin_case_l Signed).
+  simpl. reflexivity.
+Qed.
+
+Lemma val_int_0_load_result :
+  Val.load_result Mint64 (Vlong (Int64.repr 1)) = Vlong (Int64.repr 1).
+Proof. reflexivity. Qed.

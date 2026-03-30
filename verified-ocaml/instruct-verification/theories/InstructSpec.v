@@ -212,6 +212,34 @@ Definition abs_rel_pre (e : Clight.env) (le : temp_env) (m : mem)
     trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)).
 
 (* ================================================================== *)
+(* Uniform completeness statement                                      *)
+(* ================================================================== *)
+
+(* handler_correct: uniform correctness statement for instruction handlers.
+   Takes a handler function and a Clight function, quantifies over all
+   C environments and abstract machine states internally.
+   The Step case is always the same: abs_rel on the pre-state implies the
+   C body executes and abs_rel holds on the post-state.
+   The Error / Halt / CCall_request cases are per-handler predicates. *)
+Definition handler_correct
+    (handler : Z -> state -> step_result)
+    (f : function)
+    (P_error : string -> state -> Prop)
+    (P_halt : value -> Prop)
+    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
+  forall e le m s,
+    match handler s.(pc) s with
+    | Step s' =>
+        abs_rel e le m s ->
+        exists le' m' out,
+          exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m' out /\
+          abs_rel e le' m' s'
+    | Error msg => P_error msg s
+    | Halt v => P_halt v
+    | CCall_request nargs args s' => P_ccall nargs args s'
+    end.
+
+(* ================================================================== *)
 (* Module Type: per-instruction correctness obligations                *)
 (* ================================================================== *)
 
@@ -219,503 +247,351 @@ Module Type InstructSpec.
 
   (* --- Stack (ACC family) --- *)
 
-  Axiom verify_ACC0 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC0.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 0 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC0 :
+    handler_correct (handle_ACC 0) f_instr_ACC0
+      (fun _ s => s.(Machine.stack) = nil)
+      (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC1 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC1.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 1 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC1 :
+    handler_correct (handle_ACC 1) f_instr_ACC1
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC2 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC2.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 2 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC2 :
+    handler_correct (handle_ACC 2) f_instr_ACC2
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC3 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC3.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 3 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC3 :
+    handler_correct (handle_ACC 3) f_instr_ACC3
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC4 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC4.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 4 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC4 :
+    handler_correct (handle_ACC 4) f_instr_ACC4
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC5 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC5.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 5 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC5 :
+    handler_correct (handle_ACC 5) f_instr_ACC5
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC6 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC6.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 6 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC6 :
+    handler_correct (handle_ACC 6) f_instr_ACC6
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC7 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC7.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC 7 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC7 :
+    handler_correct (handle_ACC 7) f_instr_ACC7
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ACC : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ACC.(fn_body) E0 le' m' out ->
-    exists s', handle_ACC n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ACC : forall n,
+    handler_correct (handle_ACC n) f_instr_ACC
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Stack (PUSH / PUSHACC family) --- *)
 
-  Axiom verify_PUSH : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSH.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSH (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSH :
+    handler_correct handle_PUSH f_instr_PUSH
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHACC1 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHACC1.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHACC 1 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHACC1 :
+    handler_correct (handle_PUSHACC 1) f_instr_PUSHACC1
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHACC2 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHACC2.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHACC 2 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHACC2 :
+    handler_correct (handle_PUSHACC 2) f_instr_PUSHACC2
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHACC3 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHACC3.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHACC 3 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHACC3 :
+    handler_correct (handle_PUSHACC 3) f_instr_PUSHACC3
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHACC4 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHACC4.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHACC 4 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHACC4 :
+    handler_correct (handle_PUSHACC 4) f_instr_PUSHACC4
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHACC5 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHACC5.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHACC 5 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHACC5 :
+    handler_correct (handle_PUSHACC 5) f_instr_PUSHACC5
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHACC6 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHACC6.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHACC 6 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHACC6 :
+    handler_correct (handle_PUSHACC 6) f_instr_PUSHACC6
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHACC7 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHACC7.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHACC 7 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHACC7 :
+    handler_correct (handle_PUSHACC 7) f_instr_PUSHACC7
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_POP : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_POP.(fn_body) E0 le' m' out ->
-    exists s', handle_POP n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_POP : forall n,
+    handler_correct (handle_POP n) f_instr_POP
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ASSIGN : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ASSIGN.(fn_body) E0 le' m' out ->
-    exists s', handle_ASSIGN n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ASSIGN : forall n,
+    handler_correct (handle_ASSIGN n) f_instr_ASSIGN
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Constants --- *)
 
-  Axiom verify_CONST0 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_CONST0.(fn_body) E0 le' m' out ->
-    exists s', handle_CONSTINT 0 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_CONST0 :
+    handler_correct (handle_CONSTINT 0) f_instr_CONST0
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_CONST1 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_CONST1.(fn_body) E0 le' m' out ->
-    exists s', handle_CONSTINT 1 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_CONST1 :
+    handler_correct (handle_CONSTINT 1) f_instr_CONST1
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_CONST2 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_CONST2.(fn_body) E0 le' m' out ->
-    exists s', handle_CONSTINT 2 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_CONST2 :
+    handler_correct (handle_CONSTINT 2) f_instr_CONST2
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_CONST3 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_CONST3.(fn_body) E0 le' m' out ->
-    exists s', handle_CONSTINT 3 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_CONST3 :
+    handler_correct (handle_CONSTINT 3) f_instr_CONST3
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_CONSTINT : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_CONSTINT.(fn_body) E0 le' m' out ->
-    exists s', handle_CONSTINT n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_CONSTINT : forall n,
+    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHCONST0 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHCONST0.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHCONSTINT 0 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHCONST0 :
+    handler_correct (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHCONST1 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHCONST1.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHCONSTINT 1 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHCONST1 :
+    handler_correct (handle_PUSHCONSTINT 1) f_instr_PUSHCONST1
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHCONST2 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHCONST2.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHCONSTINT 2 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHCONST2 :
+    handler_correct (handle_PUSHCONSTINT 2) f_instr_PUSHCONST2
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHCONST3 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHCONST3.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHCONSTINT 3 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHCONST3 :
+    handler_correct (handle_PUSHCONSTINT 3) f_instr_PUSHCONST3
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHCONSTINT : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHCONSTINT.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHCONSTINT n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHCONSTINT : forall n,
+    handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Arithmetic (binary) --- *)
 
-  Axiom verify_ADDINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ADDINT.(fn_body) E0 le' m' out ->
-    exists s', handle_ADDINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ADDINT :
+    handler_correct handle_ADDINT f_instr_ADDINT
+      (fun _ s => forall a b rest,
+         s.(Machine.accu) = Val_int a ->
+         s.(Machine.stack) = Val_int b :: rest -> False)
+      (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SUBINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SUBINT.(fn_body) E0 le' m' out ->
-    exists s', handle_SUBINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SUBINT :
+    handler_correct handle_SUBINT f_instr_SUBINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_MULINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_MULINT.(fn_body) E0 le' m' out ->
-    exists s', handle_MULINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_MULINT :
+    handler_correct handle_MULINT f_instr_MULINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_DIVINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_DIVINT.(fn_body) E0 le' m' out ->
-    exists s', handle_DIVINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_DIVINT :
+    handler_correct handle_DIVINT f_instr_DIVINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_MODINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_MODINT.(fn_body) E0 le' m' out ->
-    exists s', handle_MODINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_MODINT :
+    handler_correct handle_MODINT f_instr_MODINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ANDINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ANDINT.(fn_body) E0 le' m' out ->
-    exists s', handle_ANDINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ANDINT :
+    handler_correct handle_ANDINT f_instr_ANDINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ORINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ORINT.(fn_body) E0 le' m' out ->
-    exists s', handle_ORINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ORINT :
+    handler_correct handle_ORINT f_instr_ORINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_XORINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_XORINT.(fn_body) E0 le' m' out ->
-    exists s', handle_XORINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_XORINT :
+    handler_correct handle_XORINT f_instr_XORINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_LSLINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_LSLINT.(fn_body) E0 le' m' out ->
-    exists s', handle_LSLINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_LSLINT :
+    handler_correct handle_LSLINT f_instr_LSLINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_LSRINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_LSRINT.(fn_body) E0 le' m' out ->
-    exists s', handle_LSRINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_LSRINT :
+    handler_correct handle_LSRINT f_instr_LSRINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ASRINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ASRINT.(fn_body) E0 le' m' out ->
-    exists s', handle_ASRINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ASRINT :
+    handler_correct handle_ASRINT f_instr_ASRINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Arithmetic (unary) --- *)
 
-  Axiom verify_NEGINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_NEGINT.(fn_body) E0 le' m' out ->
-    exists s', handle_NEGINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_NEGINT :
+    handler_correct handle_NEGINT f_instr_NEGINT
+      (fun _ s => forall n, s.(Machine.accu) <> Val_int n)
+      (fun _ => False) (fun _ _ _ => False).
 
   (* --- Comparisons --- *)
 
-  Axiom verify_EQ : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_EQ.(fn_body) E0 le' m' out ->
-    exists s', handle_EQ (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_EQ :
+    handler_correct handle_EQ f_instr_EQ
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_NEQ : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_NEQ.(fn_body) E0 le' m' out ->
-    exists s', handle_NEQ (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_NEQ :
+    handler_correct handle_NEQ f_instr_NEQ
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_LTINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_LTINT.(fn_body) E0 le' m' out ->
-    exists s', handle_LTINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_LTINT :
+    handler_correct handle_LTINT f_instr_LTINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_LEINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_LEINT.(fn_body) E0 le' m' out ->
-    exists s', handle_LEINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_LEINT :
+    handler_correct handle_LEINT f_instr_LEINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_GTINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GTINT.(fn_body) E0 le' m' out ->
-    exists s', handle_GTINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GTINT :
+    handler_correct handle_GTINT f_instr_GTINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_GEINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GEINT.(fn_body) E0 le' m' out ->
-    exists s', handle_GEINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GEINT :
+    handler_correct handle_GEINT f_instr_GEINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ULTINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ULTINT.(fn_body) E0 le' m' out ->
-    exists s', handle_ULTINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ULTINT :
+    handler_correct handle_ULTINT f_instr_ULTINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_UGEINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_UGEINT.(fn_body) E0 le' m' out ->
-    exists s', handle_UGEINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_UGEINT :
+    handler_correct handle_UGEINT f_instr_UGEINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Boolean / misc --- *)
 
-  Axiom verify_BOOLNOT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_BOOLNOT.(fn_body) E0 le' m' out ->
-    exists s', handle_BOOLNOT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_BOOLNOT :
+    handler_correct handle_BOOLNOT f_instr_BOOLNOT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_ISINT : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ISINT.(fn_body) E0 le' m' out ->
-    exists s', handle_ISINT (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ISINT :
+    handler_correct handle_ISINT f_instr_ISINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_OFFSETINT : forall e le m le' m' out s ofs,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_OFFSETINT.(fn_body) E0 le' m' out ->
-    exists s', handle_OFFSETINT ofs (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_OFFSETINT : forall ofs,
+    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_OFFSETREF : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_OFFSETREF.(fn_body) E0 le' m' out ->
-    exists s', handle_OFFSETREF n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_OFFSETREF : forall n,
+    handler_correct (handle_OFFSETREF n) f_instr_OFFSETREF
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Branches --- *)
 
-  Axiom verify_BRANCH : forall e le m le' m' out s target,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_BRANCH.(fn_body) E0 le' m' out ->
-    exists s', handle_BRANCH target s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_BRANCH : forall target,
+    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_BRANCHIF : forall e le m le' m' out s target,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_BRANCHIF.(fn_body) E0 le' m' out ->
-    exists s', handle_BRANCHIF target (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_BRANCHIF : forall target,
+    handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_BRANCHIFNOT : forall e le m le' m' out s target,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_BRANCHIFNOT.(fn_body) E0 le' m' out ->
-    exists s', handle_BRANCHIFNOT target (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_BRANCHIFNOT : forall target,
+    handler_correct (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Blocks --- *)
 
-  Axiom verify_ATOM : forall e le m le' m' out s t,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_ATOM.(fn_body) E0 le' m' out ->
-    exists s', handle_ATOM t (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_ATOM : forall t,
+    handler_correct (handle_ATOM t) f_instr_ATOM
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHATOM : forall e le m le' m' out s t,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHATOM.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHATOM t (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHATOM : forall t,
+    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_MAKEBLOCK1 : forall e le m le' m' out s t,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_MAKEBLOCK1.(fn_body) E0 le' m' out ->
-    exists s', handle_MAKEBLOCK1 t (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_MAKEBLOCK1 : forall t,
+    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_MAKEBLOCK2 : forall e le m le' m' out s t,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_MAKEBLOCK2.(fn_body) E0 le' m' out ->
-    exists s', handle_MAKEBLOCK2 t (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_MAKEBLOCK2 : forall t,
+    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_MAKEBLOCK3 : forall e le m le' m' out s t,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_MAKEBLOCK3.(fn_body) E0 le' m' out ->
-    exists s', handle_MAKEBLOCK3 t (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_MAKEBLOCK3 : forall t,
+    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Fields --- *)
 
-  Axiom verify_GETFIELD0 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GETFIELD0.(fn_body) E0 le' m' out ->
-    exists s', handle_GETFIELD 0 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GETFIELD0 :
+    handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD1 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GETFIELD1.(fn_body) E0 le' m' out ->
-    exists s', handle_GETFIELD 1 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GETFIELD1 :
+    handler_correct (handle_GETFIELD 1) f_instr_GETFIELD1
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD2 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GETFIELD2.(fn_body) E0 le' m' out ->
-    exists s', handle_GETFIELD 2 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GETFIELD2 :
+    handler_correct (handle_GETFIELD 2) f_instr_GETFIELD2
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD3 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GETFIELD3.(fn_body) E0 le' m' out ->
-    exists s', handle_GETFIELD 3 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GETFIELD3 :
+    handler_correct (handle_GETFIELD 3) f_instr_GETFIELD3
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GETFIELD.(fn_body) E0 le' m' out ->
-    exists s', handle_GETFIELD n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GETFIELD : forall n,
+    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD0 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SETFIELD0.(fn_body) E0 le' m' out ->
-    exists s', handle_SETFIELD 0 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SETFIELD0 :
+    handler_correct (handle_SETFIELD 0) f_instr_SETFIELD0
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD1 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SETFIELD1.(fn_body) E0 le' m' out ->
-    exists s', handle_SETFIELD 1 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SETFIELD1 :
+    handler_correct (handle_SETFIELD 1) f_instr_SETFIELD1
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD2 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SETFIELD2.(fn_body) E0 le' m' out ->
-    exists s', handle_SETFIELD 2 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SETFIELD2 :
+    handler_correct (handle_SETFIELD 2) f_instr_SETFIELD2
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD3 : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SETFIELD3.(fn_body) E0 le' m' out ->
-    exists s', handle_SETFIELD 3 (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SETFIELD3 :
+    handler_correct (handle_SETFIELD 3) f_instr_SETFIELD3
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SETFIELD.(fn_body) E0 le' m' out ->
-    exists s', handle_SETFIELD n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SETFIELD : forall n,
+    handler_correct (handle_SETFIELD n) f_instr_SETFIELD
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Globals --- *)
 
-  Axiom verify_GETGLOBAL : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GETGLOBAL.(fn_body) E0 le' m' out ->
-    exists s', handle_GETGLOBAL n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GETGLOBAL : forall n,
+    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_PUSHGETGLOBAL : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_PUSHGETGLOBAL.(fn_body) E0 le' m' out ->
-    exists s', handle_PUSHGETGLOBAL n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_PUSHGETGLOBAL : forall n,
+    handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SETGLOBAL : forall e le m le' m' out s n,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SETGLOBAL.(fn_body) E0 le' m' out ->
-    exists s', handle_SETGLOBAL n (s.(pc) + 2) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SETGLOBAL : forall n,
+    handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Vectors --- *)
 
-  Axiom verify_VECTLENGTH : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_VECTLENGTH.(fn_body) E0 le' m' out ->
-    exists s', handle_VECTLENGTH (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_VECTLENGTH :
+    handler_correct handle_VECTLENGTH f_instr_VECTLENGTH
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_GETVECTITEM : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_GETVECTITEM.(fn_body) E0 le' m' out ->
-    exists s', handle_GETVECTITEM (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_GETVECTITEM :
+    handler_correct handle_GETVECTITEM f_instr_GETVECTITEM
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
-  Axiom verify_SETVECTITEM : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_SETVECTITEM.(fn_body) E0 le' m' out ->
-    exists s', handle_SETVECTITEM (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_SETVECTITEM :
+    handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Misc --- *)
 
-  Axiom verify_CHECK_SIGNALS : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_CHECK_SIGNALS.(fn_body) E0 le' m' out ->
-    exists s', handle_CHECK_SIGNALS (s.(pc) + 1) s = Step s' /\
-               abs_rel e le' m' s'.
+  Axiom verify_CHECK_SIGNALS :
+    handler_correct handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   (* --- Halt --- *)
 
-  Axiom verify_STOP : forall e le m le' m' out s,
-    abs_rel_pre e le m s ->
-    exec e le m f_instr_STOP.(fn_body) E0 le' m' out ->
-    handle_STOP s = Halt s.(accu).
+  Axiom verify_STOP :
+    handler_correct (fun _ => handle_STOP) f_instr_STOP
+      (fun _ _ => False) (fun _ => True) (fun _ _ _ => False).
 
 End InstructSpec.

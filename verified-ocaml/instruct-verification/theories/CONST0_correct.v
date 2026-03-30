@@ -1,17 +1,15 @@
-(* ACC0_bigstep_compl_computational.v -- ACC0 completeness proof using
+(* CONST0_bigstep_compl_computational.v -- CONST0 completeness proof using
    the computational evaluator from StepToBigstep.v.
 
-   Same theorem as ACC0_bigstep_compl_allresults.v, but Part 1
-   (constructing the exec_stmt derivation) uses comp_eval_stmt +
-   eval_stmt_to_exec instead of manual tactic construction.
+   Proves that the C handler f_instr_CONST0 computes the same state
+   transition as the Rocq handle_CONSTINT 0 handler.
 
-   APPROACH:
-   1. Prove comp_eval_stmt clight_ge 10 e le m body = Some (...)
-      by interleaving [cbn -[...]] (reduces evaluator control flow) and
-      [rewrite] (resolves abstract PTree lookups, memory loads, composite
-      lookups, semantic operations, etc.)
-   2. Apply eval_stmt_to_exec to obtain exec_stmt.
-   3. Part 2 (abs_rel preservation) is identical to the allresults version.
+   CONST0 C code: s->accu = Val_int(0)  i.e.  s->accu = ((0 << 1) + 1) = 1
+   Rocq:          handle_CONSTINT 0 pc' s = Step (s <|pc := pc'|> <|accu := Val_int 0|>)
+
+   The proof follows ACC0_bigstep_compl_computational.v exactly:
+   Part 1: Computational evaluation via eval_stmt_to_exec + rewrite chain.
+   Part 2: abs_rel preservation (one store to accu, all other fields unchanged).
 
    Uses abs_rel directly (no separate _pre relation).
    All lemmas/axioms imported from HandlerLemmas. *)
@@ -34,13 +32,8 @@ Local Notation ge := clight_ge.
 Local Notation exec := (exec_stmt function_entry1 clight_ge).
 
 (* Tactic for controlled reduction of the evaluator.
-   cbn reduces: comp_eval_stmt/expr/lvalue, fn_body, typeof, access_mode,
-   Mem.loadv/storev (Vptr dispatch), Eapp, match on option/outcome.
-   cbn leaves alone (via -[...]): clight_ge (prevents expanding the 9000-line
-   prog AST), genv_cenv (record projection), Mptr (opaque Archi.ptr64),
-   sem_binary_operation/sem_cast (depend on ge or ptr64),
-   Mem.load/store (abstract memory), Ptrofs arith (abstract offsets),
-   field_offset (depends on ge), PTree.get/set (abstract temp_env). *)
+   Same as ACC0: cbn reduces evaluator control flow,
+   leaves abstract terms for rewriting. *)
 Local Ltac eval_cbn :=
   cbn -[clight_ge genv_cenv Mptr
         sem_binary_operation sem_cast
@@ -50,29 +43,17 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-Theorem verify_ACC0_compl_comp : forall e le m s,
-    match handle_ACC 0 s.(pc) s with
-    | Step s' =>
-        abs_rel e le m s ->
-        exists le' m' out,
-          exec e le m f_instr_ACC0.(fn_body) E0 le' m' out /\
-          abs_rel e le' m' s'
-    | Error _ => s.(Machine.stack) = nil
-    | Halt _ => False
-    | CCall_request _ _ _ => False
-    end.
+Theorem verify_CONST0_compl_comp :
+    handler_correct (handle_CONSTINT 0) f_instr_CONST0
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handle_ACC. simpl nth_error.
-  destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk.
+  unfold handler_correct, handle_CONSTINT. simpl.
 
   (* ================================================================ *)
-  (* Case 1: stack = nil => Error                                      *)
-  (* ================================================================ *)
-  { reflexivity. }
-
-  (* ================================================================ *)
-  (* Case 2: stack = v_hd :: v_tl => Step                              *)
+  (* CONST0 always returns Step — no case split needed                 *)
   (* ================================================================ *)
   {
     intro Hpre.
@@ -101,20 +82,16 @@ Proof.
     pose proof (global_block_ne_sptr ard) as Hgb_ne.
     fold sb in Hgb_ne.
 
-    (* Extract stack head *)
-    rewrite Hstk in Hstack_repr.
-    inversion Hstack_repr as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
-
     (* Composite environment facts *)
     destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
-    (* Accu store must succeed *)
-    destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 8) accu_v cv0 Haccu_load)
+    (* Accu store must succeed.
+       The new accu value is Vlong (Int64.repr 1) = val_repr hm (Val_int 0). *)
+    destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 8) accu_v (Vlong (Int64.repr 1)) Haccu_load)
       as [m' Hstore].
 
-    (* Witnesses *)
-    set (le' := PTree.set _t'2 cv0 (PTree.set _t'1 (Vptr sp_b sp_ofs) le)).
-    exists le'. exists m'.
+    (* Witnesses -- CONST0 has fn_temps := nil, so le' = le *)
+    exists le. exists m'.
     exists (Out_return (Some (Vint (Int.repr 0), tint))).
 
     split.
@@ -122,13 +99,9 @@ Proof.
     (* ============================================================== *)
     (* Part 1: exec via computational evaluator                        *)
     (*                                                                  *)
-    (* Instead of manually constructing the exec_stmt derivation tree  *)
-    (* with eapply, we prove comp_eval_stmt = Some (...) and apply     *)
-    (* the soundness bridge eval_stmt_to_exec.                         *)
-    (*                                                                  *)
-    (* The rewrite chain mirrors the evaluator's execution path:       *)
-    (* each [rewrite] resolves a stuck abstract term, and [eval_cbn]   *)
-    (* reduces the evaluator until the next stuck point.               *)
+    (* CONST0 body:                                                    *)
+    (*   Sassign (s->accu) ((0 << 1) + 1)                             *)
+    (*   Sreturn 0                                                     *)
     (* ============================================================== *)
     {
       apply (eval_stmt_to_exec clight_ge 10).
@@ -136,98 +109,93 @@ Proof.
       (* --- Initial reduction --- *)
       eval_cbn.
 
-      (* === Sset _t'1 (s->sp) === *)
+      (* === Sassign lvalue: s->accu === *)
       rewrite Hle_s; eval_cbn.                                       (* le ! _s *)
       rewrite Hco; eval_cbn.                                         (* composite lookup *)
-      rewrite Hsp_offset; eval_cbn.                                  (* field_offset _sp *)
-      rewrite Mptr_Mint64; eval_cbn.                                 (* Mptr -> Mint64 *)
-      rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).     (* sp ptrofs *)
-      rewrite Hsp_load; eval_cbn.                                    (* sp field load *)
-
-      (* === Sset _t'2 : deref (sp + 0) === *)
-      rewrite PTree.gss; eval_cbn.                                   (* le1 ! _t'1 *)
-      rewrite sem_add_sp_0; eval_cbn.                                (* sp + 0 *)
-      rewrite Hload_sp0; eval_cbn.                                   (* stack[0] load *)
-
-      (* === Sassign (s->accu = _t'2): lvalue === *)
-      rewrite PTree.gso by (compute; congruence).                    (* le2 ! _s: skip _t'2 *)
-      rewrite PTree.gso by (compute; congruence).                    (* le2 ! _s: skip _t'1 *)
-      rewrite Hle_s; eval_cbn.                                       (* le ! _s *)
       rewrite Haccu_offset; eval_cbn.                                (* field_offset _accu *)
 
-      (* === Sassign rvalue + sem_cast + store === *)
-      rewrite PTree.gss; eval_cbn.                                   (* le2 ! _t'2 *)
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hval_repr0); eval_cbn. (* sem_cast *)
+      (* === Sassign rvalue: ((cast 0 tlong) << 1) + 1 === *)
+      (* The Ecast subexpression: sem_cast (Vint 0) tint tlong m *)
+      rewrite (sem_cast_int_to_long_0 m); eval_cbn.
+
+      (* The Oshl subexpression: (long)0 << 1 *)
+      rewrite (sem_shl_long_0_1 m); eval_cbn.
+
+      (* The Oadd subexpression: 0 + 1 *)
+      rewrite (sem_add_long_int_0_1 m); eval_cbn.
+
+      (* === Sassign: sem_cast rvalue for store === *)
+      rewrite (sem_cast_long_vlong (Int64.repr 1)); eval_cbn.
+
+      (* === Sassign: store to accu field === *)
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).      (* accu ptrofs *)
       rewrite Hstore; eval_cbn.                                      (* accu store *)
 
       (* === Sreturn 0 -- reduces automatically === *)
-      subst le'. reflexivity.
+      reflexivity.
     }
 
     (* ============================================================== *)
     (* Part 2: abs_rel for post-state                                  *)
-    (* (identical to ACC0_bigstep_compl_allresults.v)                  *)
     (* ============================================================== *)
     {
       exists ard.
       set (uso := Ptrofs.unsigned so) in *.
 
       assert (Hpc_load' : Mem.load Mint64 m' sb (uso + 0) = Some pc_ptr).
-      { apply (load_after_store_other m m' sb (uso + 8) (uso + 0) cv0 pc_ptr
+      { apply (load_after_store_other m m' sb (uso + 8) (uso + 0) (Vlong (Int64.repr 1)) pc_ptr
                  Hstore Hpc_load). left. lia. }
 
       assert (Hsp_load' : Mem.load Mint64 m' sb (uso + 16) = Some (Vptr sp_b sp_ofs)).
-      { apply (load_after_store_other m m' sb (uso + 8) (uso + 16) cv0 (Vptr sp_b sp_ofs)
+      { apply (load_after_store_other m m' sb (uso + 8) (uso + 16) (Vlong (Int64.repr 1)) (Vptr sp_b sp_ofs)
                  Hstore Hsp_load). right. lia. }
 
       assert (Henv_load' : Mem.load Mint64 m' sb (uso + 24) = Some env_v).
-      { apply (load_after_store_other m m' sb (uso + 8) (uso + 24) cv0 env_v
+      { apply (load_after_store_other m m' sb (uso + 8) (uso + 24) (Vlong (Int64.repr 1)) env_v
                  Hstore Henv_load). right. lia. }
 
       assert (Hextra_load' : Mem.load Mint64 m' sb (uso + 32) =
                 Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
-      { apply (load_after_store_other m m' sb (uso + 8) (uso + 32) cv0 _
+      { apply (load_after_store_other m m' sb (uso + 8) (uso + 32) (Vlong (Int64.repr 1)) _
                  Hstore Hextra_load). right. lia. }
 
       assert (Hgd_load' : Mem.load Mint64 m' sb (uso + 40) = Some gd_ptr).
-      { apply (load_after_store_other m m' sb (uso + 8) (uso + 40) cv0 gd_ptr
+      { apply (load_after_store_other m m' sb (uso + 8) (uso + 40) (Vlong (Int64.repr 1)) gd_ptr
                  Hstore Hgd_load). right. lia. }
 
       assert (Hts_load' : Mem.load Mint64 m' sb (uso + 48) = Some ts_ptr).
-      { apply (load_after_store_other m m' sb (uso + 8) (uso + 48) cv0 ts_ptr
+      { apply (load_after_store_other m m' sb (uso + 8) (uso + 48) (Vlong (Int64.repr 1)) ts_ptr
                  Hstore Hts_load). right. lia. }
 
-      assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some cv0).
-      { pose proof (load_after_store_same m m' sb (uso + 8) cv0 Hstore) as Htmp.
-        rewrite (val_repr_load_result hm v_hd cv0 Hval_repr0) in Htmp.
+      assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some (Vlong (Int64.repr 1))).
+      { pose proof (load_after_store_same m m' sb (uso + 8) (Vlong (Int64.repr 1)) Hstore) as Htmp.
+        rewrite val_int_0_load_result in Htmp.
         exact Htmp. }
 
       split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
 
-      (* 1. _s is in le' *)
-      { subst le'.
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        exact Hle_s. }
+      (* 1. _s is in le' -- le unchanged since fn_temps = nil *)
+      { exact Hle_s. }
 
       (* 2. pc field -- unchanged by handler *)
       { exists pc_ptr. split.
         - exact Hpc_load'.
         - simpl. exact Hpc_rel. }
 
-      (* 3. accu field -- updated to stack head *)
-      { exists cv0. split.
+      (* 3. accu field -- updated to Val_int 0 *)
+      { exists (Vlong (Int64.repr 1)). split.
         - exact Haccu_load'.
-        - simpl. exact Hval_repr0. }
+        - simpl.
+          (* Vlong (Int64.repr 1) = Vlong (Int64.repr (0*2+1)) *)
+          exact (vr_int _ 0). }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
         split; [| split].
         - exact Hsp_load'.
         - reflexivity.
-        - simpl. rewrite Hstk.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv0
+        - simpl.
+          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) (Vlong (Int64.repr 1))
                    Hstack_repr Hstore).
           intro Heq; exact (Hblock_sep (eq_sym Heq)). }
 
@@ -244,7 +212,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv0
+          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) (Vlong (Int64.repr 1))
                    Hglobal_repr Hstore).
           intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
 
