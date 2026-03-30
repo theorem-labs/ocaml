@@ -1,225 +1,289 @@
-# Instruct-Verification Plan
+# Battle Plan: Verify All 79 Instruction Handlers
 
-## Goal
+## Status Quo
 
-Prove that each `Instruct(X)` handler in OCaml's `runtime/interp.c` computes the same state transition as the corresponding case in our Rocq `Interpret.v` step function, using VST (Verified Software Toolchain).
+**Proved (5):** ACC0, PUSH, CONST0, NEGINT, ADDINT
+**Remaining (74):** Everything else in InstructSpec.v
 
-## Architecture
+## Architecture: Proof Factory
+
+Every proof follows the same 2-part structure:
+
+1. **Part 1 (exec):** Prove `comp_eval_stmt` computes to `Some (le', m', Out_return (Some (Vint Int.zero)))` via `eval_stmt_to_exec` + interleaved `eval_cbn` / `rewrite` chain
+2. **Part 2 (abs_rel):** Reconstruct all 8 fields of `abs_rel` for the post-state
+
+Proof size scales with **number of memory stores**:
+- 0 stores (BRANCH, CHECK_SIGNALS): ~80 lines
+- 1 store (ACC, CONST, NEGINT): ~120-250 lines
+- 2 stores (PUSH, ADDINT, PUSHACC): ~270-400 lines
+- 3+ stores (MAKEBLOCK, SETFIELD): ~400+ lines
+
+## Phase 0: Lemma Library Expansion (Sequential, Blocking)
+
+All proofs import `HandlerLemmas.v`. New lemmas must land before proof agents can use them. Expand in one batch.
+
+### Needed lemma families
+
+| Family | Lemmas needed | Used by |
+|--------|--------------|---------|
+| **Stack indexing** | `sem_add_sp_N` for N=2..7, `stack_repr_nth` for indexed access | ACC1-7, PUSHACC1-7 |
+| **Tagged arithmetic** | `tagged_subint_arith`, `tagged_mulint_arith`, `tagged_andint_arith`, `tagged_orint_arith`, `tagged_xorint_arith`, `tagged_lslint_arith`, `tagged_lsrint_arith`, `tagged_asrint_arith` | SUBINT, MULINT, ANDINT, ORINT, XORINT, LSLINT, LSRINT, ASRINT |
+| **Tagged constants** | `sem_const_N_arith` for N=1,2,3 (generalize CONST0 pattern) | CONST1-3 |
+| **Comparison results** | `tagged_eq_result`, `tagged_neq_result`, `tagged_ltint_result`, `tagged_leint_result`, `tagged_gtint_result`, `tagged_geint_result` | EQ, NEQ, LTINT, LEINT, GTINT, GEINT |
+| **Branch PC** | `sem_add_pc_offset` (PC + signed offset) | BRANCH, BRANCHIF, BRANCHIFNOT, BEQ-BGEINT |
+| **Heap field access** | `heap_getfield_N` for N=0..3, `heap_setfield_N` | GETFIELD0-3, SETFIELD0-3 |
+| **Block allocation** | `heap_makeblock_1/2/3`, `atom_alloc` | MAKEBLOCK1-3, ATOM, PUSHATOM |
+| **Global access** | `global_repr_nth`, `global_repr_set_nth` | GETGLOBAL, SETGLOBAL |
+| **Boolean/type** | `tagged_boolnot`, `tagged_isint` | BOOLNOT, ISINT |
+| **Offset operations** | `tagged_offsetint_arith` | OFFSETINT, OFFSETREF |
+
+**Estimate:** ~40-50 new lemmas. Many are reflexivity proofs or simple `lia` proofs following existing patterns.
+
+## Phase 1: Clone Army (Massively Parallel)
+
+Handlers whose C code is structurally identical to a proved handler, differing only in a constant or a single semantic operation.
+
+### Wave 1A: ACC family (8 handlers, clone ACC0)
+
+`ACC1, ACC2, ACC3, ACC4, ACC5, ACC6, ACC7, ACC`
+
+Each differs from ACC0 only in the stack index. ACC0 loads `*sp`, ACC1 loads `*(sp+1)`, etc. The parameterized `ACC` uses `*(sp+n)` from a function argument.
+
+**Template delta:** Change `handle_ACC 0` -> `handle_ACC N`, `f_instr_ACC0` -> `f_instr_ACCN`, stack offset lemma `sem_add_sp_0` -> `sem_add_sp_N`.
+
+### Wave 1B: CONST family (4 handlers, clone CONST0)
+
+`CONST1, CONST2, CONST3, CONSTINT`
+
+Each differs in the constant value. CONST0 computes `(0<<1)+1=1`, CONST1 computes `(1<<1)+1=3`, etc.
+
+**Template delta:** Change constant value, tagged arithmetic lemma.
+
+### Wave 1C: Trivial no-ops (3 handlers)
+
+`CHECK_SIGNALS, BRANCH, STOP`
+
+- CHECK_SIGNALS: Only modifies PC. Zero stores, zero arithmetic.
+- BRANCH: Only modifies PC to `target`. One field update.
+- STOP: Returns `Halt`. No state modification at all.
+
+**These are the simplest possible proofs.** ~60-80 lines each.
+
+**Total Wave 1: 15 handlers, 15 parallel agents**
+
+## Phase 2: Binary Arithmetic (Parallel after Phase 0 lemmas)
+
+### Wave 2A: Arithmetic ops (10 handlers, template from ADDINT)
+
+`SUBINT, MULINT, DIVINT, MODINT, ANDINT, ORINT, XORINT, LSLINT, LSRINT, ASRINT`
+
+All share ADDINT's structure: pop stack, compute binary op on tagged ints, store result. The only difference is the arithmetic identity lemma.
+
+- SUBINT: `(2a+1) - (2b+1) + 1 = 2(a-b)+1`
+- MULINT: `((2a+1) >> 1) * ((2b+1) - 1) + 1 = 2(a*b)+1` (more complex -- untag, multiply, retag)
+- ANDINT: `(2a+1) & (2b+1) = 2(a land b)+1` (tag bit preserved by AND)
+- ORINT: `(2a+1) | (2b+1) = 2(a lor b)+1` (tag bit preserved by OR)
+- XORINT: `(2a+1) ^ (2b+1) ^ 1 = 2(a lxor b)+1` (XOR flips tag, must fix)
+- LSLINT/LSRINT/ASRINT: shift operations with untagging
+- DIVINT/MODINT: Same but with zero-check branch -> Error path too
+
+**Template delta from ADDINT:** Replace `tagged_addint_arith` with the op-specific lemma. DIVINT/MODINT need an extra branch for division-by-zero.
+
+### Wave 2B: Unary/offset ops (2 handlers, template from NEGINT)
+
+`OFFSETINT, BOOLNOT`
+
+- OFFSETINT: Like NEGINT but adds offset instead of negating
+- BOOLNOT: Simpler -- just flips 0<->1
+
+**Total Wave 2: 12 handlers, 12 parallel agents**
+
+## Phase 3: Comparisons & Branches (Parallel)
+
+### Wave 3A: Integer comparisons (6 handlers)
+
+`EQ, NEQ, LTINT, LEINT, GTINT, GEINT`
+
+All follow the same pattern: pop stack, compare accu vs stack top, push boolean result (Val_int 0 or Val_int 1). Two stores (sp++, accu := result).
+
+**Shared structure:** Identical to ADDINT except the arithmetic is a comparison yielding a boolean.
+
+### Wave 3B: Conditional branches (2 handlers)
+
+`BRANCHIF, BRANCHIFNOT`
+
+Load accu, compare to Val_int 0, set PC to either target or pc'. One store (PC update), conditional logic.
+
+### Wave 3C: Unsigned comparisons (2 handlers)
+
+`ULTINT, UGEINT`
+
+Like LTINT/GEINT but with `z_flip_sign` for unsigned semantics.
+
+### Wave 3D: ISINT (1 handler)
+
+Simple type check -- sets accu based on whether current accu is an int.
+
+**Total Wave 3: 11 handlers, 11 parallel agents**
+
+## Phase 4: Compound Operations (Parallel)
+
+### Wave 4A: PUSHACC family (7 handlers, compose PUSH + ACC)
+
+`PUSHACC1, PUSHACC2, PUSHACC3, PUSHACC4, PUSHACC5, PUSHACC6, PUSHACC7`
+
+Each does PUSH (store accu to stack, sp--) then ACC (load from stack). Three stores total.
+
+### Wave 4B: PUSHCONST family (5 handlers, compose PUSH + CONST)
+
+`PUSHCONST0, PUSHCONST1, PUSHCONST2, PUSHCONST3, PUSHCONSTINT`
+
+### Wave 4C: POP and ASSIGN (2 handlers)
+
+- POP: Increment SP by n (skip n stack elements)
+- ASSIGN: Write accu into stack at position n, set accu to unit
+
+### Wave 4D: PUSHGETGLOBAL (1 handler)
+
+PUSH + GETGLOBAL combined.
+
+**Total Wave 4: 15 handlers, 15 parallel agents**
+
+## Phase 5: Heap & Global Operations (Parallel)
+
+### Wave 5A: Field access (10 handlers)
+
+`GETFIELD0, GETFIELD1, GETFIELD2, GETFIELD3, GETFIELD`
+`SETFIELD0, SETFIELD1, SETFIELD2, SETFIELD3, SETFIELD`
+
+GETFIELD: Load field from heap block (1 store to accu).
+SETFIELD: Store to heap block field + pop stack (2-3 stores).
+
+### Wave 5B: Block construction (5 handlers)
+
+`ATOM, PUSHATOM, MAKEBLOCK1, MAKEBLOCK2, MAKEBLOCK3`
+
+These allocate on the heap. Need heap allocation lemmas.
+
+### Wave 5C: Globals (3 handlers)
+
+`GETGLOBAL, PUSHGETGLOBAL, SETGLOBAL`
+
+### Wave 5D: Vectors (3 handlers)
+
+`VECTLENGTH, GETVECTITEM, SETVECTITEM`
+
+**Total Wave 5: 21 handlers, 21 parallel agents** (can split into sub-waves if lemma work is heavy)
+
+## Phase 6: Complex Control Flow (Sequential pairs)
+
+### Wave 6A: Branch-compare family (6 handlers)
+
+`BEQ, BNEQ, BLTINT, BLEINT, BGTINT, BGEINT`
+
+Conditional branch based on comparing accu to an immediate. Structurally like BRANCHIF but with arithmetic comparison.
+
+### Wave 6B: Unsigned branch-compare (2 handlers)
+
+`BULTINT, BUGEINT`
+
+### Wave 6C: OFFSETREF (1 handler)
+
+Modifies a heap ref cell -- combination of heap read + write.
+
+### Wave 6D: SWITCH (1 handler)
+
+Multi-way branch. Most complex branching handler.
+
+**Total Wave 6: 10 handlers**
+
+## Phase 7: Function Call Machinery (Hardest, needs careful sequencing)
+
+These modify 4-6 state fields, have complex control flow, and interact with closures:
+
+- `APPLY, APPLY1, APPLY2, APPLY3` -- function application
+- `APPTERM, APPTERM1, APPTERM2, APPTERM3` -- tail calls
+- `RETURN` -- frame restoration with conditional tail call
+- `RESTART` -- partial application restart
+- `GRAB` -- argument collection (most complex single handler)
+- `CLOSURE, CLOSUREREC` -- heap allocation for closures
+- `PUSHTRAP, POPTRAP` -- exception frame management
+- `C_CALL` -- foreign function interface
+- `PUSH_RETADDR` -- return address setup
+- `OFFSETCLOSURE, PUSHOFFSETCLOSURE` -- closure offset access
+- `ENVACC1-4, PUSHENVACC1-4` -- environment access (if in scope)
+
+**Total Wave 7: ~15-20 handlers**
+
+## Execution Strategy
+
+### Agent Architecture
 
 ```
-system-ocaml-compiler/runtime/interp.c   (source of truth: real OCaml)
-        |
-        | extract_handlers.sh (simple sed/awk script)
-        v
-instruct-verification/gen/instruct_handlers.c  (generated: standalone C functions)
-        |
-        | clightgen -normalize
-        v
-instruct-verification/gen/instruct_handlers.v  (generated: Clight AST)
-        |
-        |   + manual/theories/Bytecode/Interpret.v (Rocq spec, refactored into per-handler defs)
-        |
-        v
-instruct-verification/theories/InstructSpec.v  (hand-written: Module Type relating C ↔ Rocq)
+                    +-------------------+
+                    |   You (PM)        |
+                    | Coordinates all   |
+                    +--------+----------+
+                             |
+              +--------------+--------------+
+              |              |              |
+     +--------v------+  +---v--------+  +--v-----------+
+     | Lemma Agent   |  | Template   |  | Build Agent  |
+     | (Phase 0)     |  | Generator  |  | (Validation) |
+     | Writes to     |  | Creates    |  | Runs dune    |
+     | HandlerLemmas |  | proof      |  | build after  |
+     +---------------+  | skeletons  |  | each wave    |
+                        +-----+------+  +--------------+
+                              |
+            +-----------------+-----------------+
+            |                 |                 |
+     +------v------+  +------v------+  +-------v-----+
+     | Proof Agent  |  | Proof Agent |  | Proof Agent |
+     | (worktree)  |  | (worktree)  |  | (worktree)  |
+     | ACC1        |  | CONST1      |  | SUBINT      |
+     +-------------+  +-------------+  +-------------+
+            ... up to 15 parallel agents per wave ...
 ```
 
-### Key principle: no static C files
+### Workflow per wave
 
-The only C files are **generated** by `extract_handlers.sh` from the real `interp.c`.
-If OCaml updates `interp.c`, re-running the script regenerates the C and Clight.
-The only hand-written artifacts are:
+1. **You** identify the handlers for the wave and the lemmas they need
+2. **Lemma Agent** adds any missing lemmas to HandlerLemmas.v, builds to verify
+3. **You** launch N parallel **Proof Agents** (one per handler, in worktrees)
+   - Each agent gets: the handler name, the existing proof to clone from, the specific deltas, and a reference to the lemmas
+4. **Build Agent** merges worktree results and runs `dune build instruct-verification/`
+5. **You** update InstructSpec.v axiom error predicates for proved handlers
+6. Commit wave, proceed to next
 
-1. `extract_handlers.sh` — extracts handlers into standalone C functions
-2. `theories/InstructSpec.v` — relates Clight AST to Rocq handlers
-3. Refactored `Interpret.v` — exposes per-instruction handler definitions
+### Parallelism budget
 
-## Step 1: extract_handlers.sh
+Claude Code can run ~8-12 agents concurrently in worktrees. Batch waves accordingly:
+- Waves 1-4: 8 agents per batch, 2-3 batches per wave
+- Waves 5-6: 6-8 agents per batch
+- Wave 7: 2-4 agents per batch (complex, need more context per agent)
 
-A shell script that:
+## Summary Table
 
-1. Takes `interp.c` as input
-2. Preprocesses: `#undef THREADED_CODE` so `Instruct(X)` = `case X`, `Next` = `break`
-3. Extracts each `Instruct(X): { body } Next;` block
-4. Wraps each in a standalone C function:
-   ```c
-   int instr_ACC(interp_state *s) {
-       s->accu = s->sp[*s->pc++];
-       return STATUS_STEP;
-   }
-   ```
-5. Replaces runtime macros with simplified equivalents:
-   - `accu` → `s->accu`, `sp` → `s->sp`, `pc` → `s->pc`, `env` → `s->env`
-   - `extra_args` → `s->extra_args`
-   - `Val_long(x)` → `((intptr_t)(x) << 1) + 1`
-   - `Long_val(x)` → `((intptr_t)(x) >> 1)`
-   - `Field(x,i)` → `((value*)(x))[i]`
-   - `Alloc_small(v,n,t)` → `v = heap_alloc(s, n, t)`
-   - `Setup_for_gc/Restore_after_gc` → removed (abstracted)
-   - `Setup_for_c_call/Restore_after_c_call` → removed
-   - `Caml_state->trapsp` → `s->trap_sp`
-   - `Next` → `return STATUS_STEP`
-6. Prepends `instruct_defs.h` (also generated, containing the struct and macro definitions)
+| Phase | Handlers | Parallel agents | Blocking on | Est. new lemmas |
+|-------|----------|----------------|-------------|-----------------|
+| 0 | -- | 1 (lemma agent) | Nothing | ~40-50 |
+| 1 | 15 | 15 | Phase 0 | 0 (all pre-built) |
+| 2 | 12 | 12 | Phase 0 | 0 |
+| 3 | 11 | 11 | Phase 0 | 0 |
+| 4 | 15 | 15 | Phase 0 | 0 |
+| 5 | 21 | 21 | Phase 0 | ~5 (heap) |
+| 6 | 10 | 10 | Phase 5 lemmas | ~3 |
+| 7 | ~15 | 2-4 | Phases 1-6 | ~10+ |
+| **Total** | **~74** | | | **~60** |
 
-The script does NOT need to handle every handler perfectly. Handlers involving GC or C-calls can be left as stubs initially. The script evolves incrementally.
+## Critical Path
 
-## Step 2: instruct_defs.h (generated preamble)
-
-```c
-#include <stdint.h>
-typedef intptr_t value;
-typedef int32_t code_t;
-
-#define STATUS_STEP  0
-#define STATUS_HALT  1
-#define STATUS_ERROR 2
-#define STATUS_CCALL 3
-
-#define Val_long(x)  (((intptr_t)(x) << 1) + 1)
-#define Long_val(x)  ((intptr_t)(x) >> 1)
-#define Val_int(x)   Val_long(x)
-#define Int_val(x)   Long_val(x)
-#define Val_unit     Val_long(0)
-#define Is_long(x)   ((x) & 1)
-
-#define Field(x,i)   (((value*)(x))[i])
-#define Code_val(x)  (((code_t**)(x))[0])
-#define Tag_val(x)   (((unsigned char*)(x))[-sizeof(value)] & 0xFF)
-
-typedef struct {
-    code_t *pc;
-    value accu;
-    value *sp;
-    value env;
-    intptr_t extra_args;
-    value *global_data;
-    value *trap_sp;
-} interp_state;
-
-value heap_alloc(interp_state *s, intptr_t nfields, intptr_t tag);
+```
+Phase 0 (lemmas) --> Phases 1,2,3,4 (parallel) --> Phase 5 --> Phase 6 --> Phase 7
 ```
 
-## Step 3: Makefile
+Phases 1-4 can all run simultaneously once Phase 0 lands. That's 53 handlers in one parallel blast.
 
-```makefile
-INTERP_C = ../../system-ocaml-compiler/runtime/interp.c
+## Historical Context
 
-gen/instruct_handlers.c: $(INTERP_C) extract_handlers.sh
-    ./extract_handlers.sh $(INTERP_C) > gen/instruct_handlers.c
-
-gen/instruct_handlers.v: gen/instruct_handlers.c
-    clightgen -normalize gen/instruct_handlers.c
-
-theories/build: gen/instruct_handlers.v
-    dune build theories/
-```
-
-## Step 4: Refactor Interpret.v
-
-Currently `Interpret.v` has one monolithic `step` function:
-
-```coq
-Definition step (code : code_array) (s : state) : step_result :=
-  match fetch_instr code s.(pc) with
-  | ACC n => ...
-  | PUSH => ...
-  | ADDINT => ...
-  ...
-  end.
-```
-
-Refactor into per-instruction handler functions:
-
-```coq
-(* Per-instruction handlers *)
-Definition handle_ACC (n : nat) (s : state) : step_result :=
-  let v := nth n s.(stack) (Val_int 0) in
-  Step (s <|pc := s.(pc) + 2|> <|accu := v|>).
-
-Definition handle_PUSH (s : state) : step_result :=
-  Step (s <|pc := s.(pc) + 1|> <|stack := s.(accu) :: s.(stack)|>).
-
-Definition handle_ADDINT (s : state) : step_result :=
-  match s.(accu), s.(stack) with
-  | Val_int a, Val_int b :: rest =>
-    Step (s <|pc := s.(pc) + 1|> <|accu := Val_int (a + b)|> <|stack := rest|>)
-  | _, _ => Error "ADDINT: bad args"
-  end.
-
-(* Dispatch function — equivalent to the old monolithic step *)
-Definition step (code : code_array) (s : state) : step_result :=
-  match fetch_instr code s.(pc) with
-  | ACC n => handle_ACC n s
-  | PUSH => handle_PUSH s
-  | ADDINT => handle_ADDINT s
-  ...
-  end.
-```
-
-This refactoring:
-- Preserves the existing `step` API (backward compatible)
-- Exposes each handler for independent verification
-- Each `handle_X` can be proven equivalent to the C `instr_X`
-
-## Step 5: InstructSpec.v
-
-A Module Type declaring the correspondence. Each axiom says: "if the abstraction relation holds, the C handler produces the same abstract state transition as the Rocq handler."
-
-```coq
-From compcert Require Import Clight Ctypes.
-From VST Require Import floyd.proofauto.
-Require Import instruct_handlers. (* generated Clight AST *)
-From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret.
-
-(* Abstraction: C interp_state ↔ Rocq state *)
-Parameter abs_rel : val -> state -> mpred.
-
-Module Type InstructSpec.
-
-  (* ACC: C instr_ACC matches Rocq handle_ACC *)
-  Axiom verify_ACC : forall n cs rs,
-    abs_rel cs rs ->
-    semax ... (call f_instr_ACC [cs]) ...
-    (* postcondition: abs_rel cs' (handle_ACC n rs) *)
-
-  (* PUSH: C instr_PUSH matches Rocq handle_PUSH *)
-  Axiom verify_PUSH : forall cs rs,
-    abs_rel cs rs ->
-    semax ... (call f_instr_PUSH [cs]) ...
-
-  (* ... one axiom per instruction ... *)
-
-End InstructSpec.
-```
-
-The axioms will be replaced by proofs as verification proceeds.
-
-## Phased Execution
-
-### Phase 0: Infrastructure (this PR)
-- [x] Write `extract_handlers.sh` (start with 5 simple instructions)
-- [ ] Write `instruct_defs.h` generation
-- [ ] Verify `clightgen` succeeds on the output
-- [ ] Add Makefile
-- [ ] Stub `InstructSpec.v`
-
-### Phase 1: Stack + Arithmetic (20 instructions)
-- Refactor Interpret.v: extract `handle_ACC`, `handle_PUSH`, `handle_POP`, `handle_ASSIGN`
-- Refactor: `handle_ADDINT`, `handle_SUBINT`, `handle_MULINT`, `handle_DIVINT`, ...
-- Expand `extract_handlers.sh` to cover these
-- Write VST proofs for each
-
-### Phase 2: Constants + Branches (20 instructions)
-- `handle_CONSTINT`, `handle_BRANCH`, `handle_BRANCHIF`, comparison ops
-
-### Phase 3: Blocks + Globals (15 instructions)
-- `handle_MAKEBLOCK1`, `handle_GETFIELD`, `handle_SETFIELD`
-- `handle_GETGLOBAL`, `handle_SETGLOBAL`
-- Requires heap abstraction relation
-
-### Phase 4: Closures + Application (15 instructions)
-- `handle_CLOSURE`, `handle_APPLY1`, `handle_RETURN`, `handle_GRAB`
-- Most complex: closure layout, stack frames
-
-### Phase 5: Exceptions + C-calls (10 instructions)
-- `handle_PUSHTRAP`, `handle_POPTRAP`, `handle_RAISE`
-- `handle_C_CALL1` through `handle_C_CALLN`
+This file supersedes the original phased plan (infrastructure-first, VST-based) written before any proofs existed. The proof methodology evolved to use direct CompCert Clight bigstep semantics via `eval_stmt_to_exec` + computational evaluator, which is simpler and more automatable than VST separation logic. The `abs_rel` abstraction relation maps C `interp_state` struct fields to Rocq `Machine.state` via CompCert memory model (8 fields: pc, accu, sp, env, extra_args, global_data, trap_sp + le binding).
