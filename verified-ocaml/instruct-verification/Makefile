@@ -12,5 +12,9 @@ gen/instruct_handlers.c: $(INTERP_C) extract_handlers.sh
 gen/instruct_handlers.v: gen/instruct_handlers.c
 	clightgen -normalize gen/instruct_handlers.c -o gen/instruct_handlers.v
 
+# Copy into theories/ so dune can build it
+theories/instruct_handlers.v: gen/instruct_handlers.v
+	cp gen/instruct_handlers.v theories/instruct_handlers.v
+
 clean:
 	rm -rf gen/
