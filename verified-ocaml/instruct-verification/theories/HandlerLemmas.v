@@ -249,6 +249,12 @@ Axiom sp_ofs_ge_8 : forall hm m stk sp_b sp_ofs,
   stack_repr hm m stk sp_b sp_ofs ->
   Ptrofs.unsigned sp_ofs >= 8.
 
+(* sp_ofs_stack_representable: all stack slots fit in the address space
+   without wrapping.  Structural invariant of the C memory layout. *)
+Axiom sp_ofs_stack_representable : forall hm m stk sp_b sp_ofs,
+  stack_repr hm m stk sp_b sp_ofs ->
+  Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus.
+
 (* ================================================================== *)
 (* Value representation                                                *)
 (* ================================================================== *)

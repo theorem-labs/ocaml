@@ -239,6 +239,89 @@ Definition handler_correct
     | CCall_request nargs args s' => P_ccall nargs args s'
     end.
 
+(* abs_rel_with_ard: exposes the abs_rel_data witness so that
+   preconditions can refer to specific fields (code base, etc.). *)
+Definition abs_rel_with_ard (e : Clight.env) (le : temp_env) (m : mem)
+    (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let go := ar_global_ofs ard in
+  let stk_b := ar_stack_block ard in
+  let stk_base := ar_stack_base_ofs ard in
+
+  le ! _s = Some (Vptr sb so) /\
+
+  (exists pc_ptr,
+    Mem.load Mint64 m sb (Ptrofs.unsigned so + 0) = Some pc_ptr /\
+    pc_rel pc_ptr cb co s.(pc)) /\
+
+  (exists accu_v,
+    Mem.load Mint64 m sb (Ptrofs.unsigned so + 8) = Some accu_v /\
+    val_repr hm s.(accu) accu_v) /\
+
+  (exists sp_ptr sp_b sp_ofs,
+    Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some sp_ptr /\
+    sp_ptr = Vptr sp_b sp_ofs /\
+    stack_repr hm m s.(stack) sp_b sp_ofs) /\
+
+  (exists env_v,
+    Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some env_v /\
+    val_repr hm s.(Machine.env) env_v) /\
+
+  Mem.load Mint64 m sb (Ptrofs.unsigned so + 32) =
+    Some (Vlong (Int64.repr (Z.of_nat s.(extra_args)))) /\
+
+  (exists gd_ptr,
+    Mem.load Mint64 m sb (Ptrofs.unsigned so + 40) = Some gd_ptr /\
+    gd_ptr = Vptr gb go /\
+    global_repr hm m s.(global) gb go) /\
+
+  (exists ts_ptr,
+    Mem.load Mint64 m sb (Ptrofs.unsigned so + 48) = Some ts_ptr /\
+    trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)).
+
+Lemma abs_rel_iff_with_ard : forall e le m s,
+  abs_rel e le m s <-> exists ard, abs_rel_with_ard e le m s ard.
+Proof.
+  intros. unfold abs_rel, abs_rel_with_ard. reflexivity.
+Qed.
+
+(* handler_correct_with_pre: variant of handler_correct with an
+   extra precondition on the Step case.  The precondition receives
+   the abs_rel_data witness so it can refer to the concrete code
+   base block, stack block, etc.
+
+   Used for handlers that read operands from the code buffer
+   (e.g. BRANCH reads the branch offset at *(s->pc)), or that
+   require operand range constraints (e.g. LSLINT shift < 64).
+
+   The Step case destructures abs_rel to get ard, then requires
+   step_pre m s ard to hold for that specific ard. *)
+Definition handler_correct_with_pre
+    (handler : Z -> state -> step_result)
+    (f : function)
+    (step_pre : mem -> state -> abs_rel_data -> Prop)
+    (P_error : string -> state -> Prop)
+    (P_halt : value -> Prop)
+    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
+  forall e le m s,
+    match handler s.(pc) s with
+    | Step s' =>
+        forall ard,
+        abs_rel_with_ard e le m s ard ->
+        step_pre m s ard ->
+        exists le' m' out,
+          exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m' out /\
+          abs_rel e le' m' s'
+    | Error msg => P_error msg s
+    | Halt v => P_halt v
+    | CCall_request nargs args s' => P_ccall nargs args s'
+    end.
+
 (* ================================================================== *)
 (* Module Type: per-instruction correctness obligations                *)
 (* ================================================================== *)
@@ -405,8 +488,17 @@ Module Type InstructSpec.
     handler_correct handle_XORINT f_instr_XORINT
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
+  (* LSLINT: shift amount must be in range [0, 64) for CompCert's
+     sem_shl guard (Int64.ltu shift_amt 64 = true) to hold.
+     The shift amount is the untagged stack top: if stack top is
+     Val_int b, we need 0 <= b < 64.  The ard parameter is unused. *)
   Axiom verify_LSLINT :
-    handler_correct handle_LSLINT f_instr_LSLINT
+    handler_correct_with_pre handle_LSLINT f_instr_LSLINT
+      (fun _ s _ =>
+         match s.(Machine.stack) with
+         | Val_int b :: _ => 0 <= b < 64
+         | _ => True
+         end)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Axiom verify_LSRINT :
@@ -478,8 +570,16 @@ Module Type InstructSpec.
 
   (* --- Branches --- *)
 
+  (* BRANCH reads the branch offset from *(s->pc).  The precondition
+     requires the code buffer at the current PC to be readable and
+     contain a 32-bit integer.  The ard parameter comes from abs_rel. *)
   Axiom verify_BRANCH : forall target,
-    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+    handler_correct_with_pre (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+      (fun m s ard =>
+         exists v, Mem.load Mint32 m (ar_code_base_block ard)
+           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+         = Some (Vint v))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Axiom verify_BRANCHIF : forall target,

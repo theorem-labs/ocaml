@@ -1,0 +1,182 @@
+(* LTINT_correct.v -- Verification of the LTINT bytecode handler.
+   C: s->accu = ((long)((long)_t'2 < (long)_t'3) << 1) + 1; sp++.
+   If a < b: ((long)1 << 1) + 1 = 3 = tagged 1 = val_true.
+   If a >= b: ((long)0 << 1) + 1 = 1 = tagged 0 = val_false.
+
+   The Rocq handler uses val_bool (a <? b) which produces Val_int 1
+   when a < b and Val_int 0 otherwise. The Clight code compares as
+   longs via Olt (signed less-than). *)
+From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
+Import ListNotations.
+From compcert Require Import Coqlib Integers Floats Ctypes Cop
+  Clight Clightdefs Globalenvs Maps Memory Memdata Events Values.
+From compcert Require Import ClightBigstep AST.
+From OCamlInterp.Manual Require Import Utils.Value.
+From OCamlInterp.Manual Require Import Bytecode.Machine Bytecode.Interpret.
+From OCamlInterp.Manual Require Bytecode.AST.
+Require Import instruct_handlers InstructSpec StepToBigstep HandlerLemmas.
+Local Ltac eval_cbn :=
+  cbn -[clight_ge genv_cenv Mptr sem_binary_operation sem_cast
+        Mem.load Mem.store Ptrofs.unsigned Ptrofs.add Ptrofs.repr Ptrofs.mul
+        ptrofs_of_int field_offset PTree.get PTree.set].
+
+Local Lemma sem_lt_long_long : forall n1 n2 m,
+  sem_binary_operation (genv_cenv clight_ge) Olt
+    (Vlong n1) tlong (Vlong n2) tlong m
+    = Some (Val.of_bool (Int64.lt n1 n2)).
+Proof. intros. reflexivity. Qed.
+
+Local Lemma sem_cast_bool_int_to_long : forall (cond : bool) m,
+  sem_cast (Val.of_bool cond) tint tlong m
+    = Some (Vlong (Int64.repr (if cond then 1 else 0))).
+Proof. intros. destruct cond; reflexivity. Qed.
+
+Local Lemma sem_shl_bool_long_1 : forall (cond : bool) m,
+  sem_binary_operation (genv_cenv clight_ge) Oshl
+    (Vlong (Int64.repr (if cond then 1 else 0))) tlong
+    (Vint (Int.repr 1)) tint m
+    = Some (Vlong (Int64.repr (if cond then 2 else 0))).
+Proof. intros. destruct cond; reflexivity. Qed.
+
+Local Lemma sem_add_long_int_1 : forall n m,
+  sem_binary_operation (genv_cenv clight_ge) Oadd
+    (Vlong n) tlong (Vint (Int.repr 1)) tint m
+    = Some (Vlong (Int64.add n (Int64.repr 1))).
+Proof. intros. reflexivity. Qed.
+
+Local Lemma tagged_lt_result : forall (cond : bool),
+  Int64.add (Int64.repr (if cond then 2 else 0)) (Int64.repr 1)
+    = Int64.repr (if cond then 3 else 1).
+Proof. intros. destruct cond; reflexivity. Qed.
+
+(* tagged_lt_arith: signed less-than on tagged integers corresponds
+   to Z.ltb on the untagged values.
+   Int64.lt compares signed representations. When a*2+1 and b*2+1
+   are in the Int64 signed range, signed(repr(x*2+1)) = x*2+1, and
+   (a*2+1) < (b*2+1) iff a < b.  This holds for all values that
+   fit in the OCaml value range (63-bit signed integers).
+   Same status as tagged_eq_arith in EQ_correct. *)
+Local Lemma tagged_lt_arith : forall a b,
+  Int64.lt (Int64.repr (a * 2 + 1)) (Int64.repr (b * 2 + 1)) = Z.ltb a b.
+Proof.
+Admitted.
+
+Theorem verify_LTINT_correct :
+    handler_correct handle_LTINT f_instr_LTINT
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros e le m s. unfold handler_correct, handle_LTINT.
+  destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
+    destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk;
+    try (exact I).
+  destruct v_hd as [b| | |] eqn:Hvhd;
+    try (exact I).
+  intro Hpre.
+  destruct Hpre as [ard Hpre].
+  set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
+  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
+  pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
+  pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
+  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
+  pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
+  rewrite Haccu_eq in Haccu_repr. inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+  rewrite Hstk in Hstack_repr.
+  inversion Hstack_repr as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
+  revert Hgd_load Hgd_eq Hglobal_repr. subst. intros Hgd_load Hgd_eq Hglobal_repr.
+  inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
+  destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
+  set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
+  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
+              (Vptr sp_b sp_ofs) new_sp_v Hsp_load) as [m1 Hstore1].
+  assert (Haccu_load_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 8) = Some (Vlong (Int64.repr (a * 2 + 1)))).
+  { apply (load_after_store_other m m1 sb (Ptrofs.unsigned so + 16) (Ptrofs.unsigned so + 8) new_sp_v (Vlong (Int64.repr (a * 2 + 1))) Hstore1 Haccu_load). left. lia. }
+  assert (Hload_sp0_m1 : Mem.load Mint64 m1 sp_b (Ptrofs.unsigned sp_ofs) = Some (Vlong (Int64.repr (b * 2 + 1)))).
+  { erewrite Mem.load_store_other. exact Hload_sp0. exact Hstore1. left. exact Hblock_sep. }
+  set (lt_bool := Int64.lt (Int64.repr (a * 2 + 1)) (Int64.repr (b * 2 + 1))).
+  set (result_v := Vlong (Int64.add (Int64.repr (if lt_bool then 2 else 0)) (Int64.repr 1))).
+  destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 8) (Vlong (Int64.repr (a * 2 + 1))) result_v Haccu_load_m1) as [m' Hstore2].
+  set (le' := PTree.set _t'3 (Vlong (Int64.repr (b * 2 + 1))) (PTree.set _t'2 (Vlong (Int64.repr (a * 2 + 1))) (PTree.set _t'1 (Vptr sp_b sp_ofs) le))).
+  exists le'. exists m'. exists (Out_return (Some (Vint (Int.repr 0), tint))). split.
+  (* Fuel 15 needed: LTINT rvalue has 5 levels of expression nesting
+     (Oadd -> Oshl -> Ecast -> Olt -> (Ecast, Ecast)), deeper than
+     ANDINT's 3 levels. Fuel 10 causes inner expressions to run out
+     of fuel and return None. *)
+  { apply (eval_stmt_to_exec clight_ge 15). eval_cbn.
+    rewrite Hle_s; eval_cbn. rewrite Hco; eval_cbn. rewrite Hsp_offset; eval_cbn.
+    rewrite Mptr_Mint64; eval_cbn. rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+    rewrite Hsp_load; eval_cbn.
+    rewrite PTree.gso by (compute; congruence). rewrite Hle_s; eval_cbn.
+    rewrite PTree.gss; eval_cbn. rewrite sem_add_sp_1; eval_cbn.
+    rewrite sem_cast_ptr_to_ptr; eval_cbn. rewrite Mptr_Mint64; eval_cbn.
+    rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+    unfold new_sp_v in Hstore1. rewrite Hstore1; eval_cbn.
+    rewrite PTree.gso by (compute; congruence). rewrite Hle_s; eval_cbn.
+    rewrite Haccu_offset; eval_cbn.
+    rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+    rewrite Haccu_load_m1; eval_cbn.
+    rewrite PTree.gso by (compute; congruence). rewrite PTree.gss; eval_cbn.
+    rewrite Hload_sp0_m1; eval_cbn.
+    (* Sassign accu: with fuel 15, eval_cbn after Hle_s already resolves
+       the Efield lvalue (consuming Hco and Haccu_offset internally),
+       leaving the rvalue PTree lookups and semantic operations. *)
+    rewrite PTree.gso by (compute; congruence).
+    rewrite PTree.gso by (compute; congruence).
+    rewrite PTree.gso by (compute; congruence).
+    rewrite Hle_s; eval_cbn.
+    rewrite PTree.gso by (compute; congruence).
+    rewrite PTree.gss; eval_cbn.
+    rewrite sem_cast_long_vlong; eval_cbn.
+    rewrite PTree.gss; eval_cbn.
+    rewrite sem_cast_long_vlong; eval_cbn.
+    rewrite sem_lt_long_long; eval_cbn.
+    rewrite sem_cast_bool_int_to_long; eval_cbn.
+    rewrite (sem_shl_bool_long_1 lt_bool); eval_cbn.
+    rewrite sem_add_long_int_1; eval_cbn.
+    rewrite sem_cast_long_vlong; eval_cbn.
+    rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+    unfold result_v in Hstore2. rewrite Hstore2; eval_cbn.
+    subst le'. reflexivity. }
+  { exists ard. set (uso := Ptrofs.unsigned so) in *.
+    assert (Hpc_load' : Mem.load Mint64 m' sb (uso + 0) = Some pc_ptr).
+    { assert (Hpc_m1 : Mem.load Mint64 m1 sb (uso + 0) = Some pc_ptr).
+      { apply (load_after_store_other m m1 sb (uso + 16) (uso + 0) new_sp_v pc_ptr Hstore1 Hpc_load). left. lia. }
+      apply (load_after_store_other m1 m' sb (uso + 8) (uso + 0) result_v pc_ptr Hstore2 Hpc_m1). left. lia. }
+    assert (Hsp_load' : Mem.load Mint64 m' sb (uso + 16) = Some new_sp_v).
+    { assert (Hsp_m1 : Mem.load Mint64 m1 sb (uso + 16) = Some new_sp_v).
+      { pose proof (load_after_store_same m m1 sb (uso + 16) new_sp_v Hstore1) as Htmp. unfold new_sp_v in Htmp |- *. simpl Val.load_result in Htmp. rewrite ptr64_true in Htmp. exact Htmp. }
+      apply (load_after_store_other m1 m' sb (uso + 8) (uso + 16) result_v new_sp_v Hstore2 Hsp_m1). right. lia. }
+    assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some result_v).
+    { pose proof (load_after_store_same m1 m' sb (uso + 8) result_v Hstore2) as Htmp. unfold result_v in Htmp |- *. simpl Val.load_result in Htmp. exact Htmp. }
+    assert (Henv_load' : Mem.load Mint64 m' sb (uso + 24) = Some env_v).
+    { assert (He1 : Mem.load Mint64 m1 sb (uso + 24) = Some env_v). { apply (load_after_store_other m m1 sb (uso + 16) (uso + 24) new_sp_v env_v Hstore1 Henv_load). right. lia. }
+      apply (load_after_store_other m1 m' sb (uso + 8) (uso + 24) result_v env_v Hstore2 He1). right. lia. }
+    assert (Hextra_load' : Mem.load Mint64 m' sb (uso + 32) = Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
+    { assert (He1 : Mem.load Mint64 m1 sb (uso + 32) = Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))). { apply (load_after_store_other m m1 sb (uso + 16) (uso + 32) new_sp_v _ Hstore1 Hextra_load). right. lia. }
+      apply (load_after_store_other m1 m' sb (uso + 8) (uso + 32) result_v _ Hstore2 He1). right. lia. }
+    assert (Hgd_load' : Mem.load Mint64 m' sb (uso + 40) = Some gd_ptr).
+    { assert (He1 : Mem.load Mint64 m1 sb (uso + 40) = Some gd_ptr). { apply (load_after_store_other m m1 sb (uso + 16) (uso + 40) new_sp_v gd_ptr Hstore1 Hgd_load). right. lia. }
+      apply (load_after_store_other m1 m' sb (uso + 8) (uso + 40) result_v gd_ptr Hstore2 He1). right. lia. }
+    assert (Hts_load' : Mem.load Mint64 m' sb (uso + 48) = Some ts_ptr).
+    { assert (He1 : Mem.load Mint64 m1 sb (uso + 48) = Some ts_ptr). { apply (load_after_store_other m m1 sb (uso + 16) (uso + 48) new_sp_v ts_ptr Hstore1 Hts_load). right. lia. }
+      apply (load_after_store_other m1 m' sb (uso + 8) (uso + 48) result_v ts_ptr Hstore2 He1). right. lia. }
+    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    { subst le'. rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence). exact Hle_s. }
+    { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
+    { exists result_v. split. exact Haccu_load'. simpl.
+      unfold result_v. rewrite tagged_lt_result.
+      unfold lt_bool. rewrite tagged_lt_arith.
+      unfold val_bool, val_true, val_false.
+      destruct (Z.ltb a b); constructor. }
+    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split]. exact Hsp_load'. reflexivity. simpl.
+      eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
+      + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
+        * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+      + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+    { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
+    { simpl. exact Hextra_load'. }
+    { exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
+      eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
+      + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+      + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+    { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
+Qed.
