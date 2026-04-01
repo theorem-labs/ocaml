@@ -299,6 +299,26 @@ Fixpoint val_corresponds (sv : svalue) (v : value) : Prop :=
   | _, _ => False
   end.
 
+(* --- val_corresponds inversion lemmas --- *)
+(* These convert val_corresponds hypotheses into value equations,
+   enabling subst in proofs where simpl alone gives True/False. *)
+
+Lemma val_corresponds_int_inv : forall n v,
+  val_corresponds (SVal_int n) v -> v = Val_int n.
+Proof. intros n v H. simpl in H. destruct v; try contradiction. f_equal. exact H. Qed.
+
+Lemma val_corresponds_bool_true_inv : forall v,
+  val_corresponds (SVal_bool true) v -> v = Val_int 1.
+Proof. intros v H. destruct v; try contradiction. destruct z; try contradiction. destruct p; try contradiction. reflexivity. Qed.
+
+Lemma val_corresponds_bool_false_inv : forall v,
+  val_corresponds (SVal_bool false) v -> v = Val_int 0.
+Proof. intros v H. destruct v; try contradiction. destruct z; try contradiction. reflexivity. Qed.
+
+Lemma val_corresponds_unit_inv : forall v,
+  val_corresponds SVal_unit v -> v = Val_int 0.
+Proof. intros v H. destruct v; try contradiction. destruct z; try contradiction. reflexivity. Qed.
+
 (* --- Helper: multi-step bytecode execution --- *)
 
 (* nsteps is defined above using step_list *)
