@@ -11,14 +11,6 @@
 open Interp_extracted
 open Test_common
 
-(* === Utilities === *)
-
-let cl s = List.init (String.length s) (fun i -> s.[i])
-
-let print_int_nl e =
-  Exp_seq (Exp_app (Exp_var (cl "print_int"), e),
-           Exp_app (Exp_var (cl "print_newline"), Exp_unit))
-
 (* === Random AST generator === *)
 
 (* Variable names pool -- short distinct names to avoid collisions *)
