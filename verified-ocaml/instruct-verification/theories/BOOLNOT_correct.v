@@ -170,10 +170,10 @@ Proof.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
-        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
         [env_v [Henv_load Henv_repr]] &
         Hextra_load &
-        [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+        [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
         [ts_ptr [Hts_load Htrap_rel]]).
       subst sp_ptr.
 
@@ -284,13 +284,16 @@ Proof.
             constructor. }
 
         { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-          split; [| split].
+          split; [| split; [| split; [| split; [| split]]]].
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
             apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                      Hstack_repr Hstore).
-            intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+                        intro Heq; exact (Hblock_sep (eq_sym Heq)).
+          - exact Hsp_ne_sb.
+          - exact Hsp_ne_gb.
+          - exact Hcb_ne_sp. }
 
         { exists env_v. split.
           - exact Henv_load'.
@@ -298,13 +301,14 @@ Proof.
 
         { simpl. exact Hextra_load'. }
 
-        { exists gd_ptr. split; [| split].
+        { exists gd_ptr. split; [| split; [| split]].
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
             apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
                      Hglobal_repr Hstore).
-            intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+                        intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+          - exact Hgb_ne_sb. }
 
         { exists ts_ptr. split.
           - exact Hts_load'.
@@ -331,10 +335,10 @@ Proof.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
-        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
         [env_v [Henv_load Henv_repr]] &
         Hextra_load &
-        [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+        [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
         [ts_ptr [Hts_load Htrap_rel]]).
       subst sp_ptr.
 
@@ -445,13 +449,16 @@ Proof.
             constructor. }
 
         { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-          split; [| split].
+          split; [| split; [| split; [| split; [| split]]]].
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
             apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                      Hstack_repr Hstore).
-            intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+                        intro Heq; exact (Hblock_sep (eq_sym Heq)).
+          - exact Hsp_ne_sb.
+          - exact Hsp_ne_gb.
+          - exact Hcb_ne_sp. }
 
         { exists env_v. split.
           - exact Henv_load'.
@@ -459,13 +466,14 @@ Proof.
 
         { simpl. exact Hextra_load'. }
 
-        { exists gd_ptr. split; [| split].
+        { exists gd_ptr. split; [| split; [| split]].
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
             apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
                      Hglobal_repr Hstore).
-            intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+                        intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+          - exact Hgb_ne_sb. }
 
         { exists ts_ptr. split.
           - exact Hts_load'.

@@ -14,13 +14,17 @@
            Step (s<|pc:=pc'|><|accu:=Val_int(Z.shiftr a b)|><|stack:=rest|>)
        | _, _ => Error ...
 
-   Tagged arithmetic identity (when 0 <= b < 64):
+   Tagged arithmetic identity (when 0 <= b < 64 and a*2+1 fits in
+   64-bit signed range):
      ((2a+1) >>_arith b) | 1 = 2*(Z.shiftr a b)+1
 
    The C shift is only defined when the shift amount is in [0,64).
-   OCaml's bytecode guarantees this for well-formed programs; we encode
-   this as an axiom on the value representation (analogous to the
-   structural axioms in HandlerLemmas.v). *)
+   Additionally, since Int64.shr is an arithmetic (signed) shift,
+   the tagged value a*2+1 must fit in the 64-bit signed range
+   for the result to agree with Z.shiftr on unbounded integers.
+   This holds for OCaml's 63-bit integers (a in [-2^62, 2^62-1]).
+   Both constraints are encoded as preconditions via
+   handler_correct_with_pre. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -36,47 +40,6 @@ Local Ltac eval_cbn :=
   cbn -[clight_ge genv_cenv Mptr sem_binary_operation sem_cast
         Mem.load Mem.store Ptrofs.unsigned Ptrofs.add Ptrofs.repr Ptrofs.mul
         ptrofs_of_int field_offset PTree.get PTree.set].
-
-(* ================================================================== *)
-(* Axiom: shift amounts in OCaml bytecode are valid C shift amounts.   *)
-(* ================================================================== *)
-
-(* OCaml's 63-bit tagged integers on 64-bit platforms ensure that
-   shift instructions receive shift counts in [0,62], well within
-   [0,64) required by C's shift semantics.  This is a runtime value
-   representation invariant, analogous to the structural separation
-   axioms in HandlerLemmas.v.  To eliminate, add a range constraint
-   on Val_int values to abs_rel / val_repr. *)
-Axiom val_int_shift_amount_valid : forall (hm : nat -> option (block * ptrofs)) b cv,
-  val_repr hm (Val_int b) cv ->
-  Int64.ltu (Int64.shr (Int64.repr (b * 2 + 1)) (Int64.repr 1))
-            Int64.iwordsize = true.
-
-(* ================================================================== *)
-(* Axiom: tagged arithmetic identity for ASR.                          *)
-(* ================================================================== *)
-
-(* The C computation on tagged integers:
-     ((2a+1) >>_arith ((2b+1) >>_arith 1)) | 1
-   equals the tagged representation of Z.shiftr a b:
-     2*(Z.shiftr a b)+1
-   when the shift amount is valid (ensured by val_int_shift_amount_valid).
-
-   This identity holds for OCaml's 63-bit tagged integers where both a
-   and b fit in 62 bits.  The identity connects Int64's modular shr
-   (which sign-extends from bit 63) with Z.shiftr (which sign-extends
-   from the mathematical sign).  These agree when a*2+1 fits in signed
-   Int64 range (-2^62 <= a < 2^62).
-
-   To eliminate this axiom, add a 62-bit range constraint on Val_int
-   values to val_repr / abs_rel. *)
-Axiom tagged_asrint_arith : forall a b,
-  Int64.ltu (Int64.shr (Int64.repr (b * 2 + 1)) (Int64.repr 1))
-            Int64.iwordsize = true ->
-  Int64.or (Int64.shr (Int64.repr (a * 2 + 1))
-              (Int64.shr (Int64.repr (b * 2 + 1)) (Int64.repr 1)))
-           (Int64.repr 1)
-  = Int64.repr (Z.shiftr a b * 2 + 1).
 
 (* ================================================================== *)
 (* Semantic lemmas for shift and or operations                         *)
@@ -111,49 +74,197 @@ Local Lemma sem_or_long_int_1 : forall n m,
 Proof. intros. reflexivity. Qed.
 
 (* ================================================================== *)
+(* Tagged arithmetic lemmas for ASRINT                                  *)
+(* ================================================================== *)
+
+(* Helper: 127 <= Int64.max_signed *)
+Local Lemma max_signed_ge_127 : 127 <= Int64.max_signed.
+Proof.
+  unfold Int64.max_signed.
+  rewrite Int64.half_modulus_power.
+  change (Int64.zwordsize - 1) with 63.
+  assert (two_p 63 >= 128).
+  { change (two_p 63) with (two_p (7 + 56)).
+    rewrite two_p_is_exp by lia.
+    change (two_p 7) with 128.
+    generalize (two_p_gt_ZERO 56 ltac:(lia)). lia. }
+  lia.
+Qed.
+
+(* Helper: 127 <= Int64.max_unsigned *)
+Local Lemma max_unsigned_ge_127 : 127 <= Int64.max_unsigned.
+Proof.
+  generalize Int64.two_wordsize_max_unsigned.
+  change Int64.zwordsize with 64. lia.
+Qed.
+
+(* Key lemma: for 0 <= b < 64,
+   Int64.shr (Int64.repr (b*2+1)) (Int64.repr 1) has unsigned value = b *)
+Local Lemma shr_tagged_unsigned : forall b,
+  0 <= b < 64 ->
+  Int64.unsigned (Int64.shr (Int64.repr (b * 2 + 1)) (Int64.repr 1)) = b.
+Proof.
+  intros b Hb.
+  unfold Int64.shr.
+  rewrite Int64.signed_repr.
+  2: { generalize (Int64.min_signed_neg) max_signed_ge_127. lia. }
+  change (Int64.unsigned (Int64.repr 1)) with 1.
+  rewrite Z.shiftr_div_pow2 by lia.
+  change (2 ^ 1)%Z with 2%Z.
+  replace ((b * 2 + 1) / 2)%Z with b by (apply Z.div_unique with 1; lia).
+  apply Int64.unsigned_repr.
+  generalize max_unsigned_ge_127. lia.
+Qed.
+
+(* The ltu guard holds when 0 <= b < 64 *)
+Local Lemma asr_shift_ltu_guard : forall b,
+  0 <= b < 64 ->
+  Int64.ltu (Int64.shr (Int64.repr (b * 2 + 1)) (Int64.repr 1))
+            Int64.iwordsize = true.
+Proof.
+  intros b Hb.
+  unfold Int64.ltu.
+  rewrite shr_tagged_unsigned by lia.
+  change (Int64.unsigned Int64.iwordsize) with Int64.zwordsize.
+  unfold Int64.zwordsize. simpl.
+  destruct (zlt b 64); [reflexivity | lia].
+Qed.
+
+(* Helper: Int64.shr (Int64.repr (b*2+1)) (Int64.repr 1) = Int64.repr b *)
+Local Lemma int64_shr_tagged_1 : forall b,
+  0 <= b < 64 ->
+  Int64.shr (Int64.repr (b * 2 + 1)) (Int64.repr 1) = Int64.repr b.
+Proof.
+  intros b Hb.
+  apply Int64.same_if_eq. unfold Int64.eq.
+  rewrite shr_tagged_unsigned by lia.
+  rewrite Int64.unsigned_repr by (generalize max_unsigned_ge_127; lia).
+  destruct (zeq b b); [reflexivity | congruence].
+Qed.
+
+(* Z.lor x 1 = 2 * Z.div2 x + 1 *)
+Local Lemma Z_lor_1_div2 : forall x, Z.lor x 1 = 2 * Z.div2 x + 1.
+Proof.
+  intros x.
+  pose proof (Z.div2_odd (Z.lor x 1)) as Heq.
+  assert (Hodd : Z.odd (Z.lor x 1) = true).
+  { rewrite <- Z.bit0_odd. rewrite Z.lor_spec. simpl. rewrite Bool.orb_true_r. reflexivity. }
+  rewrite Hodd in Heq. simpl Z.b2z in Heq.
+  assert (Hdiv2 : Z.div2 (Z.lor x 1) = Z.div2 x).
+  { rewrite !Z.div2_spec.
+    rewrite Z.shiftr_lor.
+    replace (Z.shiftr 1 1) with 0 by reflexivity.
+    rewrite Z.lor_0_r. reflexivity. }
+  lia.
+Qed.
+
+(* Z.div2 (Z.shiftr (a*2+1) b) = Z.shiftr a b when 0 <= b *)
+Local Lemma Z_div2_shiftr_tagged : forall a b,
+  0 <= b ->
+  Z.div2 (Z.shiftr (a * 2 + 1) b) = Z.shiftr a b.
+Proof.
+  intros a b Hb.
+  rewrite Z.div2_div.
+  rewrite Z.shiftr_div_pow2 by lia.
+  rewrite Z.shiftr_div_pow2 by lia.
+  rewrite Z.div_div by (try apply Z.pow_pos_nonneg; lia).
+  replace (2 ^ b * 2) with (2 ^ (b + 1)).
+  2:{ change (b + 1) with (Z.succ b). rewrite Z.pow_succ_r by lia. ring. }
+  symmetry.
+  apply Z.div_unique with (2 * (a mod 2^b) + 1).
+  - pose proof (Z.mod_pos_bound a (2^b) ltac:(apply Z.pow_pos_nonneg; lia)).
+    pose proof (Z.pow_pos_nonneg 2 b ltac:(lia) ltac:(lia)).
+    assert (H2b : 2 ^ (b + 1) = 2 * 2 ^ b).
+    { change (b + 1) with (Z.succ b). rewrite Z.pow_succ_r by lia. ring. }
+    left. lia.
+  - change (b + 1) with (Z.succ b). rewrite Z.pow_succ_r by lia.
+    rewrite (Z.div_mod a (2^b)) at 1 by (apply Z.pow_nonzero; lia).
+    ring.
+Qed.
+
+(* The combined tagged arithmetic identity for ASRINT. *)
+Local Lemma tagged_asrint_arith : forall a b,
+  0 <= b < 64 ->
+  Int64.min_signed <= a * 2 + 1 <= Int64.max_signed ->
+  Int64.or (Int64.shr (Int64.repr (a * 2 + 1))
+              (Int64.shr (Int64.repr (b * 2 + 1)) (Int64.repr 1)))
+           (Int64.repr 1)
+  = Int64.repr (Z.shiftr a b * 2 + 1).
+Proof.
+  intros a b Hb Ha_range.
+  rewrite int64_shr_tagged_1 by lia.
+  unfold Int64.shr.
+  rewrite (Int64.unsigned_repr b) by (generalize max_unsigned_ge_127; lia).
+  rewrite Int64.signed_repr by exact Ha_range.
+  unfold Int64.or.
+  apply Int64.eqm_samerepr.
+  rewrite (Int64.unsigned_repr 1) by (generalize max_unsigned_ge_127; lia).
+  apply Int64.eqm_trans with (y := Z.lor (Z.shiftr (a * 2 + 1) b) 1).
+  - apply Int64.eqm_same_bits.
+    intros i Hi.
+    rewrite !Z.lor_spec.
+    f_equal.
+    apply Int64.same_bits_eqm with (i := i).
+    + apply Int64.eqm_sym. apply Int64.eqm_unsigned_repr.
+    + exact Hi.
+  - rewrite Z_lor_1_div2.
+    rewrite Z_div2_shiftr_tagged by lia.
+    apply Int64.eqm_refl2. lia.
+Qed.
+
+(* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
 Theorem verify_ASRINT_correct :
-    handler_correct handle_ASRINT f_instr_ASRINT
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+    handler_correct_with_pre handle_ASRINT f_instr_ASRINT
+      (fun _ s _ =>
+         match s.(Machine.accu), s.(Machine.stack) with
+         | Val_int a, Val_int b :: _ =>
+             0 <= b < 64 /\
+             Int64.min_signed <= a * 2 + 1 <= Int64.max_signed
+         | _, Val_int b :: _ => 0 <= b < 64
+         | _, _ => True
+         end)
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_ASRINT.
+  intros e le m s. unfold handle_ASRINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
-  intro Hpre.
-  destruct Hpre as [ard Hpre].
+  intros ard Hpre Hstep_pre.
+  unfold abs_rel_with_ard in Hpre.
+  change (Machine.accu s) with (Val_int a) in Hstep_pre.
+  change (Machine.stack s) with (Val_int b :: v_tl) in Hstep_pre.
+  simpl in Hstep_pre. destruct Hstep_pre as [Hb Ha_range].
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr0 [Hblock_sep [Hsp_ne_gb Hcode_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr0 Hgb_ne]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
-  pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   rewrite Haccu_eq in Haccu_repr.
   inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
-  rewrite Hstk in Hstack_repr.
-  inversion Hstack_repr as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
-  revert Hgd_load Hgd_eq Hglobal_repr. subst.
-  intros Hgd_load Hgd_eq Hglobal_repr.
+  rewrite Hstk in Hstack_repr0.
+  inversion Hstack_repr0 as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
+  revert Hgd_load Hgd_eq Hglobal_repr0 Hgb_ne. subst.
+  intros Hgd_load Hgd_eq Hglobal_repr Hgb_ne.
   inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
-  (* Shift guard from axiom *)
-  pose proof (val_int_shift_amount_valid hm b (Vlong (Int64.repr (b * 2 + 1)))
-                (vr_int hm b)) as Hshift_guard.
+  pose proof (asr_shift_ltu_guard b Hb) as Hshift_guard.
 
-  (* Abbreviations *)
   set (tagged_a := Int64.repr (a * 2 + 1)).
   set (tagged_b := Int64.repr (b * 2 + 1)).
   set (shift_amt := Int64.shr tagged_b (Int64.repr 1)).
@@ -162,7 +273,6 @@ Proof.
   set (result_v := Vlong result_int64).
   set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
 
-  (* Store 1: sp field *)
   destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
               (Vptr sp_b sp_ofs) new_sp_v Hsp_load) as [m1 Hstore1].
 
@@ -177,7 +287,6 @@ Proof.
   { erewrite Mem.load_store_other. exact Hload_sp0. exact Hstore1.
     left. exact Hblock_sep. }
 
-  (* Store 2: accu field *)
   destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 8)
               (Vlong tagged_a) result_v Haccu_load_m1) as [m' Hstore2].
 
@@ -187,9 +296,7 @@ Proof.
   exists le'. exists m'. exists (Out_return (Some (Vint (Int.repr 0), tint))).
   split.
 
-  (* ============================================================== *)
-  (* Part 1: exec                                                    *)
-  (* ============================================================== *)
+  (* Part 1: exec *)
   { apply (eval_stmt_to_exec clight_ge 15). eval_cbn.
     rewrite Hle_s; eval_cbn.
     rewrite Hco; eval_cbn.
@@ -213,39 +320,26 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gss; eval_cbn.
     rewrite Hload_sp0_m1; eval_cbn.
-    (* lvalue for s->accu *)
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
-    (* -- ASRINT-specific: evaluate the rhs expression -- *)
-    (* _t'2 lookup *)
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gss; eval_cbn.
-    (* _t'2 cast *)
     rewrite sem_cast_long_vlong; eval_cbn.
-    (* _t'3 lookup *)
     rewrite PTree.gss; eval_cbn.
-    (* _t'3 cast *)
     rewrite sem_cast_long_vlong; eval_cbn.
-    (* inner Oshr: (long)_t'3 >> 1 *)
     rewrite sem_shr_long_int_1; eval_cbn.
-    (* outer Oshr: (long)_t'2 >> shift_amt *)
     rewrite (sem_shr_long_long_signed tagged_a shift_amt _ Hshift_guard); eval_cbn.
-    (* Oor: shifted | 1 *)
     rewrite sem_or_long_int_1; eval_cbn.
-    (* casts *)
     rewrite sem_cast_long_vlong; eval_cbn.
     rewrite sem_cast_long_vlong; eval_cbn.
-    (* store *)
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     unfold result_v, result_int64, shifted in Hstore2.
     rewrite Hstore2; eval_cbn.
     subst le'. reflexivity. }
 
-  (* ============================================================== *)
-  (* Part 2: abs_rel                                                 *)
-  (* ============================================================== *)
+  (* Part 2: abs_rel *)
   { exists ard. set (uso := Ptrofs.unsigned so) in *.
     assert (Hpc_load' : Mem.load Mint64 m' sb (uso + 0) = Some pc_ptr).
     { assert (Hpc_m1 : Mem.load Mint64 m1 sb (uso + 0) = Some pc_ptr).
@@ -304,33 +398,43 @@ Proof.
     (* 3. accu = Val_int (Z.shiftr a b) *)
     { exists result_v. split. exact Haccu_load'. simpl.
       unfold result_v, result_int64, shifted, shift_amt, tagged_a, tagged_b.
-      rewrite tagged_asrint_arith by exact Hshift_guard.
+      rewrite (tagged_asrint_arith a b Hb Ha_range).
       constructor. }
-    (* 4. sp *)
+    (* 4. sp -- conjunction: stack_repr /\ sep facts *)
     { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
-      split; [| split]. exact Hsp_load'. reflexivity. simpl.
-      eapply (stack_repr_store_other_block hm m1 m' _ sp_b
-               (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-      + eapply (stack_repr_store_other_block hm m m1 _ sp_b
-                 (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
-        * exact Hstack_repr_rest.
-        * exact Hstore1.
-        * intro Heq; exact (Hblock_sep (eq_sym Heq)).
-      + exact Hstore2.
-      + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+      split; [| split; [| split; [| split; [| split]]]].
+      - exact Hsp_load'.
+      - reflexivity.
+      - simpl.
+        eapply (stack_repr_store_other_block hm m1 m' _ sp_b
+                 (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
+        + eapply (stack_repr_store_other_block hm m m1 _ sp_b
+                   (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
+          * exact Hstack_repr_rest.
+          * exact Hstore1.
+          * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        + exact Hstore2.
+        + intro Heq; exact (Hblock_sep (eq_sym Heq)).
+      - exact Hblock_sep.
+      - exact Hsp_ne_gb.
+      - exact Hcode_ne_sp. }
     (* 5. env *)
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     (* 6. extra_args *)
     { simpl. exact Hextra_load'. }
-    (* 7. global_data *)
-    { exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
-      eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-      + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v).
-        * exact Hglobal_repr.
-        * exact Hstore1.
-        * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
-      + exact Hstore2.
-      + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+    (* 7. global_data -- conjunction: global_repr /\ gb <> sb *)
+    { exists gd_ptr. split; [| split; [| split]].
+      - exact Hgd_load'.
+      - simpl. exact Hgd_eq.
+      - simpl.
+        eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
+        + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v).
+          * exact Hglobal_repr.
+          * exact Hstore1.
+          * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        + exact Hstore2.
+        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+      - exact Hgb_ne. }
     (* 8. trap_sp *)
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
 Qed.

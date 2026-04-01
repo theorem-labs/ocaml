@@ -122,10 +122,10 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
   unfold pc_rel in Hpc_rel.
@@ -217,7 +217,9 @@ Proof.
     set (new_co := Ptrofs.sub new_pc_ofs (Ptrofs.repr (target * sizeof_code_t))).
     set (ard' := mk_abs_rel sb so hm cb new_co
                    (ar_global_block ard) (ar_global_ofs ard)
-                   (ar_stack_block ard) (ar_stack_base_ofs ard)).
+                   (ar_stack_block ard) (ar_stack_base_ofs ard)
+                   (ar_code_ne_sptr ard) (ar_code_ne_global ard)
+                   (ar_sptr_ofs_bound ard)).
     exists ard'.
     (* Non-pc field loads survive the store at uso (other fields at uso + 8..48) *)
     assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some accu_v).
@@ -272,20 +274,22 @@ Proof.
     + (* accu *)
       exists accu_v. split. exact Haccu_load'. simpl. exact Haccu_repr.
     + (* sp *)
-      exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split].
+      exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]].
       exact Hsp_load'. reflexivity. simpl.
       apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_ptr
                Hstack_repr Hstore).
       intro Heq. exact (sp_block_ne_sptr ard sp_b (eq_sym Heq)).
+      exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp.
     + (* env *)
       exists env_v. split. exact Henv_load'. simpl. exact Henv_repr.
     + (* extra_args *)
       simpl. exact Hextra_load'.
     + (* global_data *)
-      exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
+      exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
       apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_ptr
                Hglobal_repr Hstore).
       intro Heq2. exact (global_block_ne_sptr ard (eq_sym Heq2)).
+      exact Hgb_ne_sb.
     + (* trap_sp *)
       exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel.
 Qed.

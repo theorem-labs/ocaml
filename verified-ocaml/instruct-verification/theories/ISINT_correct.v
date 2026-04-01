@@ -299,10 +299,10 @@ Proof.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
-      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
       [env_v [Henv_load Henv_repr]] &
       Hextra_load &
-      [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+      [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
       [ts_ptr [Hts_load Htrap_rel]]).
     subst sp_ptr.
 
@@ -348,13 +348,12 @@ Proof.
       (* S2 lvalue *)
       rewrite PTree.gso by (compute; congruence).
       rewrite Hle_s; eval_cbn.
-      rewrite Hco; eval_cbn.
-      rewrite Haccu_offset; eval_cbn.
 
       (* Rvalue: resolve _t'1 *)
       rewrite PTree.gss; eval_cbn.
 
       (* Ebinop Oand: _t'1 & 1 *)
+      unfold cv_accu.
       rewrite sem_and_long_int_1; eval_cbn.
 
       (* Ecast tlong -> tlong (identity) *)
@@ -365,9 +364,6 @@ Proof.
 
       (* Ebinop Oadd: ... + 1 *)
       rewrite sem_add_long_int_1; eval_cbn.
-
-      (* Ecast tlong -> tlong *)
-      rewrite sem_cast_long_vlong; eval_cbn.
 
       (* Sassign sem_cast: typeof rhs (tlong) -> typeof lhs (tlong) *)
       rewrite sem_cast_long_vlong; eval_cbn.
@@ -435,13 +431,16 @@ Proof.
           constructor. }
 
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-        split; [| split].
+        split; [| split; [| split; [| split; [| split]]]].
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
           apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                    Hstack_repr Hstore).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+                    intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        - exact Hsp_ne_sb.
+        - exact Hsp_ne_gb.
+        - exact Hcb_ne_sp. }
 
       { exists env_v. split.
         - exact Henv_load'.
@@ -449,13 +448,14 @@ Proof.
 
       { simpl. exact Hextra_load'. }
 
-      { exists gd_ptr. split; [| split].
+      { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
           apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
                    Hglobal_repr Hstore).
-          intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+                    intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        - exact Hgb_ne_sb. }
 
       { exists ts_ptr. split.
         - exact Hts_load'.
@@ -471,7 +471,7 @@ Proof.
 
     (* The precondition isint_accu_vlong requires fields = nil *)
     intros Hok Hpre.
-    rewrite Haccu_eq in Hok. simpl in Hok.
+    unfold isint_accu_vlong in Hok. rewrite Haccu_eq in Hok. simpl in Hok.
     destruct fields as [|fhd ftl].
     2: { contradiction. }
 
@@ -482,10 +482,10 @@ Proof.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
-      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
       [env_v [Henv_load Henv_repr]] &
       Hextra_load &
-      [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+      [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
       [ts_ptr [Hts_load Htrap_rel]]).
     subst sp_ptr.
 
@@ -498,14 +498,13 @@ Proof.
     fold sb in Hgb_ne.
 
     rewrite Haccu_eq in Haccu_repr.
-    inversion Haccu_repr; subst accu_v.
-    rename tag0 into tag'.
+    inversion Haccu_repr; subst accu_v; subst tag0.
 
-    set (cv_accu := Vlong (Int64.repr (Z.of_nat tag' * 1024))) in *.
+    set (cv_accu := Vlong (Int64.repr (Z.of_nat tag * 1024))) in *.
 
     destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
-    set (cv_result := Vlong (Int64.add (Int64.shl' (Int64.and (Int64.repr (Z.of_nat tag' * 1024)) (Int64.repr 1)) (Int.repr 1)) (Int64.repr 1))) in *.
+    set (cv_result := Vlong (Int64.add (Int64.shl' (Int64.and (Int64.repr (Z.of_nat tag * 1024)) (Int64.repr 1)) (Int.repr 1)) (Int64.repr 1))) in *.
 
     destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 8)
                 cv_accu cv_result Haccu_load)
@@ -534,11 +533,11 @@ Proof.
 
       rewrite PTree.gss; eval_cbn.
 
+      unfold cv_accu.
       rewrite sem_and_long_int_1; eval_cbn.
       rewrite sem_cast_long_vlong; eval_cbn.
       rewrite sem_shl_long_int_1; eval_cbn.
       rewrite sem_add_long_int_1; eval_cbn.
-      rewrite sem_cast_long_vlong; eval_cbn.
 
       (* Sassign sem_cast *)
       rewrite sem_cast_long_vlong; eval_cbn.
@@ -606,13 +605,16 @@ Proof.
           constructor. }
 
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-        split; [| split].
+        split; [| split; [| split; [| split; [| split]]]].
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
           apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                    Hstack_repr Hstore).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+                    intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        - exact Hsp_ne_sb.
+        - exact Hsp_ne_gb.
+        - exact Hcb_ne_sp. }
 
       { exists env_v. split.
         - exact Henv_load'.
@@ -620,13 +622,14 @@ Proof.
 
       { simpl. exact Hextra_load'. }
 
-      { exists gd_ptr. split; [| split].
+      { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
           apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
                    Hglobal_repr Hstore).
-          intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+                    intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        - exact Hgb_ne_sb. }
 
       { exists ts_ptr. split.
         - exact Hts_load'.
@@ -639,7 +642,7 @@ Proof.
   (* ================================================================ *)
   {
     intros Hok _Hpre.
-    rewrite Haccu_eq in Hok. simpl in Hok. contradiction.
+    unfold isint_accu_vlong in Hok. rewrite Haccu_eq in Hok. simpl in Hok. contradiction.
   }
 
   (* ================================================================ *)
@@ -647,6 +650,6 @@ Proof.
   (* ================================================================ *)
   {
     intros Hok _Hpre.
-    rewrite Haccu_eq in Hok. simpl in Hok. contradiction.
+    unfold isint_accu_vlong in Hok. rewrite Haccu_eq in Hok. simpl in Hok. contradiction.
   }
 Qed.

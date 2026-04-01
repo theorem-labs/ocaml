@@ -17,10 +17,13 @@
    Two stores: accu field at offset +8, pc field at offset +0.
 
    Unlike CONST0-3, CONSTINT is parameterized over n, which the C code reads
-   from the code block.  This requires:
-   - An axiom connecting the code memory contents to n
-   - A shifted abs_rel_data in the post-state (code_base_ofs advanced by 4)
-   - A field_offset fact for _pc (at offset 0) *)
+   from the code block.  This requires preconditions:
+   - The code buffer contains Int.repr n at the current PC position
+   - The code block is separate from the struct block
+   - n fits in the int32 signed range
+
+   NO AXIOMS.  All structural/range constraints are preconditions
+   via handler_correct_with_pre, following the pattern of POP_correct.v. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -72,16 +75,6 @@ Lemma interp_state_co_pc_accu : exists co,
 Proof.
   rewrite cenv_is_ce. exact ce_offsets.
 Qed.
-
-(* ================================================================== *)
-(* Code memory axioms                                                  *)
-(* ================================================================== *)
-
-Axiom code_block_ne_sptr : forall (ard : abs_rel_data),
-  ar_code_base_block ard <> ar_sptr_block ard.
-
-Axiom code_contains_n : forall m cb co rocq_pc n,
-  Mem.load Mint32 m cb (Ptrofs.unsigned (Ptrofs.add co (Ptrofs.repr (rocq_pc * sizeof_code_t)))) = Some (Vint (Int.repr n)).
 
 (* ================================================================== *)
 (* Semantic helpers                                                    *)
@@ -136,10 +129,35 @@ Proof.
   simpl. reflexivity.
 Qed.
 
-(* Structural invariant: n fits in int32 signed range *)
-Axiom tagged_int_eq : forall n,
+(* tagged_int_eq: proved from range constraint instead of axiom.
+   When Int.min_signed <= n <= Int.max_signed, Int.signed (Int.repr n) = n,
+   so the Int64 arithmetic simplifies to modular congruence. *)
+Lemma tagged_int_eq : forall n,
+  Int.min_signed <= n <= Int.max_signed ->
   Int64.add (Int64.shl (Int64.repr (Int.signed (Int.repr n))) (Int64.repr 1))
             (Int64.repr 1) = Int64.repr (n * 2 + 1).
+Proof.
+  intros n Hrange.
+  rewrite Int.signed_repr by exact Hrange.
+  unfold Int64.shl.
+  change (Int64.unsigned (Int64.repr 1)) with 1%Z.
+  rewrite Int64.add_unsigned.
+  apply Int64.eqm_samerepr.
+  (* Goal: eqm (unsigned(repr(shiftl(unsigned(repr(n)),1))) + unsigned(repr(1)))
+               (n * 2 + 1) *)
+  apply Int64.eqm_trans with (y := (Z.shiftl (Int64.unsigned (Int64.repr n)) 1 + 1)%Z).
+  { apply Int64.eqm_add.
+    - apply Int64.eqm_sym. apply Int64.eqm_unsigned_repr.
+    - apply Int64.eqm_refl. }
+  rewrite Z.shiftl_mul_pow2 by lia.
+  change (2 ^ 1)%Z with 2%Z.
+  (* Goal: eqm (unsigned(repr(n)) * 2 + 1) (n * 2 + 1) *)
+  apply Int64.eqm_add.
+  - apply Int64.eqm_mult.
+    + apply Int64.eqm_sym. apply Int64.eqm_unsigned_repr.
+    + apply Int64.eqm_refl.
+  - apply Int64.eqm_refl.
+Qed.
 
 Lemma load_result_vlong : forall n,
   Val.load_result Mint64 (Vlong n) = Vlong n.
@@ -168,37 +186,49 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_CONSTINT_correct : forall n,
-    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
+    handler_correct_with_pre (handle_CONSTINT n) f_instr_CONSTINT
+      (fun m s ard =>
+         (* The code buffer contains Int.repr n at the current PC position *)
+         Mem.load Mint32 m (ar_code_base_block ard)
+           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+         = Some (Vint (Int.repr n)) /\
+         (* n fits in the int32 signed range *)
+         Int.min_signed <= n <= Int.max_signed)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_CONSTINT. simpl.
-  intro Hpre.
+  unfold handler_correct_with_pre, handle_CONSTINT. simpl.
 
-  (* Unpack abs_rel *)
-  destruct Hpre as [ard Hpre].
+  intros ard Hpre Hstep_pre.
+  unfold abs_rel_with_ard in Hpre.
+
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
   set (cb := ar_code_base_block ard) in *.
   set (co := ar_code_base_ofs ard) in *.
+
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
+
+  destruct Hstep_pre as (Hcode_load & Hn_range).
 
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
-  pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (code_block_ne_sptr ard) as Hcb_ne. fold sb cb in Hcb_ne.
+  (* Block separation from abs_rel inline facts *)
+  pose proof Hsp_ne_sb as Hblock_sep. fold sb in Hblock_sep.
+  pose proof Hgb_ne_sb as Hgb_ne. fold sb in Hgb_ne.
+  pose proof (ar_code_ne_sptr ard) as Hcb_ne. fold sb cb in Hcb_ne.
 
   (* Composite environment: co_is with _pc@0, _accu@8 *)
   destruct interp_state_co_pc_accu as [co_is [Hco [Hpc_offset Haccu_offset]]].
@@ -206,10 +236,6 @@ Proof.
   (* pc_ptr is a concrete Vptr *)
   unfold pc_rel in Hpc_rel. subst pc_ptr.
   set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
-
-  (* Load n from code memory *)
-  pose proof (code_contains_n m cb co (Machine.pc s) n) as Hcode_load.
-  fold pc_ofs in Hcode_load.
 
   (* Tagged value *)
   set (tagged_n := Int64.repr (n * 2 + 1)).
@@ -235,6 +261,14 @@ Proof.
   destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 0)
               (Vptr cb pc_ofs) new_pc_v Hpc_load_m1)
     as [m2 Hstore2].
+
+  (* Code load survives store1 (different block) *)
+  assert (Hcode_load_m1 : Mem.load Mint32 m1 cb (Ptrofs.unsigned pc_ofs) =
+            Some (Vint (Int.repr n))).
+  { erewrite Mem.load_store_other.
+    - exact Hcode_load.
+    - exact Hstore1.
+    - left. exact Hcb_ne. }
 
   (* Witnesses *)
   set (le' := PTree.set _t'1 (Vptr cb pc_ofs)
@@ -299,7 +333,7 @@ Proof.
     (* Replace tagged value *)
     replace (Int64.add (Int64.shl (Int64.repr (Int.signed (Int.repr n))) (Int64.repr 1))
                        (Int64.repr 1))
-      with tagged_n by (subst tagged_n; symmetry; apply tagged_int_eq).
+      with tagged_n by (subst tagged_n; symmetry; apply tagged_int_eq; exact Hn_range).
     fold tagged_v.
     rewrite Hstore1; eval_cbn.
 
@@ -344,7 +378,8 @@ Proof.
       (ar_sptr_block ard) (ar_sptr_ofs ard) (ar_heap_map ard)
       (ar_code_base_block ard) new_co
       (ar_global_block ard) (ar_global_ofs ard)
-      (ar_stack_block ard) (ar_stack_base_ofs ard)).
+      (ar_stack_block ard) (ar_stack_base_ofs ard)
+      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_sptr_ofs_bound ard)).
     exists ard'.
     set (uso := Ptrofs.unsigned so) in *.
 
@@ -425,7 +460,7 @@ Proof.
         exact (vr_int _ n). }
 
     (* 4. sp field -- unchanged *)
-    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split].
+    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
@@ -435,7 +470,10 @@ Proof.
           * exact Hstore1.
           * intro Heq; exact (Hblock_sep (eq_sym Heq)).
         + exact Hstore2.
-        + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+        + intro Heq; exact (Hblock_sep (eq_sym Heq)).
+      - exact Hsp_ne_sb.
+      - exact Hsp_ne_gb.
+      - exact Hcb_ne_sp. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -446,7 +484,7 @@ Proof.
     { simpl. exact Hextra_load2. }
 
     (* 7. global_data field -- unchanged *)
-    { exists gd_ptr. split; [| split].
+    { exists gd_ptr. split; [| split; [| split]].
       - exact Hgd_load2.
       - simpl. exact Hgd_eq.
       - simpl.
@@ -460,7 +498,8 @@ Proof.
           * exact Hstore1.
           * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         + exact Hstore2.
-        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+      - exact Hgb_ne_sb. }
 
     (* 8. trap_sp field -- unchanged *)
     { exists ts_ptr. split.

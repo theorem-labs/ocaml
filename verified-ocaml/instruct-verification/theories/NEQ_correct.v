@@ -98,11 +98,11 @@ Definition neq_int_range_pre (m : mem) (s : state) (_ : abs_rel_data) : Prop :=
 Theorem verify_NEQ_correct :
     handler_correct_with_pre handle_NEQ f_instr_NEQ
       neq_int_range_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 Proof.
   unfold handler_correct_with_pre.
   intros e le m s. unfold handle_NEQ.
-  destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
+  destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try reflexivity.
   (* Non-empty stack: handle_NEQ returns Step for all accu/v_hd combos. *)
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
     destruct v_hd as [b| | |] eqn:Hvhd.
@@ -114,7 +114,7 @@ Proof.
   intros ard Hpre Hrange.
   unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
-  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
+  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
@@ -212,16 +212,20 @@ Proof.
       unfold result_v. rewrite tagged_neq_result.
       unfold neq_bool. rewrite (tagged_neq_arith a b Ha_range Hb_range).
       destruct (Z.eqb a b); constructor. }
-    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split]. exact Hsp_load'. reflexivity. simpl.
-      eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-      + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
-        * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hblock_sep (eq_sym Heq)).
-      + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split; [| split; [| split; [| split]]]]. exact Hsp_load'. reflexivity.
+      { simpl.
+        eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
+        + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
+          * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+      exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp. }
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }
-    { exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
-      eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-      + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
-      + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+    { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq.
+      { simpl.
+        eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
+        + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+      exact Hgb_ne_sb. }
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
 Qed.

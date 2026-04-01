@@ -274,7 +274,7 @@ Theorem verify_ASSIGN_correct : forall n,
            exists m_sw,
              Mem.store Mint64 m1 sp_b
                (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) accu_v = Some m_sw))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
   intros e le m s.
@@ -283,7 +283,7 @@ Proof.
   (* Case split on set_nth *)
   destruct (set_nth (Machine.stack s) n (Machine.accu s)) as [new_stack |] eqn:Hset.
 
-  2: { (* Error case: P_error = True *) trivial. }
+  2: { (* Error case: set_nth returned None *) reflexivity. }
 
   (* Step case *)
   intros ard Hpre Hstep_pre.
@@ -297,10 +297,10 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
 
@@ -309,10 +309,10 @@ Proof.
 
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
-  pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
+  pose proof (Ptrofs.unsigned_range so) as [Hso_pos Hso_hi].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (sp_block_ne_global ard sp_b) as Hsp_ne_gb.
+  (* Hsp_ne_gb already from destruct *)
   pose proof (sp_ofs_stack_representable hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_rep.
 
   (* n < length stack (from set_nth success) *)
@@ -412,7 +412,9 @@ Proof.
     (ar_sptr_block ard) (ar_sptr_ofs ard) (ar_heap_map ard)
     (ar_code_base_block ard) new_co
     (ar_global_block ard) (ar_global_ofs ard)
-    (ar_stack_block ard) (ar_stack_base_ofs ard)).
+    (ar_stack_block ard) (ar_stack_base_ofs ard)
+    (ar_code_ne_sptr ard) (ar_code_ne_global ard)
+    (ar_sptr_ofs_bound ard)).
 
   exists le'. exists m3.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).
@@ -447,28 +449,44 @@ Proof.
 
     (* S1: Sset _t'1 (s->pc) -- read pc from struct *)
     rewrite Hle_s; eval_cbn.
-    (* DEBUG: see goal after first eval_cbn *)
-    admit.
+    rewrite Hco; eval_cbn.
+    rewrite Hpc_offset; eval_cbn.
+    rewrite Mptr_Mint64; eval_cbn.
+    (* After eval_cbn, set abbreviations may be expanded in goal.
+       Use change to re-fold them. *)
+    change (ar_sptr_ofs ard) with so.
+    change (ar_sptr_block ard) with sb.
+    rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
+    (* Use setoid_rewrite or rewrite at specific position *)
+    replace (Mem.load Mint64 m sb (Ptrofs.unsigned so + 0))
+      with (Some (Vptr cb pc_ofs)) by (symmetry; exact Hpc_load).
+    lazy beta iota zeta.
 
     (* S2: Sassign (s->pc) (_t'1 + 1) -- advance pc *)
     rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
     rewrite PTree.gss; eval_cbn.
     rewrite (sem_add_pc_1 cb pc_ofs m); eval_cbn.
+    change (Ptrofs.add pc_ofs (Ptrofs.repr 4)) with new_pc_ofs.
     rewrite (sem_cast_ptr_tint_to_ptr_tint cb new_pc_ofs); eval_cbn.
+    rewrite Mptr_Mint64; eval_cbn.
+    change (ar_sptr_block ard) with sb.
+    change (ar_sptr_ofs ard) with so.
+    rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
     fold new_pc_v.
-    rewrite Hstore_pc'; eval_cbn.
+    rewrite Hstore_pc; eval_cbn.
 
     (* S3: Sset _t'2 (s->sp) *)
     rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
     rewrite Hsp_offset; eval_cbn.
     rewrite Mptr_Mint64; eval_cbn.
+    change (ar_sptr_block ard) with sb.
+    change (ar_sptr_ofs ard) with so.
     rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
     rewrite Hsp_load_m1; eval_cbn.
 
-    (* S4: Sset _t'3 (*_t'1) -- read n from code buffer *)
+    (* S4: Sset _t'3 ( *_t'1) -- read n from code buffer *)
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gss; eval_cbn.
     rewrite Hcode_load_m1; eval_cbn.
@@ -478,25 +496,22 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
     rewrite Haccu_offset; eval_cbn.
+    change (ar_sptr_block ard) with sb.
+    change (ar_sptr_ofs ard) with so.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     rewrite Haccu_load_m1; eval_cbn.
 
     (* S6: Sassign *(sp + n) _t'4 -- store accu at stack[n] *)
-    (* Lvalue: Ederef (Ebinop Oadd _t'2 _t'3 (tptr tlong)) tlong *)
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gss; eval_cbn.  (* _t'2 = Vptr sp_b sp_ofs *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gss; eval_cbn.  (* _t'3 = Vint (Int.repr n) *)
-    rewrite (sem_add_sp_n sp_b sp_ofs (Int.repr (Z.of_nat n)) m1); eval_cbn.
-    (* Rvalue: _t'4 = accu_v *)
     rewrite PTree.gss; eval_cbn.
-    (* sem_cast accu_v tlong tlong *)
+    rewrite PTree.gso by (compute; congruence).
+    rewrite PTree.gss; eval_cbn.
+    rewrite (sem_add_sp_n sp_b sp_ofs (Int.repr (Z.of_nat n)) m1); eval_cbn.
+    rewrite PTree.gss; eval_cbn.
     rewrite (sem_cast_long_val_repr hm _ accu_v m1 Haccu_repr); eval_cbn.
-    (* Store: need unsigned of computed address = sp_ofs + 8*n *)
-    rewrite Hsp_n_unsigned.
+    change (Ptrofs.repr 8) with (Ptrofs.repr (sizeof ge tlong)); rewrite Hsp_n_unsigned.
     rewrite Hstore_stack; eval_cbn.
 
     (* S7: Sassign (s->accu) ((0 << 1) + 1) = 1 *)
@@ -505,7 +520,8 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
-    rewrite Haccu_offset; eval_cbn.
+    change (ar_sptr_block ard) with sb.
+    change (ar_sptr_ofs ard) with so.
     rewrite (sem_cast_int_to_long_0 m2); eval_cbn.
     rewrite (sem_shl_long_0_1 m2); eval_cbn.
     rewrite (sem_add_long_int_0_1 m2); eval_cbn.
@@ -528,7 +544,7 @@ Proof.
     (* pc field at uso+0: written by store_pc, survives other stores *)
     assert (Hpc_load_m1 : Mem.load Mint64 m1 sb (uso + 0) = Some new_pc_v).
     { pose proof (load_after_store_same m m1 sb (uso + 0) new_pc_v Hstore_pc) as Htmp.
-      unfold new_pc_v in Htmp |- *. rewrite load_result_vptr in Htmp. exact Htmp. }
+      subst new_pc_v new_pc_ofs. rewrite load_result_vptr in Htmp. exact Htmp. }
     assert (Hpc_load_m2 : Mem.load Mint64 m2 sb (uso + 0) = Some new_pc_v).
     { apply Hload_m2_sb. exact Hpc_load_m1. }
     assert (Hpc_load3 : Mem.load Mint64 m3 sb (uso + 0) = Some new_pc_v).
@@ -607,20 +623,24 @@ Proof.
       - simpl. subst unit_v. exact (vr_int _ 0). }
 
     (* 4. sp field -- same pointer, but stack_repr for new_stack *)
-    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split].
+    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
+      split; [| split; [| split; [| split; [| split]]]].
       - exact Hsp_load3.
       - reflexivity.
       - simpl.
-        apply (stack_repr_store_other_block hm m2 m3 _ sp_b sp_ofs sb
+        apply (stack_repr_store_other_block (ar_heap_map ard) m2 m3 _ sp_b sp_ofs sb
                  (uso + 8) unit_v).
-        + eapply (stack_repr_update hm m1 m2 (Machine.stack s) sp_b sp_ofs n
+        + eapply (stack_repr_update (ar_heap_map ard) m1 m2 (Machine.stack s) sp_b sp_ofs n
                     (Machine.accu s) accu_v new_stack).
           * exact Hstack_repr_m1.
           * exact Hset.
           * exact Haccu_repr.
           * exact Hstore_stack.
         + exact Hstore_accu.
-        + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+        + intro Heq; exact (Hblock_sep (eq_sym Heq)).
+      - exact Hsp_ne_sb.
+      - exact Hsp_ne_gb.
+      - exact Hcb_ne_sp. }
 
     (* 5. env field *)
     { exists env_v. split.
@@ -631,17 +651,17 @@ Proof.
     { simpl. exact Hextra_load3. }
 
     (* 7. global_data field *)
-    { exists gd_ptr. split; [| split].
+    { exists gd_ptr. split; [| split; [| split]].
       - exact Hgd_load3.
       - simpl. exact Hgd_eq.
       - simpl.
-        apply (global_repr_store_other_block hm m2 m3 _
+        apply (global_repr_store_other_block (ar_heap_map ard) m2 m3 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (uso + 8) unit_v).
-        + apply (global_repr_store_other_block hm m1 m2 _
+        + apply (global_repr_store_other_block (ar_heap_map ard) m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sp_b (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) accu_v).
-          * apply (global_repr_store_other_block hm m m1 _
+          * apply (global_repr_store_other_block (ar_heap_map ard) m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 0) new_pc_v
                      Hglobal_repr Hstore_pc).
@@ -649,11 +669,12 @@ Proof.
           * exact Hstore_stack.
           * exact Hsp_ne_gb.
         + exact Hstore_accu.
-        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+      - exact Hgb_ne_sb. }
 
     (* 8. trap_sp field *)
     { exists ts_ptr. split.
       - exact Hts_load3.
       - simpl. exact Htrap_rel. }
   }
-Admitted.
+Qed.

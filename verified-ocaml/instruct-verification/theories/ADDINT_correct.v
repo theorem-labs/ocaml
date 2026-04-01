@@ -79,10 +79,10 @@ Proof.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
-      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
       [env_v [Henv_load Henv_repr]] &
       Hextra_load &
-      [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+      [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
       [ts_ptr [Hts_load Htrap_rel]]).
     subst sp_ptr.
 
@@ -338,7 +338,7 @@ Proof.
 
       (* 4. sp field -- updated to sp + 8 (stack tail) *)
       { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
-        split; [| split].
+        split; [| split; [| split; [| split; [| split]]]].
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
@@ -354,7 +354,10 @@ Proof.
             * exact Hstore1.
             * intro Heq; exact (Hblock_sep (eq_sym Heq)).
           + exact Hstore2.
-          + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+                    + intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        - exact Hsp_ne_sb.
+        - exact Hsp_ne_gb.
+        - exact Hcb_ne_sp. }
 
       (* 5. env field -- unchanged *)
       { exists env_v. split.
@@ -365,7 +368,7 @@ Proof.
       { simpl. exact Hextra_load'. }
 
       (* 7. global_data field -- unchanged *)
-      { exists gd_ptr. split; [| split].
+      { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
@@ -376,7 +379,8 @@ Proof.
             * exact Hstore1.
             * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           + exact Hstore2.
-          + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+                    + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        - exact Hgb_ne_sb. }
 
       (* 8. trap_sp field -- unchanged *)
       { exists ts_ptr. split.

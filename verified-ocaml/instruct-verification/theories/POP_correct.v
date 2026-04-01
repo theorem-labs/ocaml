@@ -232,7 +232,7 @@ Theorem verify_POP_correct : forall n,
             Mem.load Mint64 m (ar_sptr_block ard)
               (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
             Ptrofs.unsigned sp_ofs + Z.of_nat n * 8 < Ptrofs.modulus))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
   intros e le m s.
@@ -250,10 +250,10 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
 
@@ -264,7 +264,6 @@ Proof.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (sp_block_ne_global ard sp_b) as Hsp_ne_gb.
 
   (* Composite environment *)
   destruct interp_state_co_pc_sp as [co_is [Hco [Hpc_offset Hsp_offset]]].
@@ -400,7 +399,9 @@ Proof.
     set (new_co := Ptrofs.add co (Ptrofs.repr sizeof_code_t)).
     set (ard' := mk_abs_rel sb so hm cb new_co
                    (ar_global_block ard) (ar_global_ofs ard)
-                   (ar_stack_block ard) (ar_stack_base_ofs ard)).
+                   (ar_stack_block ard) (ar_stack_base_ofs ard)
+                   (ar_code_ne_sptr ard) (ar_code_ne_global ard)
+                   (ar_sptr_ofs_bound ard)).
     exists ard'.
 
     set (uso := Ptrofs.unsigned so) in *.
@@ -491,7 +492,7 @@ Proof.
 
     (* 4. sp field -- updated; stack is skipn n *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split].
+      split; [| split; [| split; [| split; [| split]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
@@ -508,7 +509,10 @@ Proof.
                    (uso + 16) (Vptr sp_b new_sp_ofs) Hstack_m1 Hstore_sp).
           intro Heq; exact (Hblock_sep (eq_sym Heq)). }
         (* Now apply stack_repr_skipn *)
-        exact (stack_repr_skipn n hm m2 (Machine.stack s) sp_b sp_ofs Hstack_m2). }
+                exact (stack_repr_skipn n hm m2 (Machine.stack s) sp_b sp_ofs Hstack_m2).
+      - exact Hsp_ne_sb.
+      - exact Hsp_ne_gb.
+      - exact Hcb_ne_sp. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -519,7 +523,7 @@ Proof.
     { simpl. exact Hextra_load2. }
 
     (* 7. global_data field -- unchanged *)
-    { exists gd_ptr. split; [| split].
+    { exists gd_ptr. split; [| split; [| split]].
       - exact Hgd_load2.
       - simpl. exact Hgd_eq.
       - simpl.
@@ -532,7 +536,8 @@ Proof.
                    Hglobal_repr Hstore_pc).
           intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         + exact Hstore_sp.
-        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+      - exact Hgb_ne_sb. }
 
     (* 8. trap_sp field -- unchanged *)
     { exists ts_ptr. split.

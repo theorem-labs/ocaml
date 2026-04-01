@@ -1,6 +1,6 @@
 SHELL := /bin/bash
 
-.PHONY: all build extract extract-full test test-manual test-full \
+.PHONY: all build build-instruct extract extract-full test test-manual test-full \
         testsuite testsuite-all clean
 
 # ---- Build ----
@@ -10,6 +10,13 @@ all: build extract test
 build:
 	@rm -f checker/Extract.glob checker/Extract.vo checker/.Extract.aux
 	dune build manual/ semi-auto/ automatic/ checker/
+
+# Build instruct-verification theories (InstructSpec.v + Clight AST).
+# Delegates to instruct-verification/Makefile for C code generation, then
+# builds the Rocq theories via dune.
+build-instruct:
+	$(MAKE) -C instruct-verification gen/instruct_handlers.c
+	dune build instruct-verification/theories/
 
 # ---- Extraction ----
 
@@ -138,3 +145,4 @@ clean:
 	dune clean
 	rm -f Interp_extracted.ml Interp_extracted.mli
 	rm -f checker/Extract.glob checker/Extract.vo checker/.Extract.aux
+	$(MAKE) -C instruct-verification clean

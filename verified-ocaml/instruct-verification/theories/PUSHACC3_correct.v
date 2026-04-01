@@ -32,17 +32,18 @@ Qed.
 
 Theorem verify_PUSHACC3_correct :
     handler_correct (handle_PUSHACC 3) f_instr_PUSHACC3
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 3 = None)
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s. unfold handler_correct, handle_PUSHACC. simpl nth_error.
   (* The handler computes nth_error (accu :: stack) 3 = nth_error stack 2.
      We need stack to have >= 3 elements for Step. *)
   destruct (Machine.stack s) as [|v0 stk0] eqn:Hstk.
-  { exact I. }
+  { reflexivity. }
   destruct stk0 as [|v1 stk1].
-  { exact I. }
+  { reflexivity. }
   destruct stk1 as [|v2 rest].
-  { exact I. }
+  { reflexivity. }
   intro Hpre.
   destruct Hpre as [ard Hpre].
   set (sb := ar_sptr_block ard) in *.
@@ -51,10 +52,10 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
 
@@ -63,7 +64,6 @@ Proof.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (sp_block_ne_global ard sp_b) as Hsp_ne_gb.
 
   (* sp_ofs >= 8 (room to push) *)
   pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
@@ -351,7 +351,7 @@ Proof.
 
     (* 4. sp field -- updated to new_sp; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split].
+      split; [| split; [| split; [| split; [| split]]]].
       - exact Hsp_load3.
       - reflexivity.
       - simpl.
@@ -359,7 +359,10 @@ Proof.
                  (Machine.accu s :: v0 :: v1 :: v2 :: rest) sp_b new_sp_ofs sb
                  (uso + 8) cxb2
                  Hstack_m2 Hstore_accu_field).
-        intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+                intro Heq; exact (Hblock_sep (eq_sym Heq)).
+      - exact Hsp_ne_sb.
+      - exact Hsp_ne_gb.
+      - exact Hcb_ne_sp. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -370,7 +373,7 @@ Proof.
     { simpl. exact Hextra_load3. }
 
     (* 7. global_data field -- unchanged *)
-    { exists gd_ptr. split; [| split].
+    { exists gd_ptr. split; [| split; [| split]].
       - exact Hgd_load3.
       - simpl. exact Hgd_eq.
       - simpl.
@@ -388,7 +391,8 @@ Proof.
           * exact Hstore_accu.
           * exact Hsp_ne_gb.
         + exact Hstore_accu_field.
-        + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+                + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+      - exact Hgb_ne_sb. }
 
     (* 8. trap_sp field -- unchanged *)
     { exists ts_ptr. split.

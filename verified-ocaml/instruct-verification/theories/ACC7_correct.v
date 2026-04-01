@@ -23,29 +23,30 @@ Proof. intros. unfold sem_binary_operation, sem_add.
 
 Theorem verify_ACC7 :
     handler_correct (handle_ACC 7) f_instr_ACC7
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ s => nth_error s.(Machine.stack) 7 = None)
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s. unfold handler_correct, handle_ACC. simpl nth_error.
   destruct (Machine.stack s) as [|v0 stk0] eqn:Hstk.
-  { exact I. }
+  { reflexivity. }
   destruct stk0 as [|v1 stk1].
-  { exact I. }
+  { reflexivity. }
   destruct stk1 as [|v2 stk2].
-  { exact I. }
+  { reflexivity. }
   destruct stk2 as [|v3 stk3].
-  { exact I. }
+  { reflexivity. }
   destruct stk3 as [|v4 stk4].
-  { exact I. }
+  { reflexivity. }
   destruct stk4 as [|v5 stk5].
-  { exact I. }
+  { reflexivity. }
   destruct stk5 as [|v6 stk6].
-  { exact I. }
+  { reflexivity. }
   destruct stk6 as [|v7 rest].
-  { exact I. }
+  { reflexivity. }
   intro Hpre.
   destruct Hpre as [ard Hpre].
   set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
-  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
+  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
@@ -92,10 +93,13 @@ Proof.
     { subst le'. rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence). exact Hle_s. }
     { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
     { exists cv7. split. exact Haccu_load'. simpl. exact Hval_repr7. }
-    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split]. exact Hsp_load'. reflexivity. simpl. rewrite Hstk.
-      apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv7 Hstack_repr Hstore). intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]]. exact Hsp_load'. reflexivity. simpl. rewrite Hstk.
+            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv7 Hstack_repr Hstore). intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        - exact Hsp_ne_sb.
+        - exact Hsp_ne_gb.
+        - exact Hcb_ne_sp. }
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }
-    { exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl. apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv7 Hglobal_repr Hstore). intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+    { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq. simpl. apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv7 Hglobal_repr Hstore). intro Heq2; exact (Hgb_ne (eq_sym Heq2)). exact Hgb_ne_sb. }
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
 Qed.

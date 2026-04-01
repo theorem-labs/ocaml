@@ -60,10 +60,10 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
@@ -116,15 +116,19 @@ Proof.
     { exact Hle_s. }
     { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
     { exists (Vlong (Int64.repr 3)). split. exact Haccu_load'. simpl. exact (vr_int _ 1). }
-    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split].
+    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]].
       exact Hsp_load'. reflexivity. simpl.
       apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) (Vlong (Int64.repr 3))
-               Hstack_repr Hstore). intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+                              Hstack_repr Hstore). intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        - exact Hsp_ne_sb.
+        - exact Hsp_ne_gb.
+        - exact Hcb_ne_sp. }
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }
-    { exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
+    { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
       apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) (Vlong (Int64.repr 3))
-               Hglobal_repr Hstore). intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+                              Hglobal_repr Hstore). intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        - exact Hgb_ne_sb. }
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. }
   }
 Qed.

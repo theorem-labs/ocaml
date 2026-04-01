@@ -23,9 +23,10 @@
    - TWO stores: accu field at offset +8, pc field at offset +0
    - Reads operand from code memory via *pc (Mint32 load)
    - Post-state uses shifted code_base_ofs to account for pc advancement
-   - Needs code_load axiom connecting ofs parameter to code memory contents
+   - Code buffer invariants expressed as preconditions (not axioms)
 
-   Uses abs_rel directly (no separate _pre relation). *)
+   Uses handler_correct_with_pre for code buffer preconditions.
+   NO AXIOMS. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -80,37 +81,7 @@ Proof.
 Qed.
 
 (* ================================================================== *)
-(* Code memory axiom: the operand ofs is stored at *pc                 *)
-(*                                                                      *)
-(* The C handler reads the operand from the code array at the current  *)
-(* pc pointer. This axiom connects the universally quantified ofs      *)
-(* parameter to the actual value in code memory.                       *)
-(* ================================================================== *)
-
-(* The code block contains a 32-bit operand at *pc.
-   The Rocq ofs parameter is the signed interpretation of this 32-bit value,
-   i.e., there exists an int32 i such that Mem.load at *pc yields Vint i
-   and Int.signed i = ofs. *)
-Axiom code_load_at_pc : forall m cb pc_ofs ofs,
-  exists (i : int),
-    Mem.load Mint32 m cb (Ptrofs.unsigned pc_ofs) = Some (Vint i) /\
-    Int.signed i = ofs.
-
-(* The code block is separate from the struct pointer block *)
-Axiom code_block_ne_sptr : forall (ard : abs_rel_data),
-  ar_code_base_block ard <> ar_sptr_block ard.
-
-(* Code base offset is representable after advancement *)
-Axiom code_ofs_representable : forall (ard : abs_rel_data) (rocq_pc : Z),
-  Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-    (Ptrofs.repr (rocq_pc * sizeof_code_t))) + sizeof_code_t < Ptrofs.modulus.
-
-(* ================================================================== *)
 (* Semantic lemma: Oshl on tint values                                 *)
-(*                                                                      *)
-(* sem_shl (Vint i) tint (Vint (Int.repr 1)) tint                     *)
-(*   = Some (Vint (Int.shl i (Int.repr 1)))                           *)
-(*   when Int.ltu (Int.repr 1) Int.iwordsize = true                    *)
 (* ================================================================== *)
 
 Lemma sem_shl_int_int : forall i m,
@@ -128,9 +99,6 @@ Qed.
 
 (* ================================================================== *)
 (* Semantic lemma: Oadd tlong tint via sem_binarith                    *)
-(*                                                                      *)
-(* sem_add (Vlong n) tlong (Vint i) tint m                            *)
-(*   = Some (Vlong (Int64.add n (Int64.repr (Int.signed i))))         *)
 (* ================================================================== *)
 
 Lemma sem_add_long_int : forall n i m,
@@ -153,10 +121,6 @@ Qed.
 
 (* ================================================================== *)
 (* Semantic lemma: pointer + 1 for tptr tint                           *)
-(*                                                                      *)
-(* Oadd (Vptr b ofs) (tptr tint) (Vint (Int.repr 1)) tint             *)
-(*   = Some (Vptr b (Ptrofs.add ofs (Ptrofs.repr 4)))                 *)
-(* since sizeof(tint) = 4                                               *)
 (* ================================================================== *)
 
 Lemma sem_add_ptr_int_1 : forall b ofs m,
@@ -183,46 +147,68 @@ Proof.
 Qed.
 
 (* ================================================================== *)
-(* Arithmetic lemma: tagged offset addition                            *)
+(* Arithmetic lemma: tagged offset addition (PROVED, no axiom)         *)
 (*                                                                      *)
-(* Int64.add (Int64.repr (a*2+1))                                      *)
-(*           (Int64.repr (Int.signed (Int.shl (Int.repr ofs)           *)
-(*                                            (Int.repr 1))))          *)
-(*   = Int64.repr ((a+ofs)*2+1)                                        *)
-(*                                                                      *)
-(* The C computation:                                                   *)
-(*   _t'4 = ofs (as int32)                                             *)
-(*   _t'4 << 1 = Int.shl (Int.repr ofs) (Int.repr 1)                  *)
-(*   sign-extend to int64: Int64.repr (Int.signed (shl result))        *)
-(*   add to accu: (a*2+1) + sign_ext(ofs << 1) mod 2^64               *)
-(*                                                                      *)
-(* We need: Int.signed (Int.shl (Int.repr ofs) (Int.repr 1)) = ofs*2  *)
-(* modulo 2^64, which holds for the Int64.add.                         *)
+(* The C code computes ofs << 1 in 32-bit, then sign-extends to 64-bit *)
+(* and adds to the tagged accu. This equals (a+ofs)*2+1 in 64-bit     *)
+(* provided the 32-bit shift does not overflow, i.e.,                  *)
+(* Int.min_signed <= ofs*2 <= Int.max_signed.                          *)
 (* ================================================================== *)
 
-(* The C handler computes accu + (operand << 1) where the shift is 32-bit.
-   For operands where |Int.signed i * 2| >= Int.half_modulus (i.e., |ofs| >= 2^30),
-   the 32-bit shift overflows and sign extension to 64-bit gives a different result
-   than the mathematical ofs * 2.
+Local Lemma int_shl_1 : forall i,
+  Int.shl i (Int.repr 1) = Int.repr (Int.unsigned i * 2).
+Proof.
+  intros. unfold Int.shl.
+  change (Int.unsigned (Int.repr 1)) with 1%Z.
+  f_equal. rewrite Z.shiftl_mul_pow2 by lia. simpl. lia.
+Qed.
 
-   This is a well-formedness property of the bytecode: OFFSETINT operands in OCaml
-   bytecode are always small enough that the 32-bit shift does not overflow.
-   We axiomatize this correspondence. *)
-Axiom tagged_offsetint_arith : forall a (i : int),
+(* When Int.signed i * 2 fits in 32-bit signed range,
+   Int.signed (Int.shl i (Int.repr 1)) = Int.signed i * 2. *)
+Local Lemma int_signed_shl_1 : forall i,
+  Int.min_signed <= Int.signed i * 2 <= Int.max_signed ->
+  Int.signed (Int.shl i (Int.repr 1)) = Int.signed i * 2.
+Proof.
+  intros i Hrange.
+  rewrite int_shl_1.
+  assert (Hrepr_eq : Int.repr (Int.unsigned i * 2) = Int.repr (Int.signed i * 2)).
+  { apply Int.eqm_samerepr.
+    pose proof (Int.eqm_signed_unsigned i) as [k Hk].
+    exists (- k * 2)%Z.
+    change Int.modulus with 4294967296%Z in *. lia. }
+  rewrite Hrepr_eq.
+  apply Int.signed_repr. exact Hrange.
+Qed.
+
+Lemma tagged_offsetint_arith : forall a (i : int),
+  Int.min_signed <= Int.signed i * 2 <= Int.max_signed ->
   Int64.add (Int64.repr (a * 2 + 1))
             (Int64.repr (Int.signed (Int.shl i (Int.repr 1))))
   = Int64.repr ((a + Int.signed i) * 2 + 1).
+Proof.
+  intros a i Hrange.
+  rewrite (int_signed_shl_1 i Hrange).
+  rewrite Int64.add_unsigned.
+  apply Int64.eqm_samerepr.
+  eapply Int64.eqm_trans.
+  { apply Int64.eqm_add;
+      apply Int64.eqm_sym; apply Int64.eqm_unsigned_repr. }
+  replace ((a + Int.signed i) * 2 + 1)%Z
+    with (a * 2 + 1 + Int.signed i * 2)%Z by lia.
+  apply Int64.eqm_refl.
+Qed.
 
 (* ================================================================== *)
 (* Value representation for the result                                 *)
 (* ================================================================== *)
 
 Lemma val_repr_offsetint_result : forall hm a (i : int),
+  Int.min_signed <= Int.signed i * 2 <= Int.max_signed ->
   val_repr hm (Val_int (a + Int.signed i))
     (Vlong (Int64.add (Int64.repr (a * 2 + 1))
                        (Int64.repr (Int.signed (Int.shl i (Int.repr 1)))))).
 Proof.
-  intros. rewrite tagged_offsetint_arith. constructor.
+  intros. rewrite (tagged_offsetint_arith a i H). constructor.
 Qed.
 
 (* ================================================================== *)
@@ -239,15 +225,31 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
+(*                                                                      *)
+(* Preconditions (from handler_correct_with_pre):                      *)
+(* 1. Code buffer contains the operand at current PC                   *)
+(* 2. The 32-bit left shift by 1 does not overflow                    *)
+(*                                                                      *)
+(* Block separation (cb <> sb) comes from ar_code_ne_sptr in the       *)
+(* abs_rel_data record -- no precondition needed.                      *)
 (* ================================================================== *)
 
 Theorem verify_OFFSETINT_correct : forall ofs,
-    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+    handler_correct_with_pre (handle_OFFSETINT ofs) f_instr_OFFSETINT
+      (fun m s ard =>
+         exists (i : int),
+           Mem.load Mint32 m (ar_code_base_block ard)
+             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+                (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+           = Some (Vint i) /\
+           Int.signed i = ofs /\
+           Int.min_signed <= Int.signed i * 2 <= Int.max_signed)
+      (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro ofs.
   intros e le m s.
-  unfold handler_correct, handle_OFFSETINT.
+  unfold handler_correct_with_pre, handle_OFFSETINT.
 
   (* Case split on accu *)
   destruct (Machine.accu s) as [a | | | ] eqn:Haccu_eq;
@@ -257,10 +259,10 @@ Proof.
   (* The Step case: accu = Val_int a                                   *)
   (* ================================================================ *)
   {
-    intro Hpre.
+    intros ard Hpre Hstep_pre.
 
-    (* Unpack abs_rel *)
-    destruct Hpre as [ard Hpre].
+    (* Unpack abs_rel_with_ard *)
+    unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
@@ -271,23 +273,21 @@ Proof.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
-      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
       [env_v [Henv_load Henv_repr]] &
       Hextra_load &
-      [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+      [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
       [ts_ptr [Hts_load Htrap_rel]]).
     subst sp_ptr.
 
-    (* Structural invariants *)
-    pose proof (sptr_ofs_representable ard) as Hso_bound.
-    fold so in Hso_bound.
+    (* Unpack step precondition *)
+    destruct Hstep_pre as [i [Hcode_load [Hofs_eq Hshift_range]]].
+
+    (* Structural invariants from the record *)
+    pose proof (ar_code_ne_sptr ard) as Hcb_ne. fold cb sb in Hcb_ne.
+    pose proof (ar_code_ne_global ard) as Hcb_ne_gb. fold cb gb in Hcb_ne_gb.
+    pose proof (ar_sptr_ofs_bound ard) as Hso_bound. fold so in Hso_bound.
     pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-    pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep.
-    fold sb in Hblock_sep.
-    pose proof (global_block_ne_sptr ard) as Hgb_ne.
-    fold sb in Hgb_ne.
-    pose proof (code_block_ne_sptr ard) as Hcb_ne.
-    fold sb cb in Hcb_ne.
 
     (* Determine accu_v from val_repr + accu = Val_int a *)
     rewrite Haccu_eq in Haccu_repr.
@@ -301,9 +301,6 @@ Proof.
     unfold pc_rel in Hpc_rel.
     set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
     subst pc_ptr.
-
-    (* Code memory load: read operand from *pc *)
-    destruct (code_load_at_pc m cb pc_ofs ofs) as [i [Hcode_load Hofs_eq]].
 
     (* The result of the tagged offset addition *)
     set (shifted_ofs := Int.shl i (Int.repr 1)) in *.
@@ -346,112 +343,68 @@ Proof.
     {
       apply (eval_stmt_to_exec clight_ge 20).
 
-      (* --- Initial reduction of nested Ssequences --- *)
       eval_cbn.
 
-      (* ============================================================ *)
-      (* S1: Sset _t'2 (Efield (Ederef (Etempvar _s ...) ...) _accu tlong) *)
-      (* Read s->accu into _t'2                                       *)
-      (* ============================================================ *)
-      rewrite Hle_s; eval_cbn.                                       (* PTree.get _s le *)
-      rewrite Hco; eval_cbn.                                         (* genv_cenv ! _interp_state *)
-      rewrite Haccu_offset; eval_cbn.                                (* field_offset _accu *)
-      rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).      (* Ptrofs.unsigned (so + 8) *)
-      rewrite Haccu_load; eval_cbn.                                  (* Mem.load accu field *)
+      (* S1: Sset _t'2 (s->accu) *)
+      rewrite Hle_s; eval_cbn.
+      rewrite Hco; eval_cbn.
+      rewrite Haccu_offset; eval_cbn.
+      rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+      rewrite Haccu_load; eval_cbn.
 
-      (* ============================================================ *)
-      (* S2: Sset _t'3 (Efield (Ederef (Etempvar _s ...) ...) _pc (tptr tint)) *)
-      (* Read s->pc into _t'3                                         *)
-      (* Note: composite lookup already resolved by rewrite Hco in S1 *)
-      (* ============================================================ *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'2 *)
-      rewrite Hle_s; eval_cbn.                                       (* PTree.get _s le *)
-      rewrite Hpc_offset; eval_cbn.                                  (* field_offset _pc *)
-      rewrite Mptr_Mint64; eval_cbn.                                 (* Mptr -> Mint64 *)
-      (* pc field is at offset 0: Ptrofs.add so (Ptrofs.repr 0) *)
+      (* S2: Sset _t'3 (s->pc) *)
+      rewrite PTree.gso by (compute; congruence).
+      rewrite Hle_s; eval_cbn.
+      rewrite Hpc_offset; eval_cbn.
+      rewrite Mptr_Mint64; eval_cbn.
       rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
-      rewrite Hpc_load; eval_cbn.                                    (* Mem.load pc field *)
+      rewrite Hpc_load; eval_cbn.
 
-      (* ============================================================ *)
-      (* S3: Sset _t'4 (Ederef (Etempvar _t'3 (tptr tint)) tint)    *)
-      (* Read *pc (the operand ofs) into _t'4                         *)
-      (* ============================================================ *)
-      rewrite PTree.gss; eval_cbn.                                   (* PTree.get _t'3 *)
-      rewrite Hcode_load; eval_cbn.                                  (* Mem.load Mint32 from code *)
+      (* S3: Sset _t'4 (deref _t'3) *)
+      rewrite PTree.gss; eval_cbn.
+      rewrite Hcode_load; eval_cbn.
 
-      (* ============================================================ *)
-      (* S4: Sassign (s->accu) (_t'2 + (_t'4 << 1))                  *)
-      (*                                                                *)
-      (* Lvalue: Efield ... _accu tlong                                *)
-      (* Rvalue: Ebinop Oadd _t'2 (Ebinop Oshl _t'4 1 tint) tlong   *)
-      (* ============================================================ *)
-      (* Lvalue resolution *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'4 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'3 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'2 *)
-      rewrite Hle_s; eval_cbn.                                       (* _s -> lvalue *)
-
-      (* Rvalue: _t'2 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'4 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'3 *)
-      rewrite PTree.gss; eval_cbn.                                   (* PTree.get _t'2 *)
-
-      (* Rvalue: _t'4 *)
-      rewrite PTree.gss; eval_cbn.                                   (* PTree.get _t'4 *)
-
-      (* Oshl _t'4 1 *)
-      rewrite sem_shl_int_int; eval_cbn.                             (* shift *)
-
-      (* Oadd _t'2 (shifted) : tlong + tint *)
+      (* S4: Sassign (s->accu) (_t'2 + (_t'4 << 1)) *)
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite Hle_s; eval_cbn.
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gss; eval_cbn.
+      rewrite PTree.gss; eval_cbn.
+      rewrite sem_shl_int_int; eval_cbn.
       unfold cv_accu.
-      rewrite sem_add_long_int; eval_cbn.                            (* addition *)
-
-      (* sem_cast result tlong -> tlong *)
-      rewrite sem_cast_long_vlong; eval_cbn.                         (* identity cast *)
-
-      (* Store to accu field *)
+      rewrite sem_add_long_int; eval_cbn.
+      rewrite sem_cast_long_vlong; eval_cbn.
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
       fold shifted_ofs. fold cv_result.
-      rewrite Hstore1; eval_cbn.                                     (* Mem.store accu *)
+      rewrite Hstore1; eval_cbn.
 
-      (* ============================================================ *)
-      (* S5: Sset _t'1 (s->pc) -- read pc again from m1              *)
-      (* ============================================================ *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'4 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'3 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'2 *)
-      rewrite Hle_s; eval_cbn.                                       (* _s resolved, composite + field_offset already resolved by Hco *)
-      rewrite Mptr_Mint64; eval_cbn.                                 (* Mptr -> Mint64 *)
+      (* S5: Sset _t'1 (s->pc) *)
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite Hle_s; eval_cbn.
+      rewrite Mptr_Mint64; eval_cbn.
       rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
-      rewrite Hpc_load_m1; eval_cbn.                                 (* Mem.load pc from m1 *)
+      rewrite Hpc_load_m1; eval_cbn.
 
-      (* ============================================================ *)
-      (* S6: Sassign (s->pc) (_t'1 + 1)                               *)
-      (*     Advances pc past the operand                              *)
-      (* ============================================================ *)
-      (* Lvalue resolution *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'1 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'4 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'3 *)
-      rewrite PTree.gso by (compute; congruence).                    (* skip _t'2 *)
-      rewrite Hle_s; eval_cbn.                                       (* _s -> lvalue *)
-
-      (* Rvalue: _t'1 + 1 *)
-      rewrite PTree.gss; eval_cbn.                                   (* PTree.get _t'1 *)
-      rewrite sem_add_ptr_int_1; eval_cbn.                           (* ptr + 1 = ptr + 4 *)
-
-      (* sem_cast (tptr tint) -> (tptr tint) *)
-      rewrite sem_cast_ptr_tint_to_ptr_tint; eval_cbn.              (* identity cast *)
-
-      (* Store to pc field *)
-      rewrite Mptr_Mint64; eval_cbn.                                 (* Mptr -> Mint64 *)
+      (* S6: Sassign (s->pc) (_t'1 + 1) *)
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite Hle_s; eval_cbn.
+      rewrite PTree.gss; eval_cbn.
+      rewrite sem_add_ptr_int_1; eval_cbn.
+      rewrite sem_cast_ptr_tint_to_ptr_tint; eval_cbn.
+      rewrite Mptr_Mint64; eval_cbn.
       rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
       fold new_pc_v.
-      rewrite Hstore2; eval_cbn.                                     (* Mem.store pc *)
+      rewrite Hstore2; eval_cbn.
 
-      (* ============================================================ *)
-      (* S7: Sreturn 0                                                 *)
-      (* ============================================================ *)
+      (* S7: Sreturn 0 *)
       subst le'. reflexivity.
     }
 
@@ -459,17 +412,15 @@ Proof.
     (* Part 2: abs_rel for post-state                                  *)
     (* ============================================================== *)
     {
-      (* Use shifted ard for post-state: code_base_ofs += sizeof_code_t *)
       set (ard' := mk_abs_rel
         (ar_sptr_block ard) (ar_sptr_ofs ard) (ar_heap_map ard)
         (ar_code_base_block ard)
         (Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr sizeof_code_t))
         (ar_global_block ard) (ar_global_ofs ard)
-        (ar_stack_block ard) (ar_stack_base_ofs ard)).
+        (ar_stack_block ard) (ar_stack_base_ofs ard)
+        Hcb_ne Hcb_ne_gb Hso_bound).
       exists ard'.
       set (uso := Ptrofs.unsigned so) in *.
-
-      (* --- Loads from m' (after store1 at so+8 in m, store2 at so+0 in m1) --- *)
 
       (* pc field at so+0: written by store2 *)
       assert (Hpc_load' : Mem.load Mint64 m' sb (uso + 0) = Some new_pc_v).
@@ -550,18 +501,12 @@ Proof.
       (* 2. pc field -- updated to advanced pc *)
       { exists new_pc_v. split.
         - exact Hpc_load'.
-        - (* pc_rel new_pc_v cb co' s'.(pc) where s'.(pc) = s.(pc) *)
-          simpl.
+        - simpl.
           unfold pc_rel, new_pc_v, sizeof_code_t. simpl ar_code_base_block.
           simpl ar_code_base_ofs.
           fold co cb.
-          (* Goal: Vptr cb (Ptrofs.add pc_ofs (Ptrofs.repr 4)) =
-                   Vptr cb (Ptrofs.add (Ptrofs.add co (Ptrofs.repr 4))
-                                        (Ptrofs.repr (Machine.pc s * 4))) *)
           f_equal.
           unfold pc_ofs, sizeof_code_t.
-          (* Ptrofs.add (Ptrofs.add co (Ptrofs.repr (pc * 4))) (Ptrofs.repr 4) =
-             Ptrofs.add (Ptrofs.add co (Ptrofs.repr 4)) (Ptrofs.repr (pc * 4)) *)
           rewrite Ptrofs.add_assoc.
           rewrite (Ptrofs.add_assoc co (Ptrofs.repr 4)).
           f_equal.
@@ -572,22 +517,24 @@ Proof.
         - exact Haccu_load'.
         - simpl. simpl ar_heap_map. fold hm.
           rewrite <- Hofs_eq.
-          apply val_repr_offsetint_result. }
+          apply val_repr_offsetint_result. exact Hshift_range. }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-        split; [| split].
+        split; [| split; [| split; [| split; [| split]]]].
         - exact Hsp_load'.
         - reflexivity.
         - simpl. simpl ar_heap_map. fold hm.
-          (* stack_repr through two stores to sb *)
           eapply (stack_repr_store_other_block hm m1 m' _ sp_b sp_ofs sb (uso + 0) new_pc_v).
           + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 8) cv_result).
             * exact Hstack_repr.
             * exact Hstore1.
-            * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+            * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           + exact Hstore2.
-          + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        - exact Hsp_ne_sb.
+        - exact Hsp_ne_gb.
+        - simpl. exact Hcb_ne_sp. }
 
       (* 5. env field -- unchanged *)
       { exists env_v. split.
@@ -598,7 +545,7 @@ Proof.
       { simpl. exact Hextra_load'. }
 
       (* 7. global_data field -- unchanged *)
-      { exists gd_ptr. split; [| split].
+      { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load'.
         - simpl. simpl ar_global_block. simpl ar_global_ofs.
           fold gb go. exact Hgd_eq.
@@ -609,9 +556,10 @@ Proof.
           + eapply (global_repr_store_other_block hm m m1 _ gb go sb (uso + 8) cv_result).
             * exact Hglobal_repr.
             * exact Hstore1.
-            * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+            * intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
           + exact Hstore2.
-          + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+          + intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
+        - exact Hgb_ne_sb. }
 
       (* 8. trap_sp field -- unchanged *)
       { exists ts_ptr. split.

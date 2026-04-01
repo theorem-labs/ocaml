@@ -27,7 +27,7 @@ Local Ltac eval_cbn :=
 
 Theorem verify_CHECK_SIGNALS_correct :
     handler_correct handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
   unfold handler_correct, handle_CHECK_SIGNALS.

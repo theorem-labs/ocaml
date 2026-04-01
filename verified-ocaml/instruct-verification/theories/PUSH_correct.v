@@ -40,17 +40,17 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
-    [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+    [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]]).
   subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (sp_block_ne_global ard sp_b) as Hsp_ne_gb.
+  pose proof (sp_block_ne_global ard sp_b) as Hsp_ne_gb_legacy.
   pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   set (new_sp_ofs := Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
@@ -224,7 +224,7 @@ Proof.
 
     (* 4. sp field -- updated to new_sp_ofs; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split].
+      split; [| split; [| split; [| split; [| split]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
@@ -237,7 +237,10 @@ Proof.
         (* Now apply stack_repr_cons_after_store *)
         exact (stack_repr_cons_after_store hm m1 m2
                  (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                 Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8). }
+                                  Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8).
+      - exact Hsp_ne_sb.
+      - exact Hsp_ne_gb.
+      - exact Hcb_ne_sp. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -248,7 +251,7 @@ Proof.
     { simpl. exact Hextra_load2. }
 
     (* 7. global_data field -- unchanged *)
-    { exists gd_ptr. split; [| split].
+    { exists gd_ptr. split; [| split; [| split]].
       - exact Hgd_load2.
       - simpl. exact Hgd_eq.
       - simpl.
@@ -263,7 +266,8 @@ Proof.
                    Hglobal_repr Hstore_sp).
           intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         + exact Hstore_accu.
-        + exact Hsp_ne_gb. }
+        + exact Hsp_ne_gb.
+      - exact Hgb_ne_sb. }
 
     (* 8. trap_sp field -- unchanged *)
     { exists ts_ptr. split.

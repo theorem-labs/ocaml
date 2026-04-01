@@ -23,12 +23,14 @@
    - accu != Val_int 0: C takes then branch, reads offset, stores
      pc + offset.
 
-   Key axioms:
-   - code_contains_branch_ofs: code stream at pc contains the offset
-   - val_repr_ne_tagged_zero: val_repr for non-zero values produces
-     a C value that compares != 1 (tagged 0). This bridges a gap in
-     CompCert's semantics for Vptr vs Vlong comparison, and assumes
-     tagged integers are within the 63-bit range. *)
+   Preconditions (via handler_correct_with_pre):
+   - code_base_block != sptr_block (code buffer separate from struct)
+   - code buffer at pc contains the branch offset as Vint
+   - comparison well-definedness: for non-zero accu, the C ne-comparison
+     against tagged(0) succeeds.  This holds when val_repr produces a
+     Vlong (Val_int with in-range n, or Val_block tag nil), but not for
+     Vptr (CompCert's sem_binarith on tlong/tlong returns None for Vptr).
+     The precondition pushes this obligation to the caller. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -82,36 +84,6 @@ Proof.
 Qed.
 
 (* ================================================================== *)
-(* Code memory axioms                                                  *)
-(* ================================================================== *)
-
-Axiom code_block_ne_sptr : forall (ard : abs_rel_data),
-  ar_code_base_block ard <> ar_sptr_block ard.
-
-(* The code stream at position pc contains the branch offset, where
-   the offset is (target - pc) in units of sizeof(code_t) = 4. *)
-Axiom code_contains_branch_ofs : forall m cb co rocq_pc target,
-  Mem.load Mint32 m cb
-    (Ptrofs.unsigned (Ptrofs.add co (Ptrofs.repr (rocq_pc * sizeof_code_t))))
-    = Some (Vint (Int.repr (target - rocq_pc))).
-
-(* ================================================================== *)
-(* Comparison axiom: val_repr for non-zero values gives != tagged(0)   *)
-(*                                                                      *)
-(* In real x86-64 C, any value that is not tagged 0 (= 1) will compare *)
-(* not-equal to 1.  CompCert's sem_cmp is too strict about Vptr vs     *)
-(* Vlong comparison (returns None), and the tagged integer range may    *)
-(* wrap around for huge Z values.  This axiom bridges both gaps.       *)
-(* ================================================================== *)
-
-Axiom val_repr_ne_tagged_zero : forall hm v cv m,
-  val_repr hm v cv ->
-  v <> Val_int 0 ->
-  sem_binary_operation (genv_cenv clight_ge) Cop.One
-    cv tlong (Vlong (Int64.repr 1)) tlong m
-    = Some (Vint Int.one).
-
-(* ================================================================== *)
 (* Memory helpers                                                      *)
 (* ================================================================== *)
 
@@ -159,8 +131,6 @@ Qed.
 (* Comparison semantics for Val_int 0 case                             *)
 (* ================================================================== *)
 
-(* The tagged-0 constant evaluation:
-     (long)0 << 1 = 0, then 0 + 1 = 1 *)
 Lemma sem_one_long_eq : forall n m,
   sem_binary_operation (genv_cenv clight_ge) Cop.One
     (Vlong n) tlong (Vlong (Int64.repr 1)) tlong m
@@ -209,11 +179,8 @@ Qed.
 
 (* ================================================================== *)
 (* Tactic for the "branch taken" abs_rel postcondition.                *)
-(* All branch-taken cases share the same structure: one store to the   *)
-(* pc field at offset 0, then abs_rel with adjusted code base.         *)
 (* ================================================================== *)
 
-(* Helper: prove fields survive store at offset 0 *)
 Local Ltac prove_field_survives Hstore Hload :=
   apply (load_after_store_other _ _ _ _ _ _ _ Hstore Hload); right; lia.
 
@@ -222,15 +189,30 @@ Local Ltac prove_field_survives Hstore Hload :=
 (* ================================================================== *)
 
 Theorem verify_BRANCHIF_correct : forall target,
-    handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+    handler_correct_with_pre (handle_BRANCHIF target) f_instr_BRANCHIF
+      (fun m s ard =>
+         (* Code block is separate from struct block *)
+         ar_code_base_block ard <> ar_sptr_block ard /\
+         (* Code buffer at pc contains the branch offset *)
+         Mem.load Mint32 m (ar_code_base_block ard)
+           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+           = Some (Vint (Int.repr (target - Machine.pc s))) /\
+         (* Comparison well-definedness for non-zero accu *)
+         (Machine.accu s <> Val_int 0 ->
+            forall cv,
+            val_repr (ar_heap_map ard) (Machine.accu s) cv ->
+            sem_binary_operation (genv_cenv clight_ge) Cop.One
+              cv tlong (Vlong (Int64.repr 1)) tlong m
+              = Some (Vint Int.one)))
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro target.
   intros e le m s.
-  unfold handler_correct, handle_BRANCHIF.
+  unfold handler_correct_with_pre, handle_BRANCHIF.
 
   (* Case split on accu *)
-  destruct (Machine.accu s) as [n | addr | addr ofs_cl | tag fields] eqn:Haccu_eq.
+  destruct (Machine.accu s) as [n | tag fields | addr | addr ofs_cl] eqn:Haccu_eq.
 
   (* ================================================================ *)
   (* Case 1: accu = Val_int n                                          *)
@@ -243,9 +225,9 @@ Proof.
     (* ============================================================== *)
     {
       subst n. simpl.
-      intro Hpre.
+      intros ard Hpre Hstep_pre.
 
-      destruct Hpre as [ard Hpre].
+      unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
@@ -254,17 +236,17 @@ Proof.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
-        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hblock_sep [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
         [env_v [Henv_load Henv_repr]] &
         Hextra_load &
-        [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+        [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne]]]] &
         [ts_ptr [Hts_load Htrap_rel]]).
       subst sp_ptr.
 
+      destruct Hstep_pre as [Hcb_ne_sb [Hcode_load Hcmp_pre]].
+
       pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-      pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
-      pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
 
       (* accu = Val_int 0, val_repr gives Vlong (Int64.repr 1) *)
       rewrite Haccu_eq in Haccu_repr.
@@ -296,7 +278,7 @@ Proof.
 
       (* Part 1: exec *)
       {
-        apply (eval_stmt_to_exec clight_ge 20).
+        apply (eval_stmt_to_exec clight_ge 10).
         eval_cbn.
 
         (* S1: Sset _t'1 = s->accu *)
@@ -321,7 +303,7 @@ Proof.
 
         (* Else branch: fall through *)
         (* S2b: Sset _t'2 = s->pc *)
-        rewrite PTree.gso by (compute; congruence).
+        rewrite PTree.gso by (simpl; congruence).
         rewrite Hle_s; eval_cbn.
         rewrite Hco; eval_cbn.
         rewrite Hpc_offset; eval_cbn.
@@ -331,8 +313,8 @@ Proof.
 
         (* S3b: Sassign s->pc = _t'2 + 1 *)
         (* Lvalue *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
+        rewrite PTree.gso by (simpl; congruence).
+        rewrite PTree.gso by (simpl; congruence).
         rewrite Hle_s; eval_cbn.
         rewrite Hco; eval_cbn.
         rewrite Hpc_offset; eval_cbn.
@@ -391,8 +373,8 @@ Proof.
         split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
 
         { subst le'.
-          rewrite PTree.gso by (compute; congruence).
-          rewrite PTree.gso by (compute; congruence).
+          rewrite PTree.gso by (simpl; congruence).
+          rewrite PTree.gso by (simpl; congruence).
           exact Hle_s. }
 
         { exists new_pc_v. split.
@@ -404,13 +386,16 @@ Proof.
           - exact Haccu_load'.
           - simpl. rewrite Haccu_eq. constructor. }
 
-        { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split].
+        { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]].
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
             apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_v
                      Hstack_repr Hstore).
-            intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+            intro Heq; exact (Hblock_sep (eq_sym Heq)).
+          - exact Hblock_sep.
+          - exact Hsp_ne_gb.
+          - exact Hcb_ne_sp. }
 
         { exists env_v. split.
           - exact Henv_load'.
@@ -418,13 +403,14 @@ Proof.
 
         { simpl. exact Hextra_load'. }
 
-        { exists gd_ptr. split; [| split].
+        { exists gd_ptr. split; [| split; [| split]].
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
             apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_v
                      Hglobal_repr Hstore).
-            intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+            intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+          - exact Hgb_ne. }
 
         { exists ts_ptr. split.
           - exact Hts_load'.
@@ -438,9 +424,9 @@ Proof.
     {
       (* n <> 0, so the match gives the wildcard: Step {pc := target} *)
       destruct n as [| p | p]; [contradiction | |]; simpl;
-      intro Hpre;
+      intros ard Hpre Hstep_pre;
 
-      (destruct Hpre as [ard Hpre];
+      (unfold abs_rel_with_ard in Hpre;
       set (sb := ar_sptr_block ard) in *;
       set (so := ar_sptr_ofs ard) in *;
       set (hm := ar_heap_map ard) in *;
@@ -449,17 +435,17 @@ Proof.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
-        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+        [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hblock_sep [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
         [env_v [Henv_load Henv_repr]] &
         Hextra_load &
-        [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+        [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne]]]] &
         [ts_ptr [Hts_load Htrap_rel]]);
       subst sp_ptr;
 
+      destruct Hstep_pre as [Hcb_ne_sb [Hcode_load Hcmp_pre]];
+
       pose proof (sptr_ofs_representable ard) as Hso_bound; fold so in Hso_bound;
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _];
-      pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep; fold sb in Hblock_sep;
-      pose proof (global_block_ne_sptr ard) as Hgb_ne; fold sb in Hgb_ne;
 
       rewrite Haccu_eq in Haccu_repr;
 
@@ -474,7 +460,6 @@ Proof.
             exact Hpc_load);
 
       set (branch_ofs := Int.repr (target - Machine.pc s));
-      pose proof (code_contains_branch_ofs m cb co (Machine.pc s) target) as Hcode_load;
       fold pc_ofs in Hcode_load;
       fold branch_ofs in Hcode_load;
 
@@ -486,9 +471,9 @@ Proof.
       destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
                   (ex_intro _ _ Hpc_load_uso)) as [m' Hstore];
 
-      (* Use the axiom for the comparison *)
-      pose proof (val_repr_ne_tagged_zero hm _ accu_v m
-                    Haccu_repr ltac:(rewrite Haccu_eq; discriminate)) as Hcmp;
+      (* Use the precondition for the comparison *)
+      pose proof (Hcmp_pre ltac:(rewrite Haccu_eq; discriminate) accu_v
+                    Haccu_repr) as Hcmp;
 
       set (le' := PTree.set _t'5 (Vint branch_ofs)
                     (PTree.set _t'4 (Vptr cb pc_ofs)
@@ -500,7 +485,7 @@ Proof.
       split;
 
       [ (* Part 1: exec *)
-        apply (eval_stmt_to_exec clight_ge 20);
+        apply (eval_stmt_to_exec clight_ge 10);
         eval_cbn;
 
         (* S1: _t'1 = s->accu *)
@@ -515,12 +500,12 @@ Proof.
         rewrite (sem_cast_int_to_long_0 m); eval_cbn;
         rewrite (sem_shl_long_0_1 m); eval_cbn;
         rewrite (sem_add_long_int_0_1 m); eval_cbn;
-        (* Use the axiom: comparison gives true *)
+        (* Use the precondition: comparison gives true *)
         rewrite Hcmp; eval_cbn;
 
         (* Then branch: branch taken *)
         (* S2a: _t'3 = s->pc *)
-        rewrite PTree.gso by (compute; congruence);
+        rewrite PTree.gso by (simpl; congruence);
         rewrite Hle_s; eval_cbn;
         rewrite Hco; eval_cbn;
         rewrite Hpc_offset; eval_cbn;
@@ -529,8 +514,8 @@ Proof.
         rewrite Hpc_load_uso; eval_cbn;
 
         (* S3a: _t'4 = s->pc *)
-        rewrite PTree.gso by (compute; congruence);
-        rewrite PTree.gso by (compute; congruence);
+        rewrite PTree.gso by (simpl; congruence);
+        rewrite PTree.gso by (simpl; congruence);
         rewrite Hle_s; eval_cbn;
         rewrite Hco; eval_cbn;
         rewrite Hpc_offset; eval_cbn;
@@ -544,18 +529,18 @@ Proof.
 
         (* S5a: s->pc = _t'3 + _t'5 *)
         (* Lvalue *)
-        rewrite PTree.gso by (compute; congruence);
-        rewrite PTree.gso by (compute; congruence);
-        rewrite PTree.gso by (compute; congruence);
-        rewrite PTree.gso by (compute; congruence);
+        rewrite PTree.gso by (simpl; congruence);
+        rewrite PTree.gso by (simpl; congruence);
+        rewrite PTree.gso by (simpl; congruence);
+        rewrite PTree.gso by (simpl; congruence);
         rewrite Hle_s; eval_cbn;
         rewrite Hco; eval_cbn;
         rewrite Hpc_offset; eval_cbn;
         rewrite Mptr_Mint64; eval_cbn;
 
         (* Rvalue: _t'3 + _t'5 *)
-        rewrite (PTree.gso _ _ ltac:(compute; congruence));
-        rewrite (PTree.gso _ _ ltac:(compute; congruence));
+        rewrite (PTree.gso _ _ ltac:(simpl; congruence));
+        rewrite (PTree.gso _ _ ltac:(simpl; congruence));
         rewrite PTree.gss; eval_cbn;
         rewrite PTree.gss; eval_cbn;
 
@@ -610,10 +595,10 @@ Proof.
         split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]];
 
         [ subst le';
-          rewrite PTree.gso by (compute; congruence);
-          rewrite PTree.gso by (compute; congruence);
-          rewrite PTree.gso by (compute; congruence);
-          rewrite PTree.gso by (compute; congruence);
+          rewrite PTree.gso by (simpl; congruence);
+          rewrite PTree.gso by (simpl; congruence);
+          rewrite PTree.gso by (simpl; congruence);
+          rewrite PTree.gso by (simpl; congruence);
           exact Hle_s
 
         | exists new_pc_v; split;
@@ -632,13 +617,16 @@ Proof.
           [ exact Haccu_load'
           | simpl; rewrite Haccu_eq; exact Haccu_repr ]
 
-        | exists (Vptr sp_b sp_ofs), sp_b, sp_ofs; split; [| split];
+        | exists (Vptr sp_b sp_ofs), sp_b, sp_ofs; split; [| split; [| split; [| split; [| split]]]];
           [ exact Hsp_load'
           | reflexivity
           | simpl;
             apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_v
                      Hstack_repr Hstore);
-            intro Heq; exact (Hblock_sep (eq_sym Heq)) ]
+            intro Heq; exact (Hblock_sep (eq_sym Heq))
+          | exact Hblock_sep
+          | exact Hsp_ne_gb
+          | exact Hcb_ne_sp ]
 
         | exists env_v; split;
           [ exact Henv_load'
@@ -646,13 +634,14 @@ Proof.
 
         | simpl; exact Hextra_load'
 
-        | exists gd_ptr; split; [| split];
+        | exists gd_ptr; split; [| split; [| split]];
           [ exact Hgd_load'
           | simpl; exact Hgd_eq
           | simpl;
             apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_v
                      Hglobal_repr Hstore);
-            intro Heq2; exact (Hgb_ne (eq_sym Heq2)) ]
+            intro Heq2; exact (Hgb_ne (eq_sym Heq2))
+          | exact Hgb_ne ]
 
         | exists ts_ptr; split;
           [ exact Hts_load'
@@ -662,17 +651,25 @@ Proof.
   }
 
   (* ================================================================ *)
+  (* Case 2: accu = Val_block tag fields => branch taken               *)
+  (* ================================================================ *)
+  (* Val_block tag fields: handle_BRANCHIF gives Step {pc := target}.
+     val_repr can only produce a witness for Val_block tag nil
+     (vr_block_atom), so Val_block tag (h::t) is vacuously true.
+     For Val_block tag nil, val_repr gives Vlong, so the comparison
+     precondition is usable. *)
+
+  (* ================================================================ *)
   (* Cases 2-4: non-integer accu => branch taken                       *)
   (*                                                                    *)
-  (* These use val_repr_ne_tagged_zero for the comparison axiom.       *)
+  (* These use the comparison precondition.                            *)
   (* The proof structure is identical to Case 1b.                      *)
   (* ================================================================ *)
 
-  (* Val_ptr *)
   all: simpl;
-    intro Hpre;
+    intros ard Hpre Hstep_pre;
 
-    (destruct Hpre as [ard Hpre];
+    (unfold abs_rel_with_ard in Hpre;
     set (sb := ar_sptr_block ard) in *;
     set (so := ar_sptr_ofs ard) in *;
     set (hm := ar_heap_map ard) in *;
@@ -681,17 +678,17 @@ Proof.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
-      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] &
+      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hblock_sep [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
       [env_v [Henv_load Henv_repr]] &
       Hextra_load &
-      [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] &
+      [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne]]]] &
       [ts_ptr [Hts_load Htrap_rel]]);
     subst sp_ptr;
 
+    destruct Hstep_pre as [Hcb_ne_sb [Hcode_load Hcmp_pre]];
+
     pose proof (sptr_ofs_representable ard) as Hso_bound; fold so in Hso_bound;
     pose proof (Ptrofs.unsigned_range so) as [Hso_pos _];
-    pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep; fold sb in Hblock_sep;
-    pose proof (global_block_ne_sptr ard) as Hgb_ne; fold sb in Hgb_ne;
 
     destruct interp_state_co_branchif as [co_is [Hco [Hpc_offset Haccu_offset]]];
 
@@ -704,7 +701,6 @@ Proof.
           exact Hpc_load);
 
     set (branch_ofs := Int.repr (target - Machine.pc s));
-    pose proof (code_contains_branch_ofs m cb co (Machine.pc s) target) as Hcode_load;
     fold pc_ofs in Hcode_load;
     fold branch_ofs in Hcode_load;
 
@@ -716,8 +712,8 @@ Proof.
     destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
                 (ex_intro _ _ Hpc_load_uso)) as [m' Hstore];
 
-    pose proof (val_repr_ne_tagged_zero hm _ accu_v m
-                  Haccu_repr ltac:(rewrite Haccu_eq; discriminate)) as Hcmp;
+    pose proof (Hcmp_pre ltac:(rewrite Haccu_eq; discriminate) accu_v
+                  Haccu_repr) as Hcmp;
 
     set (le' := PTree.set _t'5 (Vint branch_ofs)
                   (PTree.set _t'4 (Vptr cb pc_ofs)
@@ -729,7 +725,7 @@ Proof.
     split;
 
     [ (* Part 1: exec *)
-      apply (eval_stmt_to_exec clight_ge 20);
+      apply (eval_stmt_to_exec clight_ge 10);
       eval_cbn;
 
       rewrite Hle_s; eval_cbn;
@@ -744,7 +740,7 @@ Proof.
       rewrite (sem_add_long_int_0_1 m); eval_cbn;
       rewrite Hcmp; eval_cbn;
 
-      rewrite PTree.gso by (compute; congruence);
+      rewrite PTree.gso by (simpl; congruence);
       rewrite Hle_s; eval_cbn;
       rewrite Hco; eval_cbn;
       rewrite Hpc_offset; eval_cbn;
@@ -752,8 +748,8 @@ Proof.
       rewrite (ptrofs_add_zero so);
       rewrite Hpc_load_uso; eval_cbn;
 
-      rewrite PTree.gso by (compute; congruence);
-      rewrite PTree.gso by (compute; congruence);
+      rewrite PTree.gso by (simpl; congruence);
+      rewrite PTree.gso by (simpl; congruence);
       rewrite Hle_s; eval_cbn;
       rewrite Hco; eval_cbn;
       rewrite Hpc_offset; eval_cbn;
@@ -764,17 +760,17 @@ Proof.
       rewrite PTree.gss; eval_cbn;
       rewrite Hcode_load; eval_cbn;
 
-      rewrite PTree.gso by (compute; congruence);
-      rewrite PTree.gso by (compute; congruence);
-      rewrite PTree.gso by (compute; congruence);
-      rewrite PTree.gso by (compute; congruence);
+      rewrite PTree.gso by (simpl; congruence);
+      rewrite PTree.gso by (simpl; congruence);
+      rewrite PTree.gso by (simpl; congruence);
+      rewrite PTree.gso by (simpl; congruence);
       rewrite Hle_s; eval_cbn;
       rewrite Hco; eval_cbn;
       rewrite Hpc_offset; eval_cbn;
       rewrite Mptr_Mint64; eval_cbn;
 
-      rewrite (PTree.gso _ _ ltac:(compute; congruence));
-      rewrite (PTree.gso _ _ ltac:(compute; congruence));
+      rewrite (PTree.gso _ _ ltac:(simpl; congruence));
+      rewrite (PTree.gso _ _ ltac:(simpl; congruence));
       rewrite PTree.gss; eval_cbn;
       rewrite PTree.gss; eval_cbn;
 
@@ -829,10 +825,10 @@ Proof.
       split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]];
 
       [ subst le';
-        rewrite PTree.gso by (compute; congruence);
-        rewrite PTree.gso by (compute; congruence);
-        rewrite PTree.gso by (compute; congruence);
-        rewrite PTree.gso by (compute; congruence);
+        rewrite PTree.gso by (simpl; congruence);
+        rewrite PTree.gso by (simpl; congruence);
+        rewrite PTree.gso by (simpl; congruence);
+        rewrite PTree.gso by (simpl; congruence);
         exact Hle_s
 
       | exists new_pc_v; split;
@@ -851,13 +847,16 @@ Proof.
         [ exact Haccu_load'
         | simpl; rewrite Haccu_eq; exact Haccu_repr ]
 
-      | exists (Vptr sp_b sp_ofs), sp_b, sp_ofs; split; [| split];
+      | exists (Vptr sp_b sp_ofs), sp_b, sp_ofs; split; [| split; [| split; [| split; [| split]]]];
         [ exact Hsp_load'
         | reflexivity
         | simpl;
           apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_v
                    Hstack_repr Hstore);
-          intro Heq; exact (Hblock_sep (eq_sym Heq)) ]
+          intro Heq; exact (Hblock_sep (eq_sym Heq))
+        | exact Hblock_sep
+        | exact Hsp_ne_gb
+        | exact Hcb_ne_sp ]
 
       | exists env_v; split;
         [ exact Henv_load'
@@ -865,13 +864,14 @@ Proof.
 
       | simpl; exact Hextra_load'
 
-      | exists gd_ptr; split; [| split];
+      | exists gd_ptr; split; [| split; [| split]];
         [ exact Hgd_load'
         | simpl; exact Hgd_eq
         | simpl;
           apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_v
                    Hglobal_repr Hstore);
-          intro Heq2; exact (Hgb_ne (eq_sym Heq2)) ]
+          intro Heq2; exact (Hgb_ne (eq_sym Heq2))
+        | exact Hgb_ne ]
 
       | exists ts_ptr; split;
         [ exact Hts_load'

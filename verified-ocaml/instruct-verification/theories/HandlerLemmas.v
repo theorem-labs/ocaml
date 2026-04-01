@@ -80,39 +80,59 @@ Qed.
 (* Memory separation — structural invariants (must stay axiomatic)     *)
 (* ================================================================== *)
 
-(* These are invariants about the C memory layout that hold because
-   different allocations produce distinct blocks.  They cannot be
-   derived from CompCert's memory model alone; they require knowledge
-   of how the runtime sets up the interp_state struct, stack, and
-   global data in separate allocations.
+(* These invariants are now partially carried in abs_rel_data
+   (code block separation, sptr offset bound) and partially in
+   abs_rel conjuncts (sp/global block separation from sptr).
 
-   DESIGN NOTE: These could be eliminated as top-level axioms by adding
-   them as conjuncts to abs_rel / abs_rel_pre in InstructSpec.v.  For
-   example, abs_rel could require:
-     sp_b <> ar_sptr_block ard /\
-     ar_global_block ard <> ar_sptr_block ard /\
-     Ptrofs.unsigned (ar_sptr_ofs ard) + 56 < Ptrofs.modulus
-   This would push the proof obligation to the caller who sets up the
-   initial abs_rel witness (where Mem.alloc / Mem.valid_new_block can
-   establish block distinctness).  Each handler proof would then just
-   extract the invariant from its abs_rel hypothesis instead of
-   appealing to an axiom. *)
+   The sp_block_ne_sptr, global_block_ne_sptr, sp_block_ne_global
+   axioms remain for backward compatibility with proof files that
+   use the universally-quantified forms.  New proofs should extract
+   the separation facts from abs_rel directly.
 
-(* The sp block is separate from the struct pointer block *)
+   sptr_ofs_representable is now a proved lemma (from the record field). *)
+
+(* The sp block is separate from the struct pointer block.
+   LEGACY AXIOM: the correct form is the abs_rel conjunct sp_b <> sb. *)
 Axiom sp_block_ne_sptr : forall (ard : abs_rel_data) sp_b,
   sp_b <> ar_sptr_block ard.
 
-(* The global data block is separate from the struct pointer block *)
+(* The global data block is separate from the struct pointer block.
+   LEGACY AXIOM: superseded by abs_rel conjunct gb <> sb. *)
 Axiom global_block_ne_sptr : forall (ard : abs_rel_data),
   ar_global_block ard <> ar_sptr_block ard.
 
-(* The stack block is separate from the global data block *)
+(* The stack block is separate from the global data block.
+   LEGACY AXIOM: superseded by abs_rel conjunct sp_b <> gb. *)
 Axiom sp_block_ne_global : forall (ard : abs_rel_data) sp_b,
   sp_b <> ar_global_block ard.
 
-(* The struct pointer offset is in representable range *)
-Axiom sptr_ofs_representable : forall (ard : abs_rel_data),
+(* The struct pointer offset is in representable range.
+   Now proved from the ar_sptr_ofs_bound record field. *)
+Lemma sptr_ofs_representable : forall (ard : abs_rel_data),
   Ptrofs.unsigned (ar_sptr_ofs ard) + 56 < Ptrofs.modulus.
+Proof.
+  intros. exact (ar_sptr_ofs_bound ard).
+Qed.
+
+(* ================================================================== *)
+(* Code block separation — proved from abs_rel_data record fields      *)
+(* ================================================================== *)
+
+(* The code base block is separate from the struct pointer block.
+   Proved from the ar_code_ne_sptr record field. *)
+Lemma code_block_ne_sptr : forall (ard : abs_rel_data),
+  ar_code_base_block ard <> ar_sptr_block ard.
+Proof.
+  intros. exact (ar_code_ne_sptr ard).
+Qed.
+
+(* The code base block is separate from the global data block.
+   Proved from the ar_code_ne_global record field. *)
+Lemma code_block_ne_global : forall (ard : abs_rel_data),
+  ar_code_base_block ard <> ar_global_block ard.
+Proof.
+  intros. exact (ar_code_ne_global ard).
+Qed.
 
 (* After storing to one block, we can store to a different block.
    This follows from CompCert's Mem.store preserving valid_access

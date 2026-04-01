@@ -50,40 +50,51 @@ Local Lemma tagged_bool_result : forall (cond : bool),
     = Int64.repr (if cond then 3 else 1).
 Proof. intros. destruct cond; reflexivity. Qed.
 
-(* Tagged integer comparison axiom: signed comparison of tagged integers
-   matches Z comparison.
-
-   Int64.cmp Cle (repr (a*2+1)) (repr (b*2+1)) = Z.leb a b.
-
-   This holds when both tagged values fit in 64-bit signed range, i.e.,
-   a and b are in [-2^62, 2^62 - 1].  OCaml tagged integers on a 64-bit
-   platform always satisfy this constraint (63-bit signed range).
-
-   For arbitrary Z the statement is false (tagged values wrap around),
-   but Val_int in the OCaml model carries no range restriction.  This
-   axiom matches the same pattern as EQ_correct's tagged_eq_arith and
-   the structural axioms in HandlerLemmas.v (sp_block_ne_sptr, etc.).
-
-   To eliminate: add a range constraint to Val_int or to abs_rel_pre
-   requiring that all Val_int values satisfy -2^62 <= z < 2^62.
-   Then Int64.signed_repr closes the goal directly. *)
-Axiom tagged_le_arith : forall a b,
+(* tagged_le_arith: Cle on tagged integers matches Z.leb under signed range.
+   Int64.cmp Cle x y = negb (Int64.lt y x).
+   Int64.lt compares signed representations.
+   Under signed range, Int64.signed (repr (a*2+1)) = a*2+1. *)
+Local Lemma tagged_le_arith : forall a b,
+  Int64.min_signed <= a * 2 + 1 <= Int64.max_signed ->
+  Int64.min_signed <= b * 2 + 1 <= Int64.max_signed ->
   Int64.cmp Cle (Int64.repr (a * 2 + 1)) (Int64.repr (b * 2 + 1)) = Z.leb a b.
+Proof.
+  intros a b Ha Hb.
+  unfold Int64.cmp, Int64.lt.
+  rewrite !Int64.signed_repr by lia.
+  destruct (Z.leb a b) eqn:Hleb.
+  - apply Z.leb_le in Hleb.
+    destruct (zlt (b * 2 + 1) (a * 2 + 1)); [lia | reflexivity].
+  - apply Z.leb_gt in Hleb.
+    destruct (zlt (b * 2 + 1) (a * 2 + 1)); [reflexivity | lia].
+Qed.
+
+Definition le_int_range_pre (m : mem) (s : state) (_ : abs_rel_data) : Prop :=
+  match s.(Machine.accu), s.(Machine.stack) with
+  | Val_int a, Val_int b :: _ =>
+      Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
+      Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+  | _, _ => False
+  end.
 
 Theorem verify_LEINT_correct :
-    handler_correct handle_LEINT f_instr_LEINT
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+    handler_correct_with_pre handle_LEINT f_instr_LEINT
+      le_int_range_pre
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_LEINT.
+  unfold handler_correct_with_pre.
+  intros e le m s. unfold handle_LEINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
     try (destruct (Machine.stack s); exact I);
     try exact I.
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
-  intro Hpre.
-  destruct Hpre as [ard Hpre].
+  intros ard Hpre Hrange. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
-  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
+  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
@@ -92,7 +103,9 @@ Proof.
   rewrite Hstk in Hstack_repr.
   inversion Hstack_repr as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
   revert Hgd_load Hgd_eq Hglobal_repr. subst. intros Hgd_load Hgd_eq Hglobal_repr.
-  inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
+  inversion Hval_repr0; subst cv0.
+  unfold le_int_range_pre in Hrange. rewrite Haccu_eq, Hstk in Hrange.
+  destruct Hrange as [Ha_range Hb_range].
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
   destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
@@ -135,7 +148,7 @@ Proof.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     unfold result_v in Hstore2. rewrite Hstore2; eval_cbn.
     subst le'. reflexivity. }
-  { exists ard. set (uso := Ptrofs.unsigned so) in *.
+  { unfold abs_rel. exists ard. set (uso := Ptrofs.unsigned so) in *.
     assert (Hpc_load' : Mem.load Mint64 m' sb (uso + 0) = Some pc_ptr).
     { assert (Hpc_m1 : Mem.load Mint64 m1 sb (uso + 0) = Some pc_ptr).
       { apply (load_after_store_other m m1 sb (uso + 16) (uso + 0) new_sp_v pc_ptr Hstore1 Hpc_load). left. lia. }
@@ -163,18 +176,22 @@ Proof.
     { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
     { exists result_v. split. exact Haccu_load'. simpl.
       unfold result_v. rewrite tagged_bool_result.
-      unfold le_bool. rewrite tagged_le_arith.
+      unfold le_bool. rewrite (tagged_le_arith a b Ha_range Hb_range).
       destruct (Z.leb a b); constructor. }
-    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split]. exact Hsp_load'. reflexivity. simpl.
-      eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-      + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
-        * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hblock_sep (eq_sym Heq)).
-      + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split; [| split; [| split; [| split]]]]. exact Hsp_load'. reflexivity.
+      { simpl.
+        eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
+        + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
+          * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+      exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp. }
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }
-    { exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
-      eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-      + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
-      + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+    { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq.
+      { simpl.
+        eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
+        + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+      exact Hgb_ne_sb. }
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
 Qed.

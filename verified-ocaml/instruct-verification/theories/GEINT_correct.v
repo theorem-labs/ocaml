@@ -7,12 +7,13 @@
    negb (Int64.lt n1 n2), where Int64.lt uses signed comparison.
    The Rocq handler uses val_bool (a >=? b) where >=? is Z.geb.
 
-   AXIOM (tagged_ge_arith): The connection between C signed comparison
-   on tagged integers and Z comparison requires that the original values
-   fit within the OCaml integer range (so that 2a+1 and 2b+1 fit in
-   signed 64-bit range).  The val_repr relation does not carry this
-   range constraint, so we state this as a local axiom, following the
-   same pattern as structural axioms in HandlerLemmas.v. *)
+   The tagged_ge_arith lemma requires a range precondition:
+   both integer operands must satisfy
+     Int64.min_signed <= a*2+1 <= Int64.max_signed
+   so that Int64.signed_repr is injective (no modular wrapping).
+
+   For non-(Val_int, Val_int) value combinations, the precondition is
+   False, making those obligations vacuously true. *)
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
 From compcert Require Import Coqlib Integers Floats Ctypes Cop
@@ -59,30 +60,48 @@ Local Lemma tagged_ge_result : forall (cond : bool),
     = Int64.repr (if cond then 3 else 1).
 Proof. intros. destruct cond; reflexivity. Qed.
 
-(* Tagged integer GE arithmetic.
-   For valid OCaml integers, 2a+1 and 2b+1 fit in signed 64-bit range,
-   so the signed comparison via Int64.lt preserves Z order.
-   The val_repr relation does not enforce this range, so we state this
-   as an axiom, following the same design as store_succeeds_from_load,
-   sp_block_ne_sptr, etc. in HandlerLemmas.v.
-   To eliminate: add a range constraint to val_repr's vr_int constructor
-   (e.g., Int64.min_signed <= z * 2 + 1 <= Int64.max_signed). *)
-Local Axiom tagged_ge_arith : forall a b,
+Local Lemma tagged_ge_arith : forall a b,
+  Int64.min_signed <= a * 2 + 1 <= Int64.max_signed ->
+  Int64.min_signed <= b * 2 + 1 <= Int64.max_signed ->
   negb (Int64.lt (Int64.repr (a * 2 + 1)) (Int64.repr (b * 2 + 1)))
     = Z.geb a b.
+Proof.
+  intros a b Ha Hb.
+  unfold Int64.lt.
+  rewrite !Int64.signed_repr by lia.
+  rewrite Z.geb_leb.
+  destruct (Coqlib.zlt (a * 2 + 1) (b * 2 + 1)); simpl.
+  - (* a * 2 + 1 < b * 2 + 1, so a < b, so (b <=? a) = false *)
+    symmetry. apply Z.leb_gt. lia.
+  - (* a * 2 + 1 >= b * 2 + 1, so a >= b, so (b <=? a) = true *)
+    symmetry. apply Z.leb_le. lia.
+Qed.
+
+Definition geint_range_pre (m : mem) (s : state) (_ : abs_rel_data) : Prop :=
+  match s.(Machine.accu), s.(Machine.stack) with
+  | Val_int a, Val_int b :: _ =>
+      Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
+      Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+  | _, _ => False
+  end.
 
 Theorem verify_GEINT_correct :
-    handler_correct handle_GEINT f_instr_GEINT
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+    handler_correct_with_pre handle_GEINT f_instr_GEINT
+      geint_range_pre
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_GEINT.
+  unfold handler_correct_with_pre.
+  intros e le m s. unfold handle_GEINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
-  intro Hpre.
-  destruct Hpre as [ard Hpre].
+  (* Remaining case: Val_int a, Val_int b :: _ *)
+  intros ard Hpre Hrange. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
-  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq Hstack_repr]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq Hglobal_repr]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
+  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
@@ -91,7 +110,9 @@ Proof.
   rewrite Hstk in Hstack_repr.
   inversion Hstack_repr as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
   revert Hgd_load Hgd_eq Hglobal_repr. subst. intros Hgd_load Hgd_eq Hglobal_repr.
-  inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
+  inversion Hval_repr0; subst cv0.
+  unfold geint_range_pre in Hrange. rewrite Haccu_eq, Hstk in Hrange.
+  destruct Hrange as [Ha_range Hb_range].
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
   destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
@@ -144,7 +165,7 @@ Proof.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     unfold result_v in Hstore2. rewrite Hstore2; eval_cbn.
     subst le'. reflexivity. }
-  { exists ard. set (uso := Ptrofs.unsigned so) in *.
+  { unfold abs_rel. exists ard. set (uso := Ptrofs.unsigned so) in *.
     assert (Hpc_load' : Mem.load Mint64 m' sb (uso + 0) = Some pc_ptr).
     { assert (Hpc_m1 : Mem.load Mint64 m1 sb (uso + 0) = Some pc_ptr).
       { apply (load_after_store_other m m1 sb (uso + 16) (uso + 0) new_sp_v pc_ptr Hstore1 Hpc_load). left. lia. }
@@ -172,18 +193,22 @@ Proof.
     { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
     { exists result_v. split. exact Haccu_load'. simpl.
       unfold result_v. rewrite tagged_ge_result.
-      unfold ge_bool. rewrite tagged_ge_arith.
+      unfold ge_bool. rewrite (tagged_ge_arith a b Ha_range Hb_range).
       destruct (Z.geb a b); constructor. }
-    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split]. exact Hsp_load'. reflexivity. simpl.
-      eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-      + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
-        * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hblock_sep (eq_sym Heq)).
-      + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split; [| split; [| split; [| split]]]]. exact Hsp_load'. reflexivity.
+      { simpl.
+        eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
+        + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
+          * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+      exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp. }
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }
-    { exists gd_ptr. split; [| split]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
-      eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-      + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
-      + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+    { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq.
+      { simpl.
+        eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
+        + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+      exact Hgb_ne_sb. }
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
 Qed.
