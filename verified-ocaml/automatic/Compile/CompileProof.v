@@ -2198,22 +2198,23 @@ Proof.
       (* The hp is preserved by st constructor *)
       exact Hfld.
     - (* Loc_self *) exact I. }
-  change (prefix ++ c1 ++ c2 ++ suffix)
-    with ((prefix ++ c1) ++ c2 ++ suffix) in Hsteps1.
-  rewrite <- app_assoc in Hsteps1.
+  (* Rewrite the code array in Hsteps1 to use (prefix ++ c1) as prefix for IHe2 *)
+  assert (Hcode_assoc : prefix ++ c1 ++ c2 ++ suffix =
+    (prefix ++ c1) ++ c2 ++ suffix).
+  { rewrite !app_assoc. reflexivity. }
+  rewrite Hcode_assoc in Hsteps1.
   specialize (IHe2 fuel' senv ce fe (base + Datatypes.length c1) s1 sv out out
     (prefix ++ c1) suffix Heval2 eq_refl Hpc1 Hplen1 Heinv1).
   destruct IHe2 as [n2 [v2 [Hsteps2 Hcorr2]]].
   (* Compose via nsteps_trans *)
   exists (n1 + n2)%nat, v2. split.
-  - rewrite <- app_assoc.
+  - rewrite Hcode_assoc.
     rewrite (nsteps_trans n1 n2 _ _ s1 Hsteps1).
-    (* Need to align the code arrays *)
-    rewrite app_assoc in Hsteps2.
-    (* s1 steps through (prefix ++ c1) ++ c2 ++ suffix *)
-    replace (base + Datatypes.length c1 + Datatypes.length c2)%nat
-      with (base + (Datatypes.length c1 + Datatypes.length c2))%nat by lia.
-    rewrite <- app_length with (l := c1) (l' := c2).
+    (* s1 steps through (prefix ++ c1) ++ c2 ++ suffix.
+       Hsteps2 gives us nsteps n2 on same code array. *)
+    (* Align the lengths *)
+    replace (base + (Datatypes.length c1 + Datatypes.length c2))%nat
+      with (base + Datatypes.length c1 + Datatypes.length c2)%nat by lia.
     (* The target state for s1's stepping should have same hp *)
     assert (Hhp1 : hp s1 = hp s).
     { unfold s1, st. reflexivity. }
