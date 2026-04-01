@@ -305,7 +305,7 @@ Fixpoint val_corresponds (sv : svalue) (v : value) : Prop :=
 
 Lemma val_corresponds_int_inv : forall n v,
   val_corresponds (SVal_int n) v -> v = Val_int n.
-Proof. intros n v H. simpl in H. destruct v; try contradiction. f_equal. exact H. Qed.
+Proof. intros n v H. simpl in H. destruct v; try contradiction. f_equal. symmetry. exact H. Qed.
 
 Lemma val_corresponds_bool_true_inv : forall v,
   val_corresponds (SVal_bool true) v -> v = Val_int 1.

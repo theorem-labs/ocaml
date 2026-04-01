@@ -23,7 +23,7 @@ Extract Constant Uint63.eqb => "(=)".
 
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret Encode.
-From OCamlInterp.Manual.Bytecode Require Import IO.
+From OCamlInterp.Manual.Bytecode Require Import IO DecodeSpec.
 From OCamlInterp.Checker.Bytecode Require Import Main.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
