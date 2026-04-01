@@ -289,7 +289,7 @@ Proof.
         - simpl.
           apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv
                    Hstack_repr Hstore).
-          intro Heq; exact (sp_block_ne_sptr ard sp_b (eq_sym Heq)).
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp. }

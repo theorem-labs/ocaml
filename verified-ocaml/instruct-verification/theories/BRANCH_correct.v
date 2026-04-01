@@ -218,7 +218,7 @@ Proof.
     set (ard' := mk_abs_rel sb so hm cb new_co
                    (ar_global_block ard) (ar_global_ofs ard)
                    (ar_stack_block ard) (ar_stack_base_ofs ard)
-                   (ar_code_ne_sptr ard) (ar_code_ne_global ard)
+                   (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard)
                    (ar_sptr_ofs_bound ard)).
     exists ard'.
     (* Non-pc field loads survive the store at uso (other fields at uso + 8..48) *)
@@ -278,7 +278,7 @@ Proof.
       exact Hsp_load'. reflexivity. simpl.
       apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_ptr
                Hstack_repr Hstore).
-      intro Heq. exact (sp_block_ne_sptr ard sp_b (eq_sym Heq)).
+      intro Heq. exact (Hsp_ne_sb (eq_sym Heq)).
       exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp.
     + (* env *)
       exists env_v. split. exact Henv_load'. simpl. exact Henv_repr.

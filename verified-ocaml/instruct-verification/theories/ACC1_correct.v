@@ -29,7 +29,6 @@ Proof.
   destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   rewrite Hstk in Hstack_repr.
   inversion Hstack_repr as [| xv0 xvs0 xb0 xofs0 cv0 Hload_sp0 Hval_repr0 Hstack_repr1]. subst xv0 xvs0 xb0 xofs0.
@@ -62,7 +61,7 @@ Proof.
     { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
     { exists cv1. split. exact Haccu_load'. simpl. exact Hval_repr1. }
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]]. exact Hsp_load'. reflexivity. simpl. rewrite Hstk.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv1 Hstack_repr Hstore). intro Heq; exact (Hblock_sep (eq_sym Heq)).
+            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv1 Hstack_repr Hstore). intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp. }

@@ -396,7 +396,6 @@ Proof.
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   pose proof (code_block_ne_sptr ard) as Hcb_ne. fold sb cb in Hcb_ne.
 
@@ -1068,7 +1067,7 @@ Proof.
       cb new_co
       gb go0
       (ar_stack_block ard) (ar_stack_base_ofs ard)
-      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_sptr_ofs_bound ard)).
+      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard) (ar_sptr_ofs_bound ard)).
     exists ard'.
 
     set (uso := Ptrofs.unsigned so) in *.

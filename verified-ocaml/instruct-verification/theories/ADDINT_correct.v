@@ -88,8 +88,6 @@ Proof.
     pose proof (sptr_ofs_representable ard) as Hso_bound.
     fold so in Hso_bound.
     pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-    pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep.
-    fold sb in Hblock_sep.
     pose proof (global_block_ne_sptr ard) as Hgb_ne.
     fold sb in Hgb_ne.
 
@@ -133,7 +131,7 @@ Proof.
     { erewrite Mem.load_store_other.
       - exact Hload_sp0.
       - exact Hstore1.
-      - left. exact Hblock_sep. }
+      - left. exact Hsp_ne_sb. }
 
     (* --- Store 2: accu field (so+8) gets the tagged add result --- *)
     set (result_v := Vlong (Int64.sub (Int64.add (Int64.repr (a * 2 + 1))
@@ -350,9 +348,9 @@ Proof.
                      (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
             * exact Hstack_repr_rest.
             * exact Hstore1.
-            * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+            * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           + exact Hstore2.
-                    + intro Heq; exact (Hblock_sep (eq_sym Heq)).
+                    + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp. }

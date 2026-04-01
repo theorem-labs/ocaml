@@ -3,7 +3,7 @@
 See `HandlerLemmas-plan.md` for full instructions.
 See `HandlerLemmas-analysis.md` for axiom analysis.
 
-Last updated: 2026-04-01 (Phase 0 COMPLETE — clean build)
+Last updated: 2026-04-01 (Phase 5 COMPLETE — 5 axioms eliminated, 5 remain)
 
 ---
 
@@ -17,16 +17,16 @@ Last updated: 2026-04-01 (Phase 0 COMPLETE — clean build)
 | 0.4 | InstructSpec.v | Fix `abs_rel_iff_with_ard` | DONE | 1 | `unfold abs_rel, abs_rel_with_ard. reflexivity.` |
 | 0.8 | InstructSpec.v | Unify: single `handler_correct` with `step_pre` arg | DONE | 1 | Module Type commented out; deleted `_with_pre` and `_with_pre_env` |
 | 0.9 | 56 handler files | Update for unified `handler_correct` | DONE | 1 | add step_pre arg, change intro pattern, add `unfold abs_rel_with_ard in Hpre` |
-| 1.1 | InstructSpec.v | Add `ar_global_ne_sptr` to `abs_rel_data` | TODO | 1 | |
-| 1.3 | HandlerLemmas.v | Replace `global_block_ne_sptr` axiom with lemma | TODO | 1 | |
-| 2.1 | HandlerLemmas.v | Delete `sp_block_ne_sptr`, `sp_block_ne_global` axioms | TODO | 1 | |
+| 1.1 | InstructSpec.v | Add `ar_global_ne_sptr` to `abs_rel_data` | DONE | 1 | field after ar_code_ne_global |
+| 1.3 | HandlerLemmas.v | Replace `global_block_ne_sptr` axiom with lemma | DONE | 1 | Axiom → Lemma, extracts record field |
+| 2.1 | HandlerLemmas.v | Delete `sp_block_ne_sptr`, `sp_block_ne_global` axioms | DONE | 1 | replaced ~55 call sites with Hsp_ne_sb/Hsp_ne_gb |
 | 3.1 | InstructSpec.v | Add new abs_rel conjuncts (sp_ge8, repr, writable) | TODO | 1 | |
 | 4.1 | HandlerLemmas.v | Prove `store_succeeds_from_load` | TODO | 1 | |
 | 4.2 | HandlerLemmas.v | Prove `store_to_other_block` | TODO | 1 | |
 | 4.3 | HandlerLemmas.v | Prove `store_succeeds_stack` | TODO | 1 | |
 | 4.4 | HandlerLemmas.v | Prove/delete `sp_ofs_ge_8`, `sp_ofs_stack_representable` | TODO | 1 | |
-| 5.1 | HandlerLemmas.v | Prove `stack_repr_store_same_block_lower` | TODO | 1 | |
-| 5.2 | HandlerLemmas.v | Prove `stack_repr_cons_after_store` | TODO | 1 | |
+| 5.1 | HandlerLemmas.v | Prove `stack_repr_store_same_block_lower` | DONE | 1 | induction on stk, Mem.load_store_other + ptrofs_add_unsigned |
+| 5.2 | HandlerLemmas.v | Prove `stack_repr_cons_after_store` | DONE | 1 | Mem.load_store_same + stack_repr_store_same_block_lower |
 
 ---
 
@@ -138,6 +138,7 @@ Status key: TODO | IN_PROGRESS | DONE | ERROR | SKIP
 | Fix dispatched errors | DONE | CONST0 comment-insertion bug, `unfold abs_rel_with_ard in Hpre` needed everywhere |
 | Final clean build (Phase 0) | DONE | all 58 handler files compile |
 | Axiom audit: `Print Assumptions` on key theorems | DONE | remaining axioms: store_succeeds_from_load, sp_block_ne_sptr, global_block_ne_sptr (Phase 1-6 work) |
+| Phase 5 build | DONE | stack_repr_store_same_block_lower + stack_repr_cons_after_store proved, clean build |
 
 ---
 
@@ -145,16 +146,16 @@ Status key: TODO | IN_PROGRESS | DONE | ERROR | SKIP
 
 | Axiom | Status | Eliminated in | Notes |
 |-------|--------|---------------|-------|
-| `sp_block_ne_sptr` | TODO | Phase 2 | FALSE — delete, use `Hsp_ne_sb` |
-| `sp_block_ne_global` | TODO | Phase 2 | FALSE — delete, use `Hsp_ne_gb` |
-| `global_block_ne_sptr` | TODO | Phase 1 | add `ar_global_ne_sptr` record field |
+| `sp_block_ne_sptr` | DONE | Phase 2 | DELETED — was FALSE, replaced with `Hsp_ne_sb` |
+| `sp_block_ne_global` | DONE | Phase 2 | DELETED — was FALSE, replaced with `Hsp_ne_gb` |
+| `global_block_ne_sptr` | DONE | Phase 1 | now Lemma extracting `ar_global_ne_sptr` record field |
 | `store_succeeds_from_load` | TODO | Phase 4 | needs struct writability |
 | `store_to_other_block` | TODO | Phase 4 | needs stack writability |
 | `store_succeeds_stack` | TODO | Phase 4 | needs stack writability |
 | `sp_ofs_ge_8` | TODO | Phase 4 | becomes direct hypothesis |
 | `sp_ofs_stack_representable` | TODO | Phase 4 | becomes direct hypothesis |
-| `stack_repr_store_same_block_lower` | TODO | Phase 5 | induction on stack_repr |
-| `stack_repr_cons_after_store` | TODO | Phase 5 | uses previous lemma |
+| `stack_repr_store_same_block_lower` | DONE | Phase 5 | induction on stack_repr + ptrofs_add_unsigned |
+| `stack_repr_cons_after_store` | DONE | Phase 5 | Mem.load_store_same + stack_repr_store_same_block_lower |
 
 ---
 

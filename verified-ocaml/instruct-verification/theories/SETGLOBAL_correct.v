@@ -245,7 +245,6 @@ Proof.
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   pose proof (code_block_ne_sptr ard) as Hcb_ne. fold sb cb in Hcb_ne.
 
@@ -567,7 +566,7 @@ Proof.
     set (ard' := mk_abs_rel
       sb so hm cb new_co gb go
       (ar_stack_block ard) (ar_stack_base_ofs ard)
-      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_sptr_ofs_bound ard)).
+      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard) (ar_sptr_ofs_bound ard)).
     exists ard'.
     set (uso := Ptrofs.unsigned so) in *.
 
@@ -656,12 +655,12 @@ Proof.
     assert (Hstack_repr_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
     { apply (stack_repr_store_other_block hm m_cm m1 _ sp_b sp_ofs sb (uso + 8) unit_v
                Hstack_repr_cm Hstore1).
-      intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+      intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
 
     assert (Hstack_repr_m2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
     { apply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v
                Hstack_repr_m1 Hstore2).
-      intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+      intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
 
     (* global_repr in m2: globals are on gb which is different from sb.
        m_cm already has the right global_repr, stores to sb preserve it. *)

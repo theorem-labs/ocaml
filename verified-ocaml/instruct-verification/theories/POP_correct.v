@@ -262,7 +262,6 @@ Proof.
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
 
   (* Composite environment *)
@@ -400,7 +399,7 @@ Proof.
     set (ard' := mk_abs_rel sb so hm cb new_co
                    (ar_global_block ard) (ar_global_ofs ard)
                    (ar_stack_block ard) (ar_stack_base_ofs ard)
-                   (ar_code_ne_sptr ard) (ar_code_ne_global ard)
+                   (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard)
                    (ar_sptr_ofs_bound ard)).
     exists ard'.
 
@@ -503,11 +502,11 @@ Proof.
         assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
         { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
                    (uso + 0) new_pc_v Hstack_repr Hstore_pc).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
         assert (Hstack_m2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
         { apply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb
                    (uso + 16) (Vptr sp_b new_sp_ofs) Hstack_m1 Hstore_sp).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
         (* Now apply stack_repr_skipn *)
                 exact (stack_repr_skipn n hm m2 (Machine.stack s) sp_b sp_ofs Hstack_m2).
       - exact Hsp_ne_sb.

@@ -8,11 +8,13 @@
      sem_cast_long_val_repr, sem_add_sp_0, Mptr_Mint64,
      ptrofs_add_unsigned, interp_state_co, ptrofs_mul_8_1,
      sem_sub_sp_1, sem_cast_ptr_to_ptr
+   - PROVED (from abs_rel_data record fields):
+     global_block_ne_sptr, sptr_ofs_representable
+   - PROVED (induction on stack_repr):
+     stack_repr_store_same_block_lower, stack_repr_cons_after_store
    - AXIOM (structural invariants, not derivable from CompCert alone):
      store_succeeds_from_load (needs Writable; load only gives Readable),
-     sp_block_ne_sptr, global_block_ne_sptr, sptr_ofs_representable,
-     sp_block_ne_global, store_to_other_block,
-     stack_repr_store_same_block_lower, stack_repr_cons_after_store,
+     store_to_other_block,
      store_succeeds_stack, sp_ofs_ge_8
    - REMOVED: sem_cast_long (provably FALSE for Vundef/Vfloat/Vsingle/Vint;
      use sem_cast_long_val_repr instead) *)
@@ -80,31 +82,21 @@ Qed.
 (* Memory separation — structural invariants (must stay axiomatic)     *)
 (* ================================================================== *)
 
-(* These invariants are now partially carried in abs_rel_data
-   (code block separation, sptr offset bound) and partially in
-   abs_rel conjuncts (sp/global block separation from sptr).
+(* Block separation invariants are now carried in abs_rel_data
+   (code block separation, global block separation, sptr offset bound)
+   and in abs_rel conjuncts (sp/global block separation from sptr).
 
-   The sp_block_ne_sptr, global_block_ne_sptr, sp_block_ne_global
-   axioms remain for backward compatibility with proof files that
-   use the universally-quantified forms.  New proofs should extract
-   the separation facts from abs_rel directly.
+   global_block_ne_sptr and sptr_ofs_representable are proved lemmas
+   (extracting from record fields).
 
-   sptr_ofs_representable is now a proved lemma (from the record field). *)
+   sp_block_ne_sptr and sp_block_ne_global have been DELETED
+   (they were FALSE — universally quantified over all blocks).
+   Handler proofs now use Hsp_ne_sb/Hsp_ne_gb from abs_rel destruct. *)
 
-(* The sp block is separate from the struct pointer block.
-   LEGACY AXIOM: the correct form is the abs_rel conjunct sp_b <> sb. *)
-Axiom sp_block_ne_sptr : forall (ard : abs_rel_data) sp_b,
-  sp_b <> ar_sptr_block ard.
-
-(* The global data block is separate from the struct pointer block.
-   LEGACY AXIOM: superseded by abs_rel conjunct gb <> sb. *)
-Axiom global_block_ne_sptr : forall (ard : abs_rel_data),
+(* The global data block is separate from the struct pointer block. *)
+Lemma global_block_ne_sptr : forall (ard : abs_rel_data),
   ar_global_block ard <> ar_sptr_block ard.
-
-(* The stack block is separate from the global data block.
-   LEGACY AXIOM: superseded by abs_rel conjunct sp_b <> gb. *)
-Axiom sp_block_ne_global : forall (ard : abs_rel_data) sp_b,
-  sp_b <> ar_global_block ard.
+Proof. intros. exact (ar_global_ne_sptr ard). Qed.
 
 (* The struct pointer offset is in representable range.
    Now proved from the ar_sptr_ofs_bound record field. *)
@@ -220,40 +212,6 @@ Proof.
     + eassumption.
     + eapply IH; eauto.
 Qed.
-
-(* ================================================================== *)
-(* Representation preservation under store to same block               *)
-(* ================================================================== *)
-
-(* After storing to the stack block at a LOWER offset, the existing
-   stack_repr (which starts at a HIGHER offset) is preserved.
-   This is needed when PUSH decrements sp and stores there: the old
-   stack_repr at the old sp is unaffected because the store is at
-   old_sp - 8, which does not overlap old_sp, old_sp + 8, ...
-
-   This requires knowing that ptrofs arithmetic for the tail offsets
-   stays in range.  Rather than proving this from scratch, we keep it
-   as an axiom matching the structural invariants above.  To eliminate,
-   add stack offset representability invariants to abs_rel. *)
-Axiom stack_repr_store_same_block_lower : forall hm m m' stk sp_b sp_ofs ofs v,
-  stack_repr hm m stk sp_b sp_ofs ->
-  Mem.store Mint64 m sp_b ofs v = Some m' ->
-  ofs + 8 <= Ptrofs.unsigned sp_ofs ->
-  stack_repr hm m' stk sp_b sp_ofs.
-
-(* stack_repr for a newly pushed value: after storing cv at
-   (sp_b, new_sp_unsigned) where val_repr hm v cv, and old stack has
-   stack_repr at (sp_b, sp_ofs), the new stack v :: old_stk has
-   stack_repr at (sp_b, new_sp) where new_sp = sp_ofs - 8.
-
-   This combines load_after_store_same for the head element with
-   stack_repr_store_same_block_lower for the tail. *)
-Axiom stack_repr_cons_after_store : forall hm m m' stk sp_b sp_ofs v cv,
-  stack_repr hm m stk sp_b sp_ofs ->
-  val_repr hm v cv ->
-  Mem.store Mint64 m sp_b (Ptrofs.unsigned (Ptrofs.sub sp_ofs (Ptrofs.repr 8))) cv = Some m' ->
-  Ptrofs.unsigned sp_ofs >= 8 ->
-  stack_repr hm m' (v :: stk) sp_b (Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
 
 (* store_succeeds_stack: The stack block is writable below the current sp.
    Structural invariant about the C memory layout. *)
@@ -406,6 +364,67 @@ Proof.
   2: { pose proof (Ptrofs.unsigned_range base). unfold Ptrofs.max_unsigned. lia. }
   apply Ptrofs.unsigned_repr.
   pose proof (Ptrofs.unsigned_range base). unfold Ptrofs.max_unsigned. lia.
+Qed.
+
+(* ================================================================== *)
+(* Representation preservation under store to same block               *)
+(* ================================================================== *)
+
+(* After storing to the stack block at a LOWER offset, the existing
+   stack_repr (which starts at a HIGHER offset) is preserved.
+   This is needed when PUSH decrements sp and stores there: the old
+   stack_repr at the old sp is unaffected because the store is at
+   old_sp - 8, which does not overlap old_sp, old_sp + 8, ... *)
+Lemma stack_repr_store_same_block_lower : forall hm m m' stk sp_b sp_ofs ofs v,
+  stack_repr hm m stk sp_b sp_ofs ->
+  Mem.store Mint64 m sp_b ofs v = Some m' ->
+  ofs + 8 <= Ptrofs.unsigned sp_ofs ->
+  Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus ->
+  stack_repr hm m' stk sp_b sp_ofs.
+Proof.
+  intros hm m m' stk. revert m m'.
+  induction stk as [| hd tl IH]; intros m m' sp_b sp_ofs ofs v Hsr Hstore Hle Hrep.
+  - constructor.
+  - inversion Hsr; subst. econstructor.
+    + erewrite Mem.load_store_other; eauto.
+    + eassumption.
+    + eapply IH; eauto.
+      * rewrite ptrofs_add_unsigned; [lia | lia | simpl length in Hrep; lia].
+      * rewrite ptrofs_add_unsigned; [| lia | simpl length in Hrep; lia].
+        simpl length in Hrep. lia.
+Qed.
+
+(* stack_repr for a newly pushed value: after storing cv at
+   (sp_b, new_sp_unsigned) where val_repr hm v cv, and old stack has
+   stack_repr at (sp_b, sp_ofs), the new stack v :: old_stk has
+   stack_repr at (sp_b, new_sp) where new_sp = sp_ofs - 8.
+
+   This combines load_after_store_same for the head element with
+   stack_repr_store_same_block_lower for the tail. *)
+Lemma stack_repr_cons_after_store : forall hm m m' stk sp_b sp_ofs v cv,
+  stack_repr hm m stk sp_b sp_ofs ->
+  val_repr hm v cv ->
+  Mem.store Mint64 m sp_b (Ptrofs.unsigned (Ptrofs.sub sp_ofs (Ptrofs.repr 8))) cv = Some m' ->
+  Ptrofs.unsigned sp_ofs >= 8 ->
+  Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus ->
+  stack_repr hm m' (v :: stk) sp_b (Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
+Proof.
+  intros hm m m' stk sp_b sp_ofs v cv Hsr Hvr Hstore Hge8 Hrep.
+  econstructor.
+  - pose proof (Mem.load_store_same _ _ _ _ _ _ Hstore) as Hload.
+    rewrite (val_repr_load_result hm v cv Hvr) in Hload. exact Hload.
+  - exact Hvr.
+  - replace (Ptrofs.add (Ptrofs.sub sp_ofs (Ptrofs.repr 8)) (Ptrofs.repr 8)) with sp_ofs.
+    + eapply stack_repr_store_same_block_lower; eauto.
+      unfold Ptrofs.sub.
+      rewrite (Ptrofs.unsigned_repr 8).
+      2: { pose proof Ptrofs.modulus_pos. unfold Ptrofs.max_unsigned. lia. }
+      rewrite Ptrofs.unsigned_repr.
+      2: { pose proof (Ptrofs.unsigned_range sp_ofs). unfold Ptrofs.max_unsigned. lia. }
+      lia.
+    + rewrite Ptrofs.sub_add_opp. rewrite Ptrofs.add_assoc.
+      rewrite (Ptrofs.add_commut (Ptrofs.neg (Ptrofs.repr 8)) (Ptrofs.repr 8)).
+      rewrite Ptrofs.add_neg_zero. rewrite Ptrofs.add_zero. reflexivity.
 Qed.
 
 (* ================================================================== *)

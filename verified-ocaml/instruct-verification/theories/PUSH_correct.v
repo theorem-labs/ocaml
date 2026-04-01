@@ -48,9 +48,7 @@ Proof.
   subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (sp_block_ne_global ard sp_b) as Hsp_ne_gb_legacy.
   pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   set (new_sp_ofs := Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
@@ -63,7 +61,7 @@ Proof.
               (Vptr sp_b sp_ofs) (Vptr sp_b new_sp_ofs) Hsp_load) as [m1 Hstore_sp].
   destruct (store_to_other_block m m1 sb (Ptrofs.unsigned so + 16)
               (Vptr sp_b new_sp_ofs) sp_b (Ptrofs.unsigned new_sp_ofs) accu_v
-              Hstore_sp (not_eq_sym Hblock_sep)
+              Hstore_sp (not_eq_sym Hsp_ne_sb)
               ltac:(rewrite Hnew_sp_unsigned; lia)) as [m2 Hstore_accu].
   set (le' := PTree.set _t'2 accu_v
               (PTree.set _t'1 (Vptr sp_b new_sp_ofs)
@@ -151,7 +149,7 @@ Proof.
       Mem.load Mint64 m2 sb ofs = Some v).
     { intros ofs v Hload1.
       erewrite Mem.load_store_other; [exact Hload1 | exact Hstore_accu |].
-      left. exact (not_eq_sym Hblock_sep). }
+      left. exact (not_eq_sym Hsp_ne_sb). }
 
     (* pc field: uso + 0, unaffected by store 1 (ofs 16), unaffected by store 2 *)
     assert (Hpc_load2 : Mem.load Mint64 m2 sb (uso + 0) = Some pc_ptr).
@@ -233,11 +231,11 @@ Proof.
         { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
                    (uso + 16) (Vptr sp_b new_sp_ofs)
                    Hstack_repr Hstore_sp).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
         (* Now apply stack_repr_cons_after_store *)
         exact (stack_repr_cons_after_store hm m1 m2
                  (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                                  Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8).
+                                  Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp. }

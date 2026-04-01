@@ -232,7 +232,6 @@ Proof.
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   pose proof (code_block_ne_sptr ard) as Hcb_ne. fold sb cb in Hcb_ne.
 
@@ -343,7 +342,7 @@ Proof.
       (ar_code_base_block ard) new_co
       (ar_global_block ard) (ar_global_ofs ard)
       (ar_stack_block ard) (ar_stack_base_ofs ard)
-      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_sptr_ofs_bound ard)).
+      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard) (ar_sptr_ofs_bound ard)).
     exists ard'.
     set (uso := Ptrofs.unsigned so) in *.
 
@@ -432,9 +431,9 @@ Proof.
         + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
           * exact Hstack_repr.
           * exact Hstore1.
-          * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+          * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         + exact Hstore2.
-        + intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp. }

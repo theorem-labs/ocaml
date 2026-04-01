@@ -68,7 +68,6 @@ Proof.
   subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 8) accu_v (Vlong (Int64.repr 3)) Haccu_load)
@@ -119,7 +118,7 @@ Proof.
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]].
       exact Hsp_load'. reflexivity. simpl.
       apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) (Vlong (Int64.repr 3))
-                              Hstack_repr Hstore). intro Heq; exact (Hblock_sep (eq_sym Heq)).
+                              Hstack_repr Hstore). intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp. }

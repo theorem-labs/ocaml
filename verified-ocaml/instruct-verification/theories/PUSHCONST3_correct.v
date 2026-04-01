@@ -88,7 +88,6 @@ Proof.
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
 
@@ -110,7 +109,7 @@ Proof.
   (* Store 2: *new_sp <- accu_v (different block from sb) *)
   destruct (store_to_other_block m m1 sb (Ptrofs.unsigned so + 16)
               (Vptr sp_b new_sp_ofs) sp_b (Ptrofs.unsigned new_sp_ofs) accu_v
-              Hstore_sp (not_eq_sym Hblock_sep)
+              Hstore_sp (not_eq_sym Hsp_ne_sb)
               ltac:(rewrite Hnew_sp_unsigned; lia)) as [m2 Hstore_accu].
 
   (* Store 3: accu field <- Vlong (Int64.repr 7) *)
@@ -120,7 +119,7 @@ Proof.
              Hstore_sp Haccu_load). left. lia. }
   assert (Haccu_load_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 8) = Some accu_v).
   { erewrite Mem.load_store_other; [exact Haccu_load_m1 | exact Hstore_accu |].
-    left. exact (not_eq_sym Hblock_sep). }
+    left. exact (not_eq_sym Hsp_ne_sb). }
   destruct (store_succeeds_from_load m2 sb (Ptrofs.unsigned so + 8)
               accu_v (Vlong (Int64.repr 7)) Haccu_load_m2) as [m3 Hstore_const].
 
@@ -216,7 +215,7 @@ Proof.
       Mem.load Mint64 m2 sb ofs = Some v).
     { intros ofs v Hload1.
       erewrite Mem.load_store_other; [exact Hload1 | exact Hstore_accu |].
-      left. exact (not_eq_sym Hblock_sep). }
+      left. exact (not_eq_sym Hsp_ne_sb). }
 
     (* Helper: loads on sp_b survive store 3 (different block: sb vs sp_b) *)
     assert (Hload_spb_m3 : forall ofs v,
@@ -224,7 +223,7 @@ Proof.
       Mem.load Mint64 m3 sp_b ofs = Some v).
     { intros ofs v Hload2.
       erewrite Mem.load_store_other; [exact Hload2 | exact Hstore_const |].
-      left. exact Hblock_sep. }
+      left. exact Hsp_ne_sb. }
 
     (* pc field: uso + 0, unaffected by all 3 stores *)
     assert (Hpc_load3 : Mem.load Mint64 m3 sb (uso + 0) = Some pc_ptr).
@@ -323,15 +322,15 @@ Proof.
         { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
                    (uso + 16) (Vptr sp_b new_sp_ofs)
                    Hstack_repr Hstore_sp).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
         assert (Hstack_cons_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
         { exact (stack_repr_cons_after_store hm m1 m2
                    (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                   Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8). }
+                   Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)). }
         apply (stack_repr_store_other_block hm m2 m3 _ sp_b new_sp_ofs sb
                  (uso + 8) (Vlong (Int64.repr 7))
                  Hstack_cons_m2 Hstore_const).
-                intro Heq; exact (Hblock_sep (eq_sym Heq)).
+                intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp. }

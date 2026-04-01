@@ -246,7 +246,7 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr0 [Hblock_sep [Hsp_ne_gb Hcode_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr0 [Hsp_ne_sb [Hsp_ne_gb Hcode_ne_sp]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr0 Hgb_ne]]]] &
@@ -285,7 +285,7 @@ Proof.
   assert (Hload_sp0_m1 :
     Mem.load Mint64 m1 sp_b (Ptrofs.unsigned sp_ofs) = Some (Vlong tagged_b)).
   { erewrite Mem.load_store_other. exact Hload_sp0. exact Hstore1.
-    left. exact Hblock_sep. }
+    left. exact Hsp_ne_sb. }
 
   destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 8)
               (Vlong tagged_a) result_v Haccu_load_m1) as [m' Hstore2].
@@ -412,10 +412,10 @@ Proof.
                    (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
           * exact Hstack_repr_rest.
           * exact Hstore1.
-          * intro Heq; exact (Hblock_sep (eq_sym Heq)).
+          * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         + exact Hstore2.
-        + intro Heq; exact (Hblock_sep (eq_sym Heq)).
-      - exact Hblock_sep.
+        + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+      - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcode_ne_sp. }
     (* 5. env *)

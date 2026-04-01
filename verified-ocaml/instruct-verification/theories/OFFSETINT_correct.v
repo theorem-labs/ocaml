@@ -418,7 +418,7 @@ Proof.
         (Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr sizeof_code_t))
         (ar_global_block ard) (ar_global_ofs ard)
         (ar_stack_block ard) (ar_stack_base_ofs ard)
-        Hcb_ne Hcb_ne_gb Hso_bound).
+        Hcb_ne Hcb_ne_gb (ar_global_ne_sptr ard) Hso_bound).
       exists ard'.
       set (uso := Ptrofs.unsigned so) in *.
 

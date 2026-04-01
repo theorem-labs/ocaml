@@ -88,8 +88,6 @@ Proof.
     pose proof (sptr_ofs_representable ard) as Hso_bound.
     fold so in Hso_bound.
     pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-    pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep.
-    fold sb in Hblock_sep.
     pose proof (global_block_ne_sptr ard) as Hgb_ne.
     fold sb in Hgb_ne.
 
@@ -221,7 +219,7 @@ Proof.
         - simpl. rewrite Hstk.
           apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv0
                    Hstack_repr Hstore).
-                    intro Heq; exact (Hblock_sep (eq_sym Heq)).
+                    intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp. }

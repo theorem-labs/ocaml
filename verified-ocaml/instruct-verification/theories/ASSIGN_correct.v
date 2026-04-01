@@ -217,12 +217,10 @@ Proof.
       * (* Tail unchanged: store at head doesn't overlap tail *)
         replace (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat 0)%Z
           with (Ptrofs.unsigned sp_ofs) in Hstore by lia.
-        eapply stack_repr_store_same_block_lower; eauto.
         pose proof (sp_ofs_stack_representable hm m (hd :: tl) sp_b sp_ofs Hsr) as Hrep.
         simpl length in Hrep.
-        rewrite (ptrofs_add_unsigned sp_ofs 8
-          ltac:(lia) ltac:(lia)).
-        lia.
+        eapply stack_repr_store_same_block_lower; eauto;
+          rewrite (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)); lia.
     + (* n = S n': update in tail *)
       simpl in Hset.
       destruct (set_nth tl n' v) as [tl' |] eqn:Hset_tl; [| discriminate].
@@ -310,7 +308,6 @@ Proof.
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos Hso_hi].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   (* Hsp_ne_gb already from destruct *)
   pose proof (sp_ofs_stack_representable hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_rep.
@@ -371,7 +368,7 @@ Proof.
   assert (Hstack_repr_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
   { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
              (Ptrofs.unsigned so + 0) new_pc_v Hstack_repr Hstore_pc).
-    intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+    intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
 
   (* ============================================================ *)
   (* Store 2: *(sp + n) = _t'4  (stack write at sp_b, sp_ofs+8*n) *)
@@ -385,7 +382,7 @@ Proof.
     Mem.load Mint64 m2 sb ofs = Some v).
   { intros ofs v Hload1.
     erewrite Mem.load_store_other; [exact Hload1 | exact Hstore_stack |].
-    left. exact (not_eq_sym Hblock_sep). }
+    left. exact (not_eq_sym Hsp_ne_sb). }
 
   assert (Haccu_load_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 8) =
             Some accu_v).
@@ -413,7 +410,7 @@ Proof.
     (ar_code_base_block ard) new_co
     (ar_global_block ard) (ar_global_ofs ard)
     (ar_stack_block ard) (ar_stack_base_ofs ard)
-    (ar_code_ne_sptr ard) (ar_code_ne_global ard)
+    (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard)
     (ar_sptr_ofs_bound ard)).
 
   exists le'. exists m3.
@@ -637,7 +634,7 @@ Proof.
           * exact Haccu_repr.
           * exact Hstore_stack.
         + exact Hstore_accu.
-        + intro Heq; exact (Hblock_sep (eq_sym Heq)).
+        + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp. }

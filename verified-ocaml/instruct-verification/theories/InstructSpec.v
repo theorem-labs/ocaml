@@ -63,6 +63,8 @@ Record abs_rel_data := mk_abs_rel {
   (* Block separation: code block is distinct from struct, global blocks *)
   ar_code_ne_sptr   : ar_code_base_block <> ar_sptr_block;
   ar_code_ne_global : ar_code_base_block <> ar_global_block;
+  (* Global block is distinct from struct pointer block *)
+  ar_global_ne_sptr : ar_global_block <> ar_sptr_block;
   (* Struct pointer offset representability *)
   ar_sptr_ofs_bound : Ptrofs.unsigned ar_sptr_ofs + 56 < Ptrofs.modulus;
 }.

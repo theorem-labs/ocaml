@@ -235,7 +235,6 @@ Proof.
     [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   rewrite Haccu_eq in Haccu_repr.
   inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
@@ -255,7 +254,7 @@ Proof.
   assert (Hload_sp0_m1 : Mem.load Mint64 m1 sp_b (Ptrofs.unsigned sp_ofs) =
     Some (Vlong (Int64.repr (b * 2 + 1)))).
   { erewrite Mem.load_store_other. exact Hload_sp0. exact Hstore1.
-    left. exact Hblock_sep. }
+    left. exact Hsp_ne_sb. }
   set (uge_bool := negb (Int64.ltu (Int64.repr (a * 2 + 1))
                                     (Int64.repr (b * 2 + 1)))).
   set (result_v := Vlong (Int64.add (Int64.repr (if uge_bool then 2 else 0))
@@ -364,8 +363,8 @@ Proof.
         + eapply (stack_repr_store_other_block hm m m1 _ sp_b
             (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
           * exact Hstack_repr_rest. * exact Hstore1.
-          * intro Heq; exact (Hblock_sep (eq_sym Heq)).
-        + exact Hstore2. + intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        + exact Hstore2. + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
       exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp. }
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }

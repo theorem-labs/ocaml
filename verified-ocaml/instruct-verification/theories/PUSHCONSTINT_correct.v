@@ -218,7 +218,6 @@ Proof.
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
-  pose proof (sp_block_ne_sptr ard sp_b) as Hblock_sep. fold sb in Hblock_sep.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
 
@@ -260,7 +259,7 @@ Proof.
   (* ================================================================ *)
   destruct (store_to_other_block m m1 sb (Ptrofs.unsigned so + 16)
               (Vptr sp_b new_sp_ofs) sp_b (Ptrofs.unsigned new_sp_ofs) accu_v
-              Hstore1 (not_eq_sym Hblock_sep)
+              Hstore1 (not_eq_sym Hsp_ne_sb)
               ltac:(rewrite Hnew_sp_unsigned; lia)) as [m2 Hstore2].
 
   (* ================================================================ *)
@@ -273,7 +272,7 @@ Proof.
              Hstore1 Haccu_load). left. lia. }
   assert (Haccu_load_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 8) = Some accu_v).
   { erewrite Mem.load_store_other; [exact Haccu_load_m1 | exact Hstore2 |].
-    left. exact (not_eq_sym Hblock_sep). }
+    left. exact (not_eq_sym Hsp_ne_sb). }
   destruct (store_succeeds_from_load m2 sb (Ptrofs.unsigned so + 8)
               accu_v tagged_v Haccu_load_m2) as [m3 Hstore3].
 
@@ -289,7 +288,7 @@ Proof.
   assert (Hpc_load_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 0) =
             Some (Vptr cb pc_ofs)).
   { erewrite Mem.load_store_other; [exact Hpc_load_m1 | exact Hstore2 |].
-    left. exact (not_eq_sym Hblock_sep). }
+    left. exact (not_eq_sym Hsp_ne_sb). }
   assert (Hpc_load_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 0) =
             Some (Vptr cb pc_ofs)).
   { apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 8)
@@ -494,7 +493,7 @@ Proof.
       (ar_code_base_block ard) new_co
       (ar_global_block ard) (ar_global_ofs ard)
       (ar_stack_block ard) (ar_stack_base_ofs ard)
-      (ar_code_ne_sptr ard) (ar_code_ne_global ard)
+      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard)
       (ar_sptr_ofs_bound ard)).
     exists ard'.
     set (uso := Ptrofs.unsigned so) in *.
@@ -505,7 +504,7 @@ Proof.
       Mem.load Mint64 m2 sb ofs = Some v).
     { intros ofs v Hload1.
       erewrite Mem.load_store_other; [exact Hload1 | exact Hstore2 |].
-      left. exact (not_eq_sym Hblock_sep). }
+      left. exact (not_eq_sym Hsp_ne_sb). }
 
     (* Helper: loads on sp_b survive store 3 (different block: sb vs sp_b) *)
     assert (Hload_spb_m3 : forall ofs v,
@@ -513,7 +512,7 @@ Proof.
       Mem.load Mint64 m3 sp_b ofs = Some v).
     { intros ofs v Hload2.
       erewrite Mem.load_store_other; [exact Hload2 | exact Hstore3 |].
-      left. exact Hblock_sep. }
+      left. exact Hsp_ne_sb. }
 
     (* Helper: loads on sp_b survive store 4 (different block: sb vs sp_b) *)
     assert (Hload_spb_m4 : forall ofs v,
@@ -521,7 +520,7 @@ Proof.
       Mem.load Mint64 m4 sp_b ofs = Some v).
     { intros ofs v Hload3.
       erewrite Mem.load_store_other; [exact Hload3 | exact Hstore4 |].
-      left. exact Hblock_sep. }
+      left. exact Hsp_ne_sb. }
 
     (* pc field at uso+0: survived stores 1,2,3; written by store 4 *)
     assert (Hpc_load4 : Mem.load Mint64 m4 sb (uso + 0) = Some new_pc_v).
@@ -641,20 +640,20 @@ Proof.
         { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
                    (uso + 16) (Vptr sp_b new_sp_ofs)
                    Hstack_repr Hstore1).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
         assert (Hstack_cons_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
         { exact (stack_repr_cons_after_store hm m1 m2
                    (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                   Hstack_m1 Haccu_repr Hstore2 Hsp_ge8). }
+                   Hstack_m1 Haccu_repr Hstore2 Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)). }
         assert (Hstack_cons_m3 : stack_repr hm m3 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
         { apply (stack_repr_store_other_block hm m2 m3 _ sp_b new_sp_ofs sb
                    (uso + 8) tagged_v
                    Hstack_cons_m2 Hstore3).
-          intro Heq; exact (Hblock_sep (eq_sym Heq)). }
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
         apply (stack_repr_store_other_block hm m3 m4 _ sp_b new_sp_ofs sb
                  (uso + 0) new_pc_v
                  Hstack_cons_m3 Hstore4).
-                intro Heq; exact (Hblock_sep (eq_sym Heq)).
+                intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp2. }
