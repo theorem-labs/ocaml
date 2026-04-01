@@ -1243,3 +1243,268 @@ minimize re-reading. For each `_correct.v` file:
 
 Phases 1, 4, 5 are independent of the per-file work and can be done
 between the per-file passes.
+
+---
+
+## Agent Parallelization Strategy
+
+### Overview
+
+The work splits into two kinds:
+
+1. **Shared-file edits** (InstructSpec.v, HandlerLemmas.v): must be done
+   sequentially by a single agent because these files are imported by
+   everything. Covers Phase 0 Steps 0.1-0.4/0.8, Phase 1, Phase 2
+   Step 2.1, Phase 3 Step 3.1, Phase 4, Phase 5.
+
+2. **Per-handler-file edits** (~58 `_correct.v` files): independent and
+   parallelizable. Covers Phase 0 Steps 0.5-0.7/0.9, Phase 2
+   Steps 2.2-2.3, Phase 3 Steps 3.2-3.3, Phase 6.
+
+Five agents execute in three stages:
+
+```
+STAGE 1 (sequential):  Agent 1 alone edits InstructSpec.v + HandlerLemmas.v
+STAGE 2 (parallel):    Agents 1-5 each edit their assigned handler files
+STAGE 3 (sequential):  Orchestrator runs `dune build instruct-verification`
+                        and dispatches targeted fixes
+```
+
+### Coordination rules
+
+**Rule 1: No agent runs `dune build` or `dune exec`.**
+Only the orchestrator (main conversation) runs builds, at explicit sync
+points between stages. This avoids dune lock contention entirely.
+
+**Rule 2: No agent runs `rocq-mcp` compile/verify commands.**
+The rocq-mcp server shares state and would collide. Agents make edits
+based on the plan's mechanical instructions, without interactive checking.
+
+**Rule 3: Disjoint file ownership.**
+Each agent edits ONLY the files assigned to it. No two agents touch the
+same file. Agent 1 owns InstructSpec.v and HandlerLemmas.v exclusively
+during Stage 1. During Stage 2, each agent owns its listed handler files.
+
+**Rule 4: No git operations.**
+Agents do not commit, branch, or stash. The orchestrator handles all git
+operations after verifying the build.
+
+### Agent assignments
+
+Files are balanced by total line count and complexity (files constructing
+new `ard'` via `mk_abs_rel`, custom theorem statements, or
+`handler_correct_with_pre_env` are weighted heavier).
+
+#### Agent 1 — Lead + complex handlers (~2900 lines)
+
+**Stage 1 (solo):** ALL shared-file edits:
+- InstructSpec.v: Record refactor (Steps 0.1-0.4), handler_correct
+  unification (Step 0.8), add `ar_global_ne_sptr` (Phase 1 Step 1.1),
+  add new abs_rel conjuncts (Phase 3 Step 3.1)
+- HandlerLemmas.v: replace `global_block_ne_sptr` axiom (Phase 1
+  Step 1.3), delete false axioms (Phase 2 Step 2.1), prove memory
+  axioms (Phase 4), prove stack repr lemmas (Phase 5)
+
+**Stage 2 (parallel):** Per-file edits for:
+```
+MAKEBLOCK1_correct.v    (1224 lines, with_pre+mk_abs_rel)
+SETGLOBAL_correct.v     ( 743 lines, pre_env+mk_abs_rel)
+ASSIGN_correct.v        ( 680 lines, with_pre+mk_abs_rel)
+ISINT_correct.v         ( 655 lines, custom)
+```
+Total: 3302 lines, 4 files. Fewer files because Stage 1 is substantial.
+
+#### Agent 2 — Complex handlers (~2800 lines)
+
+**Stage 2 (parallel):**
+```
+PUSHCONSTINT_correct.v  ( 703 lines, with_pre+mk_abs_rel)
+GETGLOBAL_correct.v     ( 578 lines, with_pre+mk_abs_rel)
+OFFSETINT_correct.v     ( 570 lines, with_pre+mk_abs_rel)
+POP_correct.v           ( 547 lines, with_pre+mk_abs_rel)
+CONSTINT_correct.v      ( 509 lines, with_pre+mk_abs_rel)
+```
+Total: 2907 lines, 5 files. All construct new `ard'`.
+
+#### Agent 3 — Medium handlers + custom (~3100 lines)
+
+**Stage 2 (parallel):**
+```
+BOOLNOT_correct.v       ( 500 lines, custom)
+VECTLENGTH_correct.v    ( 530 lines, with_pre)
+ATOM_correct.v          ( 473 lines, with_pre+mk_abs_rel)
+ASRINT_correct.v        ( 440 lines, with_pre)
+ADDINT_correct.v        ( 391 lines, simple)
+NEGINT_correct.v        ( 396 lines, simple)
+BRANCH_correct.v        ( 295 lines, with_pre+mk_abs_rel)
+GETFIELD0_correct.v     ( 321 lines, with_pre)
+```
+Total: 3346 lines, 8 files.
+
+#### Agent 4 — Comparisons + shifts + simple arithmetic (~3000 lines)
+
+**Stage 2 (parallel):**
+```
+UGEINT_correct.v        ( 381 lines, with_pre)
+LSRINT_correct.v        ( 371 lines, with_pre)
+LSLINT_correct.v        ( 323 lines, with_pre)
+PUSH_correct.v          ( 277 lines, simple)
+ACC0_correct.v          ( 255 lines, simple)
+ACC2_correct.v          ( 273 lines, simple)
+ULTINT_correct.v        ( 271 lines, with_pre)
+MULINT_correct.v        ( 263 lines, simple)
+SUBINT_correct.v        ( 152 lines, simple)
+NEQ_correct.v           ( 231 lines, with_pre)
+EQ_correct.v            ( 219 lines, with_pre)
+GTINT_correct.v         ( 217 lines, with_pre)
+```
+Total: 3233 lines, 12 files.
+
+#### Agent 5 — Simple handlers (~3000 lines)
+
+**Stage 2 (parallel):**
+```
+GEINT_correct.v         ( 214 lines, with_pre)
+LTINT_correct.v         ( 210 lines, with_pre)
+LEINT_correct.v         ( 197 lines, with_pre)
+PUSHACC7_correct.v      ( 418 lines, simple)
+PUSHACC6_correct.v      ( 414 lines, simple)
+PUSHACC5_correct.v      ( 412 lines, simple)
+PUSHACC4_correct.v      ( 408 lines, simple)
+PUSHACC3_correct.v      ( 402 lines, simple)
+PUSHACC2_correct.v      ( 401 lines, simple)
+PUSHACC1_correct.v      ( 406 lines, simple)
+PUSHCONST3_correct.v    ( 376 lines, simple)
+PUSHCONST2_correct.v    ( 376 lines, simple)
+PUSHCONST1_correct.v    ( 377 lines, simple)
+PUSHCONST0_correct.v    ( 366 lines, simple)
+CONST0_correct.v        ( 229 lines, simple)
+CONST1_correct.v        ( 134 lines, simple)
+CONST2_correct.v        (  51 lines, simple)
+CONST3_correct.v        (  51 lines, simple)
+ANDINT_correct.v        ( 146 lines, simple)
+ORINT_correct.v         ( 146 lines, simple)
+XORINT_correct.v        ( 157 lines, simple)
+ACC1_correct.v          (  73 lines, simple)
+ACC3_correct.v          (  93 lines, simple)
+ACC4_correct.v          (  96 lines, simple)
+ACC5_correct.v          (  99 lines, simple)
+ACC6_correct.v          ( 102 lines, simple)
+ACC7_correct.v          ( 105 lines, simple)
+CHECK_SIGNALS_correct.v (  41 lines, simple)
+STOP_correct.v          (  28 lines, simple)
+```
+Total: 6353 lines, 29 files. Many files but all simple (mechanical
+find-replace, no mk_abs_rel, no custom statements).
+
+### Per-agent instructions for Stage 2
+
+Each agent performs ALL per-file changes for its assigned files in a
+single pass per file. The changes are (in order, applied to each file):
+
+**1. Phase 0: Record destruct pattern (Step 0.5)**
+
+Find the destruct of `Hpre` and change conjunction syntax to record syntax:
+```
+destruct Hpre as (Hle_s &          →  destruct Hpre as [Hle_s
+  [pc_ptr [Hpc_load Hpc_rel]] &         [pc_ptr [Hpc_load Hpc_rel]]
+  ...                                   ...
+  [ts_ptr [Hts_load Htrap_rel]]).        [ts_ptr [Hts_load Htrap_rel]]].
+```
+Change `( ... & ... & ... )` to `[ ... ... ... ]` (parens→brackets,
+drop `&` separators).
+
+Delete any `unfold abs_rel_with_ard in Hpre.` line.
+
+**2. Phase 0: Record reconstruct pattern (Step 0.6)**
+
+Replace the top-level split chain with `constructor.`:
+```
+split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+```
+→
+```
+constructor.
+```
+Each subgoal block (brace or bullet) stays identical.
+
+**3. Phase 0: Unified handler_correct (Step 0.9)**
+
+Depends on the file's current variant:
+
+- **Old `handler_correct` (no pre):** In the theorem statement, add
+  `(fun _ _ _ _ => True)` as the new `step_pre` argument (after `f`).
+  In the proof, change:
+  ```
+  intro Hpre. destruct Hpre as [ard Hpre].
+  ```
+  to:
+  ```
+  intros ard Hpre _.
+  ```
+
+- **Old `handler_correct_with_pre`:** Change name to `handler_correct`.
+  In the precondition lambda, add a leading `_` parameter for `e`:
+  `(fun m s ard => ...)` → `(fun _ m s ard => ...)`.
+  Change `unfold handler_correct_with_pre` to `unfold handler_correct`.
+
+- **Old `handler_correct_with_pre_env`:** Change name to `handler_correct`.
+  Change `unfold handler_correct_with_pre_env` to `unfold handler_correct`.
+
+- **Custom statement (BOOLNOT, ISINT):** Replace the hand-written
+  `forall e le m s, match ... end` with `handler_correct`. Add the
+  precondition as a lambda. Change proof opening to
+  `intros e le m s. unfold handler_correct, handle_XXX. ... intros ard Hpre Hstep_pre.`
+
+**4. Phase 2: Delete false-axiom callers (Steps 2.2-2.3)**
+
+If the file contains `pose proof (sp_block_ne_sptr ard sp_b)`:
+  Delete that line and the following `fold sb in Hblock_sep.` if present.
+  Add `rename Hsp_ne_sb into Hblock_sep.` in its place (same orientation).
+
+If the file contains `pose proof (sp_block_ne_global ard sp_b)`:
+  Delete the line and replace uses of the result with `Hsp_ne_gb`.
+
+**5. Phases 3+6: New abs_rel conjuncts**
+
+In the sp clause destruct, extend the inner pattern:
+```
+[Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]     (* old *)
+[Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp _]]] (* new, wildcard for 3 new fields *)
+```
+Use `_` unless the handler needs the new hypotheses (PUSH, POP, or
+handlers that store to the struct block).
+
+In the reconstruction, add the new sub-conjuncts inside the sp field
+block and add one new top-level block for `ar_sb_writable`. For simple
+handlers that don't change memory on sp_b:
+```
+- (* sp_ofs >= 8 *) exact Hsp_ge8.
+- (* representability *) exact Hsp_rep.
+- (* stack writable *)
+  intros ofs' [Hlo Hhi]. apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore).
+  apply Hsp_writable. lia.
+```
+And for struct writability (new Record field):
+```
+{ (* ar_sb_writable *)
+  intros ofs' [Hlo Hhi]. apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore).
+  apply Hsb_writable. lia. }
+```
+
+### Error recovery after Stage 3 build
+
+After all 5 agents complete Stage 2, the orchestrator runs
+`dune build instruct-verification`. Expected error categories:
+
+1. **Syntax errors** (mismatched brackets, missing periods): assign the
+   failing file's agent to fix it.
+2. **Wrong intro pattern arity** (record has N fields, pattern has M):
+   adjust the destruct bracket count.
+3. **Unresolved hypothesis name** (`Hblock_sep` not found after axiom
+   deletion): check orientation of `Hsp_ne_sb` vs `Hblock_sep`.
+4. **Missing constructor subgoal** (record has new field, proof is short
+   one block): add the missing block.
+
+Since each file is owned by exactly one agent, fixes are dispatched to
+the owning agent without conflicts.
