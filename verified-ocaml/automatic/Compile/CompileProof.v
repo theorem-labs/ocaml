@@ -761,6 +761,87 @@ Definition env_invariant (ce : comp_env) (senv : Interpret.env)
     | Loc_self => True
     end.
 
+(* --- Shift invariant for env_invariant --- *)
+
+(* Key helper for Exp_binop/Exp_let: when we PUSH a value onto the stack,
+   all existing Loc_stack positions shift by 1. The shift function in
+   Compile.v does exactly this for Loc_stack entries (adds n to the
+   position), leaving Loc_env and Loc_self unchanged.
+
+   Proof: by induction on comp_env ce. For each entry:
+   - Loc_stack pos: shift maps it to Loc_stack (pos + k). If
+     (v :: old_stack)[pos+1] = old_stack[pos], which holds since
+     nth_error (a :: l) (S n) = nth_error l n.
+   - Loc_env n: unchanged by shift, and the env/heap are preserved
+     since only the stack changed.
+   - Loc_self: trivially True. *)
+
+Lemma comp_lookup_shift : forall ce k x loc,
+  comp_lookup (shift ce k) x = Some loc ->
+  exists loc0,
+    comp_lookup ce x = Some loc0 /\
+    loc = match loc0 with
+          | Loc_stack pos => Loc_stack (pos + k)
+          | other => other
+          end.
+Proof.
+  induction ce as [| [y l] rest IH]; intros k x loc Hlookup.
+  - simpl in Hlookup. discriminate.
+  - simpl in Hlookup. destruct l.
+    + (* Loc_stack n0 *)
+      simpl. destruct (String.eqb x y) eqn:Heq.
+      * injection Hlookup; intros; subst. exists (Loc_stack n0). auto.
+      * apply IH. exact Hlookup.
+    + (* Loc_env n0 *)
+      simpl. destruct (String.eqb x y) eqn:Heq.
+      * injection Hlookup; intros; subst. exists (Loc_env n0). auto.
+      * apply IH. exact Hlookup.
+    + (* Loc_self *)
+      simpl. destruct (String.eqb x y) eqn:Heq.
+      * injection Hlookup; intros; subst. exists Loc_self. auto.
+      * apply IH. exact Hlookup.
+Qed.
+
+Lemma env_invariant_push : forall ce senv s v_pushed k,
+  env_invariant ce senv s ->
+  env_invariant (shift ce k) senv
+    (st s (pc s) (accu s) (repeat v_pushed k ++ Machine.stack s)
+       (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
+Proof.
+  intros ce senv s v_pushed k Heinv.
+  unfold env_invariant in *. intros x loc sv Hcl Hsl.
+  apply comp_lookup_shift in Hcl.
+  destruct Hcl as [loc0 [Hcl0 Hloc_eq]].
+  specialize (Heinv x loc0 sv Hcl0 Hsl).
+  subst loc. destruct loc0.
+  - (* Loc_stack n0 *)
+    destruct Heinv as [v [Hnth Hcorr]].
+    exists v. split; [| exact Hcorr].
+    unfold st. simpl.
+    (* nth_error (repeat v_pushed k ++ stack) (n0 + k) = nth_error stack n0 *)
+    rewrite nth_error_app2 by (rewrite repeat_length; lia).
+    rewrite repeat_length. replace (n0 + k - k)%nat with n0 by lia.
+    exact Hnth.
+  - (* Loc_env n0 *)
+    destruct Heinv as [v [Hfld Hcorr]].
+    exists v. split; [| exact Hcorr].
+    unfold st. simpl. exact Hfld.
+  - (* Loc_self *)
+    exact I.
+Qed.
+
+(* Specialized version for shift by 1 (PUSH instruction) *)
+Lemma env_invariant_shift1 : forall ce senv s v_pushed,
+  env_invariant ce senv s ->
+  env_invariant (shift ce 1) senv
+    (st s (pc s) (accu s) (v_pushed :: Machine.stack s)
+       (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
+Proof.
+  intros ce senv s v_pushed Heinv.
+  change (v_pushed :: Machine.stack s) with (repeat v_pushed 1 ++ Machine.stack s).
+  apply env_invariant_push. exact Heinv.
+Qed.
+
 (* ================================================================== *)
 (* === EXPRESSION-LEVEL CORRECTNESS (SPECIFICATION)               === *)
 (* ================================================================== *)
@@ -2354,14 +2435,16 @@ Proof.
                (extra_args s) (Machine.global s) (trap_sp s)).
   (* env_invariant for s3 with shifted ce *)
   assert (Heinv3 : env_invariant (shift ce 1) senv s3).
-  { unfold env_invariant in *. intros x' loc sv' Hcl Hsl.
-    (* shift ce 1 maps Loc_stack n to Loc_stack (n+1) *)
-    unfold s3, st. simpl.
-    (* Need to relate shift ce 1 lookup to ce lookup *)
-    admit. }
-  (* This is the hardest part: we need env_invariant under shift.
-     For now, Admit this entire lemma as the env_invariant shift property
-     requires induction on comp_env. *)
+  { unfold s3.
+    (* s3 = st s pc' (Val_int z) (Val_int z :: stack) env ea global tsp
+       The stack has one extra value pushed. env_invariant_shift1 handles this. *)
+    change (Val_int z :: Machine.stack s) with
+      (repeat (Val_int z) 1 ++ Machine.stack s).
+    apply env_invariant_push. exact Heinv. }
+  (* Step 4: Execute c1 to get Val_int a in accu *)
+  (* TODO: compose through c1 using IHe1, then ADDINT step, then compose all *)
+  (* The remaining composition requires matching code arrays through
+     app_assoc and applying nsteps_trans. This is mechanical but verbose. *)
 Admitted.
 
 (* --- expr_correct_gen for Exp_unop Op_neg --- *)
