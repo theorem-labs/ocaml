@@ -78,11 +78,11 @@ Definition eq_int_range_pre (m : mem) (s : state) (_ : abs_rel_data) : Prop :=
   end.
 
 Theorem verify_EQ_correct :
-    handler_correct_with_pre handle_EQ f_instr_EQ
-      eq_int_range_pre
+    handler_correct handle_EQ f_instr_EQ
+      (fun _ => eq_int_range_pre)
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct_with_pre.
+  unfold handler_correct.
   intros e le m s. unfold handle_EQ.
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try reflexivity.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;

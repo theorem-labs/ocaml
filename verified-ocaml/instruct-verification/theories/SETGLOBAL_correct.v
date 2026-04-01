@@ -25,7 +25,7 @@
      s->pc = _t'1 + 1;
      return 0;
 
-   The precondition (via handler_correct_with_pre) provides:
+   The precondition (via handler_correct) provides:
    - Code buffer contains Z.of_nat n at current PC
    - n fits in int32 signed range
    - Genv.find_funct for caml_modify
@@ -161,7 +161,7 @@ Definition gd_target (go : ptrofs) (n_int : int) : ptrofs :=
 (* ================================================================== *)
 
 Theorem verify_SETGLOBAL_correct : forall n,
-    handler_correct_with_pre_env (handle_SETGLOBAL n) f_instr_SETGLOBAL
+    handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
       (fun e m s ard =>
          let cb := ar_code_base_block ard in
          let co := ar_code_base_ofs ard in

@@ -27,15 +27,16 @@ Local Ltac eval_cbn :=
 
 Theorem verify_CHECK_SIGNALS_correct :
     handler_correct handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
+      (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
   unfold handler_correct, handle_CHECK_SIGNALS.
-  intro Hpre.
+  intros ard Hpre _.
   exists le. exists m.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).
   split.
   - apply (eval_stmt_to_exec clight_ge 5).
     eval_cbn. reflexivity.
-  - simpl. exact Hpre.
+  - exists ard. exact Hpre.
 Qed.

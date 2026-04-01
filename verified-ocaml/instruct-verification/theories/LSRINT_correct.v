@@ -223,8 +223,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_LSRINT_correct :
-    handler_correct_with_pre handle_LSRINT f_instr_LSRINT
-      (fun _ s _ =>
+    handler_correct handle_LSRINT f_instr_LSRINT
+      (fun _ _ s _ =>
          match s.(Machine.stack) with
          | Val_int b :: _ => 0 <= b < 64
          | _ => True

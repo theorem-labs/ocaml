@@ -163,7 +163,7 @@ Proof.
     {
       intros _Hbool Hpre.
 
-      destruct Hpre as [ard Hpre].
+      destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
@@ -328,7 +328,7 @@ Proof.
       rewrite Haccu_eq in Hbool. injection Hbool as Hp.
       assert (Hp1 : p = xH) by lia. subst p.
 
-      destruct Hpre as [ard Hpre].
+      destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.

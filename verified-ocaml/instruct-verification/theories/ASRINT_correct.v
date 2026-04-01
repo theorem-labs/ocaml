@@ -24,7 +24,7 @@
    for the result to agree with Z.shiftr on unbounded integers.
    This holds for OCaml's 63-bit integers (a in [-2^62, 2^62-1]).
    Both constraints are encoded as preconditions via
-   handler_correct_with_pre. *)
+   handler_correct. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -217,8 +217,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_ASRINT_correct :
-    handler_correct_with_pre handle_ASRINT f_instr_ASRINT
-      (fun _ s _ =>
+    handler_correct handle_ASRINT f_instr_ASRINT
+      (fun _ _ s _ =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              0 <= b < 64 /\

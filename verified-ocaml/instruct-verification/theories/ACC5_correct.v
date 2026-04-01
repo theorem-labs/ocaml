@@ -23,6 +23,7 @@ Proof. intros. unfold sem_binary_operation, sem_add.
 
 Theorem verify_ACC5 :
     handler_correct (handle_ACC 5) f_instr_ACC5
+      (fun _ _ _ _ => True)
       (fun _ s => nth_error s.(Machine.stack) 5 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -39,8 +40,7 @@ Proof.
   { reflexivity. }
   destruct stk4 as [|v5 rest].
   { reflexivity. }
-  intro Hpre.
-  destruct Hpre as [ard Hpre].
+  intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
   destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.

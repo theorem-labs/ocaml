@@ -81,14 +81,14 @@ Definition lt_int_range_pre (m : mem) (s : state) (_ : abs_rel_data) : Prop :=
   end.
 
 Theorem verify_LTINT_correct :
-    handler_correct_with_pre handle_LTINT f_instr_LTINT
-      lt_int_range_pre
+    handler_correct handle_LTINT f_instr_LTINT
+      (fun _ => lt_int_range_pre)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct_with_pre.
+  unfold handler_correct.
   intros e le m s. unfold handle_LTINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
     destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk;

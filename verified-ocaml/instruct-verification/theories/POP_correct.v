@@ -15,7 +15,7 @@
 
    Two stores: pc field at offset +0, sp field at offset +16.
 
-   Uses handler_correct_with_pre because the C code reads n from the
+   Uses handler_correct because the C code reads n from the
    code buffer and because the code block must be separate from the
    struct block (for store separation).  NO AXIOMS -- everything is
    either proved or expressed as a precondition. *)
@@ -216,8 +216,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_POP_correct : forall n,
-    handler_correct_with_pre (handle_POP n) f_instr_POP
-      (fun m s ard =>
+    handler_correct (handle_POP n) f_instr_POP
+      (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -236,7 +236,7 @@ Theorem verify_POP_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_POP. simpl.
+  unfold handler_correct, handle_POP. simpl.
 
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.

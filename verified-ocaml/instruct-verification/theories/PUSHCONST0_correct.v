@@ -44,15 +44,13 @@ Local Ltac eval_cbn :=
 
 Theorem verify_PUSHCONST0_correct :
     handler_correct (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
+      (fun _ _ _ _ => True)
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
   intros e le m s. unfold handler_correct, handle_PUSHCONSTINT. simpl.
-  intro Hpre.
-
-  (* Unpack abs_rel *)
-  destruct Hpre as [ard Hpre].
+  intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.

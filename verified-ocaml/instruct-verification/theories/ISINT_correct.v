@@ -292,7 +292,7 @@ Proof.
 
     intros _Hok Hpre.
 
-    destruct Hpre as [ard Hpre].
+    destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
@@ -475,7 +475,7 @@ Proof.
     destruct fields as [|fhd ftl].
     2: { contradiction. }
 
-    destruct Hpre as [ard Hpre].
+    destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.

@@ -27,7 +27,7 @@
 
    NO AXIOMS.  All invariants that CONSTINT_correct.v took as axioms
    (code_block_ne_sptr, code_contains_n, tagged_int_eq) are turned
-   into preconditions via handler_correct_with_pre. *)
+   into preconditions via handler_correct. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -167,8 +167,8 @@ Qed.
    3. tagged_int_eq: tagged integer arithmetic identity
    4. code_block_ne_sp: code block distinct from stack block *)
 Theorem verify_PUSHCONSTINT_correct : forall n,
-    handler_correct_with_pre (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
-      (fun m s ard =>
+    handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
+      (fun _ m s ard =>
          (* code block separate from struct block *)
          ar_code_base_block ard <> ar_sptr_block ard /\
          (* code block separate from stack block -- needed for store survival *)
@@ -190,7 +190,7 @@ Theorem verify_PUSHCONSTINT_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_PUSHCONSTINT. simpl.
+  unfold handler_correct, handle_PUSHCONSTINT. simpl.
 
   intros ard Hpre Hextra_pre.
   destruct Hextra_pre as (Hcb_ne & Hcb_ne_sp & Hcode_load & Htagged_eq).

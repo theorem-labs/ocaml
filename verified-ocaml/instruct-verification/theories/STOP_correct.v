@@ -21,6 +21,7 @@ Require Import InstructSpec.
 
 Theorem verify_STOP_correct :
   handler_correct (fun _ => handle_STOP) f_instr_STOP
+    (fun _ _ _ _ => True)
     (fun _ _ => False) (fun _ => True) (fun _ _ _ => False).
 Proof.
   intros e le m s.

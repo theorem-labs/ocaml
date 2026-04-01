@@ -22,7 +22,7 @@
 
    Three stores: pc field at offset +0, stack at sp[n], accu field at offset +8.
 
-   Uses handler_correct_with_pre with preconditions for:
+   Uses handler_correct with preconditions for:
    - Code buffer contains n at current PC
    - Code block is separate from struct block
    - Stack store at sp[n] succeeds in m1 (after pc store)
@@ -255,8 +255,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_ASSIGN_correct : forall n,
-    handler_correct_with_pre (handle_ASSIGN n) f_instr_ASSIGN
-      (fun m s ard =>
+    handler_correct (handle_ASSIGN n) f_instr_ASSIGN
+      (fun _ m s ard =>
          (* Code buffer contains n at current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -278,7 +278,7 @@ Theorem verify_ASSIGN_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_ASSIGN.
+  unfold handler_correct, handle_ASSIGN.
 
   (* Case split on set_nth *)
   destruct (set_nth (Machine.stack s) n (Machine.accu s)) as [new_stack |] eqn:Hset.

@@ -23,7 +23,7 @@
    - n fits in the int32 signed range
 
    NO AXIOMS.  All structural/range constraints are preconditions
-   via handler_correct_with_pre, following the pattern of POP_correct.v. *)
+   via handler_correct, following the pattern of POP_correct.v. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -186,8 +186,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_CONSTINT_correct : forall n,
-    handler_correct_with_pre (handle_CONSTINT n) f_instr_CONSTINT
-      (fun m s ard =>
+    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
+      (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -199,7 +199,7 @@ Theorem verify_CONSTINT_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_CONSTINT. simpl.
+  unfold handler_correct, handle_CONSTINT. simpl.
 
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.

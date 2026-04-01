@@ -27,10 +27,10 @@
 
    TODO: Fix handle_ATOM in Interpret.v to return Val_block t [] instead of
    heap-allocating.  Then update InstructSpec.v to reference handle_ATOM
-   and use handler_correct_with_pre (code buffer precondition required).
+   and use handler_correct (code buffer precondition required).
 
    Two stores: pc field at offset +0, accu field at offset +8.
-   Reads tag operand from code block (precondition via handler_correct_with_pre).
+   Reads tag operand from code block (precondition via handler_correct).
 
    NO AXIOMS.  NO ADMITTED. *)
 
@@ -198,8 +198,8 @@ Definition handle_ATOM_fixed (t : nat) (pc' : Z) (s : state) : step_result :=
 
 Theorem verify_ATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct_with_pre (handle_ATOM_fixed t) f_instr_ATOM
-      (fun m s ard =>
+    handler_correct (handle_ATOM_fixed t) f_instr_ATOM
+      (fun _ m s ard =>
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
               (Ptrofs.repr (Machine.pc s * sizeof_code_t))))

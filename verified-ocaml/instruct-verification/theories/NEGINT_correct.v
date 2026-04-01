@@ -155,6 +155,7 @@ Qed.
 
 Theorem verify_NEGINT_compl_comp :
     handler_correct handle_NEGINT f_instr_NEGINT
+      (fun _ _ _ _ => True)
       (fun _ s => forall n, s.(Machine.accu) <> Val_int n)
       (fun _ => False)
       (fun _ _ _ => False).
@@ -170,10 +171,7 @@ Proof.
   (* The Step case: accu = Val_int n                                   *)
   (* ================================================================ *)
   {
-    intro Hpre.
-
-    (* Unpack abs_rel *)
-    destruct Hpre as [ard Hpre].
+    intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.

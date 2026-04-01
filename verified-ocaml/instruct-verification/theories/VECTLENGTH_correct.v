@@ -289,14 +289,14 @@ Definition vectlength_pre
 (* ================================================================== *)
 
 Theorem verify_VECTLENGTH_correct :
-    handler_correct_with_pre handle_VECTLENGTH f_instr_VECTLENGTH
-      vectlength_pre
+    handler_correct handle_VECTLENGTH f_instr_VECTLENGTH
+      (fun _ => vectlength_pre)
       (fun _ s => size_or_heap s s.(Machine.accu) = None)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_VECTLENGTH.
+  unfold handler_correct, handle_VECTLENGTH.
 
   (* Case split on accu -- constructor order: Val_int, Val_block, Val_ptr, Val_closure *)
   destruct (Machine.accu s) as [z | tag0 fields0 | addr | addr0 ofs0] eqn:Haccu_eq.

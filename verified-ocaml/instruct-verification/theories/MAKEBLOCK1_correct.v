@@ -30,7 +30,7 @@
    - heap_alloc_extends_heap_map: After allocation, the heap map can be
      extended to map the new address to the returned block.
 
-   PRECONDITIONS (via handler_correct_with_pre):
+   PRECONDITIONS (via handler_correct):
    - The code buffer contains Int.repr (Z.of_nat t) at the current PC.
    - t fits in unsigned char range (0 <= Z.of_nat t <= 255). *)
 
@@ -353,8 +353,8 @@ Axiom eval_expr_heap_alloc : forall e le m,
 (* ================================================================== *)
 
 Theorem verify_MAKEBLOCK1_correct : forall t,
-    handler_correct_with_pre (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
-      (fun m s ard =>
+    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
+      (fun _ m s ard =>
          (* The code buffer contains Int.repr (Z.of_nat t) at the current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)

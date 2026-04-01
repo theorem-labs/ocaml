@@ -78,14 +78,14 @@ Definition le_int_range_pre (m : mem) (s : state) (_ : abs_rel_data) : Prop :=
   end.
 
 Theorem verify_LEINT_correct :
-    handler_correct_with_pre handle_LEINT f_instr_LEINT
-      le_int_range_pre
+    handler_correct handle_LEINT f_instr_LEINT
+      (fun _ => le_int_range_pre)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct_with_pre.
+  unfold handler_correct.
   intros e le m s. unfold handle_LEINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
     try (destruct (Machine.stack s); exact I);

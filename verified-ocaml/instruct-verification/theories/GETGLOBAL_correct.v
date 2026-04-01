@@ -22,7 +22,7 @@
 
    Two stores: accu field at offset +8, pc field at offset +0.
 
-   Preconditions (via handler_correct_with_pre):
+   Preconditions (via handler_correct):
    - Code buffer contains Int.repr (Z.of_nat n) at the current PC position
    - Z.of_nat n fits in int32 signed range
    - Global offset arithmetic stays in ptrofs range
@@ -274,8 +274,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_GETGLOBAL_correct : forall n,
-    handler_correct_with_pre (handle_GETGLOBAL n) f_instr_GETGLOBAL
-      (fun m s ard =>
+    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
+      (fun _ m s ard =>
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
               (Ptrofs.repr (Machine.pc s * sizeof_code_t))))

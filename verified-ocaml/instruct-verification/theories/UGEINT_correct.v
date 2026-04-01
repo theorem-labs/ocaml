@@ -202,8 +202,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_UGEINT_correct :
-    handler_correct_with_pre handle_UGEINT f_instr_UGEINT
-      (fun _ s _ =>
+    handler_correct handle_UGEINT f_instr_UGEINT
+      (fun _ _ s _ =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              0 <= a < 4611686018427387904 /\
@@ -215,7 +215,7 @@ Theorem verify_UGEINT_correct :
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct_with_pre, handle_UGEINT.
+  intros e le m s. unfold handler_correct, handle_UGEINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).

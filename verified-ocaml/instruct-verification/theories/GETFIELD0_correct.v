@@ -31,7 +31,7 @@
    APPROACH:
    - Error case: fully proved (trivial — handler returns Error iff
      field_or_heap returns None, which is exactly the error predicate).
-   - Step case: proved using handler_correct_with_pre with a heap
+   - Step case: proved using handler_correct with a heap
      precondition (heap_field_loadable) that asserts:
        When field_or_heap s (accu s) 0 = Some v, there exists a C value
        cv such that:
@@ -50,7 +50,7 @@
    plus the constraint that val_repr values that are Vptr always have
    their first argument derivable from hm.  With this invariant in
    abs_rel, the heap_field_loadable precondition would be derivable
-   and handler_correct_with_pre would imply handler_correct.
+   and handler_correct would imply handler_correct.
 
    No Axioms, no Admitted, no vm_compute on Ptrofs. *)
 
@@ -120,13 +120,13 @@ Definition heap_field_loadable
 (* ================================================================== *)
 
 Theorem verify_GETFIELD0_with_pre :
-    handler_correct_with_pre (handle_GETFIELD 0) f_instr_GETFIELD0
-      heap_field_loadable
+    handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
+      (fun _ => heap_field_loadable)
       (fun _ s => field_or_heap s s.(Machine.accu) 0 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_GETFIELD.
+  unfold handler_correct, handle_GETFIELD.
   destruct (field_or_heap s s.(Machine.accu) 0) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)

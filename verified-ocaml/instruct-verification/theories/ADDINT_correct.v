@@ -48,6 +48,7 @@ Local Ltac eval_cbn :=
 
 Theorem verify_ADDINT_compl_comp :
     handler_correct handle_ADDINT f_instr_ADDINT
+      (fun _ _ _ _ => True)
       (fun _ s => forall a b rest,
          s.(Machine.accu) = Val_int a ->
          s.(Machine.stack) = Val_int b :: rest -> False)
@@ -69,10 +70,7 @@ Proof.
   (* Step case: accu = Val_int a, stack = Val_int b :: v_tl           *)
   (* ================================================================ *)
   {
-    intro Hpre.
-
-    (* Unpack abs_rel *)
-    destruct Hpre as [ard Hpre].
+    intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.

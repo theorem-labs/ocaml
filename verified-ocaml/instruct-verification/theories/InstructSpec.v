@@ -121,11 +121,10 @@ Definition trap_sp_rel (ts_ptr : val)
         (Ptrofs.sub sp_base_ofs (Ptrofs.repr (Z.of_nat rocq_trap_sp * 8)))
   end.
 
-(* abs_rel: the inter-instruction invariant (postcondition).
-   C pc = code_base + s.(pc) * sizeof(code_t). *)
-Definition abs_rel (e : Clight.env) (le : temp_env) (m : mem)
-    (s : Machine.state) : Prop :=
-  exists (ard : abs_rel_data),
+(* abs_rel_with_ard: exposes the abs_rel_data witness so that
+   preconditions can refer to specific fields (code base, etc.). *)
+Definition abs_rel_with_ard (e : Clight.env) (le : temp_env) (m : mem)
+    (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let sb := ar_sptr_block ard in
   let so := ar_sptr_ofs ard in
   let hm := ar_heap_map ard in
@@ -168,6 +167,12 @@ Definition abs_rel (e : Clight.env) (le : temp_env) (m : mem)
   (exists ts_ptr,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 48) = Some ts_ptr /\
     trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)).
+
+(* abs_rel: the inter-instruction invariant (postcondition).
+   C pc = code_base + s.(pc) * sizeof(code_t). *)
+Definition abs_rel (e : Clight.env) (le : temp_env) (m : mem)
+    (s : Machine.state) : Prop :=
+  exists (ard : abs_rel_data), abs_rel_with_ard e le m s ard.
 
 (* abs_rel_pre: the handler precondition.
    The dispatch loop has advanced C pc past the opcode, so
@@ -224,120 +229,15 @@ Definition abs_rel_pre (e : Clight.env) (le : temp_env) (m : mem)
 (* Uniform completeness statement                                      *)
 (* ================================================================== *)
 
-(* handler_correct: uniform correctness statement for instruction handlers.
-   Takes a handler function and a Clight function, quantifies over all
-   C environments and abstract machine states internally.
-   The Step case is always the same: abs_rel on the pre-state implies the
-   C body executes and abs_rel holds on the post-state.
+(* handler_correct: unified correctness statement for instruction handlers.
+   Takes a handler function, a Clight function, and a step precondition.
+   The step precondition receives the Clight environment, memory, machine
+   state, and abs_rel_data witness.  Use (fun _ _ _ _ => True) for
+   handlers with no precondition.
+   The Step case: abs_rel_with_ard on the pre-state AND step_pre imply
+   the C body executes and abs_rel holds on the post-state.
    The Error / Halt / CCall_request cases are per-handler predicates. *)
 Definition handler_correct
-    (handler : Z -> state -> step_result)
-    (f : function)
-    (P_error : string -> state -> Prop)
-    (P_halt : value -> Prop)
-    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
-  forall e le m s,
-    match handler s.(pc) s with
-    | Step s' =>
-        abs_rel e le m s ->
-        exists le' m' out,
-          exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m' out /\
-          abs_rel e le' m' s'
-    | Error msg => P_error msg s
-    | Halt v => P_halt v
-    | CCall_request nargs args s' => P_ccall nargs args s'
-    end.
-
-(* abs_rel_with_ard: exposes the abs_rel_data witness so that
-   preconditions can refer to specific fields (code base, etc.). *)
-Definition abs_rel_with_ard (e : Clight.env) (le : temp_env) (m : mem)
-    (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let sb := ar_sptr_block ard in
-  let so := ar_sptr_ofs ard in
-  let hm := ar_heap_map ard in
-  let cb := ar_code_base_block ard in
-  let co := ar_code_base_ofs ard in
-  let gb := ar_global_block ard in
-  let go := ar_global_ofs ard in
-  let stk_b := ar_stack_block ard in
-  let stk_base := ar_stack_base_ofs ard in
-
-  le ! _s = Some (Vptr sb so) /\
-
-  (exists pc_ptr,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 0) = Some pc_ptr /\
-    pc_rel pc_ptr cb co s.(pc)) /\
-
-  (exists accu_v,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 8) = Some accu_v /\
-    val_repr hm s.(accu) accu_v) /\
-
-  (exists sp_ptr sp_b sp_ofs,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some sp_ptr /\
-    sp_ptr = Vptr sp_b sp_ofs /\
-    stack_repr hm m s.(stack) sp_b sp_ofs /\
-    sp_b <> sb /\ sp_b <> gb /\ cb <> sp_b) /\
-
-  (exists env_v,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some env_v /\
-    val_repr hm s.(Machine.env) env_v) /\
-
-  Mem.load Mint64 m sb (Ptrofs.unsigned so + 32) =
-    Some (Vlong (Int64.repr (Z.of_nat s.(extra_args)))) /\
-
-  (exists gd_ptr,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 40) = Some gd_ptr /\
-    gd_ptr = Vptr gb go /\
-    global_repr hm m s.(global) gb go /\
-    gb <> sb) /\
-
-  (exists ts_ptr,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 48) = Some ts_ptr /\
-    trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)).
-
-Lemma abs_rel_iff_with_ard : forall e le m s,
-  abs_rel e le m s <-> exists ard, abs_rel_with_ard e le m s ard.
-Proof.
-  intros. unfold abs_rel, abs_rel_with_ard. reflexivity.
-Qed.
-
-(* handler_correct_with_pre: variant of handler_correct with an
-   extra precondition on the Step case.  The precondition receives
-   the abs_rel_data witness so it can refer to the concrete code
-   base block, stack block, etc.
-
-   Used for handlers that read operands from the code buffer
-   (e.g. BRANCH reads the branch offset at *(s->pc)), or that
-   require operand range constraints (e.g. LSLINT shift < 64).
-
-   The Step case destructures abs_rel to get ard, then requires
-   step_pre m s ard to hold for that specific ard. *)
-Definition handler_correct_with_pre
-    (handler : Z -> state -> step_result)
-    (f : function)
-    (step_pre : mem -> state -> abs_rel_data -> Prop)
-    (P_error : string -> state -> Prop)
-    (P_halt : value -> Prop)
-    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
-  forall e le m s,
-    match handler s.(pc) s with
-    | Step s' =>
-        forall ard,
-        abs_rel_with_ard e le m s ard ->
-        step_pre m s ard ->
-        exists le' m' out,
-          exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m' out /\
-          abs_rel e le' m' s'
-    | Error msg => P_error msg s
-    | Halt v => P_halt v
-    | CCall_request nargs args s' => P_ccall nargs args s'
-    end.
-
-(* handler_correct_with_pre_env: variant of handler_correct_with_pre
-   where the precondition also receives the Clight environment e.
-   Needed for handlers that reference global symbols (e.g. caml_modify)
-   which require e ! symbol = None for eval_Evar_global. *)
-Definition handler_correct_with_pre_env
     (handler : Z -> state -> step_result)
     (f : function)
     (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
@@ -358,10 +258,20 @@ Definition handler_correct_with_pre_env
     | CCall_request nargs args s' => P_ccall nargs args s'
     end.
 
+Lemma abs_rel_iff_with_ard : forall e le m s,
+  abs_rel e le m s <-> exists ard, abs_rel_with_ard e le m s ard.
+Proof.
+  intros. unfold abs_rel, abs_rel_with_ard. reflexivity.
+Qed.
+
+
 (* ================================================================== *)
 (* Module Type: per-instruction correctness obligations                *)
+(* TODO: Update axiom signatures for unified handler_correct           *)
+(* (needs step_pre argument). Commented out until instantiated.        *)
 (* ================================================================== *)
 
+(*
 Module Type InstructSpec.
 
   (* --- Stack (ACC family) --- *)
@@ -947,3 +857,4 @@ Module Type InstructSpec.
       (fun _ _ => False) (fun _ => True) (fun _ _ _ => False).
 
 End InstructSpec.
+*)

@@ -12,7 +12,7 @@
    Int64.ltu for non-negative operands (0 <= a, 0 <= b < 2^62).
    For negative operands, Z.lxor on infinite-precision Z does not
    model the 63-bit OCaml lxor correctly, causing disagreement.
-   We add this as a step_pre via handler_correct_with_pre. *)
+   We add this as a step_pre via handler_correct. *)
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
 From compcert Require Import Coqlib Integers Floats Ctypes Cop
@@ -137,8 +137,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_ULTINT_correct :
-    handler_correct_with_pre handle_ULTINT f_instr_ULTINT
-      (fun _ s _ =>
+    handler_correct handle_ULTINT f_instr_ULTINT
+      (fun _ _ s _ =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              0 <= a < 4611686018427387904 /\

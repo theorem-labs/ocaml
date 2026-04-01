@@ -101,8 +101,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_BRANCH_correct : forall target,
-    handler_correct_with_pre (fun _ s => handle_BRANCH target s) f_instr_BRANCH
-      (fun m s ard =>
+    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+      (fun _ m s ard =>
          exists v, Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
               (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
@@ -111,7 +111,7 @@ Theorem verify_BRANCH_correct : forall target,
 Proof.
   intro target.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_BRANCH. simpl.
+  unfold handler_correct, handle_BRANCH. simpl.
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.

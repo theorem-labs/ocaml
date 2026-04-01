@@ -180,8 +180,8 @@ Proof.
 Qed.
 
 Theorem verify_LSLINT_correct :
-    handler_correct_with_pre handle_LSLINT f_instr_LSLINT
-      (fun _ s _ =>
+    handler_correct handle_LSLINT f_instr_LSLINT
+      (fun _ _ s _ =>
          match s.(Machine.stack) with
          | Val_int b :: _ => 0 <= b < 64
          | _ => True

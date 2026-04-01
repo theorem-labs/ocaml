@@ -25,7 +25,7 @@
    - Post-state uses shifted code_base_ofs to account for pc advancement
    - Code buffer invariants expressed as preconditions (not axioms)
 
-   Uses handler_correct_with_pre for code buffer preconditions.
+   Uses handler_correct for code buffer preconditions.
    NO AXIOMS. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
@@ -226,7 +226,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* ================================================================== *)
 (* Main theorem                                                        *)
 (*                                                                      *)
-(* Preconditions (from handler_correct_with_pre):                      *)
+(* Preconditions (from handler_correct):                      *)
 (* 1. Code buffer contains the operand at current PC                   *)
 (* 2. The 32-bit left shift by 1 does not overflow                    *)
 (*                                                                      *)
@@ -235,8 +235,8 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_OFFSETINT_correct : forall ofs,
-    handler_correct_with_pre (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (fun m s ard =>
+    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
+      (fun _ m s ard =>
          exists (i : int),
            Mem.load Mint32 m (ar_code_base_block ard)
              (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -249,7 +249,7 @@ Theorem verify_OFFSETINT_correct : forall ofs,
 Proof.
   intro ofs.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_OFFSETINT.
+  unfold handler_correct, handle_OFFSETINT.
 
   (* Case split on accu *)
   destruct (Machine.accu s) as [a | | | ] eqn:Haccu_eq;
