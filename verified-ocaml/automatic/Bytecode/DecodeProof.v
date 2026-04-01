@@ -1237,19 +1237,19 @@ Fixpoint expected_raws (omap : list nat) (idx : nat)
 
 (* Sanity check: the roundtrip works on a concrete program by computation *)
 Lemma decode_encode_STOP : decode (encode_bytecode [STOP]) = [STOP].
-Proof. native_compute. reflexivity. Qed.
+Proof. vm_compute. reflexivity. Qed.
 
 Lemma decode_encode_PUSH_STOP :
   decode (encode_bytecode [PUSH; STOP]) = [PUSH; STOP].
-Proof. native_compute. reflexivity. Qed.
+Proof. vm_compute. reflexivity. Qed.
 
 Lemma decode_encode_ACC_STOP :
   decode (encode_bytecode [ACC 3; STOP]) = [ACC 3; STOP].
-Proof. native_compute. reflexivity. Qed.
+Proof. vm_compute. reflexivity. Qed.
 
 Lemma decode_encode_BRANCH :
   decode (encode_bytecode [BRANCH 1; STOP]) = [BRANCH 1; STOP].
-Proof. native_compute. reflexivity. Qed.
+Proof. vm_compute. reflexivity. Qed.
 
 (* ================================================================== *)
 (* Layer 1 (partial): decode_raw step for zero-operand instructions    *)
@@ -1712,7 +1712,7 @@ Proof.
     assert (Hnb_z : (Z.of_nat n0 < 2 ^ 16)%Z).
     { change (2 ^ 16)%Z with (Z.of_nat 65536).
       apply Nat2Z.inj_lt. apply (Nat.lt_le_trans _ _ _ Hnb15).
-      apply Nat.leb_le. native_compute. reflexivity. }
+      apply Nat.leb_le. vm_compute. reflexivity. }
     (* The expanded forms of Z.land/Z.shiftr can't be folded back due to
        match-variable naming differences. Instead, prove the roundtrip
        by converting to Z.shiftl form using change with a proof obligation. *)
@@ -1844,38 +1844,38 @@ Qed.
 
 Lemma decode_encode_closure :
   decode (encode_bytecode [CLOSURE 2 1; STOP]) = [CLOSURE 2 1; STOP].
-Proof. native_compute. reflexivity. Qed.
+Proof. vm_compute. reflexivity. Qed.
 
 Lemma decode_encode_constint_neg :
   decode (encode_bytecode [CONSTINT (-42); STOP]) = [CONSTINT (-42); STOP].
-Proof. native_compute. reflexivity. Qed.
+Proof. vm_compute. reflexivity. Qed.
 
 Lemma decode_encode_switch :
   well_formed [BRANCH 3; BRANCH 3; SWITCH 1 1 [3%Z] [3%Z]; STOP] = true /\
   decode (encode_bytecode [BRANCH 3; BRANCH 3; SWITCH 1 1 [3%Z] [3%Z]; STOP]) =
     [BRANCH 3; BRANCH 3; SWITCH 1 1 [3%Z] [3%Z]; STOP].
-Proof. split; native_compute; reflexivity. Qed.
+Proof. split; vm_compute; reflexivity. Qed.
 
 Lemma decode_encode_closurerec :
   well_formed [CLOSUREREC 2 0 [0%Z; 0%Z]; STOP] = true /\
   decode (encode_bytecode [CLOSUREREC 2 0 [0%Z; 0%Z]; STOP]) =
     [CLOSUREREC 2 0 [0%Z; 0%Z]; STOP].
-Proof. split; native_compute; reflexivity. Qed.
+Proof. split; vm_compute; reflexivity. Qed.
 
 Lemma decode_encode_getpubmet :
   decode (encode_bytecode [GETPUBMET 42; STOP]) = [GETPUBMET 42; STOP].
-Proof. native_compute. reflexivity. Qed.
+Proof. vm_compute. reflexivity. Qed.
 
 Lemma decode_encode_beq :
   well_formed [BEQ 10 1; STOP] = true /\
   decode (encode_bytecode [BEQ 10 1; STOP]) = [BEQ 10 1; STOP].
-Proof. split; native_compute; reflexivity. Qed.
+Proof. split; vm_compute; reflexivity. Qed.
 
 Lemma decode_encode_pushtrap :
   well_formed [PUSHTRAP 3; STOP; STOP; STOP] = true /\
   decode (encode_bytecode [PUSHTRAP 3; STOP; STOP; STOP]) =
     [PUSHTRAP 3; STOP; STOP; STOP].
-Proof. split; native_compute; reflexivity. Qed.
+Proof. split; vm_compute; reflexivity. Qed.
 
 Lemma decode_encode_many_instrs :
   well_formed [PUSH; ACC 3; CONSTINT 42; NEGINT; ADDINT;
@@ -1883,7 +1883,7 @@ Lemma decode_encode_many_instrs :
   decode (encode_bytecode [PUSH; ACC 3; CONSTINT 42; NEGINT; ADDINT;
                            BRANCH 6; STOP]) =
     [PUSH; ACC 3; CONSTINT 42; NEGINT; ADDINT; BRANCH 6; STOP].
-Proof. split; native_compute; reflexivity. Qed.
+Proof. split; vm_compute; reflexivity. Qed.
 
 (* ================================================================== *)
 (* Layer 1: decode_raw on encode_bytecode produces expected_raws       *)
