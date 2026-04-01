@@ -15,7 +15,7 @@ Ltac solve_ascii_cases :=
   | [ b0 : bool, b1 : bool, b2 : bool, b3 : bool,
       b4 : bool, b5 : bool, b6 : bool, b7 : bool |- _ ] =>
     destruct b0, b1, b2, b3, b4, b5, b6, b7;
-    native_compute; first [ reflexivity | discriminate ]
+    vm_compute; first [ reflexivity | discriminate ]
   end.
 
 (* ================================================================ *)
