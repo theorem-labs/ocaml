@@ -93,7 +93,7 @@ let run_compiled prog =
       | Error msg -> result := Some (sc msg)
       | CCall_request (idx, args, cont) ->
         (match handler idx args with
-         | Some v -> s := set_accu cont v; loop ()
+         | Some v -> s := { cont with accu = v }; loop ()
          | None -> result := Some "ccall failed")
     end
   in
