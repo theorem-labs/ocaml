@@ -54,11 +54,11 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
 
   (* Structural facts *)
@@ -66,13 +66,8 @@ Proof.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
 
-  (* sp_ofs >= 8 (room to push) *)
-  pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
-
   (* Invert stack_repr 6 times to get load for v5 *)
   rewrite Hstk in Hstack_repr.
-  pose proof (sp_ofs_stack_representable hm m _ sp_b sp_ofs Hstack_repr) as Hsp_rep.
-  simpl length in Hsp_rep.
   inversion Hstack_repr as [| xv0 xvs0 xb0 xofs0 cv0 Hload_sp0 Hval_repr0 Hstack_repr_0].
   subst xv0 xvs0 xb0 xofs0.
   inversion Hstack_repr_0 as [| xv1 xvs1 xb1 xofs1 cv1 Hload_sp1 Hval_repr1 Hstack_repr_1].
@@ -101,6 +96,12 @@ Proof.
     apply Ptrofs.unsigned_repr. pose proof (Ptrofs.unsigned_range sp_ofs).
     unfold Ptrofs.max_unsigned. lia. }
 
+  (* Pre-compute before ltac:() side effects *)
+  rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
+  rewrite Hstk in Hsp_writable. simpl length in Hsp_writable.
+  assert (Hsp_add40 : Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 40)) = Ptrofs.unsigned sp_ofs + 40).
+  { apply ptrofs_add_unsigned; lia. }
+
   (* Store 1: sp field <- new_sp *)
   destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
               (Vptr sp_b sp_ofs) (Vptr sp_b new_sp_ofs) Hsp_load) as [m1 Hstore_sp].
@@ -119,7 +120,7 @@ Proof.
   assert (Hload_sp5_m2 : Mem.load Mint64 m2 sp_b (Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 40))) = Some cv5).
   { erewrite Mem.load_store_other. exact Hload_sp5_m1. exact Hstore_accu.
     right. right. rewrite Hnew_sp_unsigned. simpl size_chunk.
-    rewrite (ptrofs_add_unsigned sp_ofs 40 ltac:(lia) ltac:(lia)). lia. }
+    rewrite Hsp_add40. lia. }
 
   (* new_sp + 48 = sp + 40. *)
   assert (Hadd_back : Ptrofs.add new_sp_ofs (Ptrofs.repr 48) = Ptrofs.add sp_ofs (Ptrofs.repr 40)).
@@ -330,7 +331,7 @@ Proof.
         right. lia.
       - right. lia. }
 
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s is in le' *)
     { subst le'.
@@ -353,27 +354,37 @@ Proof.
 
     (* 4. sp field -- updated to new_sp; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
-      - exact Hsp_load3.
-      - reflexivity.
-      - simpl.
-        assert (Hstack_m1 : stack_repr hm m1 (v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b sp_ofs).
-        { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
-                   (uso + 16) (Vptr sp_b new_sp_ofs)
-                   Hstack_repr Hstore_sp).
-          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-        assert (Hstack_m2 : stack_repr hm m2 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b new_sp_ofs).
-        { exact (stack_repr_cons_after_store hm m1 m2
-                   (v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b sp_ofs (Machine.accu s) accu_v
-                   Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)). }
-        apply (stack_repr_store_other_block hm m2 m3
+      assert (Hstack_m1 : stack_repr hm m1 (v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b sp_ofs).
+      { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+                 (uso + 16) (Vptr sp_b new_sp_ofs)
+                 Hstack_repr Hstore_sp).
+        intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
+      assert (Hstack_m2 : stack_repr hm m2 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b new_sp_ofs).
+      { exact (stack_repr_cons_after_store hm m1 m2
+                 (v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b sp_ofs (Machine.accu s) accu_v
+                 Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)). }
+      assert (Hstack_m3 : stack_repr hm m3 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b new_sp_ofs).
+      { apply (stack_repr_store_other_block hm m2 m3
                  (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b new_sp_ofs sb
                  (uso + 8) cv5
                  Hstack_m2 Hstore_accu_field).
-                intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+      - exact Hsp_load3.
+      - reflexivity.
+      - simpl. exact Hstack_m3.
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp. }
+      - exact Hcb_ne_sp.
+      - exact (sp_ofs_ge_8 hm m3 _ sp_b new_sp_ofs Hstack_m3).
+      - simpl Machine.stack. simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned. lia.
+      - simpl Machine.stack. simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned.
+        intros ofs' Hofs'.
+        eapply Mem.perm_store_1. exact Hstore_accu_field.
+        eapply Mem.perm_store_1. exact Hstore_accu.
+        eapply Mem.perm_store_1. exact Hstore_sp.
+        apply Hsp_writable. lia. }
+
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -409,5 +420,12 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_load3.
       - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved *)
+    { intros ofs' Hofs'.
+      eapply Mem.perm_store_1. exact Hstore_accu_field.
+      eapply Mem.perm_store_1. exact Hstore_accu.
+      eapply Mem.perm_store_1. exact Hstore_sp.
+      apply Hsb_writable. exact Hofs'. }
   }
 Qed.

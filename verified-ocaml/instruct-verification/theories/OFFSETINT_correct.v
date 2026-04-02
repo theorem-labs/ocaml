@@ -273,11 +273,11 @@ Proof.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
-      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
       [env_v [Henv_load Henv_repr]] &
       Hextra_load &
       [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-      [ts_ptr [Hts_load Htrap_rel]]).
+      [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
     subst sp_ptr.
 
     (* Unpack step precondition *)
@@ -488,7 +488,7 @@ Proof.
                  (uso + 0) (uso + 48) new_pc_v ts_ptr
                  Hstore2 Hts_m1). right. lia. }
 
-      split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
       (* 1. _s is in le' *)
       { subst le'.
@@ -521,7 +521,7 @@ Proof.
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-        split; [| split; [| split; [| split; [| split]]]].
+        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
         - exact Hsp_load'.
         - reflexivity.
         - simpl. simpl ar_heap_map. fold hm.
@@ -534,7 +534,10 @@ Proof.
           + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
-        - simpl. exact Hcb_ne_sp. }
+        - simpl. exact Hcb_ne_sp.
+        - exact Hsp_ge8.
+        - exact Hsp_rep.
+        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. exact Hofs'. }
 
       (* 5. env field -- unchanged *)
       { exists env_v. split.
@@ -565,6 +568,9 @@ Proof.
       { exists ts_ptr. split.
         - exact Hts_load'.
         - simpl. exact Htrap_rel. }
+
+      (* 9. sb_writable -- permission preserved *)
+      { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. }
     }
   }
 Qed.

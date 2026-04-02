@@ -40,16 +40,15 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   set (new_sp_ofs := Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
   assert (Hnew_sp_unsigned : Ptrofs.unsigned new_sp_ofs = Ptrofs.unsigned sp_ofs - 8).
@@ -201,7 +200,7 @@ Proof.
                (Vptr sp_b new_sp_ofs) ts_ptr Hstore_sp Hts_load).
       right. lia. }
 
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s is in le' *)
     { subst le'.
@@ -222,7 +221,7 @@ Proof.
 
     (* 4. sp field -- updated to new_sp_ofs; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
@@ -238,7 +237,30 @@ Proof.
                                   Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp. }
+      - exact Hcb_ne_sp.
+      - (* sp_ofs_ge8: Ptrofs.unsigned new_sp_ofs >= 8.
+           Apply sp_ofs_ge_8 to the new stack_repr we just built. *)
+        apply (sp_ofs_ge_8 hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+        assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
+        { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+                   (uso + 16) (Vptr sp_b new_sp_ofs)
+                   Hstack_repr Hstore_sp).
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
+        exact (stack_repr_cons_after_store hm m1 m2
+                 (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
+                 Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)).
+      - (* sp_rep: Ptrofs.unsigned new_sp_ofs + 8 * length (accu :: stack) < modulus.
+           new_sp_ofs = sp_ofs - 8, length (accu :: stack) = 1 + length stack,
+           so this equals sp_ofs + 8 * length stack, same as Hsp_rep. *)
+        simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned. lia.
+      - (* sp_writable: range_perm on [0, new_sp_ofs + 8 * length (accu :: stack)) *)
+        simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned.
+        replace (Ptrofs.unsigned sp_ofs - 8 + 8 * Z.succ (Z.of_nat (length (Machine.stack s))))
+          with (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s))) by lia.
+        intros ofs' Hofs'.
+        eapply Mem.perm_store_1. exact Hstore_accu.
+        eapply Mem.perm_store_1. exact Hstore_sp.
+        apply Hsp_writable. exact Hofs'. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -271,5 +293,11 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_load2.
       - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved through both stores *)
+    { intros ofs' Hofs'.
+      eapply Mem.perm_store_1. exact Hstore_accu.
+      eapply Mem.perm_store_1. exact Hstore_sp.
+      apply Hsb_writable. exact Hofs'. }
   }
 Qed.

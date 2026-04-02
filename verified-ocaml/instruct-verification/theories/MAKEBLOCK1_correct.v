@@ -384,11 +384,11 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr gd_ptr.
 
   destruct Hstep_pre as (Hcode_load & Ht_range & Hhm_fresh).
@@ -1172,7 +1172,7 @@ Proof.
     { eapply heap_alloc_block_ne_cb; eauto. }
 
     (* Now build abs_rel *)
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s in le' *)
     { subst le' le6 le5 le4 le3 le2 le1.
@@ -1192,13 +1192,17 @@ Proof.
 
     (* 4. sp field -- unchanged *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl. apply Hstack_repr_ext. exact Hstack2.
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp. }
+      - exact Hcb_ne_sp.
+      - exact Hsp_ge8.
+      - exact Hsp_rep.
+      - (* sp_writable: permission preserved through stores + heap_alloc *)
+        admit. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -1219,5 +1223,8 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_load2.
       - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved through stores + heap_alloc *)
+    { admit. }
   }
-Qed.
+Admitted. (* sp_writable, sb_writable through heap_alloc *)

@@ -52,11 +52,11 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
 
   (* Structural facts *)
@@ -65,12 +65,8 @@ Proof.
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
 
   (* sp_ofs >= 8 (room to push) *)
-  pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
-
   (* Invert stack_repr *)
   rewrite Hstk in Hstack_repr.
-  pose proof (sp_ofs_stack_representable hm m _ sp_b sp_ofs Hstack_repr) as Hsp_rep.
-  simpl length in Hsp_rep.
   inversion Hstack_repr as [| xv0 xvs0 xb0 xofs0 cv0 Hload_sp0 Hval_repr0 Hstack_repr0].
   subst xv0 xvs0 xb0 xofs0.
   inversion Hstack_repr0 as [| xv1 xvs1 xb1 xofs1 cv1 Hload_sp1 Hval_repr1 Hstack_repr1].
@@ -327,7 +323,7 @@ Proof.
         right. lia.
       - right. lia. }
 
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s is in le' *)
     { subst le'.
@@ -350,7 +346,7 @@ Proof.
 
     (* 4. sp field -- updated to new_sp; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load3.
       - reflexivity.
       - simpl.
@@ -361,7 +357,26 @@ Proof.
                 intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp. }
+      - exact Hcb_ne_sp.
+      - apply (sp_ofs_ge_8 hm m3 (Machine.accu s :: v0 :: v1 :: v2 :: rest) sp_b new_sp_ofs).
+        apply (stack_repr_store_other_block hm m2 m3
+                 (Machine.accu s :: v0 :: v1 :: v2 :: rest) sp_b new_sp_ofs sb
+                 (uso + 8) cxb2
+                 Hstack_m2 Hstore_accu_field).
+                intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+      - simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned.
+        rewrite Hstk in Hsp_rep. simpl length in Hsp_rep. lia.
+      - simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned.
+        rewrite Hstk in Hsp_writable. simpl length in Hsp_writable.
+        assert (Hlen_eq : Ptrofs.unsigned sp_ofs - 8 +
+          8 * Z.succ (Z.of_nat (S (S (S (length rest)))))
+          = Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (S (S (S (length rest))))) by lia.
+        rewrite Hlen_eq.
+        intros ofs' Hofs'.
+        eapply Mem.perm_store_1. exact Hstore_accu_field.
+        eapply Mem.perm_store_1. exact Hstore_accu.
+        eapply Mem.perm_store_1. exact Hstore_sp.
+        apply Hsp_writable. exact Hofs'. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -397,5 +412,12 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_load3.
       - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable *)
+    { intros ofs' Hofs'.
+      eapply Mem.perm_store_1. exact Hstore_accu_field.
+      eapply Mem.perm_store_1. exact Hstore_accu.
+      eapply Mem.perm_store_1. exact Hstore_sp.
+      apply Hsb_writable. exact Hofs'. }
   }
 Qed.

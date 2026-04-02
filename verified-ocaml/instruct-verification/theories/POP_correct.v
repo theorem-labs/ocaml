@@ -231,7 +231,9 @@ Theorem verify_POP_correct : forall n,
          (forall sp_b sp_ofs,
             Mem.load Mint64 m (ar_sptr_block ard)
               (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + Z.of_nat n * 8 < Ptrofs.modulus))
+            Ptrofs.unsigned sp_ofs + Z.of_nat n * 8 < Ptrofs.modulus) /\
+         (* n does not exceed the stack length *)
+         (n <= Datatypes.length (Machine.stack s))%nat)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
@@ -250,14 +252,14 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
 
-  destruct Hstep_pre as (Hcode_load & Hcb_ne & Hn_bound & Hsp_fits).
+  destruct Hstep_pre as (Hcode_load & Hcb_ne & Hn_bound & Hsp_fits & Hn_le_len).
 
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
@@ -469,7 +471,7 @@ Proof.
                (Vptr sp_b new_sp_ofs) ts_ptr Hstore_sp Hts_m1).
       right. lia. }
 
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s is in le' *)
     { subst le'.
@@ -491,7 +493,7 @@ Proof.
 
     (* 4. sp field -- updated; stack is skipn n *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
@@ -511,7 +513,28 @@ Proof.
                 exact (stack_repr_skipn n hm m2 (Machine.stack s) sp_b sp_ofs Hstack_m2).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp. }
+      - exact Hcb_ne_sp.
+      - (* sp_ge8: new_sp_ofs >= 8 -- POP increases sp, so still >= 8 *)
+        rewrite Hnew_sp_eq.
+        rewrite (ptrofs_add_unsigned sp_ofs (Z.of_nat n * 8) ltac:(lia) Hsp_fits_concrete).
+        lia.
+      - (* sp_rep: representability for skipn stack *)
+        simpl stack.
+        rewrite Hnew_sp_eq.
+        rewrite (ptrofs_add_unsigned sp_ofs (Z.of_nat n * 8) ltac:(lia) Hsp_fits_concrete).
+        rewrite length_skipn. rewrite (Nat2Z.inj_sub _ _ Hn_le_len). lia.
+      - (* sp_writable: permission preserved through stores *)
+        simpl stack.
+        rewrite Hnew_sp_eq.
+        rewrite (ptrofs_add_unsigned sp_ofs (Z.of_nat n * 8) ltac:(lia) Hsp_fits_concrete).
+        replace (Ptrofs.unsigned sp_ofs + Z.of_nat n * 8 +
+                  8 * Z.of_nat (Datatypes.length (skipn n (stack s))))
+          with (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (Datatypes.length (stack s))).
+        2: { rewrite length_skipn. rewrite (Nat2Z.inj_sub _ _ Hn_le_len). lia. }
+        intros ofs' Hofs'.
+        eapply Mem.perm_store_1. exact Hstore_sp.
+        eapply Mem.perm_store_1. exact Hstore_pc.
+        apply Hsp_writable. exact Hofs'. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -542,5 +565,8 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_load2.
       - simpl. exact Htrap_rel. }
+
+      (* 9. sb_writable -- permission preserved *)
+      { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore_sp. eapply Mem.perm_store_1. exact Hstore_pc. apply Hsb_writable. exact Hofs'. }
   }
 Qed.

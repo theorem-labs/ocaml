@@ -187,6 +187,22 @@ Proof.
 Qed.
 
 (* ================================================================== *)
+(* set_nth preserves list length                                       *)
+(* ================================================================== *)
+
+Lemma set_nth_length : forall {A : Type} (l : list A) n x l',
+  set_nth l n x = Some l' -> length l' = length l.
+Proof.
+  induction l as [| hd tl IH]; intros n x l' Hset.
+  - simpl in Hset. discriminate.
+  - destruct n as [| n'].
+    + simpl in Hset. injection Hset as <-. simpl. reflexivity.
+    + simpl in Hset.
+      destruct (set_nth tl n' x) as [tl'|] eqn:Hsub; [| discriminate].
+      injection Hset as <-. simpl. f_equal. exact (IH n' x tl' Hsub).
+Qed.
+
+(* ================================================================== *)
 (* stack_repr_update: updating element n preserves stack_repr          *)
 (* ================================================================== *)
 
@@ -295,11 +311,11 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
 
   (* Unpack step precondition *)
@@ -310,7 +326,7 @@ Proof.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos Hso_hi].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   (* Hsp_ne_gb already from destruct *)
-  pose proof (sp_ofs_stack_representable hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_rep.
+  (* Hsp_rep already from destruct *)
 
   (* n < length stack (from set_nth success) *)
   assert (Hn_lt : (n < length (Machine.stack s))%nat).
@@ -598,7 +614,7 @@ Proof.
                unit_v ts_ptr Hstore_accu).
       apply Hload_m2_sb. exact Hts_load_m1. right. lia. }
 
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s is in le' *)
     { subst le'.
@@ -621,7 +637,7 @@ Proof.
 
     (* 4. sp field -- same pointer, but stack_repr for new_stack *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load3.
       - reflexivity.
       - simpl.
@@ -637,7 +653,17 @@ Proof.
         + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp. }
+      - exact Hcb_ne_sp.
+      - (* sp_ge8: stack unchanged at same sp_ofs, ASSIGN doesn't move sp *)
+        exact Hsp_ge8.
+      - (* sp_rep: new_stack has same length as old stack *)
+        simpl. rewrite (set_nth_length _ _ _ _ Hset). exact Hsp_rep.
+      - (* sp_writable: permission preserved through stores *)
+        simpl. rewrite (set_nth_length _ _ _ _ Hset).
+        intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore_accu.
+        eapply Mem.perm_store_1. exact Hstore_stack.
+        eapply Mem.perm_store_1. exact Hstore_pc.
+        apply Hsp_writable. exact Hofs'. }
 
     (* 5. env field *)
     { exists env_v. split.
@@ -673,5 +699,11 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_load3.
       - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved through all stores *)
+    { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore_accu.
+      eapply Mem.perm_store_1. exact Hstore_stack.
+      eapply Mem.perm_store_1. exact Hstore_pc.
+      apply Hsb_writable. exact Hofs'. }
   }
 Qed.

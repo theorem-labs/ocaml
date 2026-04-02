@@ -122,11 +122,11 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
   unfold pc_rel in Hpc_rel.
   set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
@@ -257,7 +257,7 @@ Proof.
       rewrite (PTree.gso _ _ Hs_ne_t2).
       rewrite (PTree.gso _ _ Hs_ne_t1).
       exact Hle_s. }
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
     + (* le' ! _s *) exact Hle'_s.
     + (* pc_rel *)
       exists new_pc_ptr. split. exact Hpc_load'.
@@ -274,12 +274,15 @@ Proof.
     + (* accu *)
       exists accu_v. split. exact Haccu_load'. simpl. exact Haccu_repr.
     + (* sp *)
-      exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split]]]].
+      exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       exact Hsp_load'. reflexivity. simpl.
       apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_ptr
                Hstack_repr Hstore).
       intro Heq. exact (Hsp_ne_sb (eq_sym Heq)).
       exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp.
+        exact Hsp_ge8.
+        exact Hsp_rep.
+        intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsp_writable. exact Hofs'.
     + (* env *)
       exists env_v. split. exact Henv_load'. simpl. exact Henv_repr.
     + (* extra_args *)
@@ -292,4 +295,6 @@ Proof.
       exact Hgb_ne_sb.
     + (* trap_sp *)
       exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel.
+    + (* 9. sb_writable *)
+      { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsb_writable. exact Hofs'. }
 Qed.

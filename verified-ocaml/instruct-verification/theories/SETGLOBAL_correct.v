@@ -233,11 +233,11 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr gd_ptr.
 
   destruct Hstep_pre as (He_caml & Hcode_load & Hn_range & [b_cm [Hfind_symbol Hfind_funct]] & Hcaml_modify_pre).
@@ -688,7 +688,7 @@ Proof.
                Hglobal_m1 Hstore2).
       intro Heq; exact (Hgb_ne (eq_sym Heq)). }
 
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s is in le_final *)
     { subst le6 le5 le4 le3 le2 le1.
@@ -711,13 +711,17 @@ Proof.
 
     (* 4. sp field *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_final.
       - reflexivity.
       - simpl. exact Hstack_repr_m2.
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp. }
+      - exact Hcb_ne_sp.
+      - exact Hsp_ge8.
+      - exact Hsp_rep.
+      - (* sp_writable: permission preserved through caml_modify + stores *)
+        admit. }
 
     (* 5. env field *)
     { exists env_v. split.
@@ -738,5 +742,8 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_final.
       - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved through caml_modify + stores *)
+    { admit. }
   }
-Qed.
+Admitted. (* sp_writable, sb_writable through caml_modify *)

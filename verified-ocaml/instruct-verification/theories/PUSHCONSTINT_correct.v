@@ -185,7 +185,12 @@ Theorem verify_PUSHCONSTINT_correct : forall n,
          (* tagged integer identity *)
          Int64.add (Int64.shl (Int64.repr (Int.signed (Int.repr n)))
                               (Int64.repr 1))
-                   (Int64.repr 1) = Int64.repr (n * 2 + 1))
+                   (Int64.repr 1) = Int64.repr (n * 2 + 1) /\
+         (* sp has room for a push: new sp after push must still be >= 8 *)
+         (forall sp_b sp_ofs,
+            Mem.load Mint64 m (ar_sptr_block ard)
+              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+            Ptrofs.unsigned sp_ofs >= 16))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
@@ -193,7 +198,7 @@ Proof.
   unfold handler_correct, handle_PUSHCONSTINT. simpl.
 
   intros ard Hpre Hextra_pre.
-  destruct Hextra_pre as (Hcb_ne & Hcb_ne_sp & Hcode_load & Htagged_eq).
+  destruct Hextra_pre as (Hcb_ne & Hcb_ne_sp & Hcode_load & Htagged_eq & Hsp_ge16).
 
   (* Unpack abs_rel_with_ard *)
   set (sb := ar_sptr_block ard) in *.
@@ -204,11 +209,11 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp2]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp2 [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
 
   (* Code block separate from stack block *)
@@ -219,7 +224,7 @@ Proof.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  pose proof (sp_ofs_ge_8 hm m (Machine.stack s) sp_b sp_ofs Hstack_repr) as Hsp_ge8.
+  (* Hsp_ge8 comes from abs_rel_with_ard destruct above *)
 
   (* Composite environment facts *)
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
@@ -605,7 +610,7 @@ Proof.
     { apply (load_after_store_other m3 m4 sb (uso + 0) (uso + 48)
                new_pc_v ts_ptr Hstore4 Hts_load_m3). right. lia. }
 
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
     (* 1. _s is in le' *)
     { subst le'.
@@ -631,7 +636,7 @@ Proof.
 
     (* 4. sp field -- updated to new_sp_ofs; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load4.
       - reflexivity.
       - simpl.
@@ -644,7 +649,7 @@ Proof.
         assert (Hstack_cons_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
         { exact (stack_repr_cons_after_store hm m1 m2
                    (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                   Hstack_m1 Haccu_repr Hstore2 Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)). }
+                   Hstack_m1 Haccu_repr Hstore2 Hsp_ge8 Hsp_rep). }
         assert (Hstack_cons_m3 : stack_repr hm m3 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
         { apply (stack_repr_store_other_block hm m2 m3 _ sp_b new_sp_ofs sb
                    (uso + 8) tagged_v
@@ -656,7 +661,26 @@ Proof.
                 intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcb_ne_sp2. }
+      - exact Hcb_ne_sp2.
+      - (* sp_ge8: new_sp_ofs >= 8 follows from precondition sp_ofs >= 16 *)
+        assert (Hsp16 : Ptrofs.unsigned sp_ofs >= 16).
+        { apply (Hsp_ge16 sp_b sp_ofs). exact Hsp_load. }
+        rewrite Hnew_sp_unsigned. lia.
+      - (* sp_rep: representability for accu :: stack *)
+        simpl length. rewrite Nat2Z.inj_succ.
+        rewrite Hnew_sp_unsigned. lia.
+      - (* sp_writable: Mem.range_perm for new range *)
+        simpl length. rewrite Nat2Z.inj_succ.
+        rewrite Hnew_sp_unsigned.
+        intros ofs' Hofs'.
+        (* range: 0 <= ofs' < (sp_ofs - 8) + 8 * (Z.of_nat (length stack) + 1)
+                = 0 <= ofs' < sp_ofs + 8 * Z.of_nat (length stack) *)
+        assert (Hofs'_in_old : 0 <= ofs' < Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s))) by lia.
+        eapply Mem.perm_store_1. exact Hstore4.
+        eapply Mem.perm_store_1. exact Hstore3.
+        eapply Mem.perm_store_1. exact Hstore2.
+        eapply Mem.perm_store_1. exact Hstore1.
+        apply Hsp_writable. lia. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -698,5 +722,13 @@ Proof.
     { exists ts_ptr. split.
       - exact Hts_load4.
       - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved through all 4 stores *)
+    { intros ofs' Hofs'.
+      eapply Mem.perm_store_1. exact Hstore4.
+      eapply Mem.perm_store_1. exact Hstore3.
+      eapply Mem.perm_store_1. exact Hstore2.
+      eapply Mem.perm_store_1. exact Hstore1.
+      apply Hsb_writable. exact Hofs'. }
   }
 Qed.

@@ -151,7 +151,12 @@ Definition abs_rel_with_ard (e : Clight.env) (le : temp_env) (m : mem)
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some sp_ptr /\
     sp_ptr = Vptr sp_b sp_ofs /\
     stack_repr hm m s.(stack) sp_b sp_ofs /\
-    sp_b <> sb /\ sp_b <> gb /\ cb <> sp_b) /\
+    sp_b <> sb /\ sp_b <> gb /\ cb <> sp_b /\
+    Ptrofs.unsigned sp_ofs >= 8 /\
+    Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)) < Ptrofs.modulus /\
+    Mem.range_perm m sp_b 0
+      (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)))
+      Cur Writable) /\
 
   (exists env_v,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some env_v /\
@@ -168,7 +173,10 @@ Definition abs_rel_with_ard (e : Clight.env) (le : temp_env) (m : mem)
 
   (exists ts_ptr,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 48) = Some ts_ptr /\
-    trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)).
+    trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)) /\
+
+  Mem.range_perm m sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
+    Cur Writable.
 
 (* abs_rel: the inter-instruction invariant (postcondition).
    C pc = code_base + s.(pc) * sizeof(code_t). *)
@@ -208,7 +216,12 @@ Definition abs_rel_pre (e : Clight.env) (le : temp_env) (m : mem)
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some sp_ptr /\
     sp_ptr = Vptr sp_b sp_ofs /\
     stack_repr hm m s.(stack) sp_b sp_ofs /\
-    sp_b <> sb /\ sp_b <> gb /\ cb <> sp_b) /\
+    sp_b <> sb /\ sp_b <> gb /\ cb <> sp_b /\
+    Ptrofs.unsigned sp_ofs >= 8 /\
+    Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)) < Ptrofs.modulus /\
+    Mem.range_perm m sp_b 0
+      (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)))
+      Cur Writable) /\
 
   (exists env_v,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some env_v /\
@@ -225,7 +238,10 @@ Definition abs_rel_pre (e : Clight.env) (le : temp_env) (m : mem)
 
   (exists ts_ptr,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 48) = Some ts_ptr /\
-    trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)).
+    trap_sp_rel ts_ptr stk_b stk_base s.(trap_sp)) /\
+
+  Mem.range_perm m sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
+    Cur Writable.
 
 (* ================================================================== *)
 (* Uniform completeness statement                                      *)

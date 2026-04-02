@@ -246,16 +246,28 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr0 [Hsp_ne_sb [Hsp_ne_gb Hcode_ne_sp]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr0 [Hsp_ne_sb [Hsp_ne_gb [Hcode_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr0 Hgb_ne]]]] &
-    [ts_ptr [Hts_load Htrap_rel]]).
+    [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   rewrite Haccu_eq in Haccu_repr.
   inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+
+  (* Pre-compute modulus bounds for sp + 8 BEFORE inversion/subst *)
+  assert (Hsp_mod_orig : Ptrofs.unsigned sp_ofs + 8 < Ptrofs.modulus).
+  { rewrite Hstk in Hsp_rep. simpl length in Hsp_rep. lia. }
+  assert (Hsp_rep_tail : Ptrofs.unsigned sp_ofs + 8 + 8 * Z.of_nat (length v_tl) < Ptrofs.modulus).
+  { rewrite Hstk in Hsp_rep. simpl length in Hsp_rep. lia. }
+  (* Pre-compute writable inclusion for the tail range *)
+  assert (Hsp_writable_tail : Mem.range_perm m sp_b 0
+            (Ptrofs.unsigned sp_ofs + 8 + 8 * Z.of_nat (length v_tl)) Cur Writable).
+  { intros ofs' Hofs'. apply Hsp_writable. rewrite Hstk. simpl length.
+    pose proof (Nat2Z.is_nonneg (length v_tl)). lia. }
+
   rewrite Hstk in Hstack_repr0.
   inversion Hstack_repr0 as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
   revert Hgd_load Hgd_eq Hglobal_repr0 Hgb_ne. subst.
@@ -386,7 +398,7 @@ Proof.
                  new_sp_v ts_ptr Hstore1 Hts_load). right. lia. }
       apply (load_after_store_other m1 m' sb (uso + 8) (uso + 48)
                result_v ts_ptr Hstore2 He1). right. lia. }
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
     (* 1. _s in le' *)
     { subst le'.
       rewrite PTree.gso by (compute; congruence).
@@ -402,7 +414,7 @@ Proof.
       constructor. }
     (* 4. sp -- conjunction: stack_repr /\ sep facts *)
     { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
-      split; [| split; [| split; [| split; [| split]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load'.
       - reflexivity.
       - simpl.
@@ -417,7 +429,17 @@ Proof.
         + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
-      - exact Hcode_ne_sp. }
+      - exact Hcode_ne_sp.
+        - (* sp_ge8 *)
+          rewrite (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)). lia.
+        - (* sp_rep *)
+          rewrite (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)). exact Hsp_rep_tail.
+        - (* sp_writable *)
+          intros ofs' Hofs'.
+          rewrite (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)) in Hofs'.
+          eapply Mem.perm_store_1. exact Hstore2.
+          eapply Mem.perm_store_1. exact Hstore1.
+          apply Hsp_writable_tail. exact Hofs'. }
     (* 5. env *)
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     (* 6. extra_args *)
@@ -436,5 +458,8 @@ Proof.
         + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
       - exact Hgb_ne. }
     (* 8. trap_sp *)
-    { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
+    { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved *)
+    { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.

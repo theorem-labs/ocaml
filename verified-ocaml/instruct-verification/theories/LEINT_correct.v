@@ -94,7 +94,7 @@ Proof.
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
   intros ard Hpre Hrange. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
-  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb Hcb_ne_sp]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]]). subst sp_ptr.
+  destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
@@ -170,20 +170,27 @@ Proof.
     assert (Hts_load' : Mem.load Mint64 m' sb (uso + 48) = Some ts_ptr).
     { assert (He1 : Mem.load Mint64 m1 sb (uso + 48) = Some ts_ptr). { apply (load_after_store_other m m1 sb (uso + 16) (uso + 48) new_sp_v ts_ptr Hstore1 Hts_load). right. lia. }
       apply (load_after_store_other m1 m' sb (uso + 8) (uso + 48) result_v ts_ptr Hstore2 He1). right. lia. }
-    split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]].
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
     { subst le'. rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence). exact Hle_s. }
     { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
     { exists result_v. split. exact Haccu_load'. simpl.
       unfold result_v. rewrite tagged_bool_result.
       unfold le_bool. rewrite (tagged_le_arith a b Ha_range Hb_range).
       destruct (Z.leb a b); constructor. }
-    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)). split; [| split; [| split; [| split; [| split]]]]. exact Hsp_load'. reflexivity.
+    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
+      assert (Hsp_rep' : Ptrofs.unsigned sp_ofs + 8 + 8 * Z.of_nat (length v_tl) < Ptrofs.modulus).
+      { rewrite Hstk in Hsp_rep. simpl in Hsp_rep. lia. }
+      assert (Hadd : Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 8)) = Ptrofs.unsigned sp_ofs + 8). { apply ptrofs_add_unsigned; lia. }
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]. exact Hsp_load'. reflexivity.
       { simpl.
         eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
         + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
           * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         + exact Hstore2. + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-      exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp. }
+      exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp.
+        simpl Machine.stack. rewrite Hadd. lia.
+        simpl Machine.stack. rewrite Hadd. exact Hsp_rep'.
+        simpl Machine.stack. intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. rewrite Hadd in Hofs'. rewrite Hstk. simpl. lia. }
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }
     { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq.
@@ -192,5 +199,8 @@ Proof.
         + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
       exact Hgb_ne_sb. }
-    { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. } }
+    { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable -- permission preserved *)
+    { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
