@@ -160,7 +160,7 @@ Qed.
 (* ================================================================== *)
 
 Definition appterm1_step_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (m : mem) (s : Machine.state) (ard : abs_rel_data) (sp_b : block) : Prop :=
   let hm := ar_heap_map ard in
   let sb := ar_sptr_block ard in
   let cb := ar_code_base_block ard in
@@ -173,6 +173,7 @@ Definition appterm1_step_pre
         Mem.load Mptr m accu_b (Ptrofs.unsigned accu_ofs) = Some (Vptr code_b code_ofs) /\
         accu_b <> sb /\
         accu_b <> cb /\
+        accu_b <> sp_b /\
         (exists new_co,
           code_ofs = Ptrofs.add new_co (Ptrofs.repr (target_pc * sizeof_code_t)) /\
           code_b = cb).
@@ -214,6 +215,30 @@ Proof.
     apply Ptrofs.eqm_unsigned_repr.
 Qed.
 
+Local Lemma ptrofs_add_zero : forall ofs,
+  Ptrofs.add ofs (Ptrofs.repr 0) = ofs.
+Proof.
+  intros. rewrite Ptrofs.add_zero. reflexivity.
+Qed.
+
+Local Lemma stack_repr_skipn : forall n hm m stk sp_b sp_ofs,
+  stack_repr hm m stk sp_b sp_ofs ->
+  stack_repr hm m (skipn n stk) sp_b
+    (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat n * 8))).
+Proof.
+  induction n as [| n' IH]; intros hm0 m0 stk0 sp_b0 sp_ofs0 Hsr.
+  - simpl. rewrite ptrofs_add_zero. exact Hsr.
+  - destruct stk0 as [| v vs].
+    + simpl. constructor.
+    + simpl skipn. inversion Hsr; subst.
+      specialize (IH hm0 m0 vs sp_b0 (Ptrofs.add sp_ofs0 (Ptrofs.repr 8)) H5).
+      replace (Ptrofs.add sp_ofs0 (Ptrofs.repr (Z.of_nat (S n') * 8)))
+        with (Ptrofs.add (Ptrofs.add sp_ofs0 (Ptrofs.repr 8)) (Ptrofs.repr (Z.of_nat n' * 8))).
+      { exact IH. }
+      { rewrite Ptrofs.add_assoc. f_equal.
+        rewrite ptrofs_add_repr. f_equal. lia. }
+Qed.
+
 (* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
@@ -243,7 +268,10 @@ Theorem verify_APPTERM1_correct : forall slotsize,
          (* slotsize <= length of stack *)
          (slotsize <= Datatypes.length (Machine.stack s))%nat /\
          (* Closure code pointer is loadable *)
-         appterm1_step_pre m s ard)
+         (forall sp_b sp_ofs,
+            Mem.load Mint64 m (ar_sptr_block ard)
+              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+            appterm1_step_pre m s ard sp_b))
       (fun msg s =>
          s.(Machine.stack) = nil \/
          get_code_ptr_s s s.(Machine.accu) = None)
@@ -287,8 +315,6 @@ Proof.
   set (hm := ar_heap_map ard) in *.
   set (cb := ar_code_base_block ard) in *.
   set (co := ar_code_base_ofs ard) in *.
-  set (uso := Ptrofs.unsigned so) in *.
-
   destruct Hstep_pre as (Hcode_load & Hslot_bound & Hsp_fits & Hsp_new_ge8 & Hslot_ge1 & Hslot_le_len & Hacpl).
 
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
@@ -301,16 +327,19 @@ Proof.
   set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
 
   (* Get closure code pointer info *)
-  unfold appterm1_step_pre in Hacpl.
-  destruct (Hacpl target_pc Hgcp accu_v Haccu_repr)
+  pose proof (Hacpl sp_b sp_ofs Hsp_load) as Hacpl'.
+  unfold appterm1_step_pre in Hacpl'.
+  destruct (Hacpl' target_pc Hgcp accu_v Haccu_repr)
     as [accu_b [accu_ofs [code_b [code_ofs
         [Haccu_is_ptr [Hcode_ptr_load [Haccu_ne_sb [Haccu_ne_cb
-        [new_co [Hcode_ofs_eq Hcode_b_eq]]]]]]]]]].
+        [Haccu_ne_spb [new_co [Hcode_ofs_eq Hcode_b_eq]]]]]]]]]]].
+  clear Hacpl Hacpl'.
   subst accu_v code_b.
 
   (* Extract stack head for reading arg1 *)
   rewrite Hstk in Hstack_repr.
-  inversion Hstack_repr as [| ? ? ? ? cv_arg1 Hload_sp0 Hval_repr_arg1 Hstack_repr_rest].
+  inversion Hstack_repr as [| xv xvs xb xofs cv_arg1 Hload_sp0 Hval_repr_arg1 Hstack_repr_rest].
+  subst xv xvs xb xofs.
 
   (* sp fits *)
   assert (Hsp_fits_concrete : Ptrofs.unsigned sp_ofs + Z.of_nat slotsize * 8 < Ptrofs.modulus).
@@ -335,11 +364,11 @@ Proof.
     f_equal.
     rewrite Ptrofs.add_unsigned.
     apply Ptrofs.eqm_samerepr.
+    replace ((Z.of_nat slotsize - 1) * 8)%Z with (Z.of_nat slotsize * 8 + (- 8))%Z by lia.
     apply Ptrofs.eqm_add.
     - apply Ptrofs.eqm_sym. apply Ptrofs.eqm_unsigned_repr.
     - unfold Ptrofs.neg.
       rewrite (Ptrofs.unsigned_repr 8) by (pose proof ptrofs_max_unsigned_large; lia).
-      replace ((Z.of_nat slotsize - 1) * 8)%Z with (Z.of_nat slotsize * 8 + (- 8))%Z by lia.
       apply Ptrofs.eqm_sym. apply Ptrofs.eqm_unsigned_repr.
   }
 
@@ -371,35 +400,37 @@ Proof.
   destruct (Mem.valid_access_store m1 Mint64 sp_b (Ptrofs.unsigned new_sp_ofs) cv_arg1) as [m2 Hstore2].
   { split.
     - intros ofs' Hofs'. apply Hstack_perm_m1.
-      simpl length. rewrite Hnew_sp_unsigned. unfold size_chunk in Hofs'. lia.
+      simpl length. rewrite Hnew_sp_unsigned in Hofs'. unfold size_chunk in Hofs'.
+        simpl length in Hslot_le_len.
+        pose proof (Ptrofs.unsigned_range sp_ofs). lia.
     - exact Hstore2_align. }
 
   (* Store 3: pc field at (sb, uso+0) <- new_pc_v *)
-  assert (Hsb_writable_m2 : Mem.range_perm m2 sb uso (uso + 56) Cur Writable).
+  assert (Hsb_writable_m2 : Mem.range_perm m2 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
   { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. apply Hsb_writable_m1. exact Hofs'. }
-  assert (Hpc_load_m2 : Mem.load Mint64 m2 sb (uso + 0) =
+  assert (Hpc_load_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 0) =
             Some (Vptr cb pc_ofs)).
-  { assert (Hpc_m1 : Mem.load Mint64 m1 sb (uso + 0) =
+  { assert (Hpc_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 0) =
               Some (Vptr cb pc_ofs)).
-    { apply (load_after_store_other m m1 sb (uso + 16) (uso + 0)
+    { apply (load_after_store_other m m1 sb (Ptrofs.unsigned so + 16) (Ptrofs.unsigned so + 0)
                (Vptr sp_b new_sp_ofs) (Vptr cb pc_ofs)
                Hstore1 Hpc_load). left. lia. }
     erewrite Mem.load_store_other. exact Hpc_m1. exact Hstore2.
-    left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
+    left. intro Heq; apply Hsp_ne_sb; auto. }
   destruct (store_succeeds_sb m2 sb so 0 (Vptr cb pc_ofs)
               Hsb_writable_m2 Hpc_load_m2 ltac:(lia) ltac:(lia) new_pc_v)
     as [m3 Hstore3].
   pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore3 Hsb_writable_m2) as Hsb_writable_m3.
 
   (* Store 4: env field at (sb, uso+24) <- new_env_v *)
-  assert (Henv_load_m3 : Mem.load Mint64 m3 sb (uso + 24) = Some env_v).
-  { assert (Henv_m1 : Mem.load Mint64 m1 sb (uso + 24) = Some env_v).
-    { apply (load_after_store_other m m1 sb (uso + 16) (uso + 24)
+  assert (Henv_load_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 24) = Some env_v).
+  { assert (Henv_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 24) = Some env_v).
+    { apply (load_after_store_other m m1 sb (Ptrofs.unsigned so + 16) (Ptrofs.unsigned so + 24)
                (Vptr sp_b new_sp_ofs) env_v Hstore1 Henv_load). right. lia. }
-    assert (Henv_m2 : Mem.load Mint64 m2 sb (uso + 24) = Some env_v).
+    assert (Henv_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 24) = Some env_v).
     { erewrite Mem.load_store_other. exact Henv_m1. exact Hstore2.
-      left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
-    apply (load_after_store_other m2 m3 sb (uso + 0) (uso + 24)
+      left. intro Heq; apply Hsp_ne_sb; auto. }
+    apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 0) (Ptrofs.unsigned so + 24)
              new_pc_v env_v Hstore3 Henv_m2). right. lia. }
   destruct (store_succeeds_sb m3 sb so 24 env_v
               Hsb_writable_m3 Henv_load_m3 ltac:(lia) ltac:(lia) new_env_v)
@@ -407,22 +438,22 @@ Proof.
 
   (* Intermediate load facts *)
   (* accu in m1 *)
-  assert (Haccu_load_m1 : Mem.load Mint64 m1 sb (uso + 8) =
+  assert (Haccu_load_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 8) =
             Some (Vptr accu_b accu_ofs)).
-  { apply (load_after_store_other m m1 sb (uso + 16) (uso + 8)
+  { apply (load_after_store_other m m1 sb (Ptrofs.unsigned so + 16) (Ptrofs.unsigned so + 8)
              (Vptr sp_b new_sp_ofs) (Vptr accu_b accu_ofs)
              Hstore1 Haccu_load). left. lia. }
 
   (* sp load in m1 *)
-  assert (Hsp_load_m1 : Mem.load Mint64 m1 sb (uso + 16) =
+  assert (Hsp_load_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 16) =
             Some (Vptr sp_b new_sp_ofs)).
-  { pose proof (load_after_store_same m m1 sb (uso + 16) (Vptr sp_b new_sp_ofs) Hstore1) as Htmp.
+  { pose proof (load_after_store_same m m1 sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs) Hstore1) as Htmp.
     simpl Val.load_result in Htmp. rewrite ptr64_true in Htmp. exact Htmp. }
 
   (* arg1 load in m1: stack data survives store to sb (different block) *)
   assert (Hload_sp0_m1 : Mem.load Mint64 m1 sp_b (Ptrofs.unsigned sp_ofs) = Some cv_arg1).
   { erewrite Mem.load_store_other. exact Hload_sp0. exact Hstore1.
-    left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
+    left. intro Heq; apply Hsp_ne_sb; auto. }
 
   (* code buffer in m1 *)
   assert (Hcode_load_m1 : Mem.load Mint32 m1 cb (Ptrofs.unsigned pc_ofs) =
@@ -431,10 +462,10 @@ Proof.
     left. exact Hcb_ne. }
 
   (* accu in m2: sp_b is the store block, sb is where accu is *)
-  assert (Haccu_load_m2 : Mem.load Mint64 m2 sb (uso + 8) =
+  assert (Haccu_load_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 8) =
             Some (Vptr accu_b accu_ofs)).
   { erewrite Mem.load_store_other. exact Haccu_load_m1. exact Hstore2.
-    left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
+    left. intro Heq; apply Hsp_ne_sb; auto. }
 
   (* code pointer from closure in m1: accu_b <> sb *)
   assert (Hcode_ptr_load_m1 : Mem.load Mptr m1 accu_b (Ptrofs.unsigned accu_ofs) =
@@ -442,36 +473,16 @@ Proof.
   { erewrite Mem.load_store_other. exact Hcode_ptr_load. exact Hstore1.
     left. exact Haccu_ne_sb. }
 
-  (* code pointer from closure in m2 *)
+  (* code pointer from closure in m2: accu_b <> sp_b from precondition *)
   assert (Hcode_ptr_load_m2 : Mem.load Mptr m2 accu_b (Ptrofs.unsigned accu_ofs) =
             Some (Vptr cb code_ofs)).
   { erewrite Mem.load_store_other. exact Hcode_ptr_load_m1. exact Hstore2.
-    destruct (Pos.eq_dec accu_b sp_b) as [Heq | Hne].
-    - subst accu_b. right.
-      (* accu_ofs is where the closure starts, new_sp_ofs is the new sp.
-         The store is 8 bytes at new_sp_ofs. The load is Mptr (=8 bytes) at accu_ofs.
-         These are in the same block sp_b. We need to show they don't overlap.
-         We cannot prove this in general without more info. We add this condition
-         to the precondition via accu_b <> sp_b being part of it.
-         Actually, we already have accu_b <> sb. But accu_b could be sp_b.
-         The stack block and the heap blocks are typically different.
-         Actually the precondition says accu_b <> sb and accu_b <> cb.
-         We don't have accu_b <> sp_b directly. But in practice the closure
-         pointer will be on the heap, not on the stack. Let's just use a
-         left disjunction if accu_b <> sp_b.
-         Hmm, we need to handle this. Let's just assume they're in different blocks. *)
-      exfalso.
-      (* sp_b <> cb and accu_b = sp_b, so accu_b <> cb, which we already have.
-         But we need accu_b <> sp_b for this case. We don't have it. *)
-      (* This shows we need accu_b <> sp_b in the precondition. *)
-      exact (Haccu_ne_sb Heq).  (* Actually Haccu_ne_sb says accu_b <> sb, not sp_b *)
-    - left. exact Hne.
-  }
+    left. exact Haccu_ne_spb. }
 
   (* accu in m3 *)
-  assert (Haccu_load_m3 : Mem.load Mint64 m3 sb (uso + 8) =
+  assert (Haccu_load_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 8) =
             Some (Vptr accu_b accu_ofs)).
-  { apply (load_after_store_other m2 m3 sb (uso + 0) (uso + 8)
+  { apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 0) (Ptrofs.unsigned so + 8)
              new_pc_v (Vptr accu_b accu_ofs)
              Hstore3 Haccu_load_m2). right. lia. }
 
@@ -497,7 +508,7 @@ Proof.
     apply (eval_stmt_to_exec clight_ge 30).
     eval_cbn.
 
-    (* === S1: Sset _t'8 (s->sp) === *)
+    (* S1: Sset _t'8 (s->sp) *)
     rewrite Hle_s; eval_cbn.
     rewrite Hco; eval_cbn.
     rewrite Hsp_offset; eval_cbn.
@@ -505,107 +516,69 @@ Proof.
     rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
     rewrite Hsp_load; eval_cbn.
 
-    (* === S2: Sset _arg1 = *(_t'8 + 0) === *)
+    (* S2: Sset _arg1 = deref(_t'8 + 0) *)
     rewrite PTree.gss; eval_cbn.
     rewrite sem_add_sp_0; eval_cbn.
     rewrite Hload_sp0; eval_cbn.
 
-    (* === S3: Sset _t'5 (s->sp) -- read sp again, in original memory === *)
+    (* S3: Sset _t'5 (s->sp) *)
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
-    rewrite Hsp_offset; eval_cbn.
     rewrite Mptr_Mint64; eval_cbn.
     rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
     rewrite Hsp_load; eval_cbn.
 
-    (* === S4: Sset _t'6 (s->pc) === *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    (* S4: Sset _t'6 (s->pc) *)
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
     rewrite Hpc_offset; eval_cbn.
     rewrite Mptr_Mint64; eval_cbn.
     rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
     rewrite Hpc_load; eval_cbn.
 
-    (* === S5: Sset _t'7 = *_t'6 -- read slotsize from code buffer === *)
+    (* S5: Sset _t'7 = deref(_t'6) *)
     rewrite PTree.gss; eval_cbn.
     rewrite Hcode_load; eval_cbn.
 
-    (* === S6: Sassign s->sp = _t'5 + _t'7 - 1 === *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    (* S6: Sassign s->sp = _t'5 + _t'7 - 1 *)
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
-    rewrite Hsp_offset; eval_cbn.
-    rewrite Mptr_Mint64; eval_cbn.
-
-    (* Rvalue: ((_t'5 + _t'7) - 1) *)
-    (* First: _t'5 + _t'7 *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gss; eval_cbn.   (* _t'5 *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gss; eval_cbn.   (* _t'7 *)
+    rewrite PTree.gss; eval_cbn.
+    rewrite PTree.gss; eval_cbn.
+    fold slotsize_int.
     rewrite (sem_add_sp_n sp_b sp_ofs slotsize_int m); eval_cbn.
     fold sp_plus_slot.
-    (* Then: - 1 *)
     rewrite (sem_sub_sp_int sp_b sp_plus_slot (Int.repr 1) m); eval_cbn.
     fold new_sp_ofs.
     rewrite sem_cast_ptr_to_ptr; eval_cbn.
-    (* Store sp *)
+    rewrite Mptr_Mint64; eval_cbn.
     rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
     rewrite Hstore1; eval_cbn.
 
-    (* === S7: Sset _t'4 (s->sp) -- read NEW sp === *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    (* S7: Sset _t'4 (s->sp) -- read NEW sp in m1 *)
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
-    rewrite Hsp_offset; eval_cbn.
     rewrite Mptr_Mint64; eval_cbn.
     rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
     rewrite Hsp_load_m1; eval_cbn.
 
-    (* === S8: Sassign *(_t'4 + 0) = _arg1 -- write arg1 to new sp[0] === *)
+    (* S8: Sassign deref(_t'4 + 0) = _arg1 *)
     rewrite PTree.gss; eval_cbn.
     rewrite sem_add_sp_0; eval_cbn.
-    (* Rvalue: _arg1 *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite PTree.gss; eval_cbn.
-    (* sem_cast for the store *)
     rewrite (sem_cast_long_val_repr _ _ _ _ Hval_repr_arg1); eval_cbn.
-    (* Store to stack *)
-    rewrite Hnew_sp_unsigned.
     rewrite Hstore2; eval_cbn.
 
-    (* === S9: Sset _t'2 (s->accu) === *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    (* S9: Sset _t'2 (s->accu) in m2 *)
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
     rewrite Haccu_offset; eval_cbn.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     rewrite Haccu_load_m2; eval_cbn.
 
-    (* === S10: Sset _t'3 = *((code_t**)_t'2 + 0) -- code pointer from closure === *)
+    (* S10: Sset _t'3 = deref(cast(_t'2) + 0) -- code pointer *)
     rewrite PTree.gss; eval_cbn.
     rewrite sem_cast_long_to_ptptint_vptr; eval_cbn.
     rewrite (sem_add_ptptint_0 accu_b accu_ofs m2); eval_cbn.
@@ -613,51 +586,25 @@ Proof.
     rewrite Mptr_Mint64 in Hcode_ptr_load_m2.
     rewrite Hcode_ptr_load_m2; eval_cbn.
 
-    (* === S11: Sassign s->pc = _t'3 === *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    (* S11: Sassign s->pc = _t'3 *)
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
-    rewrite Hpc_offset; eval_cbn.
-    rewrite Mptr_Mint64; eval_cbn.
     rewrite PTree.gss; eval_cbn.
     rewrite sem_cast_ptr_tint_to_ptr_tint; eval_cbn.
     rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
+    rewrite Mptr_Mint64; eval_cbn.
     fold new_pc_v.
     rewrite Hstore3; eval_cbn.
 
-    (* === S12: Sset _t'1 (s->accu) -- read accu in m3 === *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    (* S12: Sset _t'1 (s->accu) -- read accu in m3 *)
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
-    rewrite Haccu_offset; eval_cbn.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     rewrite Haccu_load_m3; eval_cbn.
 
-    (* === S13: Sassign s->env = _t'1 === *)
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
-    rewrite PTree.gso by (compute; congruence).
+    (* S13: Sassign s->env = _t'1 *)
+    repeat (rewrite PTree.gso by (compute; congruence)).
     rewrite Hle_s; eval_cbn.
-    rewrite Hco; eval_cbn.
     rewrite Henv_offset; eval_cbn.
     rewrite PTree.gss; eval_cbn.
     rewrite (sem_cast_long_vptr accu_b accu_ofs m3); eval_cbn.
@@ -665,7 +612,7 @@ Proof.
     fold new_env_v.
     rewrite Hstore4; eval_cbn.
 
-    (* === Sreturn 0 === *)
+    (* Sreturn 0 *)
     subst le9 le8 le7 le6 le5 le4 le3 le2 le1. reflexivity.
   }
 
@@ -673,6 +620,7 @@ Proof.
   (* Part 2: abs_rel for post-state                                    *)
   (* ================================================================ *)
   {
+    set (uso := Ptrofs.unsigned so) in *.
     set (ard' := mk_abs_rel sb so hm cb new_co
                    (ar_global_block ard) (ar_global_ofs ard)
                    (ar_stack_block ard) (ar_stack_base_ofs ard)
@@ -683,88 +631,88 @@ Proof.
     (* Loads in final memory m4 *)
 
     (* pc at uso+0: written in store3, survived store4 at +24 *)
-    assert (Hpc_load4 : Mem.load Mint64 m4 sb (uso + 0) = Some new_pc_v).
-    { assert (Hpc_m3 : Mem.load Mint64 m3 sb (uso + 0) = Some new_pc_v).
-      { pose proof (load_after_store_same m2 m3 sb (uso + 0) new_pc_v Hstore3) as Htmp.
+    assert (Hpc_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 0) = Some new_pc_v).
+    { assert (Hpc_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 0) = Some new_pc_v).
+      { pose proof (load_after_store_same m2 m3 sb (Ptrofs.unsigned so + 0) new_pc_v Hstore3) as Htmp.
         unfold new_pc_v in Htmp. simpl Val.load_result in Htmp. rewrite ptr64_true in Htmp.
         exact Htmp. }
-      apply (load_after_store_other m3 m4 sb (uso + 24) (uso + 0)
+      apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so + 24) (Ptrofs.unsigned so + 0)
                new_env_v new_pc_v Hstore4 Hpc_m3). left. lia. }
 
     (* accu at uso+8: unaffected by all stores *)
-    assert (Haccu_load4 : Mem.load Mint64 m4 sb (uso + 8) =
+    assert (Haccu_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 8) =
               Some (Vptr accu_b accu_ofs)).
-    { apply (load_after_store_other m3 m4 sb (uso + 24) (uso + 8)
+    { apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so + 24) (Ptrofs.unsigned so + 8)
                new_env_v (Vptr accu_b accu_ofs) Hstore4 Haccu_load_m3). left. lia. }
 
     (* sp at uso+16: written in store1, survived stores 2,3,4 *)
-    assert (Hsp_load4 : Mem.load Mint64 m4 sb (uso + 16) =
+    assert (Hsp_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 16) =
               Some (Vptr sp_b new_sp_ofs)).
-    { assert (Hsp_m2 : Mem.load Mint64 m2 sb (uso + 16) =
+    { assert (Hsp_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 16) =
                 Some (Vptr sp_b new_sp_ofs)).
       { erewrite Mem.load_store_other. exact Hsp_load_m1. exact Hstore2.
-        left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
-      assert (Hsp_m3 : Mem.load Mint64 m3 sb (uso + 16) =
+        left. intro Heq; apply Hsp_ne_sb; auto. }
+      assert (Hsp_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 16) =
                 Some (Vptr sp_b new_sp_ofs)).
-      { apply (load_after_store_other m2 m3 sb (uso + 0) (uso + 16)
+      { apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 0) (Ptrofs.unsigned so + 16)
                  new_pc_v (Vptr sp_b new_sp_ofs) Hstore3 Hsp_m2). right. lia. }
-      apply (load_after_store_other m3 m4 sb (uso + 24) (uso + 16)
+      apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so + 24) (Ptrofs.unsigned so + 16)
                new_env_v (Vptr sp_b new_sp_ofs) Hstore4 Hsp_m3). left. lia. }
 
     (* env at uso+24: written in store4 *)
-    assert (Henv_load4 : Mem.load Mint64 m4 sb (uso + 24) = Some new_env_v).
-    { pose proof (load_after_store_same m3 m4 sb (uso + 24) new_env_v Hstore4) as Htmp.
+    assert (Henv_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 24) = Some new_env_v).
+    { pose proof (load_after_store_same m3 m4 sb (Ptrofs.unsigned so + 24) new_env_v Hstore4) as Htmp.
       unfold new_env_v in Htmp. simpl Val.load_result in Htmp. rewrite ptr64_true in Htmp.
       exact Htmp. }
 
     (* extra_args at uso+32: unaffected by all stores *)
-    assert (Hextra_load4 : Mem.load Mint64 m4 sb (uso + 32) =
+    assert (Hextra_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 32) =
               Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
-    { assert (Hextra_m1 : Mem.load Mint64 m1 sb (uso + 32) =
+    { assert (Hextra_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 32) =
                 Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
-      { apply (load_after_store_other m m1 sb (uso + 16) (uso + 32)
+      { apply (load_after_store_other m m1 sb (Ptrofs.unsigned so + 16) (Ptrofs.unsigned so + 32)
                  (Vptr sp_b new_sp_ofs) _ Hstore1 Hextra_load). right. lia. }
-      assert (Hextra_m2 : Mem.load Mint64 m2 sb (uso + 32) =
+      assert (Hextra_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 32) =
                 Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
       { erewrite Mem.load_store_other. exact Hextra_m1. exact Hstore2.
-        left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
-      assert (Hextra_m3 : Mem.load Mint64 m3 sb (uso + 32) =
+        left. intro Heq; apply Hsp_ne_sb; auto. }
+      assert (Hextra_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 32) =
                 Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
-      { apply (load_after_store_other m2 m3 sb (uso + 0) (uso + 32)
+      { apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 0) (Ptrofs.unsigned so + 32)
                  new_pc_v _ Hstore3 Hextra_m2). right. lia. }
-      apply (load_after_store_other m3 m4 sb (uso + 24) (uso + 32)
+      apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so + 24) (Ptrofs.unsigned so + 32)
                new_env_v _ Hstore4 Hextra_m3). right. lia. }
 
     (* global_data at uso+40 *)
-    assert (Hgd_load4 : Mem.load Mint64 m4 sb (uso + 40) = Some gd_ptr).
-    { assert (Hgd_m1 : Mem.load Mint64 m1 sb (uso + 40) = Some gd_ptr).
-      { apply (load_after_store_other m m1 sb (uso + 16) (uso + 40)
+    assert (Hgd_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 40) = Some gd_ptr).
+    { assert (Hgd_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 40) = Some gd_ptr).
+      { apply (load_after_store_other m m1 sb (Ptrofs.unsigned so + 16) (Ptrofs.unsigned so + 40)
                  (Vptr sp_b new_sp_ofs) gd_ptr Hstore1 Hgd_load). right. lia. }
-      assert (Hgd_m2 : Mem.load Mint64 m2 sb (uso + 40) = Some gd_ptr).
+      assert (Hgd_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 40) = Some gd_ptr).
       { erewrite Mem.load_store_other. exact Hgd_m1. exact Hstore2.
-        left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
-      assert (Hgd_m3 : Mem.load Mint64 m3 sb (uso + 40) = Some gd_ptr).
-      { apply (load_after_store_other m2 m3 sb (uso + 0) (uso + 40)
+        left. intro Heq; apply Hsp_ne_sb; auto. }
+      assert (Hgd_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 40) = Some gd_ptr).
+      { apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 0) (Ptrofs.unsigned so + 40)
                  new_pc_v gd_ptr Hstore3 Hgd_m2). right. lia. }
-      apply (load_after_store_other m3 m4 sb (uso + 24) (uso + 40)
+      apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so + 24) (Ptrofs.unsigned so + 40)
                new_env_v gd_ptr Hstore4 Hgd_m3). right. lia. }
 
     (* trap_sp at uso+48 *)
-    assert (Hts_load4 : Mem.load Mint64 m4 sb (uso + 48) = Some ts_ptr).
-    { assert (Hts_m1 : Mem.load Mint64 m1 sb (uso + 48) = Some ts_ptr).
-      { apply (load_after_store_other m m1 sb (uso + 16) (uso + 48)
+    assert (Hts_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 48) = Some ts_ptr).
+    { assert (Hts_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 48) = Some ts_ptr).
+      { apply (load_after_store_other m m1 sb (Ptrofs.unsigned so + 16) (Ptrofs.unsigned so + 48)
                  (Vptr sp_b new_sp_ofs) ts_ptr Hstore1 Hts_load). right. lia. }
-      assert (Hts_m2 : Mem.load Mint64 m2 sb (uso + 48) = Some ts_ptr).
+      assert (Hts_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 48) = Some ts_ptr).
       { erewrite Mem.load_store_other. exact Hts_m1. exact Hstore2.
-        left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
-      assert (Hts_m3 : Mem.load Mint64 m3 sb (uso + 48) = Some ts_ptr).
-      { apply (load_after_store_other m2 m3 sb (uso + 0) (uso + 48)
+        left. intro Heq; apply Hsp_ne_sb; auto. }
+      assert (Hts_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 48) = Some ts_ptr).
+      { apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 0) (Ptrofs.unsigned so + 48)
                  new_pc_v ts_ptr Hstore3 Hts_m2). right. lia. }
-      apply (load_after_store_other m3 m4 sb (uso + 24) (uso + 48)
+      apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so + 24) (Ptrofs.unsigned so + 48)
                new_env_v ts_ptr Hstore4 Hts_m3). right. lia. }
 
     (* sb_writable in m4 *)
-    assert (Hsb_writable_m4 : Mem.range_perm m4 sb uso (uso + 56) Cur Writable).
+    assert (Hsb_writable_m4 : Mem.range_perm m4 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
     { intros ofs' Hofs'.
       eapply Mem.perm_store_1. exact Hstore4.
       eapply Mem.perm_store_1. exact Hstore3.
@@ -791,9 +739,9 @@ Proof.
           exact Htmp. }
         assert (Harg1_m3 : Mem.load Mint64 m3 sp_b (Ptrofs.unsigned new_sp_ofs) = Some cv_arg1).
         { erewrite Mem.load_store_other. exact Harg1_m2. exact Hstore3.
-          left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)). }
+          left. intro Heq; apply Hsp_ne_sb; auto. }
         erewrite Mem.load_store_other. exact Harg1_m3. exact Hstore4.
-        left. intro Heq. subst sp_b. exact (Hsp_ne_sb (eq_refl _)).
+        left. intro Heq; apply Hsp_ne_sb; auto.
       - exact Hval_repr_arg1.
       - (* Tail: skipn slotsize (arg1 :: stk_rest) at new_sp_ofs + 8
            = sp_ofs + slotsize * 8
@@ -803,24 +751,35 @@ Proof.
           with (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat slotsize * 8))).
         2: { rewrite Hnew_sp_eq.
              rewrite Ptrofs.add_assoc.
-             rewrite ptrofs_add_repr. f_equal. lia. }
-        (* Now use stack_repr_skipn *)
+             f_equal. rewrite ptrofs_add_repr. f_equal.
+             change (Z.of_nat slotsize) with (Z.of_nat slotsize). lia. }
+        (* The skipn'd tail starts at sp_ofs + slotsize*8.
+           First apply stack_repr_skipn on the original stack to get
+           stack_repr hm m (skipn slotsize (stack s)) sp_b (sp_ofs + slotsize*8).
+           Then show this survives stores 1-4. *)
         rewrite <- Hstk.
-        apply (stack_repr_store_other_block hm m3 m4 _ sp_b _ sb (uso + 24) new_env_v).
-        + apply (stack_repr_store_other_block hm m2 m3 _ sp_b _ sb (uso + 0) new_pc_v).
+        apply (stack_repr_store_other_block hm m3 m4 _ sp_b _ sb (Ptrofs.unsigned so + 24) new_env_v).
+        + apply (stack_repr_store_other_block hm m2 m3 _ sp_b _ sb (Ptrofs.unsigned so + 0) new_pc_v).
           * apply (stack_repr_store_same_block_lower hm m1 m2 _ sp_b _
                      (Ptrofs.unsigned new_sp_ofs) cv_arg1).
-            { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 16) (Vptr sp_b new_sp_ofs)).
-              { rewrite Hstk. exact Hstack_repr. }
+            { apply (stack_repr_store_other_block hm m m1 _ sp_b
+                       (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat slotsize * 8)))
+                       sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)).
+              { exact (stack_repr_skipn slotsize hm m (Machine.stack s) sp_b sp_ofs
+                         (eq_ind _ (fun stk => stack_repr hm m stk sp_b sp_ofs) Hstack_repr _ (eq_sym Hstk))). }
               { exact Hstore1. }
-              { intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). } }
+              { intro Heq; apply Hsp_ne_sb; auto. } }
             { exact Hstore2. }
-            { rewrite Hnew_sp_unsigned. lia. }
-            { rewrite Hstk. simpl length. lia. }
+            { rewrite Hnew_sp_unsigned.
+              rewrite ptrofs_add_unsigned; [lia | lia | lia]. }
+            { rewrite length_skipn. rewrite Hstk. simpl length.
+              rewrite ptrofs_add_unsigned; [| lia | lia].
+              rewrite Nat2Z.inj_sub by exact Hslot_le_len.
+              rewrite Hstk in Hsp_rep. simpl length in Hsp_rep. lia. }
           * exact Hstore3.
-          * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+          * intro Heq; apply Hsp_ne_sb; auto.
         + exact Hstore4.
-        + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        + intro Heq; apply Hsp_ne_sb; auto.
     }
 
     (* le9 ! _s *)
@@ -856,27 +815,28 @@ Proof.
       - exact Hcb_ne_sp.
       - (* sp_ge8 *) rewrite Hnew_sp_unsigned. lia.
       - (* sp_rep *)
-        simpl stack. simpl length.
+        simpl stack.
+        change (Datatypes.length (arg1 :: skipn slotsize (arg1 :: stk_rest)))
+          with (S (Datatypes.length (skipn slotsize (arg1 :: stk_rest)))).
+        rewrite length_skipn. simpl length.
         rewrite Hnew_sp_unsigned.
-        rewrite length_skipn. rewrite Hstk. simpl length.
-        destruct (Nat.le_gt_cases slotsize (S (length stk_rest))) as [Hle | Hgt].
-        + rewrite (Nat2Z.inj_sub _ _ Hle). lia.
-        + assert (slotsize <= S (length stk_rest))%nat as Hle' by lia.
-          rewrite (Nat2Z.inj_sub _ _ Hle'). lia.
+        rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
+        simpl length in Hslot_le_len. zify. lia.
       - (* sp_writable *)
-        simpl stack. simpl length.
-        rewrite Hnew_sp_unsigned.
+        simpl stack. simpl length. rewrite Hnew_sp_unsigned.
+        change (Datatypes.length (arg1 :: skipn slotsize (arg1 :: stk_rest)))
+          with (S (Datatypes.length (skipn slotsize (arg1 :: stk_rest)))).
+        rewrite length_skipn. simpl length.
         replace (Ptrofs.unsigned sp_ofs + (Z.of_nat slotsize - 1) * 8 +
-                  8 * Z.of_nat (S (length (skipn slotsize (arg1 :: stk_rest)))))
-          with (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (arg1 :: stk_rest))).
-        2: { rewrite length_skipn. rewrite Hstk. simpl length.
-             rewrite (Nat2Z.inj_sub _ _ Hslot_le_len). lia. }
+                  8 * Z.of_nat (S (S (Datatypes.length stk_rest) - slotsize)))
+          with (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (S (Datatypes.length stk_rest))).
+        2: { simpl length in Hslot_le_len. zify. lia. }
         intros ofs' Hofs'.
         eapply Mem.perm_store_1. exact Hstore4.
         eapply Mem.perm_store_1. exact Hstore3.
         eapply Mem.perm_store_1. exact Hstore2.
         eapply Mem.perm_store_1. exact Hstore1.
-        apply Hsp_writable. rewrite Hstk. exact Hofs'.
+        apply Hsp_writable. rewrite Hstk. simpl length. exact Hofs'.
       - rewrite Hnew_sp_unsigned.
         apply Z.divide_add_r. exact Hsp_align. exists (Z.of_nat slotsize - 1). simpl. lia. }
 
@@ -895,20 +855,20 @@ Proof.
       - simpl.
         apply (global_repr_store_other_block hm m3 m4 _
                  (ar_global_block ard) (ar_global_ofs ard)
-                 sb (uso + 24) new_env_v).
+                 sb (Ptrofs.unsigned so + 24) new_env_v).
         + apply (global_repr_store_other_block hm m2 m3 _
                    (ar_global_block ard) (ar_global_ofs ard)
-                   sb (uso + 0) new_pc_v).
+                   sb (Ptrofs.unsigned so + 0) new_pc_v).
           * apply (global_repr_store_other_block hm m1 m2 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sp_b (Ptrofs.unsigned new_sp_ofs) cv_arg1).
             { apply (global_repr_store_other_block hm m m1 _
                        (ar_global_block ard) (ar_global_ofs ard)
-                       sb (uso + 16) (Vptr sp_b new_sp_ofs)).
+                       sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)).
               exact Hglobal_repr. exact Hstore1.
               intro Heq2; exact (global_block_ne_sptr ard (eq_sym Heq2)). }
             { exact Hstore2. }
-            { intro Heq2; exact (Hsp_ne_gb (eq_sym Heq2)). }
+            { intro Heq2; exact (Hsp_ne_gb Heq2). }
           * exact Hstore3.
           * intro Heq2; exact (global_block_ne_sptr ard (eq_sym Heq2)).
         + exact Hstore4.

@@ -48,6 +48,7 @@ Require Import instruct_handlers.
 Require Import InstructSpec.
 Require Import StepToBigstep.
 Require Import HandlerLemmas.
+From RecordUpdate Require Import RecordUpdate.
 
 Local Notation ge := clight_ge.
 Local Notation exec := (exec_stmt function_entry1 clight_ge).
@@ -134,6 +135,39 @@ Definition getdynmet_while :=
             (Sset _li (Etempvar _mi tint)))))).
 
 (* ================================================================== *)
+(* Helper: the scan function used by handle_GETDYNMET always returns   *)
+(* a state that is s with only pc and accu updated.                    *)
+(* ================================================================== *)
+
+Fixpoint getdynmet_scan (s : Machine.state) (pc' : Z) (tag : value)
+    (remaining : list value) : step_result :=
+  match remaining with
+  | [] => Error "GETDYNMET: method not found"
+  | _ :: [] => Error "GETDYNMET: method not found"
+  | method_fn :: tag_val :: rest =>
+    if value_eqb tag_val tag then
+      Step (s <| Machine.pc := pc' |> <| Machine.accu := method_fn |>)
+    else getdynmet_scan s pc' tag rest
+  end.
+
+Lemma getdynmet_scan_shape : forall s pc' tag l s0,
+  getdynmet_scan s pc' tag l = Step s0 ->
+  s0 = mk_state pc' (Machine.accu s0) (Machine.stack s) (Machine.env s)
+         (Machine.extra_args s) (Machine.global s) (Machine.trap_sp s)
+         (Machine.hp s) (Machine.next_addr s).
+Proof.
+  intros s0 pc' tag.
+  fix IH 1.
+  intros [|r1 [|r2 l'']] s1 Hscan_eq.
+  - simpl in Hscan_eq. discriminate.
+  - simpl in Hscan_eq. discriminate.
+  - simpl in Hscan_eq.
+    destruct (value_eqb r2 tag) eqn:Heqb.
+    + injection Hscan_eq as Hinj. subst s1. simpl. reflexivity.
+    + exact (IH l'' s1 Hscan_eq).
+Qed.
+
+(* ================================================================== *)
 (* Precondition                                                        *)
 (*                                                                      *)
 (* Asserts the heap loads succeed and that the binary search loop      *)
@@ -147,10 +181,15 @@ Definition getdynmet_pre
   let so := ar_sptr_ofs ard in
   forall obj rest,
     s.(Machine.stack) = obj :: rest ->
+    forall method_fn,
+    handle_GETDYNMET (Machine.pc s) s =
+      Step (mk_state (Machine.pc s) method_fn (Machine.stack s)
+              (Machine.env s) (Machine.extra_args s) (Machine.global s)
+              (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s)) ->
     forall obj_cv,
       val_repr hm obj obj_cv ->
       exists obj_b obj_ofs meths_v meths_b meths_ofs hi_v
-             final_li meth_cv method_fn,
+             final_li meth_cv,
         (* sp[0] is a pointer (object) *)
         obj_cv = Vptr obj_b obj_ofs /\
         (* object[0] = class table pointer *)
@@ -165,8 +204,8 @@ Definition getdynmet_pre
           le_pre ! _li = Some (Vint (Int.repr 3)) ->
           le_pre ! _hi = Some (Vint (Int.repr (Int64.unsigned hi_v))) ->
           exists le_post,
-            exec getdynmet_while
-              e le_pre m E0 le_post m Out_normal /\
+            exec e le_pre m getdynmet_while
+              E0 le_post m Out_normal /\
             le_post ! _li = Some (Vint final_li) /\
             le_post ! _meths = Some (Vptr meths_b meths_ofs) /\
             le_post ! _s = Some (Vptr sb so)) /\
@@ -176,9 +215,7 @@ Definition getdynmet_pre
             (Ptrofs.mul (Ptrofs.repr 8)
               (ptrofs_of_int Signed (Int.sub final_li (Int.repr 1))))))
           = Some meth_cv /\
-        val_repr hm method_fn meth_cv /\
-        (* The Rocq scan produces the same method *)
-        handle_GETDYNMET (Machine.pc s) s = Step (Machine.set_accu method_fn (Machine.set_pc (Machine.pc s) s)).
+        val_repr hm method_fn meth_cv.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -258,32 +295,36 @@ Proof.
     rewrite Hstk in Hstack_repr.
     inversion Hstack_repr as [| ? ? ? ? cv_obj Hload_sp0 Hval_repr_obj Hstack_repr_rest].
 
-    (* Reconstruct the handle_GETDYNMET call result *)
-    assert (Hhdm : handle_GETDYNMET (pc s) s = Step s').
-    { unfold handle_GETDYNMET. rewrite Hstk. rewrite Hclass. fold tag fields scan.
-      exact Hscan. }
-
-    (* From s' we need to extract what method_fn is *)
-    (* s' is the step result -- need the method_fn *)
-    (* The scan returns Step (s <|pc:=pc s|> <|accu:=method_fn|>)
-       for some method_fn.  s' equals that. *)
-
-    (* Use precondition with method_fn extracted from s' *)
-    (* We need to know what method_fn is. s' = s <|pc:=pc s|> <|accu:=method_fn|>
-       so method_fn = accu s'. *)
+    (* s' came from scan, which returns s <|pc:=pc s|><|accu:=method_fn|>.
+       We need to connect s' to the mk_state form required by the precondition. *)
     set (method_fn := Machine.accu s').
 
-    destruct (Hstep_pre obj stk_tl method_fn Hstk)
+    (* Prove the scan result has the right structure *)
+    assert (Hscan_gd : getdynmet_scan s (Machine.pc s) tag (skipn 2 fields) = Step s').
+    { (* scan l = getdynmet_scan s (pc s) tag l, by structural recursion *)
+      transitivity (scan (skipn 2 fields)).
+      2: exact Hscan.
+      symmetry. subst scan. generalize (skipn 2 fields) as l. fix IH 1.
+      intros [|r1 [|r2 l'']].
+      - simpl. reflexivity.
+      - simpl. reflexivity.
+      - simpl. destruct (value_eqb r2 tag); [reflexivity | exact (IH l'')]. }
+
+    pose proof (getdynmet_scan_shape s (Machine.pc s) tag _ _ Hscan_gd) as Hs'_fields.
+
+    assert (Hhdm_mk : handle_GETDYNMET (Machine.pc s) s =
+              Step (mk_state (Machine.pc s) method_fn (Machine.stack s)
+                     (Machine.env s) (Machine.extra_args s) (Machine.global s)
+                     (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s))).
+    { unfold handle_GETDYNMET. rewrite Hstk. rewrite Hclass.
+      fold tag fields scan. rewrite Hscan. f_equal.
+      unfold method_fn. rewrite <- Hstk. exact Hs'_fields. }
+
+    destruct (Hstep_pre obj stk_tl Hstk method_fn Hhdm_mk cv_obj Hval_repr_obj)
       as (obj_b & obj_ofs & meths_v & meths_b & meths_ofs & hi_v &
           final_li & meth_cv &
           Hobj_is_ptr & Hobj_load & Hmeths_is_ptr & Hhi_load &
           Hloop_exec & Hmeth_load & Hmeth_repr).
-    { (* Prove handle_GETDYNMET = Step with method_fn *)
-      unfold method_fn. rewrite <- Hhdm. f_equal.
-      (* s' has accu = method_fn = accu s', which is circular.
-         We need to show handle_GETDYNMET pc s s = Step (s <|...|> <|accu:=accu s'|>).
-         This is just Hhdm. *)
-      reflexivity. }
     subst cv_obj meths_v.
 
     (* Composite environment facts *)
@@ -397,29 +438,25 @@ Proof.
       (* Build steps 1-5 using the evaluator *)
       (* Steps 1-5 result: le1 as defined above, m unchanged, Out_normal *)
 
-      (* We prove steps 1-5 computationally *)
-      assert (Hsteps_1_5 :
-        exec (Ssequence
+      (* We prove steps 1-3 computationally (setup: t5, t6, meths) *)
+      (* le_setup = PTree.set _meths ... (PTree.set _t'6 ... (PTree.set _t'5 ... le)) *)
+      set (le_setup := PTree.set _meths (Vptr meths_b meths_ofs)
+                         (PTree.set _t'6 (Vptr obj_b obj_ofs)
+                           (PTree.set _t'5 (Vptr sp_b sp_ofs) le))).
+      assert (Hsteps_1_3 :
+        exec e le m
+             (Ssequence
+                (Sset _t'5
+                  (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                 (Ssequence
-                  (Sset _t'5
-                    (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                  (Ssequence
-                    (Sset _t'6
-                      (Ederef (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
-                        (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                    (Sset _meths
-                      (Ederef (Ebinop Oadd (Ecast (Etempvar _t'6 tlong) (tptr tlong))
-                        (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
-                (Ssequence
-                  (Sset _li (Econst_int (Int.repr 3) tint))
-                  (Ssequence
-                    (Ssequence
-                      (Sset _t'4
-                        (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-                          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                      (Sset _hi (Ecast (Etempvar _t'4 tlong) tint))))))
-             e le m E0 le1 m Out_normal).
+                  (Sset _t'6
+                    (Ederef (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+                      (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+                  (Sset _meths
+                    (Ederef (Ebinop Oadd (Ecast (Etempvar _t'6 tlong) (tptr tlong))
+                      (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
+             E0 le_setup m Out_normal).
       {
         apply (eval_stmt_to_exec clight_ge 20).
         eval_cbn.
@@ -443,21 +480,7 @@ Proof.
         rewrite (sem_add_sp_0 obj_b obj_ofs m); eval_cbn.
         rewrite Hobj_load; eval_cbn.
 
-        (* S4: Sset _li (Econst_int 3) *)
-        (* This just sets _li to Vint 3, eval_cbn handles it *)
-
-        (* S5a: Sset _t'4 (deref (cast(meths) + 0)) = meths[0] = count *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gss; eval_cbn.
-        rewrite (sem_cast_long_to_ptr_vptr meths_b meths_ofs m); eval_cbn.
-        rewrite (sem_add_sp_0 meths_b meths_ofs m); eval_cbn.
-        rewrite Hhi_load; eval_cbn.
-
-        (* S5b: Sset _hi (cast t4 tint) *)
-        rewrite PTree.gss; eval_cbn.
-        rewrite (sem_cast_long_to_int_vlong hi_v m); eval_cbn.
-
-        subst le1. reflexivity.
+        subst le_setup. reflexivity.
       }
 
       (* Steps 6-8: while loop + final load + accu store *)
@@ -466,7 +489,8 @@ Proof.
       (* Step 8: Sassign s->accu = t'1 *)
 
       assert (Hsteps_6_8 :
-        exec (Ssequence
+        exec e le1 m
+             (Ssequence
                 getdynmet_while
                 (Ssequence
                   (Sset _t'1
@@ -477,53 +501,66 @@ Proof.
                     (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                       (Tstruct _interp_state noattr)) _accu tlong)
                     (Etempvar _t'1 tlong))))
-             e le1 m E0 le' m' Out_normal).
+             E0 le' m' Out_normal).
       {
         (* Compose: loop then final load + store *)
-        eapply exec_Sseq_1.
+        apply exec_Sseq_1 with (t1 := E0) (le1 := le_post) (m1 := m) (t2 := E0).
         - exact Hloop.
         - (* After loop: load method and store to accu *)
-          eapply exec_Sseq_1.
+          apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m) (t2 := E0).
           + (* Sset _t'1 = meths[li-1] *)
-            eapply exec_Sset.
+            apply exec_Sset.
             (* Evaluate: deref(cast(meths) + (li - 1)) *)
-            eapply eval_Ederef.
-            eapply eval_Ebinop.
-            * (* cast(meths) *)
-              eapply eval_Ecast.
-              eapply eval_Etempvar. exact Hpost_meths.
-              simpl. unfold sem_cast. simpl classify_cast. reflexivity.
-            * (* li - 1 *)
+            eapply eval_Elvalue.
+            * eapply eval_Ederef.
               eapply eval_Ebinop.
-              eapply eval_Etempvar. exact Hpost_li.
-              eapply eval_Econst_int.
-              simpl. rewrite (sem_sub_int_int final_li (Int.repr 1) m). reflexivity.
-            * simpl. rewrite (sem_add_ptr_int_idx meths_b meths_ofs (Int.sub final_li (Int.repr 1)) m).
-              reflexivity.
-            * simpl. exact Hmeth_load.
+              { (* cast(meths) *)
+                eapply eval_Ecast.
+                eapply eval_Etempvar. exact Hpost_meths.
+                simpl. unfold sem_cast. simpl classify_cast. reflexivity. }
+              { (* li - 1 *)
+                eapply eval_Ebinop.
+                eapply eval_Etempvar. exact Hpost_li.
+                eapply eval_Econst_int.
+                unfold sem_binary_operation, sem_sub.
+                change (classify_sub tint tint) with sub_default.
+                unfold sem_binarith.
+                change (classify_binarith tint tint) with (bin_case_i Signed).
+                simpl. reflexivity. }
+              { unfold sem_binary_operation, sem_add.
+                simpl classify_add. unfold sem_add_ptr_int. simpl. reflexivity. }
+            * (* deref_loc *)
+              apply deref_loc_value with (chunk := Mint64).
+              { simpl. reflexivity. }
+              { simpl. exact Hmeth_load. }
           + (* Sassign s->accu = t'1 *)
-            eapply exec_Sseq_2.
-            eapply exec_Sassign.
+            apply exec_Sassign with (loc := sb)
+                    (ofs := Ptrofs.add so (Ptrofs.repr 8))
+                    (bf := Full) (v2 := meth_cv) (v := meth_cv).
             * (* Lvalue: s->accu *)
               eapply eval_Efield_struct.
-              eapply eval_Ederef.
-              eapply eval_Etempvar. subst le'. rewrite PTree.gso by (compute; congruence). exact Hpost_s.
-              simpl. reflexivity.
-              simpl. exact Hco.
-              simpl. exact Haccu_offset.
-              simpl. reflexivity.
+              { eapply eval_Elvalue.
+                - eapply eval_Ederef.
+                  eapply eval_Etempvar. subst le'. rewrite PTree.gso by (compute; congruence). exact Hpost_s.
+                - apply deref_loc_copy. simpl. reflexivity. }
+              { reflexivity. }
+              { exact Hco. }
+              { exact Haccu_offset. }
             * (* Rvalue: _t'1 *)
               eapply eval_Etempvar.
               subst le'. rewrite PTree.gss. reflexivity.
             * (* sem_cast *)
-              simpl. rewrite (sem_cast_long_val_repr _ _ _ _ Hmeth_repr). reflexivity.
-            * (* Store *)
-              simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)). exact Hstore.
+              rewrite (sem_cast_long_val_repr _ _ _ _ Hmeth_repr). reflexivity.
+            * (* assign_loc / Store *)
+              apply assign_loc_value with (chunk := Mint64).
+              { reflexivity. }
+              { simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)). exact Hstore. }
       }
 
       (* Combine steps 1-5 with 6-8 *)
       assert (Hsteps_all_pre_return :
-        exec (Ssequence
+        exec e le m
+             (Ssequence
                 (Ssequence
                   (Sset _t'5
                     (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
@@ -554,43 +591,54 @@ Proof.
                           (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                             (Tstruct _interp_state noattr)) _accu tlong)
                           (Etempvar _t'1 tlong)))))))
-             e le m E0 le' m' Out_normal).
+             E0 le' m' Out_normal).
       {
-        eapply exec_Sseq_1.
-        - exact Hsteps_1_5.
+        set (le_li := PTree.set _li (Vint (Int.repr 3)) le_setup).
+        set (le_t4 := PTree.set _t'4 (Vlong hi_v) le_li).
+
+        apply exec_Sseq_1 with (t1 := E0) (le1 := le_setup) (m1 := m) (t2 := E0).
+        - exact Hsteps_1_3.
         - (* Ssequence: Sset _li then rest *)
-          eapply exec_Sseq_1.
-          + eapply exec_Sset.
-            eapply eval_Econst_int.
+          apply exec_Sseq_1 with (t1 := E0) (le1 := le_li) (m1 := m) (t2 := E0).
+          + apply exec_Sset.
+            apply eval_Econst_int.
           + (* Ssequence: (Sset _t'4; Sset _hi) then (while; load; store) *)
-            eapply exec_Sseq_1.
+            apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m) (t2 := E0).
             * (* Sset _t'4 and Sset _hi *)
-              eapply exec_Sseq_1.
-              { eapply exec_Sset.
-                eapply eval_Ederef.
-                eapply eval_Ebinop.
-                - eapply eval_Ecast.
-                  eapply eval_Etempvar.
-                  subst le1.
-                  rewrite PTree.gso by (compute; congruence).
-                  rewrite PTree.gso by (compute; congruence).
-                  rewrite PTree.gso by (compute; congruence).
-                  rewrite PTree.gss. reflexivity.
-                  simpl. rewrite (sem_cast_long_to_ptr_vptr meths_b meths_ofs m). reflexivity.
-                - eapply eval_Econst_int.
-                - simpl. rewrite (sem_add_sp_0 meths_b meths_ofs m). reflexivity.
-                - simpl. exact Hhi_load. }
-              { eapply exec_Sset.
+              apply exec_Sseq_1 with (t1 := E0) (le1 := le_t4) (m1 := m) (t2 := E0).
+              { apply exec_Sset.
+                eapply eval_Elvalue.
+                - eapply eval_Ederef.
+                  eapply eval_Ebinop.
+                  + eapply eval_Ecast.
+                    eapply eval_Etempvar.
+                    subst le_li le_setup.
+                    rewrite PTree.gso by (compute; congruence).
+                    rewrite PTree.gss. reflexivity.
+                    unfold sem_cast. simpl classify_cast. reflexivity.
+                  + eapply eval_Econst_int.
+                  + unfold sem_binary_operation, sem_add. simpl classify_add.
+                    unfold sem_add_ptr_int. simpl. reflexivity.
+                - apply deref_loc_value with (chunk := Mint64).
+                  + reflexivity.
+                  + simpl.
+                    change (Ptrofs.of_ints (Int.repr 0)) with Ptrofs.zero.
+                    rewrite Ptrofs.mul_zero, Ptrofs.add_zero.
+                    exact Hhi_load. }
+              { apply exec_Sset.
                 eapply eval_Ecast.
                 eapply eval_Etempvar.
-                rewrite PTree.gss. reflexivity.
-                simpl. rewrite (sem_cast_long_to_int_vlong hi_v m). reflexivity. }
+                subst le_t4. rewrite PTree.gss. reflexivity.
+                unfold sem_cast. simpl classify_cast.
+                rewrite ptr64_true. reflexivity. }
             * exact Hsteps_6_8.
       }
 
       (* Finally, wrap with Sreturn *)
-      eapply exec_Sseq_2.
-      exact Hsteps_all_pre_return.
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m') (t2 := E0).
+      - exact Hsteps_all_pre_return.
+      - apply exec_Sreturn_some.
+        apply eval_Econst_int.
     }
 
     (* ============================================================== *)
@@ -599,6 +647,20 @@ Proof.
     {
       exists ard.
       set (uso := Ptrofs.unsigned so) in *.
+
+      (* Derive field equalities from Hs'_fields *)
+      assert (Hpc_s' : Machine.pc s' = Machine.pc s).
+      { rewrite Hs'_fields. reflexivity. }
+      assert (Hstack_s' : Machine.stack s' = Machine.stack s).
+      { rewrite Hs'_fields. reflexivity. }
+      assert (Henv_s' : Machine.env s' = Machine.env s).
+      { rewrite Hs'_fields. reflexivity. }
+      assert (Hextra_s' : Machine.extra_args s' = Machine.extra_args s).
+      { rewrite Hs'_fields. reflexivity. }
+      assert (Hglobal_s' : Machine.global s' = Machine.global s).
+      { rewrite Hs'_fields. reflexivity. }
+      assert (Htrap_s' : Machine.trap_sp s' = Machine.trap_sp s).
+      { rewrite Hs'_fields. reflexivity. }
 
       assert (Hpc_load' : Mem.load Mint64 m' sb (uso + 0) = Some pc_ptr).
       { apply (load_after_store_other m m' sb (uso + 8) (uso + 0) meth_cv pc_ptr
@@ -644,19 +706,19 @@ Proof.
       (* 2. pc field -- unchanged (GETDYNMET does not modify pc in post-state: pc s' = pc s) *)
       { exists pc_ptr. split.
         - exact Hpc_load'.
-        - simpl. exact Hpc_rel. }
+        - rewrite Hpc_s'. exact Hpc_rel. }
 
       (* 3. accu field -- updated to method *)
       { exists meth_cv. split.
         - exact Haccu_load'.
-        - simpl. exact Hmeth_repr. }
+        - unfold method_fn. exact Hmeth_repr. }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load'.
         - reflexivity.
-        - simpl. rewrite Hstk.
+        - rewrite Hstack_s'. rewrite Hstk.
           apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) meth_cv
                    Hstack_repr Hstore).
           intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -664,23 +726,24 @@ Proof.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp.
         - exact Hsp_ge8.
-        - exact Hsp_rep.
-        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsp_writable. exact Hofs'.
+        - rewrite Hstack_s'. exact Hsp_rep.
+        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore.
+          apply Hsp_writable. rewrite Hstack_s' in Hofs'. exact Hofs'.
         - exact Hsp_align. }
 
       (* 5. env field -- unchanged *)
       { exists env_v. split.
         - exact Henv_load'.
-        - simpl. exact Henv_repr. }
+        - rewrite Henv_s'. exact Henv_repr. }
 
       (* 6. extra_args field -- unchanged *)
-      { simpl. exact Hextra_load'. }
+      { rewrite Hextra_s'. exact Hextra_load'. }
 
       (* 7. global_data field -- unchanged *)
       { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load'.
-        - simpl. exact Hgd_eq.
-        - simpl.
+        - exact Hgd_eq.
+        - rewrite Hglobal_s'.
           apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) meth_cv
                    Hglobal_repr Hstore).
           intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
@@ -689,7 +752,7 @@ Proof.
       (* 8. trap_sp field -- unchanged *)
       { exists ts_ptr. split.
         - exact Hts_load'.
-        - simpl. exact Htrap_rel. }
+        - rewrite Htrap_s'. exact Htrap_rel. }
 
       (* 9. sb_writable -- permission preserved *)
       { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsb_writable. exact Hofs'. }
@@ -699,7 +762,17 @@ Proof.
   (* ================================================================ *)
   (* Error case *)
   (* ================================================================ *)
-  - trivial.
-  - trivial.
-  - trivial.
+  all: trivial.
+  (* Remaining goals are False: Halt and CCall_request impossible from scan *)
+  all: (let H := fresh "Habs" in
+        exfalso;
+        match goal with
+        | [ Hscan : _ = ?c |- _ ] =>
+          clear - Hscan; subst scan;
+          set (rf := skipn 2 fields) in Hscan; clearbody rf;
+          revert Hscan; revert rf;
+          fix IHrf 1; intros [| ? [| ? ?]]; simpl; try (intro; discriminate);
+          destruct (value_eqb _ tag); try (intro; discriminate);
+          intro; exact (IHrf _ Hscan)
+        end).
 Qed.

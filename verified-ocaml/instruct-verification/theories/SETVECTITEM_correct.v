@@ -81,19 +81,25 @@ Local Lemma ptrofs_mul_8_of_int64 : forall idx,
   = Ptrofs.repr (idx * 8).
 Proof.
   intros idx Hge Hlt.
-  pose proof Ptrofs.half_modulus_modulus.
+  change Ptrofs.half_modulus with (2^63)%Z in Hlt.
   unfold Ptrofs.of_int64.
-  rewrite Int64.unsigned_repr
-    by (change Int64.max_unsigned with Ptrofs.max_unsigned; unfold Ptrofs.max_unsigned; lia).
+  rewrite Int64.unsigned_repr.
+  2: { change Int64.max_unsigned with (2^64 - 1)%Z. lia. }
   unfold Ptrofs.mul.
-  rewrite (Ptrofs.unsigned_repr 8) by (unfold Ptrofs.max_unsigned; lia).
-  rewrite Ptrofs.unsigned_repr by (unfold Ptrofs.max_unsigned; lia).
+  rewrite (Ptrofs.unsigned_repr 8).
+  2: { change Ptrofs.max_unsigned with (2^64 - 1)%Z. lia. }
+  rewrite Ptrofs.unsigned_repr.
+  2: { change Ptrofs.max_unsigned with (2^64 - 1)%Z. lia. }
   f_equal. lia.
 Qed.
 
 Local Lemma load_result_vlong : forall n,
   Val.load_result Mint64 (Vlong n) = Vlong n.
 Proof. intros. reflexivity. Qed.
+
+Local Lemma load_result_vptr : forall b ofs,
+  Val.load_result Mint64 (Vptr b ofs) = Vptr b ofs.
+Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
 (* ================================================================== *)
 (* caml_modify definitions                                             *)
@@ -109,9 +115,6 @@ Local Definition cm_fundef : Ctypes.fundef function :=
 (* ================================================================== *)
 (* Precondition                                                        *)
 (* ================================================================== *)
-
-(* Following SETGLOBAL's pattern: the precondition provides all facts
-   about the caml_modify call's effect on memory. *)
 
 Definition setvectitem_pre
     (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
@@ -137,6 +140,10 @@ Definition setvectitem_pre
        exists hb hofs,
          accu_v = Vptr hb hofs /\
          hb <> sb /\ hb <> gb /\
+         (* hb is also separate from any sp_b obtained from abs_rel *)
+         (forall sp_b sp_ofs,
+            Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
+            hb <> sp_b) /\
          exists m_cm,
            external_call cm_ef ge
              (Vptr hb (Ptrofs.add hofs (Ptrofs.repr (idx * 8)))
@@ -150,7 +157,7 @@ Definition setvectitem_pre
            (forall ofs v_old v_new,
               Mem.load Mint64 m sb ofs = Some v_old ->
               exists m', Mem.store Mint64 m_cm sb ofs v_new = Some m') /\
-           (* Loads on other blocks (not hb) preserved *)
+           (* Loads on blocks other than hb are preserved *)
            (forall b ofs v,
               b <> hb ->
               Mem.load Mint64 m b ofs = Some v ->
@@ -158,7 +165,9 @@ Definition setvectitem_pre
            (* Permission preservation *)
            (forall b ofs k p,
               Mem.valid_block m b -> Mem.perm m b ofs k p ->
-              Mem.perm m_cm b ofs k p)).
+              Mem.perm m_cm b ofs k p) /\
+           (* global_repr preserved *)
+           (global_repr hm m_cm (Machine.global s) gb (ar_global_ofs ard))).
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -194,7 +203,7 @@ Proof.
   destruct (heap_lookup (Machine.hp s) addr) as [[tag fields]|] eqn:Hlookup.
   2: { exact I. }
   destruct (set_nth fields (Z.to_nat idx) newval) as [new_fields|] eqn:Hset.
-  2: { simpl. exact Hset. }
+  2: { simpl. reflexivity. }
 
   (* ================================================================ *)
   (* Step case                                                         *)
@@ -205,6 +214,10 @@ Proof.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
+  set (gb := ar_global_block ard) in *.
+  set (go := ar_global_ofs ard) in *.
 
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
@@ -219,6 +232,7 @@ Proof.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
+  pose proof (code_block_ne_sptr ard) as Hcb_ne. fold sb cb in Hcb_ne.
 
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
@@ -227,18 +241,14 @@ Proof.
   inversion Hstack_repr as [| ? ? ? ? cv_idx Hload_sp0 Hval_repr_idx Hstack_repr1].
   subst.
   inversion Hstack_repr1 as [| ? ? ? ? newval_cv Hload_sp1 Hval_repr_newval Hstack_repr_rest].
-  revert Hgd_load Hgd_eq Hglobal_repr Hgb_ne_sb.
-  subst. intros Hgd_load Hgd_eq Hglobal_repr Hgb_ne_sb.
+  revert Hgd_load Hglobal_repr Hgb_ne_sb.
+  subst. intros Hgd_load Hglobal_repr Hgb_ne_sb.
 
   (* Stack bounds *)
   assert (Hsp_mod_orig : Ptrofs.unsigned sp_ofs + 16 < Ptrofs.modulus).
   { rewrite Hstk in Hsp_rep. simpl length in Hsp_rep. lia. }
   assert (Hsp_rep_tail : Ptrofs.unsigned sp_ofs + 16 + 8 * Z.of_nat (length rest) < Ptrofs.modulus).
   { rewrite Hstk in Hsp_rep. simpl length in Hsp_rep. lia. }
-  assert (Hsp_writable_tail : Mem.range_perm m sp_b 0
-            (Ptrofs.unsigned sp_ofs + 16 + 8 * Z.of_nat (length rest)) Cur Writable).
-  { intros ofs' Hofs'. apply Hsp_writable. rewrite Hstk. simpl length.
-    pose proof (Nat2Z.is_nonneg (length rest)). lia. }
 
   (* Stack head is Val_int idx *)
   inversion Hval_repr_idx; subst cv_idx.
@@ -251,9 +261,13 @@ Proof.
 
   destruct (Hcm_pre accu_v newval_cv Haccu_repr Hval_repr_newval)
     as (hb & hofs & Haccu_is_ptr & Hhb_ne_sb & Hhb_ne_gb &
-        m_cm & Hext_call & Hcm_sb_loads & Hcm_sb_stores &
-        Hcm_other_loads & Hcm_perm_preserved).
+        Hhb_ne_sp & m_cm & Hext_call & Hcm_sb_loads & Hcm_sb_stores &
+        Hcm_other_loads & Hcm_perm_preserved & Hcm_global_repr).
   subst accu_v.
+
+  (* sp_b <> hb from precondition *)
+  assert (Hsp_ne_hb : sp_b <> hb).
+  { intro Heq. apply (Hhb_ne_sp sp_b sp_ofs Hsp_load). exact (eq_sym Heq). }
 
   (* Arithmetic *)
   assert (Hshr_idx : Int64.shr (Int64.repr (idx * 2 + 1)) (Int64.repr 1) = Int64.repr idx).
@@ -262,116 +276,23 @@ Proof.
                         = Ptrofs.repr (idx * 8)).
   { apply ptrofs_mul_8_of_int64; assumption. }
 
-  (* sp_b <> hb: stack block and heap block are separate.
-     We derive this: sp_b <> sb (from abs_rel), and hb <> sb.
-     But sp_b and hb could be equal. We need sp_b <> hb to
-     preserve stack loads through the caml_modify call.
-     Since Hcm_other_loads preserves loads on blocks <> hb,
-     and the stack lives on sp_b, we need sp_b <> hb.
-     This is a consequence of the fact that the caml_modify
-     only writes to the heap block hb, and the stack block sp_b
-     is a separate allocation. This must be provided by the caller. *)
-  (* Actually, we CAN derive sp_b <> hb from existing facts:
-     Look at it from the other direction. If sp_b = hb, then
-     Hload_sp0 : Mem.load m sp_b ... = Some (Vlong ...)
-     and after caml_modify writing to hb, this load would change.
-     But the abs_rel says stack loads hold in the pre-state.
-     We need them to hold in m_cm. With sp_b = hb, the
-     caml_modify might clobber them.
-
-     The cleanest approach: the precondition gives hb <> sb and hb <> gb.
-     We also have sp_b <> sb. But we need sp_b <> hb.
-     Since this is a real invariant in the system, we need the caller
-     to provide it. Let me use a different approach: thread the
-     stack_repr through using the fact that Hcm_other_loads preserves
-     loads on blocks <> hb, AND require sp_b <> hb in the precondition.
-
-     Actually, the simplest fix: strengthen the caml_modify spec to also
-     include that the target block hb is different from the sp block.
-     We already provide sp_b from the abs_rel destructuring.
-     Let me add hb <> sp_b to the precondition output by having
-     the caml_modify spec take sp_b as a parameter. But the sp_b is
-     universally quantified inside the existential for sp...
-
-     The cleanest approach: the precondition provides loads on
-     non-sb blocks are preserved. Then since sp_b <> sb, we're fine.
-     But that doesn't work either because caml_modify writes to hb
-     which is neither sb nor sp_b, but we need loads on sp_b preserved.
-
-     OK let me just add an explicit hypothesis that hb is separate from
-     the sp block obtained from abs_rel's sp pointer. The precondition
-     already knows about the abs_rel data, so it can see the sp block
-     indirectly through the load on sb at offset +16. *)
-
-  (* We need sp_b <> hb. Add to precondition output. For now,
-     use the fact that the precondition gives "loads on blocks <> hb preserved".
-     This means Hcm_other_loads : forall b, b <> hb -> loads preserved.
-     We instantiate with b := sp_b and need sp_b <> hb. *)
-
-  (* The real invariant: heap map values (blocks from hm) are disjoint
-     from the stack pointer block sp_b. Since hb comes from hm (via val_repr
-     of accu = Val_ptr addr, so hm addr = Some (hb, hofs)), we need the
-     invariant that heap blocks are disjoint from sp_b.
-
-     For now we note that the precondition's Hcm_other_loads gives us
-     exactly what we need IF sp_b <> hb. Since we cannot derive this
-     from the existing abs_rel alone, we need to get it from the
-     precondition. The precondition is designed to provide this. *)
-
-  (* Looking at this more carefully: the Hcm_other_loads says
-     "forall b, b <> hb -> loads on b are preserved from m to m_cm".
-     We have sp_b from abs_rel. We need sp_b <> hb.
-
-     Since the hb block comes from val_repr of accu (a heap pointer),
-     and sp_b comes from the sp field of the struct, these are
-     allocated separately. In practice, the precondition caller
-     can verify this.
-
-     Rather than complicating the precondition further, let me use the
-     weaker approach: make the precondition directly provide
-     stack_repr preservation through caml_modify.
-
-     Actually the simplest: just add one more conjunct to the caml_modify
-     output: forall sp_b sp_ofs stk, stack_repr hm m stk sp_b sp_ofs ->
-     sp_b <> hb.
-
-     But that's circular -- the hb is existentially quantified inside.
-
-     Let me just restructure the precondition to expose hb earlier
-     and include hb <> sp_b as a direct output. The sp_b is extracted
-     from the abs_rel struct. But we can't name it in the precondition
-     since it comes from abs_rel existentials...
-
-     FINAL APPROACH: Look at SETGLOBAL again. It uses:
-     Hcm_other_loads : forall sp_b, sp_b <> gb -> loads on sp_b preserved.
-     And then it has Hsp_ne_gb from abs_rel.
-
-     For SETVECTITEM, the write is to hb (not gb). So:
-     Hcm_other_loads : forall b, b <> hb -> loads on b preserved.
-     And we need sp_b <> hb.
-
-     Looking at abs_rel: sp_b <> sb, sp_b <> gb, cb <> sp_b.
-     None of these give sp_b <> hb.
-
-     The solution: add an explicit requirement in the precondition
-     result that "forall sp_b sp_ofs, Mem.load Mint64 m sb (Ptrofs.unsigned so + 16)
-     = Some (Vptr sp_b sp_ofs) -> hb <> sp_b". This is checkable by
-     the precondition provider since they know both hb and the sp block. *)
-
   (* ============================================================ *)
   (* Stores                                                        *)
   (* ============================================================ *)
 
+  (* Store 1: accu field at (sb, uso+8) <- val_unit *)
   set (unit_v := Vlong (Int64.repr 1)).
   destruct (Hcm_sb_stores (Ptrofs.unsigned so + 8) (Vptr hb hofs) unit_v Haccu_load)
     as [m1 Hstore1].
 
   set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 16))).
 
+  (* sp load in m_cm *)
   assert (Hsp_load_m_cm : Mem.load Mint64 m_cm sb (Ptrofs.unsigned so + 16) =
             Some (Vptr sp_b sp_ofs)).
   { apply Hcm_sb_loads. exact Hsp_load. }
 
+  (* sp load in m1 *)
   assert (Hsp_load_m1 : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 16) =
             Some (Vptr sp_b sp_ofs)).
   { apply (load_after_store_other m_cm m1 sb
@@ -379,6 +300,7 @@ Proof.
              unit_v (Vptr sp_b sp_ofs)
              Hstore1 Hsp_load_m_cm). right. lia. }
 
+  (* sb_writable in m_cm *)
   assert (Hsb_writable_m_cm :
     Mem.range_perm m_cm sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
   { intros ofs' Hofs'.
@@ -387,41 +309,552 @@ Proof.
     - apply Hsb_writable. exact Hofs'. }
   pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore1 Hsb_writable_m_cm) as Hsb_writable_m1.
 
+  (* Store 2: sp field at (sb, uso+16) <- new_sp_v *)
   destruct (store_succeeds_sb m1 sb so 16 (Vptr sp_b sp_ofs)
              Hsb_writable_m1 Hsp_load_m1 ltac:(lia) ltac:(lia) new_sp_v)
     as [m2 Hstore2].
 
-  (* sp_b <> hb: the Hcm_other_loads gives us load preservation on
-     blocks <> hb. We need sp_b <> hb. Since sp_b <> sb (from abs_rel)
-     and hb <> sb (from precondition), we can't directly derive sp_b <> hb.
-     However, the fact that Hload_sp1 loads from sp_b successfully in m,
-     and Hcm_other_loads preserves loads on blocks <> hb, means that
-     IF sp_b = hb, we could still have the load succeed or fail
-     depending on whether the caml_modify changed that location.
-     In practice sp_b <> hb because the stack and heap are separate
-     memory regions.
+  (* ============================================================ *)
+  (* Field loads threaded through stores                           *)
+  (* ============================================================ *)
+  set (uso := Ptrofs.unsigned so) in *.
 
-     Since we can only prove this with an additional invariant or
-     precondition, let's assert it and derive it from the stack_repr
-     and caml_modify structure. Actually, we can get it indirectly:
-     the caml_modify writes to hb at offset hofs + idx*8.
-     The stack loads are at sp_ofs, sp_ofs+8, etc.
-     Even if sp_b = hb, the offsets might be different.
-     But we can't prove offset disjointness easily.
+  (* pc load in m_cm, m1, m2 *)
+  assert (Hpc_load_m_cm : Mem.load Mint64 m_cm sb (uso + 0) = Some pc_ptr).
+  { apply Hcm_sb_loads. exact Hpc_load. }
+  assert (Hpc_load_m1 : Mem.load Mint64 m1 sb (uso + 0) = Some pc_ptr).
+  { apply (load_after_store_other m_cm m1 sb (uso + 8) (uso + 0)
+             unit_v pc_ptr Hstore1 Hpc_load_m_cm). left. lia. }
+  assert (Hpc_load_m2 : Mem.load Mint64 m2 sb (uso + 0) = Some pc_ptr).
+  { apply (load_after_store_other m1 m2 sb (uso + 16) (uso + 0)
+             new_sp_v pc_ptr Hstore2 Hpc_load_m1). left. lia. }
 
-     The correct approach is: the precondition should ALSO provide
-     that the stack loads survive caml_modify. Let me simplify by
-     modifying the precondition to directly include hb separations
-     from the stack block sp_b (given by the caller who knows both). *)
+  (* accu load in m1 = unit_v (written by store1) *)
+  assert (Haccu_m1 : Mem.load Mint64 m1 sb (uso + 8) = Some unit_v).
+  { pose proof (load_after_store_same m_cm m1 sb (uso + 8) unit_v Hstore1) as Htmp.
+    subst unit_v. rewrite load_result_vlong in Htmp. exact Htmp. }
+  assert (Haccu_m2 : Mem.load Mint64 m2 sb (uso + 8) = Some unit_v).
+  { apply (load_after_store_other m1 m2 sb (uso + 16) (uso + 8)
+             new_sp_v unit_v Hstore2 Haccu_m1). left. lia. }
 
-  (* Actually: the simplest clean approach is to have the precondition
-     include, as part of the caml_modify output, that the stack
-     block loaded from the struct is <> hb. We restructure the
-     precondition to take the sp_b from the struct load. *)
+  (* sp load in m2 (written by store2) *)
+  assert (Hsp_m2 : Mem.load Mint64 m2 sb (uso + 16) = Some new_sp_v).
+  { pose proof (load_after_store_same m1 m2 sb (uso + 16) new_sp_v Hstore2) as Htmp.
+    subst new_sp_v. rewrite load_result_vptr in Htmp. exact Htmp. }
 
-  (* Instead of fighting with this, let me use a simpler precondition:
-     the precondition directly gives us stack_repr in m_cm for rest. *)
+  (* env load threaded through *)
+  assert (Henv_m_cm : Mem.load Mint64 m_cm sb (uso + 24) = Some env_v).
+  { apply Hcm_sb_loads. exact Henv_load. }
+  assert (Henv_m1 : Mem.load Mint64 m1 sb (uso + 24) = Some env_v).
+  { apply (load_after_store_other m_cm m1 sb (uso + 8) (uso + 24)
+             unit_v env_v Hstore1 Henv_m_cm). right. lia. }
+  assert (Henv_m2 : Mem.load Mint64 m2 sb (uso + 24) = Some env_v).
+  { apply (load_after_store_other m1 m2 sb (uso + 16) (uso + 24)
+             new_sp_v env_v Hstore2 Henv_m1). right. lia. }
 
-  (* CLEAN RESTART with simplified precondition that directly provides
-     stack_repr preservation. *)
-Abort.
+  (* extra_args load threaded through *)
+  assert (Hextra_m_cm : Mem.load Mint64 m_cm sb (uso + 32) =
+           Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
+  { apply Hcm_sb_loads. exact Hextra_load. }
+  assert (Hextra_m1 : Mem.load Mint64 m1 sb (uso + 32) =
+           Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
+  { apply (load_after_store_other m_cm m1 sb (uso + 8) (uso + 32)
+             unit_v _ Hstore1 Hextra_m_cm). right. lia. }
+  assert (Hextra_m2 : Mem.load Mint64 m2 sb (uso + 32) =
+           Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
+  { apply (load_after_store_other m1 m2 sb (uso + 16) (uso + 32)
+             new_sp_v _ Hstore2 Hextra_m1). right. lia. }
+
+  (* global_data load threaded through *)
+  assert (Hgd_m_cm : Mem.load Mint64 m_cm sb (uso + 40) = Some (Vptr gb go)).
+  { apply Hcm_sb_loads. exact Hgd_load. }
+  assert (Hgd_m1 : Mem.load Mint64 m1 sb (uso + 40) = Some (Vptr gb go)).
+  { apply (load_after_store_other m_cm m1 sb (uso + 8) (uso + 40)
+             unit_v (Vptr gb go) Hstore1 Hgd_m_cm). right. lia. }
+  assert (Hgd_m2 : Mem.load Mint64 m2 sb (uso + 40) = Some (Vptr gb go)).
+  { apply (load_after_store_other m1 m2 sb (uso + 16) (uso + 40)
+             new_sp_v (Vptr gb go) Hstore2 Hgd_m1). right. lia. }
+
+  (* trap_sp load threaded through *)
+  assert (Hts_m_cm : Mem.load Mint64 m_cm sb (uso + 48) = Some ts_ptr).
+  { apply Hcm_sb_loads. exact Hts_load. }
+  assert (Hts_m1 : Mem.load Mint64 m1 sb (uso + 48) = Some ts_ptr).
+  { apply (load_after_store_other m_cm m1 sb (uso + 8) (uso + 48)
+             unit_v ts_ptr Hstore1 Hts_m_cm). right. lia. }
+  assert (Hts_m2 : Mem.load Mint64 m2 sb (uso + 48) = Some ts_ptr).
+  { apply (load_after_store_other m1 m2 sb (uso + 16) (uso + 48)
+             new_sp_v ts_ptr Hstore2 Hts_m1). right. lia. }
+
+  (* accu_load in m_cm (needed for bigstep derivation) *)
+  assert (Haccu_load_m_cm : Mem.load Mint64 m_cm sb (uso + 8) = Some (Vptr hb hofs)).
+  { apply Hcm_sb_loads. exact Haccu_load. }
+
+  (* sp_b stack loads in m_cm: sp_b <> hb, so loads preserved *)
+  assert (Hload_sp0_cm : Mem.load Mint64 m_cm sp_b (Ptrofs.unsigned sp_ofs) =
+            Some (Vlong (Int64.repr (idx * 2 + 1)))).
+  { apply Hcm_other_loads. exact Hsp_ne_hb. exact Hload_sp0. }
+  assert (Hload_sp1_cm : Mem.load Mint64 m_cm sp_b (Ptrofs.unsigned sp_ofs + 8) =
+            Some newval_cv).
+  { apply Hcm_other_loads. exact Hsp_ne_hb.
+    rewrite <- (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)).
+    exact Hload_sp1. }
+
+  (* ============================================================ *)
+  (* stack_repr preservation through m -> m_cm -> m1 -> m2        *)
+  (* ============================================================ *)
+
+  (* First, equate the two offset representations *)
+  assert (Hofs_eq : Ptrofs.add (Ptrofs.add sp_ofs (Ptrofs.repr 8)) (Ptrofs.repr 8)
+                    = Ptrofs.add sp_ofs (Ptrofs.repr 16)).
+  { rewrite Ptrofs.add_assoc. f_equal. }
+
+  rewrite Hofs_eq in Hstack_repr_rest.
+
+  assert (Hstack_repr_cm : stack_repr hm m_cm rest sp_b
+            (Ptrofs.add sp_ofs (Ptrofs.repr 16))).
+  { clear -Hstack_repr_rest Hcm_other_loads Hsp_ne_hb.
+    revert Hstack_repr_rest.
+    generalize (Ptrofs.add sp_ofs (Ptrofs.repr 16)) as sp_ofs'.
+    induction rest as [| v stk IH]; intros sp_ofs' Hsr.
+    - constructor.
+    - inversion Hsr; subst.
+      econstructor.
+      + apply Hcm_other_loads. exact Hsp_ne_hb. exact H1.
+      + exact H2.
+      + apply IH. exact H5. }
+
+  assert (Hstack_repr_m1 : stack_repr hm m1 rest sp_b
+            (Ptrofs.add sp_ofs (Ptrofs.repr 16))).
+  { apply (stack_repr_store_other_block hm m_cm m1 _ sp_b
+             (Ptrofs.add sp_ofs (Ptrofs.repr 16)) sb (uso + 8) unit_v
+             Hstack_repr_cm Hstore1).
+    intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
+
+  assert (Hstack_repr_m2 : stack_repr hm m2 rest sp_b
+            (Ptrofs.add sp_ofs (Ptrofs.repr 16))).
+  { apply (stack_repr_store_other_block hm m1 m2 _ sp_b
+             (Ptrofs.add sp_ofs (Ptrofs.repr 16)) sb (uso + 16) new_sp_v
+             Hstack_repr_m1 Hstore2).
+    intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
+
+  (* ============================================================ *)
+  (* global_repr preservation through m_cm -> m1 -> m2            *)
+  (* ============================================================ *)
+  assert (Hglobal_m1 : global_repr hm m1 (Machine.global s) gb go).
+  { apply (global_repr_store_other_block hm m_cm m1 _ gb go sb (uso + 8) unit_v
+             Hcm_global_repr Hstore1).
+    intro Heq; exact (Hgb_ne (eq_sym Heq)). }
+
+  assert (Hglobal_m2 : global_repr hm m2 (Machine.global s) gb go).
+  { apply (global_repr_store_other_block hm m1 m2 _ gb go sb (uso + 16) new_sp_v
+             Hglobal_m1 Hstore2).
+    intro Heq; exact (Hgb_ne (eq_sym Heq)). }
+
+  (* ============================================================ *)
+  (* sb_writable in m2                                             *)
+  (* ============================================================ *)
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore2 Hsb_writable_m1) as Hsb_writable_m2.
+
+  (* ============================================================ *)
+  (* Temp env setup                                                *)
+  (* ============================================================ *)
+  set (le1 := PTree.set _t'2 (Vptr hb hofs) le).
+  set (le2 := PTree.set _t'3 (Vptr sp_b sp_ofs) le1).
+  set (le3 := PTree.set _t'4 (Vlong (Int64.repr (idx * 2 + 1))) le2).
+  set (le4 := PTree.set _t'5 (Vptr sp_b sp_ofs) le3).
+  set (le5 := PTree.set _t'6 newval_cv le4).
+  set (le6 := le5).  (* Scall with optid=None doesn't change le *)
+  set (le7 := PTree.set _t'1 (Vptr sp_b sp_ofs) le6).
+
+  exists le7. exists m2.
+  exists (Out_return (Some (Vint (Int.repr 0), tint))).
+
+  split.
+
+  (* ================================================================ *)
+  (* Part 1: exec_stmt derivation                                     *)
+  (* ================================================================ *)
+  {
+    (* Body structure from f_instr_SETVECTITEM:
+       Ssequence
+         (Ssequence                          -- Part A: reads + caml_modify
+           (Sset _t'2 s->accu)
+           (Ssequence
+             (Sset _t'3 s->sp)
+             (Ssequence
+               (Sset _t'4 deref(_t'3 + 0))
+               (Ssequence
+                 (Sset _t'5 s->sp)
+                 (Ssequence
+                   (Sset _t'6 deref(_t'5 + 1))
+                   (Scall None caml_modify [cast accu ptr + shr idx 1; newval]))))))
+         (Ssequence                          -- Part B: assign accu, sp, return
+           (Sassign s->accu val_unit_expr)
+           (Ssequence
+             (Ssequence
+               (Sset _t'1 s->sp)
+               (Sassign s->sp (_t'1 + 2)))
+             (Sreturn 0))) *)
+
+    apply exec_Sseq_1 with (t1 := E0) (le1 := le6) (m1 := m_cm).
+
+    (* -- Part A: reads + caml_modify call -- *)
+    {
+      (* Sset _t'2 (s->accu) ; rest *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m).
+      {
+        apply exec_Sset.
+        eapply eval_Elvalue.
+        - eapply eval_Efield_struct.
+          + eapply eval_Elvalue.
+            * eapply eval_Ederef. eapply eval_Etempvar. exact Hle_s.
+            * apply deref_loc_copy. simpl. reflexivity.
+          + simpl. reflexivity.
+          + exact Hco.
+          + exact Haccu_offset.
+        - apply deref_loc_value with (chunk := Mint64).
+          * simpl. reflexivity.
+          * simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+            exact Haccu_load.
+      }
+
+      (* Sset _t'3 (s->sp) ; rest *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le2) (m1 := m).
+      {
+        apply exec_Sset.
+        eapply eval_Elvalue.
+        - eapply eval_Efield_struct.
+          + eapply eval_Elvalue.
+            * eapply eval_Ederef. eapply eval_Etempvar.
+              subst le1. rewrite PTree.gso by (compute; congruence). exact Hle_s.
+            * apply deref_loc_copy. simpl. reflexivity.
+          + simpl. reflexivity.
+          + exact Hco.
+          + exact Hsp_offset.
+        - apply deref_loc_value with (chunk := Mptr).
+          * simpl. reflexivity.
+          * simpl. rewrite Mptr_Mint64.
+            rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+            exact Hsp_load.
+      }
+
+      (* Sset _t'4 deref(_t'3 + 0) ; rest *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le3) (m1 := m).
+      {
+        apply exec_Sset.
+        eapply eval_Elvalue.
+        - eapply eval_Ederef.
+          eapply eval_Ebinop.
+          + eapply eval_Etempvar.
+            subst le2. rewrite PTree.gss. reflexivity.
+          + apply eval_Econst_int.
+          + apply sem_add_sp_0.
+        - apply deref_loc_value with (chunk := Mint64).
+          * simpl. reflexivity.
+          * simpl. exact Hload_sp0.
+      }
+
+      (* Sset _t'5 (s->sp) ; rest *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le4) (m1 := m).
+      {
+        apply exec_Sset.
+        eapply eval_Elvalue.
+        - eapply eval_Efield_struct.
+          + eapply eval_Elvalue.
+            * eapply eval_Ederef. eapply eval_Etempvar.
+              subst le3 le2 le1.
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              exact Hle_s.
+            * apply deref_loc_copy. simpl. reflexivity.
+          + simpl. reflexivity.
+          + exact Hco.
+          + exact Hsp_offset.
+        - apply deref_loc_value with (chunk := Mptr).
+          * simpl. reflexivity.
+          * simpl. rewrite Mptr_Mint64.
+            rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+            exact Hsp_load.
+      }
+
+      (* Sset _t'6 deref(_t'5 + 1) ; Scall *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le5) (m1 := m).
+      {
+        apply exec_Sset.
+        eapply eval_Elvalue.
+        - eapply eval_Ederef.
+          eapply eval_Ebinop.
+          + eapply eval_Etempvar.
+            subst le4. rewrite PTree.gss. reflexivity.
+          + apply eval_Econst_int.
+          + apply sem_add_sp_1.
+        - apply deref_loc_value with (chunk := Mint64).
+          * simpl. reflexivity.
+          * simpl. exact Hload_sp1.
+      }
+
+      (* Scall None caml_modify [accu_ptr + (idx >> 1); newval] *)
+      {
+        eapply exec_Scall with
+          (tyargs := (tptr tlong) :: tlong :: nil)
+          (tyres := tvoid)
+          (cconv := cc_default)
+          (vargs := Vptr hb (Ptrofs.add hofs (Ptrofs.repr (idx * 8)))
+                    :: newval_cv :: nil)
+          (vres := Vundef).
+        - (* classify_fun *)
+          simpl. reflexivity.
+        - (* eval_expr for Evar _caml_modify *)
+          eapply eval_Elvalue.
+          + eapply eval_Evar_global.
+            * exact He_caml.
+            * exact Hfind_symbol.
+          + apply deref_loc_reference. simpl. reflexivity.
+        - (* eval_exprlist *)
+          econstructor.
+          + (* arg1: cast(accu, ptr) + shr(idx, 1) *)
+            eapply eval_Ebinop.
+            * eapply eval_Ecast.
+              eapply eval_Etempvar.
+              subst le5 le4 le3 le2 le1.
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gss. reflexivity.
+              { apply sem_cast_long_to_ptr_vptr. }
+            * eapply eval_Ebinop.
+              { eapply eval_Ecast.
+                eapply eval_Etempvar.
+                subst le5 le4 le3.
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gss. reflexivity.
+                { apply sem_cast_tlong_tlong_vlong. } }
+              { apply eval_Econst_int. }
+              { apply sem_shr_long_int_1. }
+            * rewrite Hshr_idx.
+              pose proof (sem_add_ptr_tlong_idx hb hofs (Int64.repr idx) m) as Htmp.
+              rewrite Hptrofs_mul in Htmp. exact Htmp.
+          + (* sem_cast for arg1 *)
+            simpl. apply sem_cast_ptr_to_ptr.
+          + econstructor.
+            * (* arg2: _t'6 = newval_cv *)
+              eapply eval_Etempvar.
+              subst le5. rewrite PTree.gss. reflexivity.
+            * (* sem_cast for arg2: newval_cv tlong -> tlong *)
+              apply (sem_cast_long_val_repr hm _ newval_cv m Hval_repr_newval).
+            * econstructor.
+        - (* Genv.find_funct *)
+          exact Hfind_funct.
+        - (* type_of_fundef *)
+          simpl. reflexivity.
+        - (* eval_funcall *)
+          apply eval_funcall_external.
+          exact Hext_call.
+      }
+    }
+
+    (* -- Part B: assign accu, advance sp, return 0 -- *)
+    {
+      simpl. (* set_opttemp None Vundef le5 = le5 *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le6) (m1 := m1).
+      {
+        (* Sassign (s->accu) val_unit_expr *)
+        apply exec_Sassign with (loc := sb)
+          (ofs := Ptrofs.add so (Ptrofs.repr 8))
+          (bf := Full) (v2 := unit_v) (v := unit_v).
+        - eapply eval_Efield_struct.
+          + eapply eval_Elvalue.
+            * eapply eval_Ederef.
+              eapply eval_Etempvar.
+              subst le6 le5 le4 le3 le2 le1.
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              exact Hle_s.
+            * apply deref_loc_copy. simpl. reflexivity.
+          + simpl. reflexivity.
+          + exact Hco.
+          + exact Haccu_offset.
+        - eapply eval_Ebinop.
+          + eapply eval_Ebinop.
+            * eapply eval_Ecast.
+              apply eval_Econst_int.
+              { apply sem_cast_int_to_long_0. }
+            * apply eval_Econst_int.
+            * apply sem_shl_long_0_1.
+          + apply eval_Econst_int.
+          + apply sem_add_long_int_0_1.
+        - apply sem_cast_long_vlong.
+        - apply assign_loc_value with (chunk := Mint64).
+          + simpl. reflexivity.
+          + simpl.
+            rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+            exact Hstore1.
+      }
+
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le7) (m1 := m2).
+      {
+        (* Sset _t'1 (s->sp) ; Sassign (s->sp) (_t'1 + 2) *)
+        apply exec_Sseq_1 with (t1 := E0) (le1 := le7) (m1 := m1).
+        {
+          apply exec_Sset.
+          eapply eval_Elvalue.
+          - eapply eval_Efield_struct.
+            + eapply eval_Elvalue.
+              * eapply eval_Ederef.
+                eapply eval_Etempvar.
+                subst le6 le5 le4 le3 le2 le1.
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                exact Hle_s.
+              * apply deref_loc_copy. simpl. reflexivity.
+            + simpl. reflexivity.
+            + exact Hco.
+            + exact Hsp_offset.
+          - apply deref_loc_value with (chunk := Mptr).
+            * simpl. reflexivity.
+            * simpl. rewrite Mptr_Mint64.
+              rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+              exact Hsp_load_m1.
+        }
+
+        {
+          apply exec_Sassign with (loc := sb)
+            (ofs := Ptrofs.add so (Ptrofs.repr 16))
+            (bf := Full) (v2 := new_sp_v) (v := new_sp_v).
+          - eapply eval_Efield_struct.
+            + eapply eval_Elvalue.
+              * eapply eval_Ederef.
+                eapply eval_Etempvar.
+                subst le7 le6 le5 le4 le3 le2 le1.
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                rewrite PTree.gso by (compute; congruence).
+                exact Hle_s.
+              * apply deref_loc_copy. simpl. reflexivity.
+            + simpl. reflexivity.
+            + exact Hco.
+            + exact Hsp_offset.
+          - eapply eval_Ebinop.
+            + eapply eval_Etempvar.
+              subst le7. rewrite PTree.gss. reflexivity.
+            + apply eval_Econst_int.
+            + apply sem_add_sp_2.
+          - apply sem_cast_ptr_to_ptr.
+          - apply assign_loc_value with (chunk := Mptr).
+            + simpl. reflexivity.
+            + simpl. rewrite Mptr_Mint64.
+              rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+              exact Hstore2.
+        }
+      }
+
+      (* Sreturn 0 *)
+      { apply exec_Sreturn_some.
+        apply eval_Econst_int. }
+    }
+  }
+
+  (* ================================================================ *)
+  (* Part 2: abs_rel for post-state                                   *)
+  (* ================================================================ *)
+  {
+    set (ard' := mk_abs_rel
+      sb so hm cb co gb go
+      (ar_stack_block ard) (ar_stack_base_ofs ard)
+      (ar_code_ne_sptr ard) (ar_code_ne_global ard) (ar_global_ne_sptr ard) (ar_sptr_ofs_bound ard)).
+    exists ard'.
+
+    split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+
+    (* 1. _s is in le_final *)
+    { subst le7 le6 le5 le4 le3 le2 le1.
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      rewrite PTree.gso by (compute; congruence).
+      exact Hle_s. }
+
+    (* 2. pc field -- unchanged *)
+    { exists pc_ptr. split.
+      - exact Hpc_load_m2.
+      - simpl. exact Hpc_rel. }
+
+    (* 3. accu field -- val_unit = Val_int 0 *)
+    { exists unit_v. split.
+      - exact Haccu_m2.
+      - simpl. subst unit_v. exact (vr_int _ 0). }
+
+    (* 4. sp field *)
+    { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 16)).
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+      - exact Hsp_m2.
+      - reflexivity.
+      - simpl. exact Hstack_repr_m2.
+      - exact Hsp_ne_sb.
+      - exact Hsp_ne_gb.
+      - exact Hcb_ne_sp.
+      - (* Ptrofs.unsigned (sp_ofs + 16) >= 8 *)
+        rewrite ptrofs_add_unsigned by lia. lia.
+      - (* sp_rep for rest *)
+        rewrite ptrofs_add_unsigned by lia. exact Hsp_rep_tail.
+      - split.
+        + (* sp_writable: permission preserved through caml_modify + stores *)
+          intros ofs' Hofs'.
+          eapply Mem.perm_store_1. exact Hstore2.
+          eapply Mem.perm_store_1. exact Hstore1.
+          apply Hcm_perm_preserved.
+          * eapply Mem.perm_valid_block. apply (Hsp_writable 0). lia.
+          * { apply Hsp_writable.
+              rewrite (ptrofs_add_unsigned sp_ofs 16 ltac:(lia) ltac:(lia)) in Hofs'.
+              rewrite Hstk in Hsp_rep |- *. simpl Datatypes.length in Hsp_rep |- *.
+              destruct Hofs' as [Hofs_lo Hofs_hi].
+              split; [exact Hofs_lo|].
+              apply Z.lt_le_trans with
+                (m := Ptrofs.unsigned sp_ofs + 16 + 8 * Z.of_nat (Datatypes.length rest)).
+              - exact Hofs_hi.
+              - pose proof (Nat2Z.is_nonneg (Datatypes.length rest)). lia. }
+        + (* sp alignment: unchanged *)
+          rewrite ptrofs_add_unsigned by lia.
+          unfold align_chunk. simpl.
+          destruct Hsp_align as [k Hk].
+          clear - Hk. unfold align_chunk in Hk.
+          exists (k + 2)%Z. lia. }
+
+    (* 5. env field *)
+    { exists env_v. split.
+      - exact Henv_m2.
+      - simpl. exact Henv_repr. }
+
+    (* 6. extra_args field *)
+    { simpl. exact Hextra_m2. }
+
+    (* 7. global_data field *)
+    { exists (Vptr gb go). split; [| split; [| split]].
+      - exact Hgd_m2.
+      - simpl. reflexivity.
+      - simpl. exact Hglobal_m2.
+      - exact Hgb_ne_sb. }
+
+    (* 8. trap_sp field *)
+    { exists ts_ptr. split.
+      - exact Hts_m2.
+      - simpl. exact Htrap_rel. }
+
+    (* 9. sb_writable *)
+    { exact Hsb_writable_m2. }
+  }
+Qed.

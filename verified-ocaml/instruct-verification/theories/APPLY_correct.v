@@ -173,6 +173,8 @@ Theorem verify_APPLY_correct : forall n,
          = Some (Vint (Int.repr (Z.of_nat n))) /\
          (* n fits in int32 signed range *)
          Int.min_signed <= Z.of_nat n <= Int.max_signed /\
+         (* n >= 1 (APPLY always has at least 1 arg) *)
+         (1 <= n)%nat /\
          (* Closure code pointer is loadable *)
          apply_step_pre m s ard)
       (fun msg s => get_code_ptr_s s s.(Machine.accu) = None)
@@ -207,7 +209,7 @@ Proof.
   set (cb := ar_code_base_block ard) in *.
   set (co := ar_code_base_ofs ard) in *.
 
-  destruct Hstep_pre as (Hcode_load & Hn_range & Hacpl).
+  destruct Hstep_pre as (Hcode_load & Hn_range & Hn_ge1 & Hacpl).
 
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
@@ -331,6 +333,7 @@ Proof.
 
     (* Store extra_args *)
     rewrite (ptrofs_add_unsigned so 32 ltac:(lia) ltac:(lia)).
+    unfold ea_val, ea_long, nargs_sub1, nargs_int in Hstore1.
     rewrite Hstore1; eval_cbn.
 
     (* === S4: Sset _t'2 (s->accu) -- in m1 === *)
@@ -359,7 +362,6 @@ Proof.
     rewrite PTree.gso by (compute; congruence).  (* _s <> _t'5 *)
     rewrite PTree.gso by (compute; congruence).  (* _s <> _t'4 *)
     rewrite Hle_s; eval_cbn.
-    rewrite Hpc_offset; eval_cbn.
     rewrite Mptr_Mint64; eval_cbn.
 
     (* Rvalue: _t'3 *)
@@ -377,7 +379,6 @@ Proof.
     rewrite PTree.gso by (compute; congruence).  (* _s <> _t'5 *)
     rewrite PTree.gso by (compute; congruence).  (* _s <> _t'4 *)
     rewrite Hle_s; eval_cbn.
-    rewrite Haccu_offset; eval_cbn.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     rewrite Haccu_load_m2; eval_cbn.
 
@@ -544,19 +545,21 @@ Proof.
       - simpl. exact Haccu_repr. }
 
     (* 6. extra_args field -- updated to (n-1) *)
-    { simpl.
-      (* Need: ... = Some (Vlong (Int64.repr (Z.of_nat (n - 1))))
-         Have: Hextra_load3 : ... = Some ea_val
-         where ea_val = Vlong (Int64.repr (Int.signed (Int.sub (Int.repr (Z.of_nat n)) (Int.repr 1)))) *)
-      rewrite Hextra_load3.
-      f_equal. f_equal.
-      subst ea_long nargs_sub1 nargs_int.
+    { simpl. rewrite Hextra_load3.
+      (* ea_val may or may not still be set-defined; use enough unfolds *)
+      unfold ea_val, ea_long, nargs_sub1, nargs_int.
+      do 3 f_equal.
+      (* Goal: Int.signed (Int.sub (Int.repr (Z.of_nat n)) (Int.repr 1)) = Z.of_nat (n - 1) *)
       rewrite Int.sub_signed.
-      rewrite Int.signed_repr by exact Hn_range.
-      rewrite Int.signed_repr by (vm_compute; lia).
-      rewrite Int.signed_repr.
-      2: { split; [| lia]. destruct Hn_range. vm_compute in H. lia. }
-      lia. }
+      rewrite (Int.signed_repr (Z.of_nat n) Hn_range).
+      change (Int.signed (Int.repr 1)) with 1.
+      assert (Hn_lo : -2147483648 <= Z.of_nat n) by
+        (destruct Hn_range; change Int.min_signed with (-2147483648) in *; lia).
+      assert (Hn_hi : Z.of_nat n <= 2147483647) by
+        (destruct Hn_range; change Int.max_signed with 2147483647 in *; lia).
+      rewrite Int.signed_repr by
+        (change Int.min_signed with (-2147483648); change Int.max_signed with 2147483647; lia).
+      rewrite Nat2Z.inj_sub by exact Hn_ge1. lia. }
 
     (* 7. global_data field -- unchanged *)
     { exists gd_ptr. split; [| split; [| split]].

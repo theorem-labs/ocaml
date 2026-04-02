@@ -183,13 +183,21 @@ Proof.
   unfold sem_add_ptr_int. reflexivity.
 Qed.
 
-(* Oor (Vlong a) tlong (Vint b) tint *)
+(* Oor (Vlong a) tlong (Vint b) tint -- mixed types, the Vint is cast to Vlong
+   via Int.signed before the or operation *)
 Lemma sem_or_long_int : forall a b m,
   sem_binary_operation (genv_cenv clight_ge) Oor
     (Vlong a) tlong
-    (Vint (Int.repr b)) tint
-    m = Some (Vlong (Int64.or a (Int64.repr b))).
-Proof. intros. reflexivity. Qed.
+    (Vint b) tint
+    m = Some (Vlong (Int64.or a (Int64.repr (Int.signed b)))).
+Proof.
+  intros. unfold sem_binary_operation, sem_or.
+  change (classify_binarith tlong tint) with (bin_case_l Signed).
+  unfold sem_binarith. simpl binarith_type.
+  unfold sem_cast at 1. simpl classify_cast. rewrite ptr64_true.
+  unfold sem_cast at 1. simpl classify_cast. simpl cast_int_long.
+  reflexivity.
+Qed.
 
 (* Oadd Vptr (tptr tint) + Vint n tint *)
 Lemma sem_add_ptr_tint_int : forall b ofs n m,
@@ -233,10 +241,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
 (* Int.lt (Int.repr 0) (Int.repr 0) = false *)
 Lemma int_lt_0_0 : Int.lt (Int.repr 0) (Int.repr 0) = false.
-Proof.
-  unfold Int.lt. rewrite Int.signed_repr, Int.signed_repr; try (change Int.min_signed with (-2147483648)%Z; change Int.max_signed with 2147483647%Z; lia).
-  simpl. reflexivity.
-Qed.
+Proof. reflexivity. Qed.
 
 (* ================================================================== *)
 (* Main theorem: nvars = 0 case                                        *)
@@ -297,8 +302,8 @@ Theorem verify_CLOSURE_correct : forall code_ofs,
                     Mem.load chunk m_s0 b ofs = Some v) /\
                  (* Field 1 storable after field 0 *)
                  (forall cv1, exists m_s1,
-                    Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs + 8) cv1 = Some m_s1 /\
-                    Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs + 8) =
+                    Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
+                    Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
                       Some (Val.load_result Mint64 cv1) /\
                     (* Load at field 0 preserved *)
                     (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
@@ -475,7 +480,7 @@ Proof.
     - apply Hsb_writable_m1. exact Hofs0. }
   assert (Hsb_writable_s0 :
     Mem.range_perm m_s0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
-  { intros ofs0 Hofs0. eapply Mem.perm_store_1; eauto. apply Hsb_writable_alloc. exact Hofs0. }
+  { intros ofs0 Hofs0. eapply Mem.perm_store_1. exact Hstore_f0. apply Hsb_writable_alloc. exact Hofs0. }
   assert (Hsb_writable_s1 :
     Mem.range_perm m_s1 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
   { intros ofs0 Hofs0. eapply Hf1_perm_pres.
@@ -506,9 +511,11 @@ Proof.
   (* sp field in m_s1 *)
   assert (Hsp_load_s1 : Mem.load Mint64 m_s1 sb (Ptrofs.unsigned so + 16) =
     Some (Vptr sp_b sp_ofs)).
-  { apply Hf1_load_pres; auto.
-    apply Hf0_load_pres; auto.
-    apply Hstruct_preserved. exact Hsp_load_m1. }
+  { apply Hf1_load_pres.
+    - intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq).
+    - apply Hf0_load_pres.
+      + intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq).
+      + apply Hstruct_preserved. exact Hsp_load_m1. }
 
   assert (Hsp_load_pc2 : Mem.load Mint64 m_pc2 sb (Ptrofs.unsigned so + 16) =
     Some (Vptr sp_b sp_ofs)).
@@ -529,7 +536,11 @@ Proof.
   assert (Haccu_load_pc2 : Mem.load Mint64 m_pc2 sb (Ptrofs.unsigned so + 8) = Some accu_v).
   { apply (load_after_store_other m_s1 m_pc2 sb (Ptrofs.unsigned so + 0)
              (Ptrofs.unsigned so + 8) (Vptr cb pc_ofs_2) accu_v Hstore_pc2).
-    - apply Hf1_load_pres; auto. apply Hf0_load_pres; auto. apply Hstruct_preserved. exact Haccu_load_m1.
+    - apply Hf1_load_pres.
+      + intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq).
+      + apply Hf0_load_pres.
+        * intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq).
+        * apply Hstruct_preserved. exact Haccu_load_m1.
     - right. lia. }
 
   assert (Haccu_load_sp : Mem.load Mint64 m_sp sb (Ptrofs.unsigned so + 8) = Some accu_v).
@@ -570,9 +581,11 @@ Proof.
     - constructor. }
 
   assert (Hval_repr_new : val_repr hm' (Val_closure addr 0) block_v).
-  { econstructor.
+  { unfold block_v. change (Z.of_nat 0 * 8)%Z with 0%Z.
+    rewrite <- (Ptrofs.add_zero new_ofs) at 1.
+    apply vr_closure with (b := new_b) (ofs := new_ofs).
     - unfold hm'. rewrite Nat.eqb_refl. reflexivity.
-    - simpl. rewrite Ptrofs.add_zero. reflexivity. }
+    - reflexivity. }
 
   assert (Hstack_repr_ext : forall stk m0 sp_b0 sp_ofs0,
     stack_repr hm m0 stk sp_b0 sp_ofs0 -> stack_repr hm' m0 stk sp_b0 sp_ofs0).
@@ -726,16 +739,15 @@ Proof.
                 (Etempvar _t'11 tlong))))
           Sskip)
         E0 le2 m1 Out_normal).
-    { eapply exec_Sifthenelse with (v := Vfalse) (b := false).
+    { eapply exec_Sifthenelse with (b := false).
       - (* eval_expr: nvars > 0 *)
-        econstructor.
-        + econstructor.
+        eapply eval_Ebinop.
+        + eapply eval_Etempvar.
           unfold le2. rewrite PTree.gss. reflexivity.
-        + econstructor.
-        + simpl. rewrite sem_cmp_gt_int_0. rewrite int_lt_0_0.
-          simpl. reflexivity.
+        + eapply eval_Econst_int.
+        + apply sem_cmp_gt_int_0.
       - (* bool_val Vfalse tint = Some false *)
-        simpl. reflexivity.
+        rewrite int_lt_0_0. simpl. reflexivity.
       - (* exec Sskip *)
         constructor. }
 
@@ -815,16 +827,16 @@ Proof.
           Sskip
           Sbreak)
         E0 le5 m_alloc (Out_break)).
-    { eapply exec_Sifthenelse with (v := Vfalse) (b := false).
-      - econstructor.
-        + econstructor. unfold le5. rewrite PTree.gss. reflexivity.
-        + econstructor.
+    { eapply exec_Sifthenelse with (b := false).
+      - eapply eval_Ebinop.
+        + eapply eval_Etempvar. unfold le5. rewrite PTree.gss. reflexivity.
+        + eapply eval_Etempvar.
           unfold le5. rewrite PTree.gso by (compute; congruence).
           unfold le4. rewrite PTree.gso by (compute; congruence).
           unfold le3. rewrite PTree.gso by (compute; congruence).
           unfold le2. rewrite PTree.gss. reflexivity.
-        + simpl. rewrite sem_cmp_lt_int. rewrite int_lt_0_0. simpl. reflexivity.
-      - simpl. reflexivity.
+        + apply sem_cmp_lt_int.
+      - rewrite int_lt_0_0. simpl. reflexivity.
       - constructor. }
 
     (* The Ssequence inside the loop: condition check followed by copy body.
@@ -888,11 +900,9 @@ Proof.
             (Ebinop Oadd (Etempvar _i tint)
               (Econst_int (Int.repr 1) tint) tint)))
         E0 le5 m_alloc Out_normal).
-    { replace E0 with (E0 ** E0) by reflexivity.
-      eapply exec_Sloop_stop1.
+    { eapply exec_Sloop_stop1.
       - exact Hexec_loop_body_break.
-      - discriminate.
-      - reflexivity. }
+      - constructor. }
 
     (* Sset _i; Sloop *)
     assert (Hexec_init_loop :
@@ -953,27 +963,15 @@ Proof.
 
        So loading from cb at pc_ofs_1 gives code_ofs.
     *)
-    assert (Hpc_ofs_1_eq : Ptrofs.unsigned pc_ofs_1 =
-      Ptrofs.unsigned (Ptrofs.add co (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))).
+    assert (Hpc_ofs_1_eq : pc_ofs_1 =
+      Ptrofs.add co (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))).
     { unfold pc_ofs_1, pc_ofs, sizeof_code_t.
-      rewrite !Ptrofs.add_unsigned.
-      f_equal.
-      rewrite (Ptrofs.unsigned_repr 4).
-      2: { pose proof (Ptrofs.unsigned_range co). unfold Ptrofs.max_unsigned, Ptrofs.modulus. simpl. lia. }
-      rewrite Ptrofs.unsigned_repr.
-      2: { pose proof (Ptrofs.unsigned_range co). unfold Ptrofs.max_unsigned.
-           (* We need pc s * 4 to be representable. This follows from
-              the fact that Mem.load at this address succeeds. *)
-           pose proof (Mem.load_valid_access _ _ _ _ _ Hcode_nvars) as [Hrp_cb Halign_cb].
-           pose proof (Hrp_cb (Ptrofs.unsigned (Ptrofs.add co (Ptrofs.repr (Machine.pc s * 4))))).
-           simpl in H. unfold Ptrofs.max_unsigned.
-           lia. }
-      rewrite Ptrofs.unsigned_repr.
-      2: { pose proof (Ptrofs.unsigned_range co). unfold Ptrofs.max_unsigned.
-           pose proof (Mem.load_valid_access _ _ _ _ _ Hcode_ofs) as [Hrp_cb2 _].
-           pose proof (Hrp_cb2 (Ptrofs.unsigned (Ptrofs.add co (Ptrofs.repr ((Machine.pc s + 1) * 4))))).
-           simpl in H. unfold Ptrofs.max_unsigned. lia. }
-      lia. }
+      rewrite Ptrofs.add_assoc. f_equal.
+      rewrite Ptrofs.add_unsigned.
+      apply Ptrofs.eqm_samerepr.
+      eapply Ptrofs.eqm_trans.
+      - apply Ptrofs.eqm_add; apply Ptrofs.eqm_sym; apply Ptrofs.eqm_unsigned_repr.
+      - apply Ptrofs.eqm_refl2. lia. }
 
     assert (Hcode_ofs_load_alloc : Mem.load Mint32 m_alloc cb (Ptrofs.unsigned pc_ofs_1) =
               Some (Vint (Int.repr code_ofs))).
@@ -983,7 +981,7 @@ Proof.
         + exact Hcode_ofs.
         + exact Hstore_pc1.
         + left. exact Hcb_ne.
-      - exact Hnew_ne_cb. }
+      - intro Heq; symmetry in Heq; exact (Hnew_ne_cb Heq). }
 
     assert (Hexec_set_t6 : exec_stmt function_entry1 clight_ge e le5 m_alloc
         (Sset _t'6
@@ -1048,35 +1046,36 @@ Proof.
           (Ebinop Oadd (Etempvar _t'6 (tptr tint))
             (Etempvar _t'8 tint) (tptr tint)))
         E0 le8 m_s0 Out_normal).
-    { apply (eval_stmt_to_exec clight_ge 10).
-      eval_cbn.
-      (* _block *)
-      unfold le8. rewrite PTree.gso by (compute; congruence).
-      unfold le7. rewrite PTree.gso by (compute; congruence).
-      unfold le6. rewrite PTree.gso by (compute; congruence).
-      unfold le5. rewrite PTree.gso by (compute; congruence).
-      unfold le4. rewrite PTree.gss; eval_cbn.
-      (* cast block to (tptr (tptr tint)) *)
-      fold block_v.
-      rewrite (sem_cast_vptr_tlong_to_ptr_ptr_tint new_b new_ofs m_alloc); eval_cbn.
-      (* Oadd (Vptr new_b new_ofs) (tptr (tptr tint)) (Vint 0) tint *)
-      rewrite (sem_add_ptr_ptr_tint_0 new_b new_ofs m_alloc); eval_cbn.
-      (* RHS: t'6 + t'8 *)
-      unfold le8.
-      rewrite PTree.gso by (compute; congruence).
-      unfold le7. rewrite PTree.gso by (compute; congruence).
-      unfold le6. rewrite PTree.gss; eval_cbn.
-      unfold le8. rewrite PTree.gss; eval_cbn.
-      rewrite (sem_add_ptr_tint_int cb pc_ofs_1 (Int.repr code_ofs) m_alloc); eval_cbn.
-      (* sem_cast result to (tptr tint) *)
-      rewrite (sem_cast_ptr_tint_to_ptr_tint_cl cb _ m_alloc); eval_cbn.
-      (* Store: block[0] = code_ptr_val *)
-      unfold code_ptr_val.
-      (* The deref_loc at Vptr new_b new_ofs with access_mode (tptr tint) = By_value Mptr *)
-      change (access_mode (tptr tint)) with (By_value Mptr).
-      rewrite Mptr_Mint64.
-      rewrite Hstore_f0; eval_cbn.
-      reflexivity. }
+    { eapply exec_Sassign with (v := code_ptr_val).
+      - (* lvalue: Ederef (Oadd (cast _block to ptr ptr tint) (const 0)) *)
+        eapply eval_Ederef.
+        eapply eval_Ebinop.
+        + eapply eval_Ecast.
+          * eapply eval_Etempvar.
+            unfold le8. rewrite PTree.gso by (compute; congruence).
+            unfold le7. rewrite PTree.gso by (compute; congruence).
+            unfold le6. rewrite PTree.gso by (compute; congruence).
+            unfold le5. rewrite PTree.gso by (compute; congruence).
+            unfold le4. rewrite PTree.gss. reflexivity.
+          * apply sem_cast_vptr_tlong_to_ptr_ptr_tint.
+        + eapply eval_Econst_int.
+        + apply sem_add_ptr_ptr_tint_0.
+      - (* rvalue: Oadd t'6 t'8 *)
+        eapply eval_Ebinop.
+        + eapply eval_Etempvar.
+          unfold le8.
+          rewrite PTree.gso by (compute; congruence).
+          unfold le7. rewrite PTree.gso by (compute; congruence).
+          unfold le6. rewrite PTree.gss. reflexivity.
+        + eapply eval_Etempvar.
+          unfold le8. rewrite PTree.gss. reflexivity.
+        + apply sem_add_ptr_tint_int.
+      - (* sem_cast rhs to lhs type: tptr tint -> tptr tint *)
+        apply sem_cast_ptr_tint_to_ptr_tint_cl.
+      - (* assign_loc: store at block[0] *)
+        eapply assign_loc_value.
+        + reflexivity.
+        + unfold Mem.storev. rewrite Mptr_Mint64. exact Hstore_f0. }
 
     (* Phase 9: Store block[1] = closinfo *)
     assert (Hexec_store_closinfo : exec_stmt function_entry1 clight_ge e le8 m_s0
@@ -1092,24 +1091,32 @@ Proof.
         E0 le8 m_s1 Out_normal).
     { apply (eval_stmt_to_exec clight_ge 10).
       eval_cbn.
-      (* _block *)
+      (* Resolve _block lookup *)
       unfold le8. rewrite PTree.gso by (compute; congruence).
       unfold le7. rewrite PTree.gso by (compute; congruence).
       unfold le6. rewrite PTree.gso by (compute; congruence).
       unfold le5. rewrite PTree.gso by (compute; congruence).
       unfold le4. rewrite PTree.gss; eval_cbn.
       fold block_v.
-      rewrite (sem_cast_vptr_tlong_to_ptr_tlong new_b new_ofs m_s0); eval_cbn.
-      rewrite (sem_add_ptr_tlong_int new_b new_ofs (Int.repr 1) m_s0); eval_cbn.
-      (* RHS: (2 << 1) | 1 *)
-      rewrite (sem_shl_int_1 (Int.repr 2) m_s0); eval_cbn.
-      rewrite (sem_cast_int_to_tlong (Int.shl (Int.repr 2) (Int.repr 1)) m_s0); eval_cbn.
-      rewrite (sem_or_long_int (Int64.repr (Int.signed (Int.shl (Int.repr 2) (Int.repr 1)))) 1 m_s0); eval_cbn.
+      (* Cast block_v (Vptr) from tlong to (tptr tlong) *)
+      replace (sem_cast block_v tlong (tptr tlong) m_s0)
+        with (Some block_v)
+        by (unfold block_v, sem_cast; simpl classify_cast; reflexivity);
+        eval_cbn.
+      (* sem_add: block + 1 *)
+      unfold block_v at 1.
+      rewrite (sem_add_sp_1 new_b new_ofs m_s0); eval_cbn.
+      (* Evaluate the rvalue: (2 << 1) | 1 *)
+      (* shl is handled by eval_cbn since sem_binary_operation is opaque
+         but the constants are all ints, we need sem_shl_int_1 *)
+      rewrite sem_shl_int_1; eval_cbn.
+      rewrite sem_cast_int_to_tlong; eval_cbn.
+      rewrite sem_or_long_int; eval_cbn.
+      (* Cast closinfo from tlong to tlong *)
+      rewrite sem_cast_long_vlong; eval_cbn.
+      (* Normalize Int.signed (Int.repr 1) to 1 so fold closinfo_val matches *)
+      change (Int64.repr (Int.signed (Int.repr 1))) with (Int64.repr 1).
       fold closinfo_val.
-      rewrite (sem_cast_long_vlong closinfo_val m_s0); eval_cbn.
-      (* Store *)
-      change (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed (Int.repr 1)))))
-        with (Ptrofs.unsigned new_ofs + 8).
       rewrite Hstore_f1; eval_cbn.
       reflexivity. }
 
@@ -1276,7 +1283,8 @@ Proof.
       unfold le5. rewrite PTree.gso by (compute; congruence).
       unfold le4. rewrite PTree.gss; eval_cbn.
       fold block_v.
-      rewrite (sem_cast_long_vptr new_b new_ofs m_sp); eval_cbn.
+      replace (sem_cast block_v tlong tlong m_sp) with (Some block_v)
+        by (unfold block_v; apply (sem_cast_long_vptr new_b new_ofs m_sp)); eval_cbn.
       (* store *)
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
       rewrite Hstore_accu; eval_cbn.
@@ -1764,7 +1772,7 @@ Proof.
       eapply exec_Sseq_1; eauto. }
 
     (* Build: pc_nvars; if_alloc *)
-    assert (Hexec_pre_return : exec_stmt function_entry1 clight_ge e le m
+    eassert (Hexec_pre_return : exec_stmt function_entry1 clight_ge e le m
       (Ssequence
         (Ssequence
           (Ssequence
@@ -1940,9 +1948,9 @@ Proof.
     { pose proof (load_after_store_same m_sp m_final sb (uso + 8) block_v Hstore_accu) as Htmp.
       unfold block_v in Htmp |- *. rewrite load_result_vptr_cl in Htmp. exact Htmp. }
 
-    (* Helper: struct fields at offsets >= 16 survive m_pc2, m_sp (at 16), m_final (at 8) *)
+    (* Helper: struct fields at offsets = 16 or >= 24 survive through all stores *)
     assert (Hfield_survive : forall field_ofs v,
-      field_ofs >= 16 ->
+      (field_ofs = 16 \/ field_ofs >= 24) ->
       Mem.load Mint64 m sb (uso + field_ofs) = Some v ->
       Mem.load Mint64 m_final sb (uso + field_ofs) = Some v).
     { intros fo v Hfo Hload.
@@ -1974,7 +1982,6 @@ Proof.
           rewrite Hsp_load in Hload. injection Hload. intro Heq. rewrite Heq. reflexivity.
         - apply (load_after_store_other m_pc2 m_sp sb (uso + 16) (uso + fo)
                    (Vptr sp_b sp_ofs) v Hstore_sp H5).
-          destruct (Z.lt_ge_cases fo 16). lia.
           right. lia. }
       (* m_sp -> m_final: store at uso+8 *)
       apply (load_after_store_other m_sp m_final sb (uso + 8) (uso + fo)
@@ -1982,20 +1989,20 @@ Proof.
 
     (* sp field *)
     assert (Hsp_load_final : Mem.load Mint64 m_final sb (uso + 16) = Some (Vptr sp_b sp_ofs)).
-    { apply Hfield_survive; [lia | exact Hsp_load]. }
+    { apply Hfield_survive; [left; lia | exact Hsp_load]. }
 
     assert (Henv_load_final : Mem.load Mint64 m_final sb (uso + 24) = Some env_v).
-    { apply Hfield_survive; [lia | exact Henv_load]. }
+    { apply Hfield_survive; [right; lia | exact Henv_load]. }
 
     assert (Hextra_load_final : Mem.load Mint64 m_final sb (uso + 32) =
               Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
-    { apply Hfield_survive; [lia | exact Hextra_load]. }
+    { apply Hfield_survive; [right; lia | exact Hextra_load]. }
 
     assert (Hgd_load_final : Mem.load Mint64 m_final sb (uso + 40) = Some (Vptr gb go0)).
-    { apply Hfield_survive; [lia | exact Hgd_load]. }
+    { apply Hfield_survive; [right; lia | exact Hgd_load]. }
 
     assert (Hts_load_final : Mem.load Mint64 m_final sb (uso + 48) = Some ts_ptr).
-    { apply Hfield_survive; [lia | exact Hts_load]. }
+    { apply Hfield_survive; [right; lia | exact Hts_load]. }
 
     (* Stack repr in m_final *)
     assert (Hsp_ne_new : sp_b <> new_b).
@@ -2023,7 +2030,9 @@ Proof.
       induction Hstack_s0 as [| v vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
       - constructor.
       - econstructor.
-        + apply Hf1_load_pres; auto.
+        + apply Hf1_load_pres.
+          * exact Hsp_ne_new.
+          * exact Hld.
         + exact Hvr.
         + apply IH. exact Hsp_ne_new. }
 
@@ -2031,12 +2040,10 @@ Proof.
     { eapply stack_repr_store_other_block; eauto. }
 
     assert (Hstack_sp : stack_repr hm m_sp (Machine.stack s) sp_b sp_ofs).
-    { eapply stack_repr_store_other_block; eauto.
-      intro Heq. symmetry in Heq. exact (Hsp_ne_sb Heq). }
+    { eapply stack_repr_store_other_block; eauto. }
 
     assert (Hstack_final : stack_repr hm m_final (Machine.stack s) sp_b sp_ofs).
-    { eapply stack_repr_store_other_block; eauto.
-      intro Heq. symmetry in Heq. exact (Hsp_ne_sb Heq). }
+    { eapply stack_repr_store_other_block; eauto. }
 
     (* Global repr in m_final *)
     assert (Hglobal_m1 : global_repr hm m1 (Machine.global s) gb go0).
@@ -2059,7 +2066,9 @@ Proof.
       induction Hglobal_s0 as [| v vs gb0 gofs0 cv Hld Hvr Htl IH].
       - constructor.
       - econstructor.
-        + apply Hf1_load_pres; auto.
+        + apply Hf1_load_pres.
+          * exact Hgb_ne_new.
+          * exact Hld.
         + exact Hvr.
         + apply IH. exact Hgb_ne_new. }
 
@@ -2232,14 +2241,10 @@ Proof.
            pc_rel (Vptr cb pc_ofs_2) cb new_co (pc s)
            = Vptr cb ((co + 8) + (pc s) * 4) -- matches!
         *)
-        unfold pc_rel, new_co, pc_ofs_2, pc_ofs_1, pc_ofs.
-        f_equal.
+        unfold pc_rel, new_co, pc_ofs_2, pc_ofs_1, pc_ofs, sizeof_code_t.
         rewrite !Ptrofs.add_assoc.
-        f_equal.
-        rewrite (Ptrofs.add_commut (Ptrofs.repr 4) _).
-        rewrite !Ptrofs.add_assoc.
-        rewrite (Ptrofs.add_commut (Ptrofs.repr 4) (Ptrofs.repr sizeof_code_t)).
-        unfold sizeof_code_t.
+        rewrite <- (Ptrofs.add_assoc (Ptrofs.repr 4) (Ptrofs.repr 4)).
+        rewrite (Ptrofs.add_commut (Ptrofs.add (Ptrofs.repr 4) (Ptrofs.repr 4))).
         reflexivity. }
 
     (* 3. accu field -- Val_closure addr 0 *)
@@ -2271,7 +2276,7 @@ Proof.
                apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc1).
                apply (Hsp_writable 0). lia.
             ** eapply Mem.perm_store_1. exact Hstore_pc1.
-               apply Hsp_writable. lia.
+               apply Hsp_writable. exact Hofs0.
           * eapply Mem.perm_store_1. exact Hstore_f0.
             eapply Halloc_perm_pres.
             ** eapply Mem.perm_valid_block.

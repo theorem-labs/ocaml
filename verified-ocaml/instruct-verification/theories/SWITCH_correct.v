@@ -435,153 +435,671 @@ Proof.
       (* Part 1: exec                                                  *)
       (* ============================================================ *)
       {
-        apply (eval_stmt_to_exec clight_ge 30).
-        (* explicit big-step needed *)
-        (*
-        eval_cbn.
+        (* Convenience: ltac for evaluating s->field lvalue *)
+        Local Ltac eval_s_field_lvalue_sw solve_le co_is Hco Hfld :=
+          eapply eval_Efield_struct;
+          [ eapply eval_Elvalue;
+            [ eapply eval_Ederef; eapply eval_Etempvar; solve_le
+            | apply deref_loc_copy; reflexivity ]
+          | reflexivity
+          | exact Hco
+          | exact Hfld ].
 
         (* S1: Sset _t'1 = s->pc *)
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Hpc_offset; eval_cbn.
-        rewrite Mptr_Mint64; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
-        rewrite Hpc_load; eval_cbn.
+        assert (Hexec_S1 : exec e le m
+            (Sset _t'1 (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            E0 (PTree.set _t'1 (Vptr cb pc_ofs) le) m Out_normal).
+        { apply exec_Sset.
+          eapply eval_Elvalue.
+          - eval_s_field_lvalue_sw ltac:(exact Hle_s) co_is Hco Hpc_offset.
+          - apply deref_loc_value with (chunk := Mptr).
+            + reflexivity.
+            + simpl. rewrite Mptr_Mint64.
+              rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
+              exact Hpc_load. }
 
         (* S2: Sassign s->pc = _t'1 + 1 *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Hpc_offset; eval_cbn.
-        rewrite PTree.gss; eval_cbn.
-        rewrite (sem_add_pc_1 cb pc_ofs m); eval_cbn.
-        rewrite (sem_cast_ptr_tint_to_ptr_tint cb (Ptrofs.add pc_ofs (Ptrofs.repr 4)) m); eval_cbn.
-        rewrite Mptr_Mint64; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
-        fold pc1. fold pc1_v.
-        rewrite Hs1; eval_cbn.
+        assert (Hexec_S2 : exec e (PTree.set _t'1 (Vptr cb pc_ofs) le) m
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint))
+              (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+                (Econst_int (Int.repr 1) tint) (tptr tint)))
+            E0 (PTree.set _t'1 (Vptr cb pc_ofs) le) m1 Out_normal).
+        { eapply exec_Sassign.
+          - eval_s_field_lvalue_sw
+              ltac:(rewrite PTree.gso by (compute; congruence); exact Hle_s)
+              co_is Hco Hpc_offset.
+          - eapply eval_Ebinop.
+            + eapply eval_Etempvar. rewrite PTree.gss. reflexivity.
+            + eapply eval_Econst_int.
+            + apply sem_add_pc_1.
+          - apply sem_cast_ptr_tint_to_ptr_tint.
+          - apply assign_loc_value with (chunk := Mptr).
+            + reflexivity.
+            + simpl. rewrite Mptr_Mint64.
+              rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
+              fold pc1. fold pc1_v. exact Hstore1. }
 
-        (* S3: Sset _sizes = *_t'1 (read sizes from old pc) *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gss; eval_cbn.
-        rewrite Hsizes_m1; eval_cbn.
+        (* S3: Sset _sizes = *_t'1 *)
+        assert (Hexec_S3 : exec e (PTree.set _t'1 (Vptr cb pc_ofs) le) m1
+            (Sset _sizes (Ederef (Etempvar _t'1 (tptr tint)) tint))
+            E0 (PTree.set _sizes (Vint sizes_v) (PTree.set _t'1 (Vptr cb pc_ofs) le)) m1 Out_normal).
+        { apply exec_Sset.
+          eapply eval_Elvalue.
+          - eapply eval_Ederef.
+            eapply eval_Etempvar. rewrite PTree.gss. reflexivity.
+          - apply deref_loc_value with (chunk := Mint32).
+            + reflexivity.
+            + exact Hsizes_m1. }
+
+        (* Abbreviation for le after S1,S2,S3 *)
+        set (le_S3 := PTree.set _sizes (Vint sizes_v) (PTree.set _t'1 (Vptr cb pc_ofs) le)).
 
         (* S4: Sset _t'2 = s->accu *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Haccu_offset; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
-        rewrite Haccu_m1; eval_cbn.
+        assert (Hexec_S4 : exec e le_S3 m1
+            (Sset _t'2 (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _accu tlong))
+            E0 (PTree.set _t'2 (Vlong tagged_n) le_S3) m1 Out_normal).
+        { apply exec_Sset.
+          eapply eval_Elvalue.
+          - eval_s_field_lvalue_sw
+              ltac:(subst le_S3;
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence); exact Hle_s)
+              co_is Hco Haccu_offset.
+          - apply deref_loc_value with (chunk := Mint64).
+            + reflexivity.
+            + simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+              exact Haccu_m1. }
 
-        (* S5: Sifthenelse ((_t'2 & 1) == 0) *)
-        (* Evaluate _t'2 & 1 *)
-        rewrite PTree.gss; eval_cbn.
-        rewrite (sem_and_long_int_1 tagged_n m1); eval_cbn.
-        (* Evaluate comparison with 0 *)
-        rewrite (sem_eq_long_int_0
-          (Int64.and tagged_n (Int64.repr 1)) m1); eval_cbn.
-        (* tagged_int_bit0_ne_0: for Val_int n, (n*2+1) & 1 != 0 *)
-        (* need to show Int64.eq (...) Int64.zero = false *)
-        (* For Val_int n: tagged_n = Int64.repr (n*2+1), bit 0 = 1, so
-           (n*2+1) & 1 != 0, comparison is false => else branch *)
-        unfold tagged_n.
-        rewrite tagged_int_bit0_ne_0; eval_cbn.
+        set (le_S4 := PTree.set _t'2 (Vlong tagged_n) le_S3).
 
-        (* Now in the else branch (integer case) *)
         (* S6: Sset _t'6 = s->accu *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Haccu_offset; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
-        rewrite Haccu_m1; eval_cbn.
+        assert (Hexec_S6 : exec e le_S4 m1
+            (Sset _t'6 (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _accu tlong))
+            E0 (PTree.set _t'6 (Vlong tagged_n) le_S4) m1 Out_normal).
+        { apply exec_Sset.
+          eapply eval_Elvalue.
+          - eval_s_field_lvalue_sw
+              ltac:(subst le_S4 le_S3;
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence); exact Hle_s)
+              co_is Hco Haccu_offset.
+          - apply deref_loc_value with (chunk := Mint64).
+            + reflexivity.
+            + simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+              exact Haccu_m1. }
+
+        set (le_S6 := PTree.set _t'6 (Vlong tagged_n) le_S4).
 
         (* S7: Sset _index__1 = (long)_t'6 >> 1 *)
-        rewrite PTree.gss; eval_cbn.
-        fold tagged_n.
-        rewrite (sem_cast_long_vlong tagged_n); eval_cbn.
-        rewrite (sem_shr_long_int_1 tagged_n m1); eval_cbn.
+        assert (Hexec_S7 : exec e le_S6 m1
+            (Sset _index__1
+              (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
+                (Econst_int (Int.repr 1) tint) tlong))
+            E0 (PTree.set _index__1 (Vlong (Int64.repr n)) le_S6) m1 Out_normal).
+        { apply exec_Sset.
+          assert (Hshr_val : Int64.shr tagged_n (Int64.repr 1) = Int64.repr n).
+          { unfold tagged_n. apply tagged_shr_1. exact Hn_range. }
+          eapply eval_Ebinop.
+          - eapply eval_Ecast.
+            + eapply eval_Etempvar. subst le_S6. rewrite PTree.gss. reflexivity.
+            + apply sem_cast_long_vlong.
+          - eapply eval_Econst_int.
+          - rewrite sem_shr_long_int_1. rewrite Hshr_val. reflexivity. }
 
-        (* Replace shr(tagged_n, 1) with Int64.repr n *)
-        unfold tagged_n.
-        rewrite (tagged_shr_1 n Hn_range); eval_cbn.
+        set (le_S7 := PTree.set _index__1 (Vlong (Int64.repr n)) le_S6).
 
         (* S8: Sset _t'3 = s->pc *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Hpc_offset; eval_cbn.
-        rewrite Mptr_Mint64; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
-        rewrite Hpc_m1; eval_cbn.
+        assert (Hexec_S8 : exec e le_S7 m1
+            (Sset _t'3 (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            E0 (PTree.set _t'3 (Vptr cb pc1) le_S7) m1 Out_normal).
+        { apply exec_Sset.
+          eapply eval_Elvalue.
+          - eval_s_field_lvalue_sw
+              ltac:(subst le_S7 le_S6 le_S4 le_S3;
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence); exact Hle_s)
+              co_is Hco Hpc_offset.
+          - apply deref_loc_value with (chunk := Mptr).
+            + reflexivity.
+            + simpl. rewrite Mptr_Mint64.
+              rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
+              exact Hpc_m1. }
+
+        set (le_S8 := PTree.set _t'3 (Vptr cb pc1) le_S7).
 
         (* S9: Sset _t'4 = s->pc *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Hpc_offset; eval_cbn.
-        rewrite Mptr_Mint64; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
-        rewrite Hpc_m1; eval_cbn.
+        assert (Hexec_S9 : exec e le_S8 m1
+            (Sset _t'4 (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            E0 (PTree.set _t'4 (Vptr cb pc1) le_S8) m1 Out_normal).
+        { apply exec_Sset.
+          eapply eval_Elvalue.
+          - eval_s_field_lvalue_sw
+              ltac:(subst le_S8 le_S7 le_S6 le_S4 le_S3;
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence); exact Hle_s)
+              co_is Hco Hpc_offset.
+          - apply deref_loc_value with (chunk := Mptr).
+            + reflexivity.
+            + simpl. rewrite Mptr_Mint64.
+              rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
+              exact Hpc_m1. }
+
+        set (le_S9 := PTree.set _t'4 (Vptr cb pc1) le_S8).
 
         (* S10: Sset _t'5 = *(_t'4 + _index__1) *)
-        rewrite PTree.gss; eval_cbn.
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gss; eval_cbn.
-        rewrite (sem_add_ptr_long cb pc1 (Int64.repr n) m1); eval_cbn.
-        (* The deref loads the switch table offset *)
-        rewrite Hpc1_eq.
-        rewrite Hofs_m1; eval_cbn.
+        assert (Hexec_S10 : exec e le_S9 m1
+            (Sset _t'5
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                  (Etempvar _index__1 tlong) (tptr tint)) tint))
+            E0 (PTree.set _t'5 (Vint ofs_int) le_S9) m1 Out_normal).
+        { apply exec_Sset.
+          eapply eval_Elvalue.
+          - eapply eval_Ederef.
+            eapply eval_Ebinop.
+            + eapply eval_Etempvar. subst le_S9. rewrite PTree.gss. reflexivity.
+            + eapply eval_Etempvar.
+              subst le_S9 le_S8.
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              subst le_S7. rewrite PTree.gss. reflexivity.
+            + apply sem_add_ptr_long.
+          - apply deref_loc_value with (chunk := Mint32).
+            + reflexivity.
+            + rewrite Hpc1_eq. exact Hofs_m1. }
+
+        set (le_S10 := PTree.set _t'5 (Vint ofs_int) le_S9).
+
+        (* le' = le_S10 *)
+        assert (Hle'_eq : le' = le_S10).
+        { subst le' le_S10 le_S9 le_S8 le_S7 le_S6 le_S4 le_S3. reflexivity. }
 
         (* S11: Sassign s->pc = _t'3 + _t'5 *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Hpc_offset; eval_cbn.
-        rewrite Mptr_Mint64; eval_cbn.
-        (* Rvalue: _t'3 + _t'5 *)
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gss; eval_cbn.
-        rewrite PTree.gso by (compute; congruence).
-        rewrite PTree.gss; eval_cbn.
-        rewrite (sem_add_ptr_int_tint cb pc1 ofs_int m1); eval_cbn.
-        rewrite (sem_cast_ptr_tint_to_ptr_tint cb (Ptrofs.add pc1 jump_ofs) m1); eval_cbn.
-        rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
-        fold new_pc. fold new_pc_v.
-        rewrite Hs2; eval_cbn.
+        assert (Hexec_S11 : exec e le_S10 m1
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint))
+              (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                (Etempvar _t'5 tint) (tptr tint)))
+            E0 le_S10 m2 Out_normal).
+        { eapply exec_Sassign.
+          - eval_s_field_lvalue_sw
+              ltac:(subst le_S10 le_S9 le_S8 le_S7 le_S6 le_S4 le_S3;
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence);
+                rewrite PTree.gso by (compute; congruence); exact Hle_s)
+              co_is Hco Hpc_offset.
+          - eapply eval_Ebinop.
+            + eapply eval_Etempvar.
+              subst le_S10 le_S9.
+              rewrite PTree.gso by (compute; congruence).
+              rewrite PTree.gso by (compute; congruence).
+              subst le_S8. rewrite PTree.gss. reflexivity.
+            + eapply eval_Etempvar.
+              subst le_S10. rewrite PTree.gss. reflexivity.
+            + apply sem_add_ptr_int_tint.
+          - apply sem_cast_ptr_tint_to_ptr_tint.
+          - apply assign_loc_value with (chunk := Mptr).
+            + reflexivity.
+            + simpl. rewrite Mptr_Mint64.
+              rewrite (ptrofs_add_unsigned so 0 ltac:(lia) ltac:(lia)).
+              fold new_pc. fold new_pc_v. exact Hstore2. }
 
         (* S12: Sreturn 0 *)
-        subst le'. reflexivity.
+        assert (Hexec_S12 : exec e le_S10 m2
+            (Sreturn (Some (Econst_int (Int.repr 0) tint)))
+            E0 le_S10 m2 (Out_return (Some (Vint (Int.repr 0), tint)))).
+        { apply exec_Sreturn_some. eapply eval_Econst_int. }
+
+        (* === Combine phases bottom-up with exec_Sseq_1 === *)
+
+        (* S1;S2 *)
+        assert (Hexec_S12_seq : exec e le m
+            (Ssequence
+              (Sset _t'1 (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint))
+                (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+                  (Econst_int (Int.repr 1) tint) (tptr tint))))
+            E0 (PTree.set _t'1 (Vptr cb pc_ofs) le) m1 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity. eapply exec_Sseq_1; eauto. }
+
+        (* (S1;S2);S3 *)
+        assert (Hexec_S123 : exec e le m
+            (Ssequence
+              (Ssequence
+                (Sset _t'1 (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                (Sassign
+                  (Efield
+                    (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+                    (Econst_int (Int.repr 1) tint) (tptr tint))))
+              (Sset _sizes (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+            E0 le_S3 m1 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity. eapply exec_Sseq_1; eauto. }
+
+        (* S6;S7 *)
+        assert (Hexec_S67 : exec e le_S4 m1
+            (Ssequence
+              (Sset _t'6 (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
+              (Sset _index__1
+                (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
+                  (Econst_int (Int.repr 1) tint) tlong)))
+            E0 le_S7 m1 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity. eapply exec_Sseq_1; eauto. }
+
+        (* S10;S11 *)
+        assert (Hexec_S10_11 : exec e le_S9 m1
+            (Ssequence
+              (Sset _t'5
+                (Ederef
+                  (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                    (Etempvar _index__1 tlong) (tptr tint)) tint))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint))
+                (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                  (Etempvar _t'5 tint) (tptr tint))))
+            E0 le_S10 m2 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity.
+          eapply exec_Sseq_1; eauto. }
+
+        (* S9;(S10;S11) *)
+        assert (Hexec_S9_11 : exec e le_S8 m1
+            (Ssequence
+              (Sset _t'4 (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Ssequence
+                (Sset _t'5
+                  (Ederef
+                    (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                      (Etempvar _index__1 tlong) (tptr tint)) tint))
+                (Sassign
+                  (Efield
+                    (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                    (Etempvar _t'5 tint) (tptr tint)))))
+            E0 le_S10 m2 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity. eapply exec_Sseq_1; eauto. }
+
+        (* S8;(S9;S10;S11) *)
+        assert (Hexec_S8_11 : exec e le_S7 m1
+            (Ssequence
+              (Sset _t'3 (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Ssequence
+                (Sset _t'4 (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                (Ssequence
+                  (Sset _t'5
+                    (Ederef
+                      (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                        (Etempvar _index__1 tlong) (tptr tint)) tint))
+                  (Sassign
+                    (Efield
+                      (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _pc (tptr tint))
+                    (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                      (Etempvar _t'5 tint) (tptr tint))))))
+            E0 le_S10 m2 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity. eapply exec_Sseq_1; eauto. }
+
+        (* Full else branch: (S6;S7);(S8;S9;S10;S11) *)
+        assert (Hexec_else : exec e le_S4 m1
+            (Ssequence
+              (Ssequence
+                (Sset _t'6 (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _accu tlong))
+                (Sset _index__1
+                  (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
+                    (Econst_int (Int.repr 1) tint) tlong)))
+              (Ssequence
+                (Sset _t'3 (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                (Ssequence
+                  (Sset _t'4 (Efield
+                    (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                  (Ssequence
+                    (Sset _t'5
+                      (Ederef
+                        (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                          (Etempvar _index__1 tlong) (tptr tint)) tint))
+                    (Sassign
+                      (Efield
+                        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _pc (tptr tint))
+                      (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                        (Etempvar _t'5 tint) (tptr tint)))))))
+            E0 le_S10 m2 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity. eapply exec_Sseq_1; eauto. }
+
+        (* S5: Sifthenelse -- condition is false for Val_int, take else branch *)
+        assert (Hexec_S5 : exec e le_S4 m1
+            (Sifthenelse (Ebinop Oeq
+                           (Ebinop Oand (Etempvar _t'2 tlong)
+                             (Econst_int (Int.repr 1) tint) tlong)
+                           (Econst_int (Int.repr 0) tint) tint)
+              (* then branch -- not taken for Val_int *)
+              (Ssequence
+                (Ssequence
+                  (Sset _t'10
+                    (Efield
+                      (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _accu tlong))
+                  (Ssequence
+                    (Sset _t'11
+                      (Ederef
+                        (Ebinop Oadd (Ecast (Etempvar _t'10 tlong) (tptr tuchar))
+                          (Eunop Oneg (Esizeof tlong tulong) tulong) (tptr tuchar))
+                        tuchar))
+                    (Sset _index
+                      (Ecast
+                        (Ebinop Oand (Etempvar _t'11 tuchar)
+                          (Econst_int (Int.repr 255) tint) tint) tlong))))
+                (Ssequence
+                  (Sset _t'7
+                    (Efield
+                      (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                  (Ssequence
+                    (Sset _t'8
+                      (Efield
+                        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                    (Ssequence
+                      (Sset _t'9
+                        (Ederef
+                          (Ebinop Oadd (Etempvar _t'8 (tptr tint))
+                            (Ebinop Oadd
+                              (Ebinop Oand (Etempvar _sizes tuint)
+                                (Econst_int (Int.repr 65535) tint) tuint)
+                              (Etempvar _index tlong) tlong) (tptr tint)) tint))
+                      (Sassign
+                        (Efield
+                          (Ederef
+                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _pc (tptr tint))
+                        (Ebinop Oadd (Etempvar _t'7 (tptr tint))
+                          (Etempvar _t'9 tint) (tptr tint)))))))
+              (* else branch -- taken *)
+              (Ssequence
+                (Ssequence
+                  (Sset _t'6 (Efield
+                    (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _accu tlong))
+                  (Sset _index__1
+                    (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
+                      (Econst_int (Int.repr 1) tint) tlong)))
+                (Ssequence
+                  (Sset _t'3 (Efield
+                    (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                  (Ssequence
+                    (Sset _t'4 (Efield
+                      (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                    (Ssequence
+                      (Sset _t'5
+                        (Ederef
+                          (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                            (Etempvar _index__1 tlong) (tptr tint)) tint))
+                      (Sassign
+                        (Efield
+                          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _pc (tptr tint))
+                        (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                          (Etempvar _t'5 tint) (tptr tint))))))))
+            E0 le_S10 m2 Out_normal).
+        { eapply exec_Sifthenelse.
+          - eapply eval_Ebinop.
+            + eapply eval_Ebinop.
+              * eapply eval_Etempvar. subst le_S4. rewrite PTree.gss. reflexivity.
+              * eapply eval_Econst_int.
+              * apply sem_and_long_int_1.
+            + eapply eval_Econst_int.
+            + apply sem_eq_long_int_0.
+          - unfold tagged_n. rewrite tagged_int_bit0_ne_0.
+            apply bool_val_of_bool.
+          - exact Hexec_else. }
+
+        (* S4;S5 *)
+        assert (Hexec_S4_S5 : exec e le_S3 m1
+            (Ssequence
+              (Sset _t'2 (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
+              (Sifthenelse (Ebinop Oeq
+                             (Ebinop Oand (Etempvar _t'2 tlong)
+                               (Econst_int (Int.repr 1) tint) tlong)
+                             (Econst_int (Int.repr 0) tint) tint)
+                (* then branch *)
+                (Ssequence
+                  (Ssequence
+                    (Sset _t'10
+                      (Efield
+                        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
+                    (Ssequence
+                      (Sset _t'11
+                        (Ederef
+                          (Ebinop Oadd (Ecast (Etempvar _t'10 tlong) (tptr tuchar))
+                            (Eunop Oneg (Esizeof tlong tulong) tulong) (tptr tuchar))
+                          tuchar))
+                      (Sset _index
+                        (Ecast
+                          (Ebinop Oand (Etempvar _t'11 tuchar)
+                            (Econst_int (Int.repr 255) tint) tint) tlong))))
+                  (Ssequence
+                    (Sset _t'7
+                      (Efield
+                        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                    (Ssequence
+                      (Sset _t'8
+                        (Efield
+                          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                      (Ssequence
+                        (Sset _t'9
+                          (Ederef
+                            (Ebinop Oadd (Etempvar _t'8 (tptr tint))
+                              (Ebinop Oadd
+                                (Ebinop Oand (Etempvar _sizes tuint)
+                                  (Econst_int (Int.repr 65535) tint) tuint)
+                                (Etempvar _index tlong) tlong) (tptr tint)) tint))
+                        (Sassign
+                          (Efield
+                            (Ederef
+                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                              (Tstruct _interp_state noattr)) _pc (tptr tint))
+                          (Ebinop Oadd (Etempvar _t'7 (tptr tint))
+                            (Etempvar _t'9 tint) (tptr tint)))))))
+                (* else branch *)
+                (Ssequence
+                  (Ssequence
+                    (Sset _t'6 (Efield
+                      (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _accu tlong))
+                    (Sset _index__1
+                      (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
+                        (Econst_int (Int.repr 1) tint) tlong)))
+                  (Ssequence
+                    (Sset _t'3 (Efield
+                      (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                    (Ssequence
+                      (Sset _t'4 (Efield
+                        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                      (Ssequence
+                        (Sset _t'5
+                          (Ederef
+                            (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                              (Etempvar _index__1 tlong) (tptr tint)) tint))
+                        (Sassign
+                          (Efield
+                            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                              (Tstruct _interp_state noattr)) _pc (tptr tint))
+                          (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                            (Etempvar _t'5 tint) (tptr tint)))))))))
+            E0 le_S10 m2 Out_normal).
+        { replace E0 with (E0 ** E0) by reflexivity. eapply exec_Sseq_1; eauto. }
+
+        (* Full body: fn_body f_instr_SWITCH =
+           Ssequence body_pre (Sreturn ...).
+           We use change to expose this structure. *)
+        rewrite Hle'_eq.
+        change (fn_body f_instr_SWITCH) with
+(Ssequence
+  (Ssequence
+    (Ssequence
+      (Ssequence
+        (Sset _t'1
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint)))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint))
+          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+            (Econst_int (Int.repr 1) tint) (tptr tint))))
+      (Sset _sizes (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+    (Ssequence
+      (Sset _t'2
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _accu tlong))
+      (Sifthenelse (Ebinop Oeq
+                     (Ebinop Oand (Etempvar _t'2 tlong)
+                       (Econst_int (Int.repr 1) tint) tlong)
+                     (Econst_int (Int.repr 0) tint) tint)
+        (Ssequence
+          (Ssequence
+            (Sset _t'10
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
+            (Ssequence
+              (Sset _t'11
+                (Ederef
+                  (Ebinop Oadd (Ecast (Etempvar _t'10 tlong) (tptr tuchar))
+                    (Eunop Oneg (Esizeof tlong tulong) tulong) (tptr tuchar))
+                  tuchar))
+              (Sset _index
+                (Ecast
+                  (Ebinop Oand (Etempvar _t'11 tuchar)
+                    (Econst_int (Int.repr 255) tint) tint) tlong))))
+          (Ssequence
+            (Sset _t'7
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            (Ssequence
+              (Sset _t'8
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Ssequence
+                (Sset _t'9
+                  (Ederef
+                    (Ebinop Oadd (Etempvar _t'8 (tptr tint))
+                      (Ebinop Oadd
+                        (Ebinop Oand (Etempvar _sizes tuint)
+                          (Econst_int (Int.repr 65535) tint) tuint)
+                        (Etempvar _index tlong) tlong) (tptr tint)) tint))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Ebinop Oadd (Etempvar _t'7 (tptr tint))
+                    (Etempvar _t'9 tint) (tptr tint)))))))
+        (Ssequence
+          (Ssequence
+            (Sset _t'6
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
+            (Sset _index__1
+              (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
+                (Econst_int (Int.repr 1) tint) tlong)))
+          (Ssequence
+            (Sset _t'3
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            (Ssequence
+              (Sset _t'4
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Ssequence
+                (Sset _t'5
+                  (Ederef
+                    (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                      (Etempvar _index__1 tlong) (tptr tint)) tint))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                    (Etempvar _t'5 tint) (tptr tint))))))))))
+  (Sreturn (Some (Econst_int (Int.repr 0) tint)))).
+        replace E0 with (E0 ** E0) by reflexivity.
+        eapply exec_Sseq_1.
+        (* body_pre: ((S1;S2);S3);(S4;Sifthenelse) *)
+        { replace E0 with (E0 ** E0) by reflexivity.
+          eapply exec_Sseq_1.
+          - exact Hexec_S123.
+          - exact Hexec_S4_S5. }
+        (* Sreturn *)
+        { exact Hexec_S12. }
       }
 
       (* ============================================================ *)
@@ -716,7 +1234,7 @@ Proof.
   (* Case 3: accu = Val_ptr addr                                       *)
   (* ================================================================ *)
   {
-    destruct (tag_or_heap s (Machine.accu s)) as [t|] eqn:Htag.
+    destruct (tag_or_heap s (Val_ptr addr)) as [t|] eqn:Htag.
     - destruct (nth_error block_targets t) as [target|] eqn:Hnth.
       + intros ard _ Hfalse. contradiction.
       + exact I.
@@ -727,11 +1245,10 @@ Proof.
   (* Case 4: accu = Val_closure addr off                               *)
   (* ================================================================ *)
   {
-    destruct (tag_or_heap s (Machine.accu s)) as [t|] eqn:Htag.
+    destruct (tag_or_heap s (Val_closure addr off)) as [t|] eqn:Htag.
     - destruct (nth_error block_targets t) as [target|] eqn:Hnth.
       + intros ard _ Hfalse. contradiction.
       + exact I.
     - exact I.
   }
 Qed.
-*)

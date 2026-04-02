@@ -1347,20 +1347,10 @@ Proof.
           + apply IH. exact Hsp_ne_new. }
 
       assert (Hstack_rest_f0 : stack_repr hm m_f0 rest sp_b new_sp_ofs).
-      { induction Hstack_rest_alloc as [| v0 vs0 sp_b0 sp_ofs0 cv0 Hld Hvr Htl IH].
-        - constructor.
-        - econstructor.
-          + apply Hf0_load_pres. intro; subst; exact (Hsp_ne_new eq_refl). exact Hld.
-          + exact Hvr.
-          + exact IH. }
+      { eapply stack_repr_store_other_block; eauto. }
 
       assert (Hstack_rest_f1 : stack_repr hm m_f1 rest sp_b new_sp_ofs).
-      { induction Hstack_rest_f0 as [| v0 vs0 sp_b0 sp_ofs0 cv0 Hld Hvr Htl IH].
-        - constructor.
-        - econstructor.
-          + apply Hf1_load_pres. intro; subst; exact (Hsp_ne_new eq_refl). exact Hld.
-          + exact Hvr.
-          + exact IH. }
+      { eapply stack_repr_store_other_block; eauto. }
 
       assert (Hstack_rest_m2 : stack_repr hm m2 rest sp_b new_sp_ofs).
       { eapply stack_repr_store_other_block; eauto. }
@@ -1382,28 +1372,16 @@ Proof.
           + apply IH. exact Hgb_ne_new. }
 
       assert (Hglobal_f0 : global_repr hm m_f0 (Machine.global s) gb go0).
-      { induction Hglobal_alloc as [| v0 vs0 gb0 gofs0 cv0 Hld Hvr Htl IH].
-        - constructor.
-        - econstructor.
-          + apply Hf0_load_pres. intro; subst; exact (Hgb_ne_new eq_refl). exact Hld.
-          + exact Hvr.
-          + exact IH. }
+      { eapply global_repr_store_other_block; eauto. }
 
       assert (Hglobal_f1 : global_repr hm m_f1 (Machine.global s) gb go0).
-      { induction Hglobal_f0 as [| v0 vs0 gb0 gofs0 cv0 Hld Hvr Htl IH].
-        - constructor.
-        - econstructor.
-          + apply Hf1_load_pres. intro; subst; exact (Hgb_ne_new eq_refl). exact Hld.
-          + exact Hvr.
-          + exact IH. }
+      { eapply global_repr_store_other_block; eauto. }
 
       assert (Hglobal_m2 : global_repr hm m2 (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto.
-        intro Heq; exact (Hgb_ne (eq_sym Heq)). }
+      { eapply global_repr_store_other_block; eauto. }
 
       assert (Hglobal3 : global_repr hm m3 (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto.
-        intro Heq; exact (Hgb_ne (eq_sym Heq)). }
+      { eapply global_repr_store_other_block; eauto. }
 
       (* Now build abs_rel *)
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -1429,8 +1407,7 @@ Proof.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
         - exact Hsp_load3.
         - reflexivity.
-        - simpl. rewrite Hstk. simpl.
-          apply Hstack_repr_ext. exact Hstack_rest_m3.
+        - simpl. apply Hstack_repr_ext. exact Hstack_rest_m3.
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp.
@@ -1442,7 +1419,7 @@ Proof.
           rewrite Ptrofs.unsigned_repr.
           2: { pose proof (Ptrofs.unsigned_range sp_ofs).
                unfold Ptrofs.max_unsigned.
-               simpl length in Hsp_rep.
+               rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
                lia. }
           lia.
         - (* sp representable *)
@@ -1453,13 +1430,14 @@ Proof.
           rewrite Ptrofs.unsigned_repr.
           2: { pose proof (Ptrofs.unsigned_range sp_ofs).
                unfold Ptrofs.max_unsigned.
-               simpl length in Hsp_rep.
+               rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
                lia. }
-          simpl. rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
+          simpl Machine.stack. rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
           lia.
         - split.
           + (* sp_writable *)
             intros ofs0 Hofs0.
+            simpl Machine.stack in Hofs0.
             eapply Mem.perm_store_1. exact Hstore_accu.
             eapply Mem.perm_store_1. exact Hstore_sp.
             eapply Hf1_perm_pres.
@@ -1468,7 +1446,18 @@ Proof.
               apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
               apply (Hsp_writable 0). lia.
             * eapply Mem.perm_store_1. exact Hstore_pc.
-              apply Hsp_writable. exact Hofs0.
+              apply Hsp_writable.
+              rewrite Hstk. simpl length.
+              unfold new_sp_ofs in Hofs0.
+              rewrite Ptrofs.add_unsigned in Hofs0.
+              rewrite (Ptrofs.unsigned_repr 8) in Hofs0.
+              2: { unfold Ptrofs.max_unsigned. pose proof Ptrofs.modulus_pos. lia. }
+              rewrite Ptrofs.unsigned_repr in Hofs0.
+              2: { pose proof (Ptrofs.unsigned_range sp_ofs).
+                   unfold Ptrofs.max_unsigned.
+                   rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
+                   lia. }
+              lia.
           + (* sp_align *)
             unfold new_sp_ofs.
             destruct Hsp_align as [k Hk].
@@ -1478,7 +1467,7 @@ Proof.
             rewrite Ptrofs.unsigned_repr.
             2: { pose proof (Ptrofs.unsigned_range sp_ofs).
                  unfold Ptrofs.max_unsigned.
-                 simpl length in Hsp_rep.
+                 rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
                  lia. }
             change (align_chunk Mint64) with 8%Z in Hk |- *.
             lia.

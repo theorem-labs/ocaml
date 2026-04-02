@@ -293,10 +293,10 @@ Proof.
               destruct (store_succeeds_sb m1 sb so 16 (Vptr sp_b sp_ofs) Hsb_writable_m1 Hsp_load_m1 ltac:(lia) ltac:(lia) (Vptr sp_b new_sp_ofs)) as [m2 Hstore2].
 
               (* Witnesses *)
-              set (le' := PTree.set _t'4 (Vlong (Int64.repr (z1 * 2 + 1)))
+              set (le' := PTree.set _t'1 (Vptr sp_b sp_ofs)
+                          (PTree.set _t'4 (Vlong (Int64.repr (z1 * 2 + 1)))
                           (PTree.set _t'3 (Vptr sp_b sp_ofs)
-                          (PTree.set _t'2 (Vptr sp_b sp_ofs)
-                          (PTree.set _t'1 (Vptr sp_b sp_ofs) le)))).
+                          (PTree.set _t'2 (Vptr sp_b sp_ofs) le)))).
               exists le'. exists m2.
               exists (Out_return (Some (Vint (Int.repr 0), tint))).
 
@@ -360,7 +360,6 @@ Proof.
                 rewrite PTree.gso by (compute; congruence).
                 rewrite PTree.gso by (compute; congruence).
                 rewrite PTree.gso by (compute; congruence).
-                rewrite PTree.gso by (compute; congruence).
                 rewrite Hle_s; eval_cbn.
                 try rewrite Hco; eval_cbn.
                 try rewrite Hsp_offset; eval_cbn.
@@ -374,15 +373,10 @@ Proof.
                 rewrite PTree.gso by (compute; congruence).
                 rewrite PTree.gso by (compute; congruence).
                 rewrite PTree.gso by (compute; congruence).
-                rewrite PTree.gso by (compute; congruence).
                 rewrite Hle_s; eval_cbn.
                 try rewrite Hco; eval_cbn.
                 try rewrite Hsp_offset; eval_cbn.
                 rewrite Mptr_Mint64; eval_cbn.
-                rewrite PTree.gso by (compute; congruence).
-                rewrite PTree.gso by (compute; congruence).
-                rewrite PTree.gso by (compute; congruence).
-                rewrite PTree.gso by (compute; congruence).
                 rewrite PTree.gss; eval_cbn.
                 rewrite sem_add_sp_4; eval_cbn.
                 rewrite sem_cast_ptr_to_ptr; eval_cbn.
@@ -511,20 +505,20 @@ Proof.
                     simpl.
                     unfold new_sp_ofs.
                     rewrite (ptrofs_add_unsigned sp_ofs 32 ltac:(lia) ltac:(lia)).
-                    lia.
+                    exact Hrest_fits.
                   - (* sp_writable *)
                     simpl.
                     unfold new_sp_ofs.
                     rewrite (ptrofs_add_unsigned sp_ofs 32 ltac:(lia) ltac:(lia)).
-                    rewrite Hstk in Hsp_writable.
-                    simpl length in Hsp_writable.
-                    replace (Ptrofs.unsigned sp_ofs + 32 + 8 * Z.of_nat (length rest))
-                      with (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (S (S (S (S (length rest))))))
-                      by lia.
+                    assert (Hwritable_old : Mem.range_perm m sp_b 0
+                              (Ptrofs.unsigned sp_ofs + 32 + 8 * Z.of_nat (length rest)) Cur Writable).
+                    { intros ofs' Hofs'.
+                      rewrite Hstk in Hsp_writable. simpl length in Hsp_writable.
+                      apply Hsp_writable. rewrite !Nat2Z.inj_succ. lia. }
                     intros ofs' Hofs'.
                     eapply Mem.perm_store_1. exact Hstore2.
                     eapply Mem.perm_store_1. exact Hstore1.
-                    apply Hsp_writable. lia.
+                    apply Hwritable_old. assumption.
                   - (* sp_align *)
                     unfold new_sp_ofs.
                     rewrite (ptrofs_add_unsigned sp_ofs 32 ltac:(lia) ltac:(lia)).
