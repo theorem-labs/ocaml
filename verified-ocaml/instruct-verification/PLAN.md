@@ -54,7 +54,15 @@ Paste the block below into every agent prompt verbatim.
 
 5. Every proof MUST end with `Qed.` -- never Defined, never Admitted.
 
-6. Before declaring success, run BOTH:
+6. NEVER use `(fun _ _ => True)` as the error predicate (P_error).
+   The error predicate MUST precisely characterize when errors occur.
+   For example, if the handler errors on non-integer accu, write:
+     `(fun s _ => match Machine.accu s with Val_int _ => False | _ => True end)`
+   NOT `(fun _ _ => True)`. The whole point of the error predicate is to
+   specify exactly which states produce errors. `True` is vacuously
+   satisfied and provides no information.
+
+7. Before declaring success, run BOTH:
    a) coqc command above (must exit 0 with no errors)
    b) grep -c "Admitted\|^Axiom" theories/HANDLER_correct.v (must print 0)
 
