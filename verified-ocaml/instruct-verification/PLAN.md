@@ -62,7 +62,15 @@ Paste the block below into every agent prompt verbatim.
    specify exactly which states produce errors. `True` is vacuously
    satisfied and provides no information.
 
-7. Before declaring success, run BOTH:
+7. NEVER use `False` as step_pre. If you cannot prove the Step case,
+   add the missing facts as ASSUMPTIONS in step_pre. For example, if
+   the proof needs a code pointer to satisfy val_repr, add:
+     `val_repr hm (Val_int pc') pc_cval`
+   as a step_pre assumption. This gives a non-vacuous theorem
+   conditioned on those assumptions. `False` step_pre proves nothing
+   about successful execution — it is as bad as Admitted.
+
+8. Before declaring success, run BOTH:
    a) coqc command above (must exit 0 with no errors)
    b) grep -c "Admitted\|^Axiom" theories/HANDLER_correct.v (must print 0)
 
