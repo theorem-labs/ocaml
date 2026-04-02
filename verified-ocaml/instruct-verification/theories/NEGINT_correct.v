@@ -178,7 +178,7 @@ Proof.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
-      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+      [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
       [env_v [Henv_load Henv_repr]] &
       Hextra_load &
       [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
@@ -205,8 +205,7 @@ Proof.
                                         (Int64.repr (n * 2 + 1)))) in *.
 
     (* Accu store must succeed *)
-    destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 8)
-                cv_accu cv_result Haccu_load)
+    destruct (store_succeeds_sb m sb so 8 cv_accu Hsb_writable Haccu_load ltac:(lia) ltac:(lia) cv_result)
       as [m' Hstore].
 
     (* Witnesses *)
@@ -354,7 +353,7 @@ Proof.
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+        split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
@@ -366,7 +365,8 @@ Proof.
         - exact Hcb_ne_sp.
         - exact Hsp_ge8.
         - exact Hsp_rep.
-        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsp_writable. exact Hofs'. }
+        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsp_writable. exact Hofs'. 
+        - exact Hsp_align. }
 
       (* 5. env field -- unchanged *)
       { exists env_v. split.

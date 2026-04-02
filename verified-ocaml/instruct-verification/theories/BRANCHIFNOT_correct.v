@@ -166,13 +166,8 @@ Lemma load_result_vptr : forall b ofs,
   Val.load_result Mint64 (Vptr b ofs) = Vptr b ofs.
 Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
-Lemma store_pc_succeeds : forall m sb so v_new,
-  (exists v_old, Mem.load Mint64 m sb so = Some v_old) ->
-  exists m', Mem.store Mint64 m sb so v_new = Some m'.
-Proof.
-  intros m sb so v_new [v_old Hload].
-  exact (store_succeeds_from_load m sb so v_old v_new Hload).
-Qed.
+(* store_pc_succeeds is no longer needed -- uses of the deleted axiom
+   store_succeeds_from_load are replaced by store_succeeds_sb below. *)
 
 (* ================================================================== *)
 (* Tagged zero comparison                                              *)
@@ -338,7 +333,7 @@ Proof.
         [ts_ptr [Hts_load Htrap_rel]] &
         Hsb_writable).
       destruct Hsp_data as [sp_ptr [sp_b [sp_ofs (Hsp_load & Hsp_eq & Hstack_repr
-        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable)]]].
+        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]].
       subst sp_ptr.
 
       (* Extract preconditions *)
@@ -374,9 +369,11 @@ Proof.
       { replace (Ptrofs.unsigned so) with (Ptrofs.unsigned so + 0)%Z by lia.
         exact Hpc_load. }
 
-      (* Store to pc field *)
-      destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
-                  (ex_intro _ _ Hpc_load_uso)) as [m' Hstore].
+      (* Store to pc field at offset 0 *)
+      destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load ltac:(lia) ltac:(lia) new_pc_v) as [m' Hstore0].
+      (* Hstore0 stores at (uso + 0); convert to uso for downstream compatibility *)
+      assert (Hstore : Mem.store Mint64 m sb (Ptrofs.unsigned so) new_pc_v = Some m').
+      { replace (Ptrofs.unsigned so) with (Ptrofs.unsigned so + 0)%Z by lia. exact Hstore0. }
 
       (* Witnesses *)
       set (le' := PTree.set _t'5 (Vint ofs_int)
@@ -598,9 +595,10 @@ Proof.
           split. { exact Hcb_ne_sp. }
           split. { exact Hsp_ge8. }
           split. { exact Hsp_bound. }
-          intros ofs' Hofs'.
+          split. { intros ofs' Hofs'.
           eapply Mem.perm_store_1. exact Hstore.
           apply Hsp_writable. exact Hofs'. }
+          exact Hsp_align. }
 
         { exists env_v. split.
           - exact Henv_load'.
@@ -652,7 +650,7 @@ Proof.
         [ts_ptr [Hts_load Htrap_rel]] &
         Hsb_writable);
       destruct Hsp_data as [sp_ptr [sp_b [sp_ofs (Hsp_load & Hsp_eq & Hstack_repr
-        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable)]]];
+        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]];
       subst sp_ptr;
 
       destruct Hstep_pre as (_ & _ & Haccu_range);
@@ -675,8 +673,9 @@ Proof.
       set (new_pc_ofs := Ptrofs.add pc_ofs (Ptrofs.repr 4));
       set (new_pc_v := Vptr cb new_pc_ofs);
 
-      destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
-                  (ex_intro _ _ Hpc_load_uso)) as [m' Hstore];
+      destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load ltac:(lia) ltac:(lia) new_pc_v) as [m' Hstore0];
+      assert (Hstore : Mem.store Mint64 m sb (Ptrofs.unsigned so) new_pc_v = Some m')
+        by (replace (Ptrofs.unsigned so) with (Ptrofs.unsigned so + 0)%Z by lia; exact Hstore0);
 
       (* Set le1 and le' BEFORE subst so accu_v name is available *)
       set (le1 := PTree.set _t'1 accu_v le);
@@ -846,9 +845,10 @@ Proof.
           | split; [ exact Hcb_ne_sp
           | split; [ exact Hsp_ge8
           | split; [ exact Hsp_bound
-          | intros ofs' Hofs';
+          | split; [ intros ofs' Hofs';
             eapply Mem.perm_store_1; [ exact Hstore | ];
-            apply Hsp_writable; exact Hofs' ]]]]]]]])
+            apply Hsp_writable; exact Hofs'
+          | exact Hsp_align ]]]]]]]]])
 
         | exists env_v; split;
           [ exact Henv_load'
@@ -901,7 +901,7 @@ Proof.
         [ts_ptr [Hts_load Htrap_rel]] &
         Hsb_writable).
       destruct Hsp_data as [sp_ptr [sp_b [sp_ofs (Hsp_load & Hsp_eq & Hstack_repr
-        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable)]]].
+        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]].
       subst sp_ptr.
 
       pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
@@ -923,8 +923,9 @@ Proof.
       set (new_pc_ofs := Ptrofs.add pc_ofs (Ptrofs.repr 4)).
       set (new_pc_v := Vptr cb new_pc_ofs).
 
-      destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
-                  (ex_intro _ _ Hpc_load_uso)) as [m' Hstore].
+      destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load ltac:(lia) ltac:(lia) new_pc_v) as [m' Hstore0].
+      assert (Hstore : Mem.store Mint64 m sb (Ptrofs.unsigned so) new_pc_v = Some m').
+      { replace (Ptrofs.unsigned so) with (Ptrofs.unsigned so + 0)%Z by lia. exact Hstore0. }
 
       set (le' := PTree.set _t'2 (Vptr cb pc_ofs)
                   (PTree.set _t'1 (Vlong (Int64.repr (Z.of_nat addr * 1024))) le)).
@@ -1075,9 +1076,10 @@ Proof.
           | split; [ exact Hcb_ne_sp
           | split; [ exact Hsp_ge8
           | split; [ exact Hsp_bound
-          | intros ofs' Hofs';
+          | split; [ intros ofs' Hofs';
             eapply Mem.perm_store_1; [ exact Hstore | ];
-            apply Hsp_writable; exact Hofs' ]]]]]]]]).  }
+            apply Hsp_writable; exact Hofs'
+          | exact Hsp_align ]]]]]]]]]).  }
 
         { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
 

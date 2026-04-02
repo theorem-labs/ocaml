@@ -246,7 +246,7 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr0 [Hsp_ne_sb [Hsp_ne_gb [Hcode_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr0 [Hsp_ne_sb [Hsp_ne_gb [Hcode_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr0 Hgb_ne]]]] &
@@ -285,8 +285,7 @@ Proof.
   set (result_v := Vlong result_int64).
   set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
 
-  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
-              (Vptr sp_b sp_ofs) new_sp_v Hsp_load) as [m1 Hstore1].
+  destruct (store_succeeds_sb m sb so 16 (Vptr sp_b sp_ofs) Hsb_writable Hsp_load ltac:(lia) ltac:(lia) new_sp_v) as [m1 Hstore1].
 
   assert (Haccu_load_m1 :
     Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 8) = Some (Vlong tagged_a)).
@@ -299,8 +298,8 @@ Proof.
   { erewrite Mem.load_store_other. exact Hload_sp0. exact Hstore1.
     left. exact Hsp_ne_sb. }
 
-  destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 8)
-              (Vlong tagged_a) result_v Haccu_load_m1) as [m' Hstore2].
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore1 Hsb_writable) as Hsb_writable_m1.
+  destruct (store_succeeds_sb m1 sb so 8 (Vlong tagged_a) Hsb_writable_m1 Haccu_load_m1 ltac:(lia) ltac:(lia) result_v) as [m' Hstore2].
 
   set (le' := PTree.set _t'3 (Vlong tagged_b)
                 (PTree.set _t'2 (Vlong tagged_a)
@@ -414,7 +413,7 @@ Proof.
       constructor. }
     (* 4. sp -- conjunction: stack_repr /\ sep facts *)
     { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
-      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load'.
       - reflexivity.
       - simpl.
@@ -439,7 +438,11 @@ Proof.
           rewrite (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)) in Hofs'.
           eapply Mem.perm_store_1. exact Hstore2.
           eapply Mem.perm_store_1. exact Hstore1.
-          apply Hsp_writable_tail. exact Hofs'. }
+          apply Hsp_writable_tail. exact Hofs'.
+        - (* sp_align *)
+          simpl.
+          rewrite (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)).
+          apply Z.divide_add_r. exact Hsp_align. exists 1. lia. }
     (* 5. env *)
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     (* 6. extra_args *)

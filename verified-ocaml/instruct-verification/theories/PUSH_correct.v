@@ -28,24 +28,34 @@ Local Ltac eval_cbn :=
 
 Theorem verify_PUSH_correct :
     handler_correct handle_PUSH f_instr_PUSH
-      (fun _ _ _ _ => True)
+      (fun _ m _ ard =>
+         let sb := ar_sptr_block ard in
+         let so := ar_sptr_ofs ard in
+         exists sp_b sp_ofs,
+           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
+           Ptrofs.unsigned sp_ofs >= 16)
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSH. intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
+  intros e le m s. unfold handler_correct, handle_PUSH. intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
+  (* Extract sp_ofs >= 16 from step_pre *)
+  destruct Hstep_pre as [sp_b' [sp_ofs' [Hsp_load' Hsp_ge16]]].
+  simpl in Hsp_load'. fold sb so in Hsp_load'.
+  assert (sp_b' = sp_b /\ sp_ofs' = sp_ofs) as [-> ->]
+    by (rewrite Hsp_load in Hsp_load'; injection Hsp_load'; auto).
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
@@ -56,12 +66,18 @@ Proof.
     change (Ptrofs.unsigned (Ptrofs.repr 8)) with 8.
     apply Ptrofs.unsigned_repr. pose proof (Ptrofs.unsigned_range sp_ofs).
     unfold Ptrofs.max_unsigned. lia. }
-  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
-              (Vptr sp_b sp_ofs) (Vptr sp_b new_sp_ofs) Hsp_load) as [m1 Hstore_sp].
-  destruct (store_to_other_block m m1 sb (Ptrofs.unsigned so + 16)
-              (Vptr sp_b new_sp_ofs) sp_b (Ptrofs.unsigned new_sp_ofs) accu_v
-              Hstore_sp (not_eq_sym Hsp_ne_sb)
-              ltac:(rewrite Hnew_sp_unsigned; lia)) as [m2 Hstore_accu].
+  destruct (store_succeeds_sb m sb so 16 (Vptr sp_b sp_ofs) Hsb_writable Hsp_load ltac:(lia) ltac:(lia) (Vptr sp_b new_sp_ofs)) as [m1 Hstore_sp].
+  assert (Halign_new : (align_chunk Mint64 | Ptrofs.unsigned new_sp_ofs)).
+  { rewrite Hnew_sp_unsigned. simpl.
+    apply Z.divide_sub_r; [exact Hsp_align | exists 1; lia]. }
+  destruct (store_to_sp_after_sb_store m m1 sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)
+              sp_b (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)))
+              (Ptrofs.unsigned new_sp_ofs)
+              Hstore_sp Hsp_writable
+              ltac:(rewrite Hnew_sp_unsigned; lia)
+              ltac:(rewrite Hnew_sp_unsigned; lia)
+              Halign_new
+              accu_v) as [m2 Hstore_accu].
   set (le' := PTree.set _t'2 accu_v
               (PTree.set _t'1 (Vptr sp_b new_sp_ofs)
               (PTree.set _t'3 (Vptr sp_b sp_ofs) le))).
@@ -221,7 +237,7 @@ Proof.
 
     (* 4. sp field -- updated to new_sp_ofs; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
@@ -234,21 +250,12 @@ Proof.
         (* Now apply stack_repr_cons_after_store *)
         exact (stack_repr_cons_after_store hm m1 m2
                  (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                                  Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)).
+                                  Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 Hsp_rep).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp.
-      - (* sp_ofs_ge8: Ptrofs.unsigned new_sp_ofs >= 8.
-           Apply sp_ofs_ge_8 to the new stack_repr we just built. *)
-        apply (sp_ofs_ge_8 hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-        assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-        { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
-                   (uso + 16) (Vptr sp_b new_sp_ofs)
-                   Hstack_repr Hstore_sp).
-          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-        exact (stack_repr_cons_after_store hm m1 m2
-                 (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                 Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)).
+      - (* sp_ofs_ge8: Ptrofs.unsigned new_sp_ofs >= 8, from Hsp_ge16. *)
+        rewrite Hnew_sp_unsigned. lia.
       - (* sp_rep: Ptrofs.unsigned new_sp_ofs + 8 * length (accu :: stack) < modulus.
            new_sp_ofs = sp_ofs - 8, length (accu :: stack) = 1 + length stack,
            so this equals sp_ofs + 8 * length stack, same as Hsp_rep. *)
@@ -260,7 +267,10 @@ Proof.
         intros ofs' Hofs'.
         eapply Mem.perm_store_1. exact Hstore_accu.
         eapply Mem.perm_store_1. exact Hstore_sp.
-        apply Hsp_writable. exact Hofs'. }
+        apply Hsp_writable. exact Hofs'.
+      - (* sp_aligned: new_sp_ofs is 8-aligned *)
+        rewrite Hnew_sp_unsigned. simpl.
+        apply Z.divide_sub_r; [exact Hsp_align | exists 1; lia]. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.

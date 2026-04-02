@@ -102,12 +102,13 @@ Qed.
 (* Memory helpers                                                      *)
 (* ================================================================== *)
 
-Lemma store_pc_succeeds : forall m sb so v_new,
-  (exists v_old, Mem.load Mint64 m sb so = Some v_old) ->
-  exists m', Mem.store Mint64 m sb so v_new = Some m'.
+Lemma store_pc_succeeds : forall m sb so_ptrofs v_new,
+  Mem.range_perm m sb (Ptrofs.unsigned so_ptrofs) (Ptrofs.unsigned so_ptrofs + 56) Cur Writable ->
+  (exists v_old, Mem.load Mint64 m sb (Ptrofs.unsigned so_ptrofs + 0) = Some v_old) ->
+  exists m', Mem.store Mint64 m sb (Ptrofs.unsigned so_ptrofs + 0) v_new = Some m'.
 Proof.
-  intros m sb so v_new [v_old Hload].
-  exact (store_succeeds_from_load m sb so v_old v_new Hload).
+  intros m sb so_ptrofs v_new Hrp [v_old Hload].
+  exact (store_succeeds_sb m sb so_ptrofs 0 v_old Hrp Hload ltac:(lia) ltac:(lia) v_new).
 Qed.
 
 Lemma load_result_vptr : forall b ofs,
@@ -271,7 +272,7 @@ Proof.
         [ts_ptr [Hts_load Htrap_rel]] &
         Hsb_writable).
       destruct Hsp_data as [sp_ptr [sp_b [sp_ofs (Hsp_load & Hsp_eq & Hstack_repr
-        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable)]]].
+        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]].
       subst sp_ptr.
 
       destruct Hstep_pre as [Hcb_ne_sb [Hcode_load Hcmp_pre]].
@@ -297,8 +298,14 @@ Proof.
       set (new_pc_ofs := Ptrofs.add pc_ofs (Ptrofs.repr 4)).
       set (new_pc_v := Vptr cb new_pc_ofs).
 
-      destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
-                  (ex_intro _ _ Hpc_load_uso)) as [m' Hstore].
+      assert (Hpc_load_uso0 : Mem.load Mint64 m sb (Ptrofs.unsigned so + 0) =
+                Some (Vptr cb pc_ofs)).
+      { replace (Ptrofs.unsigned so + 0)%Z with (Ptrofs.unsigned so) by lia.
+        exact Hpc_load_uso. }
+      destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load_uso0 ltac:(lia) ltac:(lia) new_pc_v) as [m' Hstore0].
+      assert (Hstore : Mem.store Mint64 m sb (Ptrofs.unsigned so) new_pc_v = Some m').
+      { replace (Ptrofs.unsigned so) with (Ptrofs.unsigned so + 0)%Z by lia.
+        exact Hstore0. }
 
       set (le' := PTree.set _t'2 (Vptr cb pc_ofs)
                     (PTree.set _t'1 (Vlong (Int64.repr 1)) le)).
@@ -463,9 +470,10 @@ Proof.
           split. { exact Hcb_ne_sp. }
           split. { exact Hsp_ge8. }
           split. { exact Hsp_bound. }
-          intros ofs' Hofs'.
+          split. { intros ofs' Hofs'.
           eapply Mem.perm_store_1. exact Hstore.
           apply Hsp_writable. exact Hofs'. }
+          exact Hsp_align. }
 
         { exists env_v. split.
           - exact Henv_load'.
@@ -516,7 +524,7 @@ Proof.
         [ts_ptr [Hts_load Htrap_rel]] &
         Hsb_writable);
       destruct Hsp_data as [sp_ptr [sp_b [sp_ofs (Hsp_load & Hsp_eq & Hstack_repr
-        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable)]]];
+        & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]];
       subst sp_ptr;
 
       destruct Hstep_pre as [Hcb_ne_sb [Hcode_load Hcmp_pre]];
@@ -545,8 +553,14 @@ Proof.
                          (ptrofs_of_int Signed branch_ofs)));
       set (new_pc_v := Vptr cb new_pc_ofs);
 
-      destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
-                  (ex_intro _ _ Hpc_load_uso)) as [m' Hstore];
+      assert (Hpc_load_uso0 : Mem.load Mint64 m sb (Ptrofs.unsigned so + 0) =
+                Some (Vptr cb pc_ofs))
+        by (replace (Ptrofs.unsigned so + 0)%Z with (Ptrofs.unsigned so) by lia;
+            exact Hpc_load_uso);
+      destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load_uso0 ltac:(lia) ltac:(lia) new_pc_v) as [m' Hstore0];
+      assert (Hstore : Mem.store Mint64 m sb (Ptrofs.unsigned so) new_pc_v = Some m')
+        by (replace (Ptrofs.unsigned so) with (Ptrofs.unsigned so + 0)%Z by lia;
+            exact Hstore0);
 
       (* Use the precondition for the comparison *)
       pose proof (Hcmp_pre ltac:(congruence) accu_v
@@ -766,9 +780,10 @@ Proof.
           | split; [ exact Hcb_ne_sp
           | split; [ exact Hsp_ge8
           | split; [ exact Hsp_bound
-          | intros ofs' Hofs';
+          | split; [ intros ofs' Hofs';
             eapply Mem.perm_store_1; [ exact Hstore | ];
-            apply Hsp_writable; exact Hofs' ]]]]]]]])
+            apply Hsp_writable; exact Hofs'
+          | exact Hsp_align ]]]]]]]]])
 
         | exists env_v; split;
           [ exact Henv_load'
@@ -831,7 +846,7 @@ Proof.
       [ts_ptr [Hts_load Htrap_rel]] &
       Hsb_writable);
     destruct Hsp_data as [sp_ptr [sp_b [sp_ofs (Hsp_load & Hsp_eq & Hstack_repr
-      & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable)]]];
+      & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]];
     subst sp_ptr;
 
     destruct Hstep_pre as [Hcb_ne_sb [Hcode_load Hcmp_pre]];
@@ -858,8 +873,14 @@ Proof.
                        (ptrofs_of_int Signed branch_ofs)));
     set (new_pc_v := Vptr cb new_pc_ofs);
 
-    destruct (store_pc_succeeds m sb (Ptrofs.unsigned so) new_pc_v
-                (ex_intro _ _ Hpc_load_uso)) as [m' Hstore];
+    assert (Hpc_load_uso0 : Mem.load Mint64 m sb (Ptrofs.unsigned so + 0) =
+              Some (Vptr cb pc_ofs))
+      by (replace (Ptrofs.unsigned so + 0)%Z with (Ptrofs.unsigned so) by lia;
+          exact Hpc_load_uso);
+    destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load_uso0 ltac:(lia) ltac:(lia) new_pc_v) as [m' Hstore0];
+    assert (Hstore : Mem.store Mint64 m sb (Ptrofs.unsigned so) new_pc_v = Some m')
+      by (replace (Ptrofs.unsigned so) with (Ptrofs.unsigned so + 0)%Z by lia;
+          exact Hstore0);
 
     rewrite Haccu_eq in Haccu_repr;
 
@@ -1063,9 +1084,10 @@ Proof.
         | split; [ exact Hcb_ne_sp
         | split; [ exact Hsp_ge8
         | split; [ exact Hsp_bound
-        | intros ofs' Hofs';
+        | split; [ intros ofs' Hofs';
           eapply Mem.perm_store_1; [ exact Hstore | ];
-          apply Hsp_writable; exact Hofs' ]]]]]]]])
+          apply Hsp_writable; exact Hofs'
+        | exact Hsp_align ]]]]]]]]])
 
       | exists env_v; split;
         [ exact Henv_load'

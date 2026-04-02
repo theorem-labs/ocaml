@@ -211,17 +211,19 @@ Lemma stack_repr_update : forall hm m m' stk sp_b sp_ofs n v cv new_stk,
   set_nth stk n v = Some new_stk ->
   val_repr hm v cv ->
   Mem.store Mint64 m sp_b (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) cv = Some m' ->
+  Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus ->
   stack_repr hm m' new_stk sp_b sp_ofs.
 Proof.
   intros hm m m' stk sp_b sp_ofs n v cv new_stk. revert m m' sp_ofs n new_stk.
   induction stk as [| hd tl IH]; intros m m' sp_ofs n new_stk
-    Hsr Hset Hvr Hstore.
+    Hsr Hset Hvr Hstore Hrep.
   - (* stk = [] => set_nth fails *)
     simpl in Hset. discriminate.
   - destruct n as [| n'].
     + (* n = 0: update head *)
       simpl in Hset. injection Hset as <-.
       inversion Hsr; subst.
+      simpl length in Hrep.
       econstructor.
       * (* Load the head: stored value *)
         replace (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat 0)%Z
@@ -233,8 +235,6 @@ Proof.
       * (* Tail unchanged: store at head doesn't overlap tail *)
         replace (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat 0)%Z
           with (Ptrofs.unsigned sp_ofs) in Hstore by lia.
-        pose proof (sp_ofs_stack_representable hm m (hd :: tl) sp_b sp_ofs Hsr) as Hrep.
-        simpl length in Hrep.
         eapply stack_repr_store_same_block_lower; eauto;
           rewrite (ptrofs_add_unsigned sp_ofs 8 ltac:(lia) ltac:(lia)); lia.
     + (* n = S n': update in tail *)
@@ -242,7 +242,6 @@ Proof.
       destruct (set_nth tl n' v) as [tl' |] eqn:Hset_tl; [| discriminate].
       injection Hset as <-.
       inversion Hsr; subst.
-      pose proof (sp_ofs_stack_representable hm m (hd :: tl) sp_b sp_ofs Hsr) as Hrep.
       simpl length in Hrep.
       assert (Hstore_ofs : Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (S n')
                          = Ptrofs.unsigned sp_ofs + 8 + 8 * Z.of_nat n')
@@ -259,9 +258,10 @@ Proof.
         assert (Htail_unsigned : Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 8)) = Ptrofs.unsigned sp_ofs + 8).
         { apply ptrofs_add_unsigned; lia. }
         eapply IH; eauto.
-        rewrite Htail_unsigned.
-        rewrite Hstore_ofs in Hstore.
-        exact Hstore.
+        -- rewrite Htail_unsigned.
+           rewrite Hstore_ofs in Hstore.
+           exact Hstore.
+        -- rewrite Htail_unsigned. lia.
 Qed.
 
 (* ================================================================== *)
@@ -311,7 +311,7 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
@@ -357,8 +357,7 @@ Proof.
   (* ============================================================ *)
   (* Store 1: s->pc = _t'1 + 1 (pc field at uso+0)               *)
   (* ============================================================ *)
-  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 0)
-              (Vptr cb pc_ofs) new_pc_v Hpc_load)
+  destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load ltac:(lia) ltac:(lia) new_pc_v)
     as [m1 Hstore_pc].
 
   (* After store 1: loads from m1 *)
@@ -408,8 +407,9 @@ Proof.
   (* Store 3: s->accu = val_unit = ((0 << 1) + 1) = 1            *)
   (* ============================================================ *)
   set (unit_v := Vlong (Int64.repr 1)).
-  destruct (store_succeeds_from_load m2 sb (Ptrofs.unsigned so + 8)
-              accu_v unit_v Haccu_load_m2)
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore_pc Hsb_writable) as Hsb_writable_m1.
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore_stack Hsb_writable_m1) as Hsb_writable_m2.
+  destruct (store_succeeds_sb m2 sb so 8 accu_v Hsb_writable_m2 Haccu_load_m2 ltac:(lia) ltac:(lia) unit_v)
     as [m3 Hstore_accu].
 
   (* ============================================================ *)
@@ -637,7 +637,7 @@ Proof.
 
     (* 4. sp field -- same pointer, but stack_repr for new_stack *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
-      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load3.
       - reflexivity.
       - simpl.
@@ -649,6 +649,7 @@ Proof.
           * exact Hset.
           * exact Haccu_repr.
           * exact Hstore_stack.
+          * exact Hsp_rep.
         + exact Hstore_accu.
         + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
@@ -663,7 +664,8 @@ Proof.
         intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore_accu.
         eapply Mem.perm_store_1. exact Hstore_stack.
         eapply Mem.perm_store_1. exact Hstore_pc.
-        apply Hsp_writable. exact Hofs'. }
+        apply Hsp_writable. exact Hofs'. 
+        - exact Hsp_align. }
 
     (* 5. env field *)
     { exists env_v. split.

@@ -306,7 +306,7 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
@@ -328,8 +328,9 @@ Proof.
   destruct (global_repr_nth_error hm m _ gb go n gval Hglobal_repr Hnth Hgo_bound)
     as [cv_global [Hglobal_load Hglobal_val_repr]].
 
-  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 8) accu_v cv_global Haccu_load)
+  destruct (store_succeeds_sb m sb so 8 accu_v Hsb_writable Haccu_load ltac:(lia) ltac:(lia) cv_global)
     as [m1 Hstore1].
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore1 Hsb_writable) as Hsb_writable_m1.
 
   set (new_pc_ofs := Ptrofs.add pc_ofs (Ptrofs.repr 4)).
   set (new_pc_v := Vptr cb new_pc_ofs).
@@ -341,8 +342,7 @@ Proof.
              Hstore1 Hpc_load).
     left. lia. }
 
-  destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 0)
-              (Vptr cb pc_ofs) new_pc_v Hpc_load_m1)
+  destruct (store_succeeds_sb m1 sb so 0 (Vptr cb pc_ofs) Hsb_writable_m1 Hpc_load_m1 ltac:(lia) ltac:(lia) new_pc_v)
     as [m2 Hstore2].
 
   assert (Hcode_load_m1 : Mem.load Mint32 m1 cb (Ptrofs.unsigned pc_ofs) =
@@ -534,7 +534,7 @@ Proof.
       - exact Haccu_load2.
       - simpl. exact Hglobal_val_repr. }
 
-    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+    { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
@@ -550,7 +550,8 @@ Proof.
       - exact Hcb_ne_sp.
         - exact Hsp_ge8.
         - exact Hsp_rep.
-        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. exact Hofs'. }
+        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. exact Hofs'.
+        - exact Hsp_align. }
 
     { exists env_v. split.
       - exact Henv_load2.

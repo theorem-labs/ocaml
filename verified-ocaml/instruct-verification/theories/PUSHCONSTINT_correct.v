@@ -209,7 +209,7 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp2 [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp2 [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
@@ -256,16 +256,22 @@ Proof.
   (* ================================================================ *)
   (* Store 1: sp field (sb, uso+16) <- Vptr sp_b new_sp_ofs           *)
   (* ================================================================ *)
-  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
-              (Vptr sp_b sp_ofs) (Vptr sp_b new_sp_ofs) Hsp_load) as [m1 Hstore1].
+  destruct (store_succeeds_sb m sb so 16 (Vptr sp_b sp_ofs) Hsb_writable Hsp_load ltac:(lia) ltac:(lia) (Vptr sp_b new_sp_ofs)) as [m1 Hstore1].
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore1 Hsb_writable) as Hsb_writable_m1.
 
   (* ================================================================ *)
   (* Store 2: *new_sp (sp_b, new_sp_ofs) <- accu_v                    *)
   (* ================================================================ *)
-  destruct (store_to_other_block m m1 sb (Ptrofs.unsigned so + 16)
-              (Vptr sp_b new_sp_ofs) sp_b (Ptrofs.unsigned new_sp_ofs) accu_v
-              Hstore1 (not_eq_sym Hsp_ne_sb)
-              ltac:(rewrite Hnew_sp_unsigned; lia)) as [m2 Hstore2].
+  assert (Halign_new : (align_chunk Mint64 | Ptrofs.unsigned new_sp_ofs)).
+  { rewrite Hnew_sp_unsigned. simpl align_chunk.
+    apply Z.divide_sub_r. exact Hsp_align. exists 1; lia. }
+  destruct (store_to_sp_after_sb_store m m1 sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)
+              sp_b (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)))
+              (Ptrofs.unsigned new_sp_ofs)
+              Hstore1 Hsp_writable
+              ltac:(rewrite Hnew_sp_unsigned; lia)
+              ltac:(rewrite Hnew_sp_unsigned; lia)
+              Halign_new accu_v) as [m2 Hstore2].
 
   (* ================================================================ *)
   (* Store 3: accu field (sb, uso+8) <- tagged_v                       *)
@@ -278,8 +284,9 @@ Proof.
   assert (Haccu_load_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 8) = Some accu_v).
   { erewrite Mem.load_store_other; [exact Haccu_load_m1 | exact Hstore2 |].
     left. exact (not_eq_sym Hsp_ne_sb). }
-  destruct (store_succeeds_from_load m2 sb (Ptrofs.unsigned so + 8)
-              accu_v tagged_v Haccu_load_m2) as [m3 Hstore3].
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore2 Hsb_writable_m1) as Hsb_writable_m2.
+  destruct (store_succeeds_sb m2 sb so 8 accu_v Hsb_writable_m2 Haccu_load_m2 ltac:(lia) ltac:(lia) tagged_v) as [m3 Hstore3].
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore3 Hsb_writable_m2) as Hsb_writable_m3.
 
   (* ================================================================ *)
   (* Store 4: pc field (sb, uso+0) <- new_pc_v                        *)
@@ -299,8 +306,7 @@ Proof.
   { apply (load_after_store_other m2 m3 sb (Ptrofs.unsigned so + 8)
              (Ptrofs.unsigned so + 0) tagged_v (Vptr cb pc_ofs)
              Hstore3 Hpc_load_m2). left. lia. }
-  destruct (store_succeeds_from_load m3 sb (Ptrofs.unsigned so + 0)
-              (Vptr cb pc_ofs) new_pc_v Hpc_load_m3)
+  destruct (store_succeeds_sb m3 sb so 0 (Vptr cb pc_ofs) Hsb_writable_m3 Hpc_load_m3 ltac:(lia) ltac:(lia) new_pc_v)
     as [m4 Hstore4].
 
   (* ================================================================ *)
@@ -636,7 +642,7 @@ Proof.
 
     (* 4. sp field -- updated to new_sp_ofs; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load4.
       - reflexivity.
       - simpl.
@@ -680,7 +686,9 @@ Proof.
         eapply Mem.perm_store_1. exact Hstore3.
         eapply Mem.perm_store_1. exact Hstore2.
         eapply Mem.perm_store_1. exact Hstore1.
-        apply Hsp_writable. lia. }
+        apply Hsp_writable. lia.
+      - (* sp_aligned *)
+        exact Halign_new. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.

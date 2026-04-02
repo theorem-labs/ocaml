@@ -12,10 +12,12 @@
      global_block_ne_sptr, sptr_ofs_representable
    - PROVED (induction on stack_repr):
      stack_repr_store_same_block_lower, stack_repr_cons_after_store
-   - AXIOM (structural invariants, not derivable from CompCert alone):
-     store_succeeds_from_load (needs Writable; load only gives Readable),
-     store_to_other_block,
-     store_succeeds_stack, sp_ofs_ge_8
+   - PROVED (from abs_rel range_perm):
+     store_succeeds_sb, sb_writable_after_store, store_to_sp_after_sb_store
+   - DELETED: store_succeeds_from_load, store_to_other_block,
+     store_succeeds_stack (all replaced by proved lemmas or unused)
+   - DELETED (redundant with abs_rel sp_ofs >= 8 / sp_rep):
+     sp_ofs_ge_8, sp_ofs_stack_representable
    - REMOVED: sem_cast_long (provably FALSE for Vundef/Vfloat/Vsingle/Vint;
      use sem_cast_long_val_repr instead) *)
 
@@ -78,6 +80,22 @@ Proof.
   rewrite cenv_is_ce. exact ce_facts.
 Qed.
 
+Local Lemma ce_facts_env : exists co,
+  ce ! _interp_state = Some co /\
+  field_offset ce _env (co_members co) = Errors.OK (24, Full) /\
+  field_offset ce _accu (co_members co) = Errors.OK (8, Full).
+Proof.
+  eexists. split; [| split]; reflexivity.
+Qed.
+
+Lemma interp_state_co_env : exists co,
+  (genv_cenv clight_ge) ! _interp_state = Some co /\
+  field_offset (genv_cenv clight_ge) _env (co_members co) = Errors.OK (24, Full) /\
+  field_offset (genv_cenv clight_ge) _accu (co_members co) = Errors.OK (8, Full).
+Proof.
+  rewrite cenv_is_ce. exact ce_facts_env.
+Qed.
+
 (* ================================================================== *)
 (* Memory separation — structural invariants (must stay axiomatic)     *)
 (* ================================================================== *)
@@ -126,14 +144,39 @@ Proof.
   intros. exact (ar_code_ne_global ard).
 Qed.
 
-(* After storing to one block, we can store to a different block.
-   This follows from CompCert's Mem.store preserving valid_access
-   on other blocks, plus the Writable invariant on the target. *)
-Axiom store_to_other_block : forall m m' sb ofs_store v sp_b new_ofs cv,
-  Mem.store Mint64 m sb ofs_store v = Some m' ->
-  sb <> sp_b ->
-  new_ofs >= 0 ->
-  exists m'', Mem.store Mint64 m' sp_b new_ofs cv = Some m''.
+(* store_to_sp_after_sb_store: After storing to the struct block sb,
+   we can store to the stack block sp_b.  Uses Mem.perm_store_1 to
+   thread Writable through the sb store, plus explicit alignment.
+   Replaces the former axiom store_to_other_block. *)
+Lemma store_to_sp_after_sb_store :
+  forall m m' sb ofs_sb v sp_b sp_bound new_ofs,
+  Mem.store Mint64 m sb ofs_sb v = Some m' ->
+  Mem.range_perm m sp_b 0 sp_bound Cur Writable ->
+  0 <= new_ofs -> new_ofs + 8 <= sp_bound ->
+  (align_chunk Mint64 | new_ofs) ->
+  forall cv_new, exists m'', Mem.store Mint64 m' sp_b new_ofs cv_new = Some m''.
+Proof.
+  intros m m' sb ofs_sb v sp_b sp_bound new_ofs
+    Hstore Hsp_writable Hlo Hhi Halign cv_new.
+  destruct (Mem.valid_access_store m' Mint64 sp_b new_ofs cv_new) as [m'' Hst].
+  { split.
+    - intros ofs' Hofs'.
+      eapply Mem.perm_store_1. exact Hstore.
+      apply Hsp_writable. unfold size_chunk in Hofs'. lia.
+    - exact Halign. }
+  exists m''. exact Hst.
+Qed.
+
+(* sp_ofs_aligned: stack offsets from stack_repr are 8-aligned,
+   since Mem.load Mint64 succeeds only at aligned addresses. *)
+Lemma sp_ofs_aligned : forall hm m v vs sp_b sp_ofs,
+  stack_repr hm m (v :: vs) sp_b sp_ofs ->
+  (align_chunk Mint64 | Ptrofs.unsigned sp_ofs).
+Proof.
+  intros hm m v vs sp_b sp_ofs Hsr.
+  inversion Hsr as [| ? ? ? ? cv Hload Hvr Htail].
+  exact (proj2 (Mem.load_valid_access _ _ _ _ _ Hload)).
+Qed.
 
 (* ================================================================== *)
 (* Memory operations — provable from CompCert                          *)
@@ -156,28 +199,35 @@ Proof.
   erewrite Mem.load_store_other; eauto.
 Qed.
 
-(* store_succeeds_from_load: Mem.load_valid_access gives
-   Mem.valid_access m Mint64 b ofs Readable, but Mem.valid_access_store
-   requires Writable.  CompCert's perm_order satisfies
-   perm_order Writable Readable (Writable implies Readable) but NOT
-   perm_order Readable Writable, so there is no valid_access_implies
-   path from Readable to Writable.
+(* store_succeeds_sb: Storing to the struct pointer block at any field
+   offset succeeds, given Writable range_perm on the struct and an
+   existing load (for alignment).  Replaces the former axiom
+   store_succeeds_from_load. *)
+Lemma store_succeeds_sb : forall m sb so ofs v,
+  Mem.range_perm m sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable ->
+  Mem.load Mint64 m sb (Ptrofs.unsigned so + ofs) = Some v ->
+  0 <= ofs -> ofs + 8 <= 56 ->
+  forall v_new, exists m', Mem.store Mint64 m sb (Ptrofs.unsigned so + ofs) v_new = Some m'.
+Proof.
+  intros m sb so ofs v Hrp Hload Hlo Hhi v_new.
+  destruct (Mem.valid_access_store m Mint64 sb (Ptrofs.unsigned so + ofs) v_new) as [m' Hst].
+  { pose proof (Mem.load_valid_access _ _ _ _ _ Hload) as [Hrp' Halign].
+    split.
+    - intros ofs' Hofs'. apply Hrp. unfold size_chunk in Hofs'. lia.
+    - exact Halign. }
+  exists m'. exact Hst.
+Qed.
 
-   Mem.store_valid_access_3 and Mem.valid_access_free_2 do not help
-   either: the former gives valid_access from a successful store (wrong
-   direction), and the latter weakens Freeable.
-
-   To eliminate this axiom, add a Writable (or Freeable) invariant for
-   the struct pointer block to abs_rel / abs_rel_pre.  For example:
-     Mem.valid_access m Mint64 (ar_sptr_block ard)
-       (Ptrofs.unsigned (ar_sptr_ofs ard) + field_ofs) Writable
-   for each field offset.  The initial abs_rel witness can establish
-   this from Mem.alloc (which grants Freeable >= Writable).
-   Alternatively, a single range_perm covering the entire struct
-   (offsets 0..55, Writable) would suffice and be simpler. *)
-Axiom store_succeeds_from_load : forall m b ofs v_old v_new,
-  Mem.load Mint64 m b ofs = Some v_old ->
-  exists m', Mem.store Mint64 m b ofs v_new = Some m'.
+(* sb_writable_after_store: range_perm on sb is preserved through any
+   Mem.store operation (via Mem.perm_store_1). *)
+Lemma sb_writable_after_store : forall m m' sb so b ofs chunk v,
+  Mem.store chunk m b ofs v = Some m' ->
+  Mem.range_perm m sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable ->
+  Mem.range_perm m' sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable.
+Proof.
+  intros m m' sb so b ofs chunk v Hstore Hrp ofs' Hofs'.
+  eapply Mem.perm_store_1; eauto.
+Qed.
 
 (* ================================================================== *)
 (* Representation preservation under store to other block              *)
@@ -213,25 +263,10 @@ Proof.
     + eapply IH; eauto.
 Qed.
 
-(* store_succeeds_stack: The stack block is writable below the current sp.
-   Structural invariant about the C memory layout. *)
-Axiom store_succeeds_stack : forall m sp_b sp_ofs v,
-  Mem.load Mint64 m sp_b (Ptrofs.unsigned sp_ofs) = Some v ->
-  forall v_new ofs,
-  ofs + 8 <= Ptrofs.unsigned sp_ofs ->
-  ofs >= 0 ->
-  exists m', Mem.store Mint64 m sp_b ofs v_new = Some m'.
+(* store_succeeds_stack: DELETED — 0 references across the codebase. *)
 
-(* sp_ofs_ge_8: stack pointer has room for at least one push. *)
-Axiom sp_ofs_ge_8 : forall hm m stk sp_b sp_ofs,
-  stack_repr hm m stk sp_b sp_ofs ->
-  Ptrofs.unsigned sp_ofs >= 8.
-
-(* sp_ofs_stack_representable: all stack slots fit in the address space
-   without wrapping.  Structural invariant of the C memory layout. *)
-Axiom sp_ofs_stack_representable : forall hm m stk sp_b sp_ofs,
-  stack_repr hm m stk sp_b sp_ofs ->
-  Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus.
+(* sp_ofs_ge_8: DELETED — redundant with abs_rel_with_ard's Hsp_ge8. *)
+(* sp_ofs_stack_representable: DELETED — redundant with abs_rel_with_ard's Hsp_rep. *)
 
 (* ================================================================== *)
 (* Value representation                                                *)
@@ -534,3 +569,30 @@ Qed.
 Lemma val_int_0_load_result :
   Val.load_result Mint64 (Vlong (Int64.repr 1)) = Vlong (Int64.repr 1).
 Proof. reflexivity. Qed.
+
+(* ================================================================== *)
+(* Code buffer load preservation under store to other block            *)
+(* ================================================================== *)
+
+(* code_buffer_load_at: A Mem.load on the code buffer block cb
+   is preserved after any Mem.store to a different block sb.
+
+   This is the pattern used in every parameterized handler proof
+   (CONSTINT, BRANCHIF, ATOM, POP, ASSIGN, GETGLOBAL, MAKEBLOCK1,
+   PUSHCONSTINT, etc.):
+
+     assert (Hcode_load_m1 : Mem.load Mint32 m1 cb ... = Some ...).
+     { erewrite Mem.load_store_other; [exact Hcode_load | exact Hstore |].
+       left. exact Hcb_ne. }
+
+   This lemma packages that three-line proof into a single apply. *)
+Lemma code_buffer_load_at : forall chunk chunk' m m' cb sb ofs_code ofs_store v_code v_store,
+  Mem.load chunk m cb ofs_code = Some v_code ->
+  Mem.store chunk' m sb ofs_store v_store = Some m' ->
+  cb <> sb ->
+  Mem.load chunk m' cb ofs_code = Some v_code.
+Proof.
+  intros chunk chunk' m m' cb sb ofs_code ofs_store v_code v_store
+    Hload Hstore Hne.
+  erewrite Mem.load_store_other; eauto.
+Qed.

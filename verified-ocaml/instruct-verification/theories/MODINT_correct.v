@@ -406,7 +406,7 @@ Proof.
       [ts_ptr [Hts_load Htrap_rel]] &
       Hsb_writable).
     destruct Hsp_data as [sp_ptr [sp_b [sp_ofs (Hsp_load & Hsp_eq & Hstack_repr
-      & Hsp_ne_sb & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable)]]].
+      & Hsp_ne_sb & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]].
     subst sp_ptr.
 
     (* Structural invariants *)
@@ -445,8 +445,7 @@ Proof.
 
     (* --- Store 1: sp field (so+16) gets sp+1 = Vptr sp_b (sp_ofs + 8) --- *)
     set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
-    destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
-                (Vptr sp_b sp_ofs) new_sp_v Hsp_load)
+    destruct (store_succeeds_sb m sb so 16 (Vptr sp_b sp_ofs) Hsb_writable Hsp_load ltac:(lia) ltac:(lia) new_sp_v)
       as [m1 Hstore1].
 
     (* --- After store 1: load accu from m1 --- *)
@@ -466,8 +465,8 @@ Proof.
       - left. exact Hblock_sep. }
 
     (* --- Store 2: accu field (so+8) gets the tagged mod result --- *)
-    destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 8)
-                (Vlong a_tagged) result_v Haccu_load_m1)
+    pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore1 Hsb_writable) as Hsb_writable_m1.
+    destruct (store_succeeds_sb m1 sb so 8 (Vlong a_tagged) Hsb_writable_m1 Haccu_load_m1 ltac:(lia) ltac:(lia) result_v)
       as [m' Hstore2].
 
     (* --- Key properties of divisor_val --- *)
@@ -693,13 +692,18 @@ Proof.
         split. { rewrite ptrofs_add_unsigned by lia. lia. }
         split. { simpl length. rewrite ptrofs_add_unsigned by lia.
                  rewrite Hstk in Hsp_bound. simpl length in Hsp_bound. lia. }
-        intros ofs' Hofs'.
+        split.
+        { intros ofs' Hofs'.
         eapply Mem.perm_store_1. exact Hstore2.
         eapply Mem.perm_store_1. exact Hstore1.
         apply Hsp_writable.
         rewrite Hstk. simpl length.
         rewrite ptrofs_add_unsigned in Hofs' by lia.
         simpl length in Hofs'. lia. }
+        (* sp_align *)
+        simpl.
+        rewrite ptrofs_add_unsigned by lia.
+        apply Z.divide_add_r. exact Hsp_align. exists 1. lia. }
       (* 5. env field *)
       split.
       { exists env_v. split.

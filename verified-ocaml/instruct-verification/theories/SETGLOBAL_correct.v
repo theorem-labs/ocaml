@@ -212,7 +212,11 @@ Theorem verify_SETGLOBAL_correct : forall n,
                  global_repr hm m_cm new_gs gb go) /\
               (* global_repr unchanged if set_nth fails *)
               (set_nth (Machine.global s) n (Machine.accu s) = None ->
-                 global_repr hm m_cm (Machine.global s) gb go)))
+                 global_repr hm m_cm (Machine.global s) gb go) /\
+              (* Permission preservation through caml_modify *)
+              (forall b ofs k p,
+                 Mem.valid_block m b -> Mem.perm m b ofs k p ->
+                 Mem.perm m_cm b ofs k p)))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
@@ -233,7 +237,7 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
@@ -258,7 +262,8 @@ Proof.
   (* Get the caml_modify results *)
   destruct (Hcaml_modify_pre accu_v Haccu_repr) as
     (m_cm & Hext_call & Hcm_sb_loads & Hcm_sb_stores &
-     Hcm_other_loads & Hcm_global_repr_some & Hcm_global_repr_none).
+     Hcm_other_loads & Hcm_global_repr_some & Hcm_global_repr_none &
+     Hcm_perm_preserved).
 
   (* Store 1: accu field at (sb, uso+8) <- val_unit = Vlong 1 *)
   set (unit_v := Vlong (Int64.repr 1)).
@@ -278,8 +283,16 @@ Proof.
     - apply Hcm_sb_loads. exact Hpc_load.
     - left. lia. }
 
-  destruct (store_succeeds_from_load m1 sb (Ptrofs.unsigned so + 0)
-              (Vptr cb pc_ofs) new_pc_v Hpc_load_m1)
+  (* sb_writable in m1: thread through m -> m_cm -> m1.
+     m -> m_cm via perm preservation; m_cm -> m1 via sb_writable_after_store. *)
+  assert (Hsb_writable_m_cm :
+    Mem.range_perm m_cm sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
+  { intros ofs' Hofs'.
+    apply Hcm_perm_preserved.
+    - eapply Mem.perm_valid_block. apply Hsb_writable. exact Hofs'.
+    - apply Hsb_writable. exact Hofs'. }
+  pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore1 Hsb_writable_m_cm) as Hsb_writable_m1.
+  destruct (store_succeeds_sb m1 sb so 0 (Vptr cb pc_ofs) Hsb_writable_m1 Hpc_load_m1 ltac:(lia) ltac:(lia) new_pc_v)
     as [m2 Hstore2].
 
   (* Final temp env *)
@@ -720,8 +733,16 @@ Proof.
       - exact Hcb_ne_sp.
       - exact Hsp_ge8.
       - exact Hsp_rep.
-      - (* sp_writable: permission preserved through caml_modify + stores *)
-        admit. }
+      - (* sp_writable + alignment *)
+        split.
+        + (* sp_writable: permission preserved through caml_modify + stores *)
+          intros ofs' Hofs'.
+          eapply Mem.perm_store_1. exact Hstore2.
+          eapply Mem.perm_store_1. exact Hstore1.
+          apply Hcm_perm_preserved.
+          * eapply Mem.perm_valid_block. apply (Hsp_writable 0). lia.
+          * apply Hsp_writable. exact Hofs'.
+        + exact Hsp_align. }
 
     (* 5. env field *)
     { exists env_v. split.
@@ -744,6 +765,11 @@ Proof.
       - simpl. exact Htrap_rel. }
 
     (* 9. sb_writable -- permission preserved through caml_modify + stores *)
-    { admit. }
+    { intros ofs' Hofs'.
+      eapply Mem.perm_store_1. exact Hstore2.
+      eapply Mem.perm_store_1. exact Hstore1.
+      apply Hcm_perm_preserved.
+      - eapply Mem.perm_valid_block. apply Hsb_writable. exact Hofs'.
+      - apply Hsb_writable. exact Hofs'. }
   }
-Admitted. (* sp_writable, sb_writable through caml_modify *)
+Qed.

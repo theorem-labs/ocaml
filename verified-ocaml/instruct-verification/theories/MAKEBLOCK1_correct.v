@@ -47,6 +47,7 @@ Require Import instruct_handlers.
 Require Import InstructSpec.
 Require Import StepToBigstep.
 Require Import HandlerLemmas.
+Require Import ExternalCallSpecs.
 
 Local Notation ge := clight_ge.
 
@@ -165,188 +166,8 @@ Lemma load_result_vptr : forall b ofs,
   Val.load_result Mint64 (Vptr b ofs) = Vptr b ofs.
 Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
-(* ================================================================== *)
-(* heap_alloc axioms                                                   *)
-(*                                                                     *)
-(* These axioms specify the behavior of the external C function        *)
-(* heap_alloc at the CompCert memory model level.  They bridge the     *)
-(* gap between the Rocq heap_alloc (which operates on abstract         *)
-(* PositiveMap-based heaps) and the C heap_alloc (which operates on    *)
-(* CompCert memory blocks).                                            *)
-(*                                                                     *)
-(* To eliminate these axioms, one would need to:                       *)
-(* 1. Provide a concrete C implementation of heap_alloc                *)
-(* 2. Prove it satisfies these specifications                          *)
-(* 3. Link it into the Clight program as an Internal function          *)
-(*                                                                     *)
-(* Currently heap_alloc is declared as EF_external, so its behavior    *)
-(* must be axiomatized.                                                *)
-(* ================================================================== *)
-
-(* The heap_alloc function is findable in the global environment.
-   This is a consequence of how the Clight program is linked. *)
-Axiom heap_alloc_find_funct :
-  exists b_ha,
-    Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-    Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-      Some (Ctypes.External
-        (EF_external "heap_alloc"
-          (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-            AST.Xlong cc_default))
-        ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
-        tlong cc_default).
-
-(* After heap_alloc returns, the returned pointer (a Vptr) can be
-   used to store values, and the struct block, stack, and globals
-   are preserved.  This is the core specification of heap_alloc's
-   effect on CompCert memory.
-
-   heap_alloc_spec: given the pre-state memory m with abs_rel,
-   calling C heap_alloc(s_ptr, Vlong(1), Vlong(tag)) produces:
-   - A post-memory m' and return value block_v = Vptr new_b new_ofs
-   - The struct block is unchanged in m'
-   - new_b is a fresh block separate from sb, sp_b, gb
-   - We can store a Mint64 value at (new_b, new_ofs + 0)
-   - external_call holds for the EF_external spec *)
-Axiom heap_alloc_external_call : forall m sb so tag_z
-    (Htag_range : 0 <= tag_z <= 255),
-  exists m_alloc new_b new_ofs,
-    external_call
-      (EF_external "heap_alloc"
-        (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-          AST.Xlong cc_default))
-      (Genv.to_senv (genv_genv clight_ge))
-      (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-      m E0 (Vptr new_b new_ofs) m_alloc /\
-    (* The returned block is separate from the struct block *)
-    new_b <> sb /\
-    (* The struct fields are preserved *)
-    (forall ofs v, Mem.load Mint64 m sb ofs = Some v ->
-                   Mem.load Mint64 m_alloc sb ofs = Some v) /\
-    (* We can store at (new_b, Ptrofs.unsigned new_ofs) *)
-    (forall cv, exists m_store,
-      Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
-      (* After storing, we can load back *)
-      Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
-        Some (Val.load_result Mint64 cv) /\
-      (* Struct fields still preserved *)
-      (forall ofs v, Mem.load Mint64 m sb ofs = Some v ->
-                     Mem.load Mint64 m_store sb ofs = Some v)).
-
-(* heap_alloc preserves stack_repr: the returned block is on a
-   fresh block that doesn't overlap the stack. *)
-Axiom heap_alloc_preserves_stack : forall m m_alloc sb so tag_z new_b new_ofs
-    hm sp_b sp_ofs stk,
-  external_call
-    (EF_external "heap_alloc"
-      (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-        AST.Xlong cc_default))
-    (Genv.to_senv (genv_genv clight_ge))
-    (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-    m E0 (Vptr new_b new_ofs) m_alloc ->
-  stack_repr hm m stk sp_b sp_ofs ->
-  sp_b <> sb ->
-  stack_repr hm m_alloc stk sp_b sp_ofs.
-
-(* heap_alloc preserves global_repr *)
-Axiom heap_alloc_preserves_global : forall m m_alloc sb so tag_z new_b new_ofs
-    hm gb gofs gs,
-  external_call
-    (EF_external "heap_alloc"
-      (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-        AST.Xlong cc_default))
-    (Genv.to_senv (genv_genv clight_ge))
-    (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-    m E0 (Vptr new_b new_ofs) m_alloc ->
-  global_repr hm m gs gb gofs ->
-  gb <> sb ->
-  global_repr hm m_alloc gs gb gofs.
-
-(* The new block is separate from the stack block *)
-Axiom heap_alloc_block_ne_sp : forall m m_alloc sb so tag_z new_b new_ofs
-    sp_b,
-  external_call
-    (EF_external "heap_alloc"
-      (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-        AST.Xlong cc_default))
-    (Genv.to_senv (genv_genv clight_ge))
-    (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-    m E0 (Vptr new_b new_ofs) m_alloc ->
-  sp_b <> sb ->
-  new_b <> sp_b.
-
-(* The new block is separate from the global block *)
-Axiom heap_alloc_block_ne_gb : forall m m_alloc sb so tag_z new_b new_ofs
-    gb,
-  external_call
-    (EF_external "heap_alloc"
-      (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-        AST.Xlong cc_default))
-    (Genv.to_senv (genv_genv clight_ge))
-    (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-    m E0 (Vptr new_b new_ofs) m_alloc ->
-  gb <> sb ->
-  new_b <> gb.
-
-(* The new block is separate from the code block *)
-Axiom heap_alloc_block_ne_cb : forall m m_alloc sb so tag_z new_b new_ofs
-    cb,
-  external_call
-    (EF_external "heap_alloc"
-      (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-        AST.Xlong cc_default))
-    (Genv.to_senv (genv_genv clight_ge))
-    (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-    m E0 (Vptr new_b new_ofs) m_alloc ->
-  cb <> sb ->
-  new_b <> cb.
-
-(* Store to the new block preserves stack_repr *)
-Axiom store_new_block_preserves_stack : forall m m' new_b ofs cv
-    hm sp_b sp_ofs stk,
-  Mem.store Mint64 m new_b ofs cv = Some m' ->
-  new_b <> sp_b ->
-  stack_repr hm m stk sp_b sp_ofs ->
-  stack_repr hm m' stk sp_b sp_ofs.
-
-(* Store to the new block preserves global_repr *)
-Axiom store_new_block_preserves_global : forall m m' new_b ofs cv
-    hm gb gofs gs,
-  Mem.store Mint64 m new_b ofs cv = Some m' ->
-  new_b <> gb ->
-  global_repr hm m gs gb gofs ->
-  global_repr hm m' gs gb gofs.
 
 
-
-
-(* heap_alloc preserves code block loads *)
-Axiom heap_alloc_preserves_code : forall m m_alloc sb so tag_z new_b new_ofs
-    cb code_ofs chunk v,
-  external_call
-    (EF_external "heap_alloc"
-      (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-        AST.Xlong cc_default))
-    (Genv.to_senv (genv_genv clight_ge))
-    (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-    m E0 (Vptr new_b new_ofs) m_alloc ->
-  cb <> sb ->
-  Mem.load chunk m cb code_ofs = Some v ->
-  Mem.load chunk m_alloc cb code_ofs = Some v.
-
-(* ================================================================== *)
-(* eval_expr helper for Evar (global variable lookup)                  *)
-(* ================================================================== *)
-
-(* The Evar node for heap_alloc resolves to its function pointer *)
-Axiom eval_expr_heap_alloc : forall e le m,
-  exists b_ha,
-    Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-    eval_expr clight_ge e le m
-      (Evar _heap_alloc (Tfunction
-        ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
-        tlong cc_default))
-      (Vptr b_ha Ptrofs.zero).
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -354,16 +175,56 @@ Axiom eval_expr_heap_alloc : forall e le m,
 
 Theorem verify_MAKEBLOCK1_correct : forall t,
     handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
-      (fun _ m s ard =>
-         (* The code buffer contains Int.repr (Z.of_nat t) at the current PC *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+      (fun e m s ard =>
+         let sb := ar_sptr_block ard in
+         let so := ar_sptr_ofs ard in
+         let cb := ar_code_base_block ard in
+         let co := ar_code_base_ofs ard in
+         let gb := ar_global_block ard in
+         let sp_b := ar_stack_block ard in
+         (* 0. e does not bind _heap_alloc *)
+         e ! _heap_alloc = None /\
+         (* 1. The code buffer contains Int.repr (Z.of_nat t) at the current PC *)
+         Mem.load Mint32 m cb
+           (Ptrofs.unsigned (Ptrofs.add co
               (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
          = Some (Vint (Int.repr (Z.of_nat t))) /\
-         (* t fits in unsigned char range *)
+         (* 2. t fits in unsigned char range *)
          (0 <= Z.of_nat t <= 255) /\
-         (* Heap map freshness: next_addr is not yet mapped *)
-         (ar_heap_map ard) (next_addr s) = None)
+         (* 3. Heap map freshness: next_addr is not yet mapped *)
+         (ar_heap_map ard) (next_addr s) = None /\
+         (* 3a. Global block is valid *)
+         Mem.valid_block m gb /\
+         (* 4. Genv lookup for heap_alloc *)
+         (exists b_ha,
+            Genv.find_symbol (genv_genv ge) _heap_alloc = Some b_ha /\
+            Genv.find_funct (genv_genv ge) (Vptr b_ha Ptrofs.zero) =
+              Some heap_alloc_fundef) /\
+         (* 5. heap_alloc: for any memory m', allocation succeeds *)
+         (forall m',
+            exists m_alloc new_b new_ofs,
+              external_call heap_alloc_ef
+                (Genv.to_senv (genv_genv ge))
+                (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
+                m' E0 (Vptr new_b new_ofs) m_alloc /\
+              (* Freshness: new block is fresh *)
+              (forall b, Mem.valid_block m' b -> new_b <> b) /\
+              (* Load preservation on existing blocks *)
+              (forall b ofs chunk v,
+                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+                 Mem.load chunk m_alloc b ofs = Some v) /\
+              (* Permission preservation *)
+              (forall b ofs k p,
+                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+                 Mem.perm m_alloc b ofs k p) /\
+              (* Field 0 storable + load-back + other-block preservation *)
+              (forall cv, exists m_store,
+                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+                 Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+                   Some (Val.load_result Mint64 cv) /\
+                 (forall b ofs chunk v, b <> new_b ->
+                    Mem.load chunk m_alloc b ofs = Some v ->
+                    Mem.load chunk m_store b ofs = Some v))))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro t.
@@ -384,14 +245,15 @@ Proof.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr gd_ptr.
 
-  destruct Hstep_pre as (Hcode_load & Ht_range & Hhm_fresh).
+  destruct Hstep_pre as (He_heap_alloc & Hcode_load & Ht_range & Hhm_fresh &
+    Hgb_valid & [b_ha [Hfind_symbol Hfind_funct]] & Halloc_spec_all).
 
   (* Structural invariants *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
@@ -411,8 +273,7 @@ Proof.
   set (new_pc_v := Vptr cb new_pc_ofs).
 
   (* --- Store 1: pc field --- *)
-  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 0)
-              (Vptr cb pc_ofs) new_pc_v Hpc_load)
+  destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load ltac:(lia) ltac:(lia) new_pc_v)
     as [m1 Hstore_pc].
 
   (* Accu survives pc store *)
@@ -447,17 +308,54 @@ Proof.
              (Ptrofs.unsigned so + 16) new_pc_v (Vptr sp_b sp_ofs) Hstore_pc Hsp_load).
     right. lia. }
 
-  (* Call heap_alloc: get allocation result *)
-  destruct (heap_alloc_external_call m1 sb so tag_z Ht_range)
+  (* Instantiate heap_alloc for m1 *)
+  destruct (Halloc_spec_all m1)
     as [m_alloc [new_b [new_ofs
-         (Hext_call & Hnew_ne_sb & Hstruct_preserved & Hcan_store)]]].
+         (Hext_call & Hnew_fresh &
+          Halloc_load_pres & Halloc_perm_pres & Hcan_store)]]].
+
+  (* Derive freshness for specific blocks from universal freshness.
+     For each block, we need valid_block m1 b, obtained via
+     Mem.perm_valid_block from any permission on b in m1. *)
+  assert (Hnew_ne_sb : new_b <> sb).
+  { apply Hnew_fresh. eapply Mem.perm_valid_block.
+    apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
+    apply (Hsb_writable (Ptrofs.unsigned so)). lia. }
+  assert (Hnew_ne_sp : new_b <> sp_b).
+  { apply Hnew_fresh. eapply Mem.perm_valid_block.
+    apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
+    apply (Hsp_writable 0). lia. }
+  assert (Hnew_ne_cb : new_b <> cb).
+  { apply Hnew_fresh.
+    pose proof (Mem.load_valid_access _ _ _ _ _ Hcode_load) as [Hrp_cb _].
+    eapply Mem.perm_valid_block.
+    apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
+    apply (Hrp_cb (Ptrofs.unsigned pc_ofs)). simpl. lia. }
+  assert (Hnew_ne_gb : new_b <> gb).
+  { apply Hnew_fresh.
+    eapply Mem.store_valid_block_1. exact Hstore_pc. exact Hgb_valid. }
+
+  (* Derive struct field preservation from generic load preservation *)
+  assert (Hstruct_preserved : forall ofs v,
+    Mem.load Mint64 m1 sb ofs = Some v ->
+    Mem.load Mint64 m_alloc sb ofs = Some v).
+  { intros ofs0 v0 Hld. apply Halloc_load_pres; auto. }
 
   (* Accu in m_alloc *)
   assert (Haccu_load_alloc : Mem.load Mint64 m_alloc sb (Ptrofs.unsigned so + 8) = Some accu_v).
   { apply Hstruct_preserved. exact Haccu_load_m1. }
 
   (* --- Store field 0: *(block + 0) = accu_v --- *)
-  destruct (Hcan_store accu_v) as [m_field [Hstore_field [Hload_field Hstruct_preserved2]]].
+  destruct (Hcan_store accu_v) as [m_field [Hstore_field [Hload_field Hfield_load_pres]]].
+
+  (* Struct field loads survive field store (store to new_b, loads on sb) *)
+  assert (Hstruct_preserved2 : forall ofs0 v0,
+    Mem.load Mint64 m1 sb ofs0 = Some v0 ->
+    Mem.load Mint64 m_field sb ofs0 = Some v0).
+  { intros ofs0 v0 Hld.
+    apply Hfield_load_pres.
+    - intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq).
+    - apply Hstruct_preserved. exact Hld. }
 
   (* Accu in m_field *)
   assert (Haccu_load_field : Mem.load Mint64 m_field sb (Ptrofs.unsigned so + 8) = Some accu_v).
@@ -465,8 +363,22 @@ Proof.
 
   (* --- Store 2: accu field <- Vptr new_b new_ofs --- *)
   set (block_v := Vptr new_b new_ofs).
-  destruct (store_succeeds_from_load m_field sb (Ptrofs.unsigned so + 8)
-              accu_v block_v Haccu_load_field)
+  (* sb_writable in m_field: thread through m -> m1 -> m_alloc -> m_field.
+     m -> m1 via sb_writable_after_store; m1 -> m_alloc via Halloc_perm_pres;
+     m_alloc -> m_field via Mem.perm_store_1 (field store on different block). *)
+  assert (Hsb_writable_m1 :
+    Mem.range_perm m1 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
+  { eapply sb_writable_after_store; eauto. }
+  assert (Hsb_writable_alloc :
+    Mem.range_perm m_alloc sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
+  { intros ofs0 Hofs0. eapply Halloc_perm_pres.
+    - eapply Mem.perm_valid_block.
+      apply (Hsb_writable_m1 (Ptrofs.unsigned so)). lia.
+    - apply Hsb_writable_m1. exact Hofs0. }
+  assert (Hsb_writable_m_field :
+    Mem.range_perm m_field sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
+  { eapply sb_writable_after_store; eauto. }
+  destruct (store_succeeds_sb m_field sb so 8 accu_v Hsb_writable_m_field Haccu_load_field ltac:(lia) ltac:(lia) block_v)
     as [m2 Hstore_accu].
 
   (* Final memory: m -> m1 (pc store) -> m_alloc (heap_alloc) ->
@@ -677,13 +589,7 @@ Proof.
           ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
            (Econst_int (Int.repr 1) tint) :: (Etempvar _tag tuchar) :: nil))
         E0 le4 m_alloc Out_normal).
-    { destruct heap_alloc_find_funct as [b_ha [Hfind_sym Hfind_funct]].
-      destruct (eval_expr_heap_alloc e le3 m1) as [b_ha2 [Hfind_sym2 Heval_func]].
-      (* b_ha = b_ha2 since find_symbol is deterministic *)
-      assert (b_ha = b_ha2) by (rewrite Hfind_sym in Hfind_sym2; congruence).
-      subst b_ha2.
-
-      (* Rewrite sem_cast for _tag argument *)
+    { (* Rewrite sem_cast for _tag argument *)
       assert (Hcast_tag : sem_cast (Vint tag_uchar) tuchar tlong m1 =
                 Some (Vlong (Int64.repr (Int.unsigned tag_uchar)))).
       { apply sem_cast_tuchar_to_tlong. }
@@ -697,15 +603,15 @@ Proof.
         (cconv := cc_default)
         (vf := Vptr b_ha Ptrofs.zero)
         (vargs := Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr tag_z) :: nil)
-        (f := Ctypes.External
-          (EF_external "heap_alloc"
-            (mksignature (AST.Xptr :: AST.Xlong :: AST.Xlong :: nil)
-              AST.Xlong cc_default))
-          ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
-          tlong cc_default)
+        (f := heap_alloc_fundef)
         (vres := Vptr new_b new_ofs).
       - (* classify_fun *) reflexivity.
-      - (* eval_expr for Evar _heap_alloc *) exact Heval_func.
+      - (* eval_expr for Evar _heap_alloc *)
+        eapply eval_Elvalue.
+        + eapply eval_Evar_global.
+          * exact He_heap_alloc.
+          * exact Hfind_symbol.
+        + apply deref_loc_reference. simpl. reflexivity.
       - (* eval_exprlist *)
         econstructor.
         + (* Etempvar _s *)
@@ -1140,14 +1046,24 @@ Proof.
     assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
     { eapply stack_repr_store_other_block; eauto. }
 
-    assert (Hstack_alloc : stack_repr hm m_alloc (Machine.stack s) sp_b sp_ofs).
-    { eapply heap_alloc_preserves_stack; eauto. }
+    (* stack_repr preservation through heap_alloc:
+       loads on sp_b are preserved since sp_b <> new_b *)
+    assert (Hsp_ne_new : sp_b <> new_b).
+    { intro Heq; symmetry in Heq; exact (Hnew_ne_sp Heq). }
+    assert (Hgb_ne_new : gb <> new_b).
+    { intro Heq; symmetry in Heq; exact (Hnew_ne_gb Heq). }
 
-    assert (Hnew_ne_sp : new_b <> sp_b).
-    { eapply heap_alloc_block_ne_sp; eauto. }
+    assert (Hstack_alloc : stack_repr hm m_alloc (Machine.stack s) sp_b sp_ofs).
+    { clear -Hstack_m1 Halloc_load_pres Hsp_ne_new.
+      induction Hstack_m1 as [| v vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
+      - constructor.
+      - econstructor.
+        + apply Halloc_load_pres. exact Hld. exact Hsp_ne_new.
+        + exact Hvr.
+        + apply IH. exact Hsp_ne_new. }
 
     assert (Hstack_field : stack_repr hm m_field (Machine.stack s) sp_b sp_ofs).
-    { eapply store_new_block_preserves_stack; eauto. }
+    { eapply stack_repr_store_other_block; eauto. }
 
     assert (Hstack2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
     { eapply stack_repr_store_other_block; eauto. }
@@ -1156,20 +1072,22 @@ Proof.
     assert (Hglobal_m1 : global_repr hm m1 (Machine.global s) gb go0).
     { eapply global_repr_store_other_block; eauto. }
 
+    (* global_repr preservation through heap_alloc:
+       loads on gb are preserved since gb <> new_b *)
     assert (Hglobal_alloc : global_repr hm m_alloc (Machine.global s) gb go0).
-    { eapply heap_alloc_preserves_global; eauto. }
-
-    assert (Hnew_ne_gb : new_b <> gb).
-    { eapply heap_alloc_block_ne_gb; eauto. }
+    { clear -Hglobal_m1 Halloc_load_pres Hgb_ne_new.
+      induction Hglobal_m1 as [| v vs gb0 gofs0 cv Hld Hvr Htl IH].
+      - constructor.
+      - econstructor.
+        + apply Halloc_load_pres. exact Hld. exact Hgb_ne_new.
+        + exact Hvr.
+        + apply IH. exact Hgb_ne_new. }
 
     assert (Hglobal_field : global_repr hm m_field (Machine.global s) gb go0).
-    { eapply store_new_block_preserves_global; eauto. }
+    { eapply global_repr_store_other_block; eauto. }
 
     assert (Hglobal2 : global_repr hm m2 (Machine.global s) gb go0).
     { eapply global_repr_store_other_block; eauto. }
-
-    assert (Hnew_ne_cb : new_b <> cb).
-    { eapply heap_alloc_block_ne_cb; eauto. }
 
     (* Now build abs_rel *)
     split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -1201,8 +1119,19 @@ Proof.
       - exact Hcb_ne_sp.
       - exact Hsp_ge8.
       - exact Hsp_rep.
-      - (* sp_writable: permission preserved through stores + heap_alloc *)
-        admit. }
+      - (* sp_writable + sp_align *)
+        split.
+        + (* sp_writable: permission preserved through stores + heap_alloc *)
+          intros ofs0 Hofs0.
+          eapply Mem.perm_store_1. exact Hstore_accu.
+          eapply Mem.perm_store_1. exact Hstore_field.
+          eapply Halloc_perm_pres.
+          * eapply Mem.perm_valid_block.
+            apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
+            apply (Hsp_writable 0). lia.
+          * eapply Mem.perm_store_1. exact Hstore_pc.
+            apply Hsp_writable. exact Hofs0.
+        + exact Hsp_align. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
@@ -1225,6 +1154,14 @@ Proof.
       - simpl. exact Htrap_rel. }
 
     (* 9. sb_writable -- permission preserved through stores + heap_alloc *)
-    { admit. }
+    { intros ofs0 Hofs0.
+      eapply Mem.perm_store_1. exact Hstore_accu.
+      eapply Mem.perm_store_1. exact Hstore_field.
+      eapply Halloc_perm_pres.
+      - eapply Mem.perm_valid_block.
+        apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
+        apply (Hsb_writable (Ptrofs.unsigned so)). lia.
+      - eapply Mem.perm_store_1. exact Hstore_pc.
+        apply Hsb_writable. exact Hofs0. }
   }
-Admitted. (* sp_writable, sb_writable through heap_alloc *)
+Qed.

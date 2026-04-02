@@ -29,7 +29,12 @@ Proof. intros. unfold sem_binary_operation, sem_add.
 
 Theorem verify_PUSHACC6_correct :
     handler_correct (handle_PUSHACC 6) f_instr_PUSHACC6
-      (fun _ _ _ _ => True)
+      (fun _ m _ ard =>
+         let sb := ar_sptr_block ard in
+         let so := ar_sptr_ofs ard in
+         exists sp_b sp_ofs,
+           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
+           Ptrofs.unsigned sp_ofs >= 16)
       (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 6 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -47,19 +52,24 @@ Proof.
   { reflexivity. }
   destruct stk4 as [|v5 rest].
   { reflexivity. }
-  intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
+  intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
-    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep Hsp_writable]]]]]]]]]]] &
+    [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
     [env_v [Henv_load Henv_repr]] &
     Hextra_load &
     [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] &
     [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
   subst sp_ptr.
+  (* Extract sp_ofs >= 16 from step_pre *)
+  destruct Hstep_pre as [sp_b' [sp_ofs' [Hsp_load' Hsp_ge16]]].
+  simpl in Hsp_load'. fold sb so in Hsp_load'.
+  assert (sp_b' = sp_b /\ sp_ofs' = sp_ofs) as [-> ->]
+    by (rewrite Hsp_load in Hsp_load'; injection Hsp_load'; auto).
 
   (* Structural facts *)
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
@@ -98,19 +108,25 @@ Proof.
 
   (* Pre-compute before ltac:() side effects *)
   rewrite Hstk in Hsp_rep. simpl length in Hsp_rep.
-  rewrite Hstk in Hsp_writable. simpl length in Hsp_writable.
   assert (Hsp_add40 : Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 40)) = Ptrofs.unsigned sp_ofs + 40).
   { apply ptrofs_add_unsigned; lia. }
 
   (* Store 1: sp field <- new_sp *)
-  destruct (store_succeeds_from_load m sb (Ptrofs.unsigned so + 16)
-              (Vptr sp_b sp_ofs) (Vptr sp_b new_sp_ofs) Hsp_load) as [m1 Hstore_sp].
+  destruct (store_succeeds_sb m sb so 16 (Vptr sp_b sp_ofs) Hsb_writable Hsp_load ltac:(lia) ltac:(lia) (Vptr sp_b new_sp_ofs)) as [m1 Hstore_sp].
 
   (* Store 2: *new_sp <- accu_v (on sp_b, different block from sb) *)
-  destruct (store_to_other_block m m1 sb (Ptrofs.unsigned so + 16)
-              (Vptr sp_b new_sp_ofs) sp_b (Ptrofs.unsigned new_sp_ofs) accu_v
-              Hstore_sp (not_eq_sym Hsp_ne_sb)
-              ltac:(rewrite Hnew_sp_unsigned; lia)) as [m2 Hstore_accu].
+  assert (Halign_new : (align_chunk Mint64 | Ptrofs.unsigned new_sp_ofs)).
+  { rewrite Hnew_sp_unsigned. simpl.
+    apply Z.divide_sub_r; [exact Hsp_align | exists 1; lia]. }
+  destruct (store_to_sp_after_sb_store m m1 sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)
+              sp_b (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)))
+              (Ptrofs.unsigned new_sp_ofs)
+              Hstore_sp Hsp_writable
+              ltac:(rewrite Hnew_sp_unsigned; lia)
+              ltac:(rewrite Hnew_sp_unsigned; lia)
+              Halign_new
+              accu_v) as [m2 Hstore_accu].
+  rewrite Hstk in Hsp_writable. simpl length in Hsp_writable.
 
   (* After stores 1 and 2, load v5's repr from the stack.
      The load at sp+40 (= new_sp+48) survives both stores. *)
@@ -141,8 +157,11 @@ Proof.
     erewrite Mem.load_store_other. exact Haccu_m1. exact Hstore_accu.
     left. exact (not_eq_sym Hsp_ne_sb). }
 
-  destruct (store_succeeds_from_load m2 sb (Ptrofs.unsigned so + 8) accu_v cv5
-              Haccu_load_m2) as [m3 Hstore_accu_field].
+  assert (Hsb_writable_m2 : Mem.range_perm m2 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
+  { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore_accu.
+    eapply Mem.perm_store_1. exact Hstore_sp. apply Hsb_writable. exact Hofs'. }
+  destruct (store_succeeds_sb m2 sb so 8 accu_v Hsb_writable_m2 Haccu_load_m2 ltac:(lia) ltac:(lia) cv5)
+    as [m3 Hstore_accu_field].
 
   (* Define le' with all the temps. *)
   set (le' := PTree.set _t'3 cv5
@@ -362,28 +381,31 @@ Proof.
       assert (Hstack_m2 : stack_repr hm m2 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b new_sp_ofs).
       { exact (stack_repr_cons_after_store hm m1 m2
                  (v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b sp_ofs (Machine.accu s) accu_v
-                 Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (sp_ofs_stack_representable _ _ _ _ _ Hstack_m1)). }
+                 Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 Hsp_rep). }
       assert (Hstack_m3 : stack_repr hm m3 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b new_sp_ofs).
       { apply (stack_repr_store_other_block hm m2 m3
                  (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: v5 :: rest) sp_b new_sp_ofs sb
                  (uso + 8) cv5
                  Hstack_m2 Hstore_accu_field).
         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
+      split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load3.
       - reflexivity.
       - simpl. exact Hstack_m3.
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp.
-      - exact (sp_ofs_ge_8 hm m3 _ sp_b new_sp_ofs Hstack_m3).
+      - rewrite Hnew_sp_unsigned. lia.
       - simpl Machine.stack. simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned. lia.
       - simpl Machine.stack. simpl length. rewrite Nat2Z.inj_succ. rewrite Hnew_sp_unsigned.
         intros ofs' Hofs'.
         eapply Mem.perm_store_1. exact Hstore_accu_field.
         eapply Mem.perm_store_1. exact Hstore_accu.
         eapply Mem.perm_store_1. exact Hstore_sp.
-        apply Hsp_writable. lia. }
+        apply Hsp_writable. lia.
+      - (* sp_aligned *)
+        rewrite Hnew_sp_unsigned. simpl.
+        apply Z.divide_sub_r; [exact Hsp_align | exists 1; lia]. }
 
 
     (* 5. env field -- unchanged *)

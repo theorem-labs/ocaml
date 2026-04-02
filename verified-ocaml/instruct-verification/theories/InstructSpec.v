@@ -156,7 +156,8 @@ Definition abs_rel_with_ard (e : Clight.env) (le : temp_env) (m : mem)
     Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)) < Ptrofs.modulus /\
     Mem.range_perm m sp_b 0
       (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)))
-      Cur Writable) /\
+      Cur Writable /\
+    (align_chunk Mint64 | Ptrofs.unsigned sp_ofs)) /\
 
   (exists env_v,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some env_v /\
@@ -221,7 +222,8 @@ Definition abs_rel_pre (e : Clight.env) (le : temp_env) (m : mem)
     Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)) < Ptrofs.modulus /\
     Mem.range_perm m sp_b 0
       (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length s.(stack)))
-      Cur Writable) /\
+      Cur Writable /\
+    (align_chunk Mint64 | Ptrofs.unsigned sp_ofs)) /\
 
   (exists env_v,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some env_v /\
