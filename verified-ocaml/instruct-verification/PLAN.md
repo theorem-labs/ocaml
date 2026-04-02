@@ -45,8 +45,8 @@ Paste the block below into every agent prompt verbatim.
    fail or corrupt state. Use coqc DIRECTLY:
 
    cd /workspaces/theorem-work/theorem-ocaml/verified-ocaml/instruct-verification
-   coqc -R ../../_build/default/instruct-verification/theories InstructVerification \
-        -Q ../../_build/default/manual OCamlInterp.Manual theories/HANDLER_correct.v
+   coqc -R ../_build/default/instruct-verification/theories InstructVerification \
+        -Q ../_build/default/manual OCamlInterp.Manual theories/HANDLER_correct.v
 
 4. NEVER use compute, vm_compute, native_compute on large terms.
    These cause memory blowup. Use rewrite, simpl, cbn only on small
