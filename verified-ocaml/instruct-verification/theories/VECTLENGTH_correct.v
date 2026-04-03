@@ -44,59 +44,41 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 (* ================================================================== *)
-(* Heap block header axioms                                            *)
+(* Heap block header precondition                                      *)
 (*                                                                      *)
 (* OCaml block layout in memory (64-bit):                              *)
 (*   ptr[-1]  = header word (8 bytes): size(54) | color(2) | tag(8)   *)
 (*   ptr[0..] = fields                                                 *)
 (*                                                                      *)
-(* These axioms relate the Rocq heap model to the C memory model.     *)
+(* These properties relate the Rocq heap model to the C memory model. *)
+(* They are required as preconditions (step_pre) rather than axioms.   *)
 (* ================================================================== *)
 
-(* heap_header_load: reading 8 bytes at offset -8 from the block pointer
-   yields the OCaml header word encoding size and tag. *)
-Axiom heap_header_load : forall (hm : nat -> option (block * ptrofs))
-    (m : mem) (s : Machine.state) addr b ofs tag fields,
-  hm addr = Some (b, ofs) ->
-  heap_lookup s.(Machine.hp) addr = Some (tag, fields) ->
-  exists hdr_word,
-    Mem.load Mint64 m b (Ptrofs.unsigned ofs - 8) = Some (Vlong hdr_word) /\
-    Int64.shru hdr_word (Int64.repr 10) =
-      Int64.repr (Z.of_nat (length fields)) /\
-    Mem.load Mint8unsigned m b (Ptrofs.unsigned ofs - 8) =
-      Some (Vint (Int.repr (Z.of_nat tag))).
-
-(* heap_tag_not_double_array: size_or_heap counts word-sized fields,
-   so tag 254 (Double_array_tag) is excluded from our model. *)
-Axiom heap_tag_not_double_array : forall hp addr tag fields,
-  heap_lookup hp addr = Some (tag, fields) ->
-  Z.of_nat tag <> 254.
-
-(* heap_block_ofs_ge_8: block pointer offset >= 8, so header at -8 is valid. *)
-Axiom heap_block_ofs_ge_8 : forall (hm : nat -> option (block * ptrofs)) addr b ofs,
-  hm addr = Some (b, ofs) ->
-  Ptrofs.unsigned ofs >= 8.
-
-(* heap_block_ne_sptr: heap blocks live in different memory blocks than
-   the interpreter state struct. *)
-Axiom heap_block_ne_sptr : forall (hm : nat -> option (block * ptrofs)) addr b ofs sb,
-  hm addr = Some (b, ofs) ->
-  b <> sb.
-
-(* heap_tag_range: OCaml tags are in range 0..255. *)
-Axiom heap_tag_range : forall hp addr tag fields,
-  heap_lookup hp addr = Some (tag, fields) ->
-  (0 <= Z.of_nat tag <= 255)%Z.
-
-(* heap_header_shr_size: The C handler uses signed shift (Oshr on tlong),
-   but the header is always non-negative, so shr = shru for the size field. *)
-Axiom heap_header_shr_size : forall (hm : nat -> option (block * ptrofs))
-    (m : mem) (s : Machine.state) addr b ofs tag fields hdr_word,
-  hm addr = Some (b, ofs) ->
-  heap_lookup s.(Machine.hp) addr = Some (tag, fields) ->
-  Mem.load Mint64 m b (Ptrofs.unsigned ofs - 8) = Some (Vlong hdr_word) ->
-  Int64.shr hdr_word (Int64.repr 10) =
-    Int64.repr (Z.of_nat (length fields)).
+Definition heap_block_pre
+    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let hm := ar_heap_map ard in
+  let sb := ar_sptr_block ard in
+  forall addr b ofs tag fields,
+    hm addr = Some (b, ofs) ->
+    heap_lookup s.(Machine.hp) addr = Some (tag, fields) ->
+    (* Header word exists at ptr[-1] and encodes size and tag *)
+    (exists hdr_word,
+      Mem.load Mint64 m b (Ptrofs.unsigned ofs - 8) = Some (Vlong hdr_word) /\
+      Int64.shru hdr_word (Int64.repr 10) =
+        Int64.repr (Z.of_nat (length fields)) /\
+      Mem.load Mint8unsigned m b (Ptrofs.unsigned ofs - 8) =
+        Some (Vint (Int.repr (Z.of_nat tag))) /\
+      (* Signed shift = unsigned shift for size (header non-negative) *)
+      Int64.shr hdr_word (Int64.repr 10) =
+        Int64.repr (Z.of_nat (length fields))) /\
+    (* Tag is not Double_array_tag (254) *)
+    Z.of_nat tag <> 254 /\
+    (* Block pointer offset >= 8, so header at -8 is valid *)
+    Ptrofs.unsigned ofs >= 8 /\
+    (* Heap blocks live in different memory blocks than sptr *)
+    b <> sb /\
+    (* Tag in range 0..255 *)
+    (0 <= Z.of_nat tag <= 255)%Z.
 
 (* ================================================================== *)
 (* Semantic lemmas                                                     *)
@@ -282,7 +264,8 @@ Proof. intros. reflexivity. Qed.
 
 Definition vectlength_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  match Machine.accu s with Val_block _ _ => False | _ => True end.
+  (match Machine.accu s with Val_block _ _ => False | _ => True end) /\
+  heap_block_pre m s ard.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -308,7 +291,8 @@ Proof.
      The C code dereferences accu as a pointer, but Val_block maps to Vlong.
      Excluded by vectlength_pre. *)
   { simpl. intros ard _ Hpre. exfalso.
-    unfold vectlength_pre in Hpre. rewrite Haccu_eq in Hpre. exact Hpre. }
+    unfold vectlength_pre in Hpre. destruct Hpre as [Hpre_block _].
+    rewrite Haccu_eq in Hpre_block. exact Hpre_block. }
 
   (* Case 3: accu = Val_ptr addr *)
   {
@@ -317,7 +301,7 @@ Proof.
 
     (* Case 2a: heap_lookup = Some => Step *)
     {
-      intros ard Hpre _.
+      intros ard Hpre Hstep_pre.
       unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
@@ -347,12 +331,14 @@ Proof.
       | [ H : hm _ = Some (hb, ho) |- _ ] => rename H into Hhm
       end.
 
-      pose proof (heap_header_load hm m s addr hb ho tag fields
-                    Hhm Hheap) as [hdr_word [Hhdr_load [Hhdr_size Htag_byte_load]]].
-      pose proof (heap_tag_not_double_array _ _ _ _ Hheap) as Htag_ne_254.
-      pose proof (heap_tag_range _ _ _ _ Hheap) as Htag_range.
-      pose proof (heap_block_ofs_ge_8 hm addr hb ho Hhm) as Hho_ge_8.
-      pose proof (heap_block_ne_sptr hm addr hb ho sb Hhm) as Hhb_ne_sb.
+      (* Extract heap block facts from precondition *)
+      unfold vectlength_pre in Hstep_pre.
+      destruct Hstep_pre as [_ Hheap_pre].
+      unfold heap_block_pre in Hheap_pre.
+      specialize (Hheap_pre addr hb ho tag fields Hhm Hheap).
+      destruct Hheap_pre as
+        [[hdr_word [Hhdr_load [Hhdr_size [Htag_byte_load Hhdr_shr]]]]
+         [Htag_ne_254 [Hho_ge_8 [Hhb_ne_sb Htag_range]]]].
 
       destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
@@ -375,69 +361,175 @@ Proof.
                         (PTree.set _t'4 cv_hdr
                           (PTree.set _t'3 cv_accu le))))).
 
-      pose proof (heap_header_shr_size hm m s addr hb ho tag fields
-                    hdr_word Hhm Hheap Hhdr_load) as Hhdr_shr.
-      fold n in Hhdr_shr.
-
       exists le'. exists m'.
       exists (Out_return (Some (Vint (Int.repr 0), tint))).
 
       split.
 
-      (* Part 1: exec *)
+      (* Part 1: exec -- explicit big-step proof *)
       {
-        apply (eval_stmt_to_exec clight_ge 9). eval_cbn.
-        (* Load s->accu *)
-        rewrite Hle_s; eval_cbn.
-        rewrite Hco; eval_cbn.
-        rewrite Haccu_offset; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
-        rewrite Haccu_load; eval_cbn.
-        (* Cast accu to ptr, compute ptr[-1] address, load header *)
-        rewrite PTree.gss; eval_cbn.
-        unfold cv_accu; rewrite sem_cast_long_to_ptr_tlong; eval_cbn.
-        rewrite sem_neg_int_1; eval_cbn.
-        rewrite sem_add_ptr_neg1_tlong; eval_cbn.
-        rewrite ptrofs_add_neg8 by lia.
-        rewrite Hhdr_load; eval_cbn.
-        (* Shift header right 10 to get size *)
-        rewrite PTree.gss; eval_cbn.
-        unfold cv_hdr; rewrite sem_shr_long_int_10; eval_cbn.
-        (* Load s->accu again for tag byte *)
-        repeat (rewrite PTree.gso by (compute; congruence)).
-        rewrite Hle_s; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
-        rewrite Haccu_load; eval_cbn.
-        (* Cast to tuchar ptr, compute ptr - sizeof(long), load tag byte *)
-        rewrite PTree.gss; eval_cbn.
-        unfold cv_accu; rewrite sem_cast_long_to_ptr_tuchar; eval_cbn.
-        change (sizeof ge tlong) with 8%Z.
-        rewrite Vptrofs_is_Vlong, ptrofs_to_int64_8.
-        rewrite sem_neg_sizeof_long; eval_cbn.
-        rewrite sem_add_ptr_tuchar_neg_sizeof_long; eval_cbn.
-        rewrite ptrofs_add_neg8 by lia.
-        rewrite Htag_byte_load; eval_cbn.
-        (* Sifthenelse: tag & 255 == 254 => false *)
-        rewrite PTree.gss; eval_cbn.
-        unfold cv_tag_byte.
-        change (sem_binary_operation ge Oand (Vint (Int.repr (Z.of_nat tag)))
-                  tuchar (Vint (Int.repr 255)) tint m)
-          with (Some (Vint (Int.and (Int.repr (Z.of_nat tag)) (Int.repr 255)))).
-        eval_cbn.
-        rewrite sem_eq_int_int; eval_cbn.
-        rewrite (tag_not_254_comparison tag Htag_range Htag_ne_254); eval_cbn.
-        change (Int.eq Int.zero Int.zero) with true; eval_cbn.
-        (* Store result: (size << 1) + 1 *)
-        repeat (rewrite PTree.gso by (compute; congruence)).
-        rewrite Hle_s; eval_cbn.
-        rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
-        rewrite PTree.gss; eval_cbn.
-        rewrite sem_cast_ulong_to_long; eval_cbn.
-        rewrite sem_shl_long_int_1; eval_cbn.
-        rewrite sem_add_long_int_1; eval_cbn.
-        rewrite sem_cast_long_to_long; eval_cbn.
-        fold cv_result; rewrite Hstore; eval_cbn.
-        reflexivity.
+        (* Intermediate local environments *)
+        set (le1 := PTree.set _t'3 cv_accu le).
+        set (le2 := PTree.set _t'4 cv_hdr le1).
+        set (le3 := PTree.set _size cv_size le2).
+        set (le4 := PTree.set _t'1 cv_accu le3).
+        assert (Hle'_eq : le' = PTree.set _t'2 cv_tag_byte le4).
+        { subst le' le4 le3 le2 le1. reflexivity. }
+
+        (* Outer: PartA ; PartB *)
+        apply exec_Sseq_1 with (t1 := E0) (le1 := le3) (m1 := m).
+
+        (* PartA: (Sset _t'3) ; ((Sset _t'4) ; (Sset _size)) *)
+        {
+          apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m).
+
+          (* Sset _t'3 = s->accu *)
+          { apply exec_Sset.
+            eapply eval_Elvalue.
+            - eapply eval_Efield_struct.
+              + eapply eval_Elvalue.
+                * eapply eval_Ederef. eapply eval_Etempvar. exact Hle_s.
+                * apply deref_loc_copy. reflexivity.
+              + reflexivity.
+              + exact Hco.
+              + exact Haccu_offset.
+            - apply deref_loc_value with (chunk := Mint64).
+              + reflexivity.
+              + simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+                exact Haccu_load. }
+
+          (* (Sset _t'4) ; (Sset _size) *)
+          {
+            apply exec_Sseq_1 with (t1 := E0) (le1 := le2) (m1 := m).
+
+            (* Sset _t'4: load header word *)
+            { apply exec_Sset.
+              eapply eval_Elvalue.
+              - eapply eval_Ederef.
+                eapply eval_Ebinop.
+                + eapply eval_Ecast.
+                  * eapply eval_Etempvar. subst le1. rewrite PTree.gss. reflexivity.
+                  * unfold cv_accu. apply sem_cast_long_to_ptr_tlong.
+                + eapply eval_Eunop.
+                  * eapply eval_Econst_int.
+                  * apply sem_neg_int_1.
+                + unfold cv_accu. apply sem_add_ptr_neg1_tlong.
+              - apply deref_loc_value with (chunk := Mint64).
+                + reflexivity.
+                + simpl. rewrite ptrofs_add_neg8 by lia. exact Hhdr_load. }
+
+            (* Sset _size = _t'4 >> 10 *)
+            { apply exec_Sset.
+              eapply eval_Ebinop.
+              - eapply eval_Etempvar. subst le2. rewrite PTree.gss. reflexivity.
+              - eapply eval_Econst_int.
+              - unfold cv_hdr. apply sem_shr_long_int_10. }
+          }
+        }
+
+        (* PartB: PartB1 ; PartB2 *)
+        {
+          apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m).
+
+          (* PartB1: (Sset _t'1) ; ((Sset _t'2) ; Sifthenelse) *)
+          {
+            apply exec_Sseq_1 with (t1 := E0) (le1 := le4) (m1 := m).
+
+            (* Sset _t'1 = s->accu (second load) *)
+            { apply exec_Sset.
+              eapply eval_Elvalue.
+              - eapply eval_Efield_struct.
+                + eapply eval_Elvalue.
+                  * eapply eval_Ederef. eapply eval_Etempvar.
+                    subst le3 le2 le1.
+                    repeat (rewrite PTree.gso by (compute; congruence)).
+                    exact Hle_s.
+                  * apply deref_loc_copy. reflexivity.
+                + reflexivity.
+                + exact Hco.
+                + exact Haccu_offset.
+              - apply deref_loc_value with (chunk := Mint64).
+                + reflexivity.
+                + simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+                  exact Haccu_load. }
+
+            (* (Sset _t'2) ; Sifthenelse *)
+            {
+              apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m).
+
+              (* Sset _t'2: load tag byte *)
+              { rewrite Hle'_eq. apply exec_Sset.
+                eapply eval_Elvalue.
+                - eapply eval_Ederef.
+                  eapply eval_Ebinop.
+                  + eapply eval_Ecast.
+                    * eapply eval_Etempvar. subst le4. rewrite PTree.gss. reflexivity.
+                    * unfold cv_accu. apply sem_cast_long_to_ptr_tuchar.
+                  + eapply eval_Eunop.
+                    * eapply eval_Esizeof.
+                    * change (sizeof (genv_cenv clight_ge) tlong) with 8%Z.
+                      rewrite Vptrofs_is_Vlong, ptrofs_to_int64_8.
+                      apply sem_neg_sizeof_long.
+                  + unfold cv_accu. apply sem_add_ptr_tuchar_neg_sizeof_long.
+                - apply deref_loc_value with (chunk := Mint8unsigned).
+                  + reflexivity.
+                  + simpl. rewrite ptrofs_add_neg8 by lia. exact Htag_byte_load. }
+
+              (* Sifthenelse: tag & 255 == 254 => false => Sskip *)
+              { eapply exec_Sifthenelse.
+                - rewrite Hle'_eq.
+                  eapply eval_Ebinop.
+                  + eapply eval_Ebinop.
+                    * eapply eval_Etempvar. rewrite PTree.gss. reflexivity.
+                    * eapply eval_Econst_int.
+                    * unfold cv_tag_byte. reflexivity.
+                  + eapply eval_Econst_int.
+                  + apply sem_eq_int_int.
+                - unfold cast_int_int.
+                  rewrite (tag_not_254_comparison tag Htag_range Htag_ne_254).
+                  reflexivity.
+                - simpl. apply exec_Sskip. }
+            }
+          }
+
+          (* PartB2: (Sassign s->accu) ; (Sreturn 0) *)
+          {
+            apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m').
+
+            (* Sassign: s->accu = (cast _size tlong << 1) + 1 *)
+            { eapply exec_Sassign.
+              - eapply eval_Efield_struct.
+                + eapply eval_Elvalue.
+                  * eapply eval_Ederef. eapply eval_Etempvar.
+                    rewrite Hle'_eq. subst le4 le3 le2 le1.
+                    repeat (rewrite PTree.gso by (compute; congruence)).
+                    exact Hle_s.
+                  * apply deref_loc_copy. reflexivity.
+                + reflexivity.
+                + exact Hco.
+                + exact Haccu_offset.
+              - eapply eval_Ebinop.
+                + eapply eval_Ebinop.
+                  * eapply eval_Ecast.
+                    { eapply eval_Etempvar.
+                      rewrite Hle'_eq. subst le4 le3 le2.
+                      repeat (rewrite PTree.gso by (compute; congruence)).
+                      rewrite PTree.gss. reflexivity. }
+                    { apply sem_cast_ulong_to_long. }
+                  * eapply eval_Econst_int.
+                  * apply sem_shl_long_int_1.
+                + eapply eval_Econst_int.
+                + apply sem_add_long_int_1.
+              - apply sem_cast_long_to_long.
+              - apply assign_loc_value with (chunk := Mint64).
+                + reflexivity.
+                + simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+                  fold cv_result. exact Hstore. }
+
+            (* Sreturn (Some 0) *)
+            { apply exec_Sreturn_some. eapply eval_Econst_int. }
+          }
+        }
       }
 
       (* Part 2: abs_rel for post-state *)
