@@ -284,369 +284,623 @@ Proof.
   intros. unfold abs_rel, abs_rel_with_ard. reflexivity.
 Qed.
 
+(* handler_correct_with_pre: variant where step_pre omits the Clight env.
+   Used for handlers whose precondition depends only on memory, machine
+   state, and abs_rel_data (not the Clight local environment). *)
+Definition handler_correct_with_pre
+    (handler : Z -> state -> step_result)
+    (f : function)
+    (step_pre : mem -> state -> abs_rel_data -> Prop)
+    (P_error : string -> state -> Prop)
+    (P_halt : value -> Prop)
+    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
+  forall e le m s,
+    match handler s.(pc) s with
+    | Step s' =>
+        forall ard,
+        abs_rel_with_ard e le m s ard ->
+        step_pre m s ard ->
+        exists le' m' out,
+          exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m' out /\
+          abs_rel e le' m' s'
+    | Error msg => P_error msg s
+    | Halt v => P_halt v
+    | CCall_request nargs args s' => P_ccall nargs args s'
+    end.
+
+(* handler_verified: existential wrapper — the Module Type declares that
+   a handler is correct for SOME step_pre, and the instantiation pins
+   down the concrete precondition. *)
+Definition handler_verified
+    (handler : Z -> state -> step_result)
+    (f : function)
+    (P_error : string -> state -> Prop)
+    (P_halt : value -> Prop)
+    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
+  exists step_pre, handler_correct handler f step_pre P_error P_halt P_ccall.
+
+Definition handler_with_pre_verified
+    (handler : Z -> state -> step_result)
+    (f : function)
+    (P_error : string -> state -> Prop)
+    (P_halt : value -> Prop)
+    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
+  exists step_pre, handler_correct_with_pre handler f step_pre P_error P_halt P_ccall.
 
 (* ================================================================== *)
 (* Module Type: per-instruction correctness obligations                *)
-(* TODO: Update axiom signatures for unified handler_correct           *)
-(* (needs step_pre argument). Commented out until instantiated.        *)
+(*                                                                      *)
+(* Each Parameter asserts that a handler is correct for some step_pre. *)
+(* InstructVerification.v instantiates this Module Type, providing     *)
+(* the concrete preconditions from each handler's proof file.          *)
 (* ================================================================== *)
 
-(*
-Module Type InstructSpec.
+(* WIP — Module Type under construction; uncomment when complete.
 
-  (* --- Stack (ACC family) --- *)
+Module Type InstructVerificationSpec.
 
-  Axiom verify_ACC0 :
-    handler_correct (handle_ACC 0) f_instr_ACC0
+  Parameter verified_ACC0 :
+    handler_verified
+      (handle_ACC 0) f_instr_ACC0
       (fun _ s => s.(Machine.stack) = nil)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC1 :
-    handler_correct (handle_ACC 1) f_instr_ACC1
+  Parameter verified_ACC1 :
+    handler_verified
+      (handle_ACC 1) f_instr_ACC1
       (fun _ s => nth_error s.(Machine.stack) 1 = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC2 :
-    handler_correct (handle_ACC 2) f_instr_ACC2
+  Parameter verified_ACC2 :
+    handler_verified
+      (handle_ACC 2) f_instr_ACC2
       (fun _ s => nth_error s.(Machine.stack) 2 = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC3 :
-    handler_correct (handle_ACC 3) f_instr_ACC3
+  Parameter verified_ACC3 :
+    handler_verified
+      (handle_ACC 3) f_instr_ACC3
       (fun _ s => nth_error s.(Machine.stack) 3 = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC4 :
-    handler_correct (handle_ACC 4) f_instr_ACC4
+  Parameter verified_ACC4 :
+    handler_verified
+      (handle_ACC 4) f_instr_ACC4
       (fun _ s => nth_error s.(Machine.stack) 4 = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC5 :
-    handler_correct (handle_ACC 5) f_instr_ACC5
+  Parameter verified_ACC5 :
+    handler_verified
+      (handle_ACC 5) f_instr_ACC5
       (fun _ s => nth_error s.(Machine.stack) 5 = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC6 :
-    handler_correct (handle_ACC 6) f_instr_ACC6
+  Parameter verified_ACC6 :
+    handler_verified
+      (handle_ACC 6) f_instr_ACC6
       (fun _ s => nth_error s.(Machine.stack) 6 = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC7 :
-    handler_correct (handle_ACC 7) f_instr_ACC7
+  Parameter verified_ACC7 :
+    handler_verified
+      (handle_ACC 7) f_instr_ACC7
       (fun _ s => nth_error s.(Machine.stack) 7 = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ACC : forall n,
-    handler_correct (handle_ACC n) f_instr_ACC
+  Parameter verified_ACC :
+    forall n, handler_verified
+      (handle_ACC n) f_instr_ACC
       (fun _ s => nth_error s.(Machine.stack) n = None)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Stack (PUSH / PUSHACC family) --- *)
-
-  Axiom verify_PUSH :
-    handler_correct handle_PUSH f_instr_PUSH
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHACC1 :
-    handler_correct (handle_PUSHACC 1) f_instr_PUSHACC1
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 1 = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHACC2 :
-    handler_correct (handle_PUSHACC 2) f_instr_PUSHACC2
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 2 = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHACC3 :
-    handler_correct (handle_PUSHACC 3) f_instr_PUSHACC3
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 3 = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHACC4 :
-    handler_correct (handle_PUSHACC 4) f_instr_PUSHACC4
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 4 = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHACC5 :
-    handler_correct (handle_PUSHACC 5) f_instr_PUSHACC5
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 5 = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHACC6 :
-    handler_correct (handle_PUSHACC 6) f_instr_PUSHACC6
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 6 = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHACC7 :
-    handler_correct (handle_PUSHACC 7) f_instr_PUSHACC7
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 7 = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_POP : forall n,
-    handler_correct (handle_POP n) f_instr_POP
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_ASSIGN : forall n,
-    handler_correct (handle_ASSIGN n) f_instr_ASSIGN
-      (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  (* --- Constants --- *)
-
-  Axiom verify_CONST0 :
-    handler_correct (handle_CONSTINT 0) f_instr_CONST0
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_CONST1 :
-    handler_correct (handle_CONSTINT 1) f_instr_CONST1
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_CONST2 :
-    handler_correct (handle_CONSTINT 2) f_instr_CONST2
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_CONST3 :
-    handler_correct (handle_CONSTINT 3) f_instr_CONST3
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_CONSTINT : forall n,
-    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHCONST0 :
-    handler_correct (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHCONST1 :
-    handler_correct (handle_PUSHCONSTINT 1) f_instr_PUSHCONST1
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHCONST2 :
-    handler_correct (handle_PUSHCONSTINT 2) f_instr_PUSHCONST2
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHCONST3 :
-    handler_correct (handle_PUSHCONSTINT 3) f_instr_PUSHCONST3
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_PUSHCONSTINT : forall n,
-    handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  (* --- Arithmetic (binary) --- *)
-
-  Axiom verify_ADDINT :
-    handler_correct handle_ADDINT f_instr_ADDINT
+  Parameter verified_ADDINT :
+    handler_verified
+      handle_ADDINT f_instr_ADDINT
       (fun _ s => forall a b rest,
          s.(Machine.accu) = Val_int a ->
          s.(Machine.stack) = Val_int b :: rest -> False)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_SUBINT :
-    handler_correct handle_SUBINT f_instr_SUBINT
+  Parameter verified_ANDINT :
+    handler_verified
+      handle_ANDINT f_instr_ANDINT
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_MULINT :
-    handler_correct handle_MULINT f_instr_MULINT
+  Parameter verified_APPLY1 :
+    handler_verified
+      (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
+      (fun msg s =>
+         (msg = "APPLY1: accu is not a closure"%string /\
+          get_code_ptr_s s s.(Machine.accu) = None) \/
+         (msg = "APPLY1: stack underflow"%string))
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_APPLY3 :
+    handler_verified
+      (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
+      (fun msg s =>
+        match s.(Machine.stack) with
+        | _ :: _ :: _ :: _ =>
+          get_code_ptr_s s s.(Machine.accu) = None
+        | _ => True
+        end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_ASRINT :
+    handler_verified
+      handle_ASRINT f_instr_ASRINT
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end)
-      (fun _ => False) (fun _ _ _ => False).
+                  | _, _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_DIVINT :
-    handler_correct_with_pre handle_DIVINT f_instr_DIVINT
-      (fun _ s _ =>
-         match s.(Machine.accu), s.(Machine.stack) with
-         | Val_int a, Val_int b :: _ =>
-             b <> 0%Z /\
-             Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
-             Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
-         | _, _ => True
-         end)
+  Parameter verified_ASSIGN :
+    forall n, handler_verified
+      (handle_ASSIGN n) f_instr_ASSIGN
+      (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BEQ :
+    forall n target, handler_verified
+      (handle_BEQ n target) f_instr_BEQ
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BGEINT :
+    forall n target, handler_verified
+      (handle_BGEINT n target) f_instr_BGEINT
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BGTINT :
+    forall n target, handler_verified
+      (handle_BGTINT n target) f_instr_BGTINT
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BLEINT :
+    forall n target, handler_verified
+      (handle_BLEINT n target) f_instr_BLEINT
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BLTINT :
+    forall n target, handler_verified
+      (handle_BLTINT n target) f_instr_BLTINT
+      (fun msg s =>
+         msg = "BLTINT: not an integer"%string /\
+         match Machine.accu s with Val_int _ => False | _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BNEQ :
+    forall n target, handler_verified
+      (handle_BNEQ n target) f_instr_BNEQ
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BRANCHIFNOT :
+    forall target, handler_with_pre_verified
+      (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BRANCHIF :
+    forall target, handler_with_pre_verified
+      (handle_BRANCHIF target) f_instr_BRANCHIF
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BRANCH :
+    forall target, handler_verified
+      (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BREAK :
+    handler_verified
+      handle_BREAK f_instr_BREAK
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BUGEINT :
+    forall n target, handler_verified
+      (handle_BUGEINT n target) f_instr_BUGEINT
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_BULTINT :
+    forall n target, handler_verified
+      (handle_BULTINT n target) f_instr_BULTINT
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CHECK_SIGNALS :
+    handler_verified
+      handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CLOSUREREC :
+    forall code_ofs, handler_verified
+      (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+      (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CLOSURE :
+    forall code_ofs, handler_verified
+      (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CONST0 :
+    handler_verified
+      (handle_CONSTINT 0) f_instr_CONST0
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CONST1 :
+    handler_verified
+      (handle_CONSTINT 1) f_instr_CONST1
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CONST2 :
+    handler_verified
+      (handle_CONSTINT 2) f_instr_CONST2
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CONST3 :
+    handler_verified
+      (handle_CONSTINT 3) f_instr_CONST3
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_CONSTINT :
+    forall n, handler_verified
+      (handle_CONSTINT n) f_instr_CONSTINT
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_C_CALL1 :
+    forall prim_idx, handler_verified
+      (handle_C_CALL 1 prim_idx) f_instr_C_CALL1
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => True).
+
+  Parameter verified_C_CALL2 :
+    forall prim_idx, handler_verified
+      (handle_C_CALL 2 prim_idx) f_instr_C_CALL2
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => True).
+
+  Parameter verified_C_CALL3 :
+    forall prim_idx, handler_verified
+      (handle_C_CALL 3 prim_idx) f_instr_C_CALL3
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => True).
+
+  Parameter verified_C_CALL4 :
+    forall prim_idx, handler_verified
+      (handle_C_CALL 4 prim_idx) f_instr_C_CALL4
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => True).
+
+  Parameter verified_C_CALL5 :
+    forall prim_idx, handler_verified
+      (handle_C_CALL 5 prim_idx) f_instr_C_CALL5
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => True).
+
+  Parameter verified_C_CALLN :
+    forall nargs prim_idx, handler_verified
+      (handle_C_CALL nargs prim_idx) f_instr_C_CALLN
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => True).
+
+  Parameter verified_DIVINT :
+    handler_with_pre_verified
+      handle_DIVINT f_instr_DIVINT
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
                   | _, _ => True
                   end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_MODINT :
-    handler_correct_with_pre handle_MODINT f_instr_MODINT
-      (fun _ s _ =>
+  Parameter verified_ENVACC :
+    forall n, handler_verified
+      (handle_ENVACC n) f_instr_ENVACC
+      (fun _ s => field_or_heap s s.(Machine.env) n = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_EQ :
+    handler_verified
+      handle_EQ f_instr_EQ
+      (fun _ s => s.(Machine.stack) = nil)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_EVENT :
+    handler_verified
+      handle_EVENT f_instr_EVENT
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GEINT :
+    handler_verified
+      handle_GEINT f_instr_GEINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETFIELD0 :
+    handler_verified
+      (handle_GETFIELD 0) f_instr_GETFIELD0
+      (fun _ s => field_or_heap s s.(Machine.accu) 0 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETFIELD1 :
+    handler_verified
+      (handle_GETFIELD 1) f_instr_GETFIELD1
+      (fun _ s => field_or_heap s s.(Machine.accu) 1 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETFIELD2 :
+    handler_verified
+      (handle_GETFIELD 2) f_instr_GETFIELD2
+      (fun _ s => field_or_heap s s.(Machine.accu) 2 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETFIELD3 :
+    handler_verified
+      (handle_GETFIELD 3) f_instr_GETFIELD3
+      (fun _ s => field_or_heap s s.(Machine.accu) 3 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETFIELD :
+    forall n, handler_verified
+      (handle_GETFIELD n) f_instr_GETFIELD
+      (fun _ s => field_or_heap s s.(Machine.accu) n = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETFLOATFIELD :
+    forall n, handler_verified
+      (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
+      (fun _ s => field_or_heap s s.(Machine.accu) n = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETGLOBALFIELD :
+    forall n p, handler_verified
+      (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
+      (fun msg s =>
+         (nth_error s.(Machine.global) n = None /\ msg = "GETGLOBALFIELD: index out of bounds"%string) \/
+         (exists glob, nth_error s.(Machine.global) n = Some glob /\
+            field_or_heap s glob p = None /\ msg = "GETGLOBALFIELD: field access failed"%string))
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETGLOBAL :
+    forall n, handler_verified
+      (handle_GETGLOBAL n) f_instr_GETGLOBAL
+      (fun _ s => nth_error s.(Machine.global) n = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GRAB :
+    forall required, handler_verified
+      (handle_GRAB required) f_instr_GRAB
+      (fun msg s =>
+         msg = "GRAB: malformed return frame"%string /\
+         Nat.leb required (extra_args s) = false /\
+         match skipn (S (extra_args s)) (Machine.stack s) with
+         | Val_int _ :: _ :: Val_int _ :: _ => False
+         | _ => True
+         end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GTINT :
+    handler_verified
+      handle_GTINT f_instr_GTINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_LEINT :
+    handler_verified
+      handle_LEINT f_instr_LEINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_LSLINT :
+    handler_verified
+      handle_LSLINT f_instr_LSLINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_LSRINT :
+    handler_verified
+      handle_LSRINT f_instr_LSRINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_LTINT :
+    handler_verified
+      handle_LTINT f_instr_LTINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_MAKEBLOCK1 :
+    forall t, handler_verified
+      (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_MAKEBLOCK2 :
+    forall t, handler_verified
+      (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
+      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_MAKEBLOCK3 :
+    forall t, handler_verified
+      (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_MAKEBLOCK :
+    forall (t size : nat), (size >= 1)%nat ->
+    handler_verified
+      (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_MAKEFLOATBLOCK :
+    forall (n : nat), (n >= 1)%nat ->
+    handler_verified
+      (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_MODINT :
+    handler_with_pre_verified
+      handle_MODINT f_instr_MODINT
+      (fun _ s =>
          match s.(Machine.accu), s.(Machine.stack) with
-         | Val_int a, Val_int b :: _ =>
-             b <> 0%Z /\
-             Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
-             Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+         | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
          | _, _ => True
          end)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
-                  | _, _ => True
-                  end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ANDINT :
-    handler_correct handle_ANDINT f_instr_ANDINT
+  Parameter verified_MULINT :
+    handler_verified
+      handle_MULINT f_instr_MULINT
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ORINT :
-    handler_correct handle_ORINT f_instr_ORINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_XORINT :
-    handler_correct handle_XORINT f_instr_XORINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  (* LSLINT: shift amount must be in range [0, 64) for CompCert's
-     sem_shl guard (Int64.ltu shift_amt 64 = true) to hold.
-     The shift amount is the untagged stack top: if stack top is
-     Val_int b, we need 0 <= b < 64.  The ard parameter is unused. *)
-  Axiom verify_LSLINT :
-    handler_correct_with_pre handle_LSLINT f_instr_LSLINT
-      (fun _ s _ =>
-         match s.(Machine.stack) with
-         | Val_int b :: _ => 0 <= b < 64
-         | _ => True
-         end)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  (* LSRINT: shift amount must be in range [0, 64) for CompCert's
-     sem_shr guard (Int64.ltu shift_amt 64 = true) to hold.
-     The shift amount is the untagged stack top: if stack top is
-     Val_int b, we need 0 <= b < 64.  The ard parameter is unused. *)
-  Axiom verify_LSRINT :
-    handler_correct_with_pre handle_LSRINT f_instr_LSRINT
-      (fun _ s _ =>
-         match s.(Machine.stack) with
-         | Val_int b :: _ => 0 <= b < 64
-         | _ => True
-         end)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_ASRINT :
-    handler_correct_with_pre handle_ASRINT f_instr_ASRINT
-      (fun _ s _ =>
-         match s.(Machine.stack) with
-         | Val_int b :: _ => 0 <= b < 64
-         | _ => True
-         end)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  (* --- Arithmetic (unary) --- *)
-
-  Axiom verify_NEGINT :
-    handler_correct handle_NEGINT f_instr_NEGINT
+  Parameter verified_NEGINT :
+    handler_verified
+      handle_NEGINT f_instr_NEGINT
       (fun _ s => forall n, s.(Machine.accu) <> Val_int n)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Comparisons --- *)
+  Parameter verified_NEQ :
+    handler_verified
+      handle_NEQ f_instr_NEQ
+      (fun _ s => s.(Machine.stack) = nil)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_EQ :
-    handler_correct handle_EQ f_instr_EQ
-      (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_OFFSETCLOSURE0 :
+    handler_verified
+      (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_NEQ :
-    handler_correct handle_NEQ f_instr_NEQ
-      (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_OFFSETCLOSURE :
+    forall n, handler_verified
+      (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_LTINT :
-    handler_correct handle_LTINT f_instr_LTINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_LEINT :
-    handler_correct handle_LEINT f_instr_LEINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_GTINT :
-    handler_correct handle_GTINT f_instr_GTINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_GEINT :
-    handler_correct handle_GEINT f_instr_GEINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_ULTINT :
-    handler_correct handle_ULTINT f_instr_ULTINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_UGEINT :
-    handler_correct handle_UGEINT f_instr_UGEINT
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | Val_int _, Val_int _ :: _ => False
-                  | _, _ => True
-                  end) (fun _ => False) (fun _ _ _ => False).
-
-  (* --- Boolean / misc --- *)
-
-  Axiom verify_BOOLNOT :
-    handler_correct handle_BOOLNOT f_instr_BOOLNOT
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_ISINT :
-    handler_correct handle_ISINT f_instr_ISINT
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  (* OFFSETINT reads the operand from the code buffer and performs
-     a 32-bit left shift by 1.  The precondition requires:
-     1. The code buffer contains an int32 whose signed value is ofs.
-     2. The 32-bit shift does not overflow (ofs*2 in signed range). *)
-  Axiom verify_OFFSETINT : forall ofs,
-    handler_correct_with_pre (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (fun m s ard =>
-         exists (i : int),
-           Mem.load Mint32 m (ar_code_base_block ard)
-             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint i) /\
-           Int.signed i = ofs /\
-           Int.min_signed <= Int.signed i * 2 <= Int.max_signed)
+  Parameter verified_OFFSETINT :
+    forall ofs, handler_verified
+      (handle_OFFSETINT ofs) f_instr_OFFSETINT
       (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_OFFSETREF : forall n,
-    handler_correct (handle_OFFSETREF n) f_instr_OFFSETREF
+  Parameter verified_OFFSETREF :
+    forall n, handler_verified
+      (handle_OFFSETREF n) f_instr_OFFSETREF
       (fun _ s => match s.(Machine.accu) with
                   | Val_ptr addr =>
                     match heap_lookup s.(Machine.hp) addr with
@@ -655,100 +909,224 @@ Module Type InstructSpec.
                     end
                   | _ => True
                   end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Branches --- *)
+  Parameter verified_ORINT :
+    handler_verified
+      handle_ORINT f_instr_ORINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* BRANCH reads the branch offset from *(s->pc).  The precondition
-     requires the code buffer at the current PC to be readable and
-     contain a 32-bit integer.  The ard parameter comes from abs_rel. *)
-  Axiom verify_BRANCH : forall target,
-    handler_correct_with_pre (fun _ s => handle_BRANCH target s) f_instr_BRANCH
-      (fun m s ard =>
-         exists v, Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint v))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_POPTRAP :
+    handler_verified
+      (handle_POPTRAP) f_instr_POPTRAP
+      (fun msg _ => msg = "POPTRAP: malformed trap frame"%string)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_BRANCHIF : forall target,
-    handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_POP :
+    forall n, handler_verified
+      (handle_POP n) f_instr_POP
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* BRANCHIFNOT requires preconditions:
-     1. Code block is separate from struct pointer block
-     2. Code buffer at current PC contains a valid branch offset
-     3. Accu is representable: not Val_ptr/Val_closure (CompCert's
-        sem_binary_operation Oeq is undefined for Vptr vs Vlong
-        when both typed tlong), and integers are in 63-bit range *)
-  Axiom verify_BRANCHIFNOT : forall target,
-    handler_correct_with_pre (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
-      (fun m s ard =>
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (exists ofs_int,
-           Mem.load Mint32 m (ar_code_base_block ard)
-             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t)))) = Some (Vint ofs_int) /\
-           Ptrofs.add
-             (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t)))
-             (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                         (ptrofs_of_int Signed ofs_int))
-           = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t))) /\
-         match Machine.accu s with
-         | Val_int n => -4611686018427387904 <= n <= 4611686018427387903
-         | Val_block _ nil => True
-         | Val_ptr _ | Val_closure _ _ => False
-         | Val_block _ (_ :: _) => True
-         end)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHACC1 :
+    handler_verified
+      (handle_PUSHACC 1) f_instr_PUSHACC1
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 1 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Blocks --- *)
+  Parameter verified_PUSHACC2 :
+    handler_verified
+      (handle_PUSHACC 2) f_instr_PUSHACC2
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 2 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_ATOM : forall t,
-    handler_correct (handle_ATOM t) f_instr_ATOM
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHACC3 :
+    handler_verified
+      (handle_PUSHACC 3) f_instr_PUSHACC3
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 3 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_PUSHATOM : forall t,
-    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHACC4 :
+    handler_verified
+      (handle_PUSHACC 4) f_instr_PUSHACC4
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 4 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_MAKEBLOCK1 : forall t,
-    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHACC5 :
+    handler_verified
+      (handle_PUSHACC 5) f_instr_PUSHACC5
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 5 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_MAKEBLOCK2 : forall t,
-    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
-      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHACC6 :
+    handler_verified
+      (handle_PUSHACC 6) f_instr_PUSHACC6
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 6 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_MAKEBLOCK3 : forall t,
-    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
-      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHACC7 :
+    handler_verified
+      (handle_PUSHACC 7) f_instr_PUSHACC7
+      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 7 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Fields --- *)
+  Parameter verified_PUSHCONST0 :
+    handler_verified
+      (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD0 :
-    handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
-      (fun _ s => field_or_heap s s.(Machine.accu) 0 = None) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHCONST1 :
+    handler_verified
+      (handle_PUSHCONSTINT 1) f_instr_PUSHCONST1
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD1 :
-    handler_correct (handle_GETFIELD 1) f_instr_GETFIELD1
-      (fun _ s => field_or_heap s s.(Machine.accu) 1 = None) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHCONST2 :
+    handler_verified
+      (handle_PUSHCONSTINT 2) f_instr_PUSHCONST2
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD2 :
-    handler_correct (handle_GETFIELD 2) f_instr_GETFIELD2
-      (fun _ s => field_or_heap s s.(Machine.accu) 2 = None) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHCONST3 :
+    handler_verified
+      (handle_PUSHCONSTINT 3) f_instr_PUSHCONST3
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD3 :
-    handler_correct (handle_GETFIELD 3) f_instr_GETFIELD3
-      (fun _ s => field_or_heap s s.(Machine.accu) 3 = None) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHCONSTINT :
+    forall n, handler_verified
+      (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_GETFIELD : forall n,
-    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
-      (fun _ s => field_or_heap s s.(Machine.accu) n = None) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_PUSHGETGLOBALFIELD :
+    forall n p, handler_verified
+      (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
+      (fun msg s =>
+         nth_error s.(Machine.global) n = None \/
+         (exists glob, nth_error s.(Machine.global) n = Some glob /\
+                       field_or_heap s glob p = None))
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD0 :
-    handler_correct (handle_SETFIELD 0) f_instr_SETFIELD0
+  Parameter verified_PUSHGETGLOBAL :
+    forall n, handler_verified
+      (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
+      (fun _ s => nth_error s.(Machine.global) n = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHTRAP :
+    forall handler_pc, handler_verified
+      (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSH_RETADDR :
+    forall ret_addr, handler_verified
+      (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSH :
+    handler_verified
+      handle_PUSH f_instr_PUSH
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_RAISE_NOTRACE :
+    handler_verified
+      (fun _pc s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
+      (fun msg _ =>
+         msg = "unhandled exception"%string \/
+         msg = "RAISE: malformed trap frame"%string)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_RAISE :
+    handler_verified
+      (fun _pc s => do_raise s.(accu) s) f_instr_RAISE
+      (fun msg _ =>
+         msg = "unhandled exception"%string \/
+         msg = "RAISE: malformed trap frame"%string)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_RERAISE :
+    handler_verified
+      (fun _pc s => do_raise s.(accu) s) f_instr_RERAISE
+      (fun msg _ =>
+         msg = "unhandled exception"%string \/
+         msg = "RAISE: malformed trap frame"%string)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_RESTART :
+    handler_verified
+      handle_RESTART f_instr_RESTART
+      (* P_error: precise characterization of every Error branch *)
+      (fun msg s =>
+         (msg = "RESTART: env is not a block"%string /\
+          match Machine.env s with
+          | Val_int _ | Val_ptr _ => True
+          | _ => False
+          end)
+         \/
+         (msg = "RESTART: dangling pointer"%string /\
+          exists addr ofs, Machine.env s = Val_closure addr ofs /\
+          heap_lookup s.(Machine.hp) addr = None)
+         \/
+         (msg = "RESTART: env is not a closure"%string /\
+          ((exists addr ofs t fs,
+              Machine.env s = Val_closure addr ofs /\
+              heap_lookup s.(Machine.hp) addr = Some (t, fs) /\
+              Nat.eqb t Closure_tag = false)
+           \/
+           (exists t fs,
+              Machine.env s = Val_block t fs /\
+              Nat.eqb t Closure_tag = false)))
+         \/
+         (msg = "RESTART: malformed closure"%string /\
+          ((exists addr ofs t all_fields,
+              Machine.env s = Val_closure addr ofs /\
+              heap_lookup s.(Machine.hp) addr = Some (t, all_fields) /\
+              Nat.eqb t Closure_tag = true /\
+              nth_error (skipn ofs all_fields) 2 = None)
+           \/
+           (exists t fs,
+              Machine.env s = Val_block t fs /\
+              Nat.eqb t Closure_tag = true /\
+              nth_error fs 2 = None))))
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_SETFIELD0 :
+    handler_verified
+      (handle_SETFIELD 0) f_instr_SETFIELD0
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
                     match s.(Machine.accu) with
@@ -760,10 +1138,12 @@ Module Type InstructSpec.
                     | _ => True
                     end
                   | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD1 :
-    handler_correct (handle_SETFIELD 1) f_instr_SETFIELD1
+  Parameter verified_SETFIELD1 :
+    handler_verified
+      (handle_SETFIELD 1) f_instr_SETFIELD1
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
                     match s.(Machine.accu) with
@@ -775,10 +1155,12 @@ Module Type InstructSpec.
                     | _ => True
                     end
                   | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD2 :
-    handler_correct (handle_SETFIELD 2) f_instr_SETFIELD2
+  Parameter verified_SETFIELD2 :
+    handler_verified
+      (handle_SETFIELD 2) f_instr_SETFIELD2
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
                     match s.(Machine.accu) with
@@ -790,10 +1172,12 @@ Module Type InstructSpec.
                     | _ => True
                     end
                   | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD3 :
-    handler_correct (handle_SETFIELD 3) f_instr_SETFIELD3
+  Parameter verified_SETFIELD3 :
+    handler_verified
+      (handle_SETFIELD 3) f_instr_SETFIELD3
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
                     match s.(Machine.accu) with
@@ -805,10 +1189,12 @@ Module Type InstructSpec.
                     | _ => True
                     end
                   | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_SETFIELD : forall n,
-    handler_correct (handle_SETFIELD n) f_instr_SETFIELD
+  Parameter verified_SETFIELD :
+    forall n, handler_verified
+      (handle_SETFIELD n) f_instr_SETFIELD
       (fun _ s => match s.(Machine.stack) with
                   | newval :: _ =>
                     match s.(Machine.accu) with
@@ -820,38 +1206,37 @@ Module Type InstructSpec.
                     | _ => True
                     end
                   | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Globals --- *)
+  Parameter verified_SETFLOATFIELD :
+    forall n, handler_verified
+      (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
+      (fun _ s => match s.(Machine.stack) with
+                  | _ :: _ =>
+                    match s.(Machine.accu) with
+                    | Val_ptr addr =>
+                      match heap_lookup s.(Machine.hp) addr with
+                      | Some (_, fields) =>
+                          set_nth fields n (hd (Val_int 0) s.(Machine.stack)) = None
+                      | None => True
+                      end
+                    | _ => True
+                    end
+                  | _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_GETGLOBAL : forall n,
-    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
-      (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_SETGLOBAL :
+    forall n, handler_verified
+      (handle_SETGLOBAL n) f_instr_SETGLOBAL
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_PUSHGETGLOBAL : forall n,
-    handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
-      (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_SETGLOBAL : forall n,
-    handler_correct_with_pre_env (handle_SETGLOBAL n) f_instr_SETGLOBAL
-      (fun e m s ard => True)  (* precondition specified in proof file *)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  (* --- Vectors --- *)
-
-  Axiom verify_VECTLENGTH :
-    handler_correct handle_VECTLENGTH f_instr_VECTLENGTH
-      (fun _ s => size_or_heap s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_GETVECTITEM :
-    handler_correct handle_GETVECTITEM f_instr_GETVECTITEM
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | _, Val_int idx :: _ =>
-                    field_or_heap s s.(Machine.accu) (Z.to_nat idx) = None
-                  | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Axiom verify_SETVECTITEM :
-    handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
+  Parameter verified_SETVECTITEM :
+    handler_verified
+      handle_SETVECTITEM f_instr_SETVECTITEM
       (fun _ s => match s.(Machine.stack) with
                   | Val_int idx :: newval :: _ =>
                     match s.(Machine.accu) with
@@ -862,19 +1247,64 @@ Module Type InstructSpec.
                       end
                     | _ => True
                     end
-                  | _ => True end) (fun _ => False) (fun _ _ _ => False).
+                  | _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Misc --- *)
+  Parameter verified_STOP :
+    handler_verified
+      (fun _ => handle_STOP) f_instr_STOP
+      (fun _ _ => False)
+      (fun _ => True)
+      (fun _ _ _ => False).
 
-  Axiom verify_CHECK_SIGNALS :
-    handler_correct handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter verified_SUBINT :
+    handler_verified
+      handle_SUBINT f_instr_SUBINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  (* --- Halt --- *)
+  Parameter verified_UGEINT :
+    handler_verified
+      handle_UGEINT f_instr_UGEINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-  Axiom verify_STOP :
-    handler_correct (fun _ => handle_STOP) f_instr_STOP
-      (fun _ _ => False) (fun _ => True) (fun _ _ _ => False).
+  Parameter verified_ULTINT :
+    handler_verified
+      handle_ULTINT f_instr_ULTINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
 
-End InstructSpec.
+  Parameter verified_VECTLENGTH :
+    handler_verified
+      handle_VECTLENGTH f_instr_VECTLENGTH
+      (fun _ s => size_or_heap s s.(Machine.accu) = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_XORINT :
+    handler_verified
+      handle_XORINT f_instr_XORINT
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+End InstructVerificationSpec.
+
 *)

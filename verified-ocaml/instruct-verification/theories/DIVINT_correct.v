@@ -33,31 +33,6 @@ From OCamlInterp.Manual Require Import Bytecode.Machine Bytecode.Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
 Require Import instruct_handlers InstructSpec HandlerLemmas.
 
-(* handler_correct_with_pre: variant of handler_correct where step_pre
-   takes (mem -> state -> abs_rel_data -> Prop) instead of including
-   the Clight env.  Used for handlers with do_raise branches where the
-   precondition makes the raise-Step case vacuously true. *)
-Definition handler_correct_with_pre
-    (handler : Z -> state -> step_result)
-    (f : function)
-    (step_pre : mem -> state -> abs_rel_data -> Prop)
-    (P_error : string -> state -> Prop)
-    (P_halt : value -> Prop)
-    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
-  forall e le m s,
-    match handler s.(pc) s with
-    | Step s' =>
-        forall ard,
-        abs_rel_with_ard e le m s ard ->
-        step_pre m s ard ->
-        exists le' m' out,
-          exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m' out /\
-          abs_rel e le' m' s'
-    | Error msg => P_error msg s
-    | Halt v => P_halt v
-    | CCall_request nargs args s' => P_ccall nargs args s'
-    end.
-
 (* ================================================================== *)
 (* Semantic lemmas for DIVINT C operations                             *)
 (* ================================================================== *)
