@@ -386,7 +386,7 @@ Proof.
 
       (* Part 1: exec *)
       {
-        apply (eval_stmt_to_exec clight_ge 10). eval_cbn.
+        apply (eval_stmt_to_exec clight_ge 9). eval_cbn.
         (* Load s->accu *)
         rewrite Hle_s; eval_cbn.
         rewrite Hco; eval_cbn.
