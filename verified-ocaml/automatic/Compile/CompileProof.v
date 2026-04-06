@@ -2120,9 +2120,9 @@ Proof.
         replace (Z.of_nat base + 1) with (Z.of_nat (base + 1)) by lia. reflexivity.
       * exact Hcorr.
     + (* Loc_self -- excluded by Hno_self *)
-      exfalso. exact (Hno_self s0 Hlookup Hclookup).
+      exfalso. exact (Hno_self s0 eq_refl eq_refl).
   - (* comp_lookup = None -- excluded by Hscoped *)
-    exfalso. exact (Hscoped s0 Hlookup Hclookup).
+    exfalso. exact (Hscoped s0 eq_refl eq_refl).
 Qed.
 
 (* --- expr_correct_gen for Exp_seq --- *)
@@ -4111,8 +4111,7 @@ Proof.
       s_after_c1 = Step s_after_op).
   { rewrite Hstep_op.
     unfold s_after_op, s_after_c1, st, val_bool. simpl.
-    f_equal. f_equal; try lia.
-    destruct (Z.eqb z z0); reflexivity. }
+    f_equal. f_equal; try lia; try (destruct (Z.eqb z z0); reflexivity). }
   exists (n2 + 1 + n1 + 1)%nat, (val_bool (Z.eqb z z0)). split.
   - set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [EQ] ++ suffix).
     assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
@@ -4322,6 +4321,831 @@ Proof.
     rewrite app_length. simpl. rewrite app_length. simpl. lia.
   - rewrite Hval_eq. apply val_bool_corresponds.
 Qed.
+
+
+(* --- expr_correct_gen_binop_and --- *)
+
+(* For Op_and: source evaluates SVal_bool a && SVal_bool b,
+   compiler uses ANDINT which computes Z.land on the integer encodings
+   (true=1, false=0). Z.land 1 1 = 1, Z.land 1 0 = 0, Z.land 0 1 = 0, Z.land 0 0 = 0,
+   matching andb. *)
+
+Lemma expr_correct_gen_binop_and : forall e1 e2,
+  expr_correct_gen e1 ->
+  expr_correct_gen e2 ->
+  forall fuel senv ce fe base s a b out prefix suffix,
+    eval fuel (Exp_binop Op_and e1 e2) senv out = Eval_ok (SVal_bool (a && b)) out ->
+    pc s = Z.of_nat base ->
+    length prefix = base ->
+    env_invariant ce senv s ->
+    exists n v,
+      nsteps n (prefix ++ compile_expr fuel (Exp_binop Op_and e1 e2) ce fe base ++ suffix) s =
+        Step (st s (Z.of_nat (base + length (compile_expr fuel (Exp_binop Op_and e1 e2) ce fe base)))
+                v (Machine.stack s) (Machine.env s) (extra_args s)
+                (Machine.global s) (trap_sp s)) /\
+      val_corresponds (SVal_bool (a && b)) v.
+Proof.
+  intros e1 e2 IHe1 IHe2 fuel senv ce fe base s a b out prefix suffix
+    Heval Hpc Hplen Heinv.
+  destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
+  simpl in Heval.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
+  destruct v1; try discriminate.
+  destruct v2; try discriminate.
+  simpl in Heval.
+  injection Heval; intros Hout_eq Hval_eq.
+  subst out2.
+  assert (He1_pure : out1 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out1.
+  simpl (compile_expr (S fuel') (Exp_binop Op_and e1 e2) ce fe base).
+  set (c2 := compile_expr fuel' e2 ce fe base).
+  set (c1 := compile_expr fuel' e1 (shift ce 1) fe
+               (base + Datatypes.length c2 + 1)).
+  (* Step 1: execute c2 via IHe2 *)
+  specialize (IHe2 fuel' senv ce fe base s (SVal_bool b1) out out
+    prefix ([PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+    He2 eq_refl Hpc Hplen Heinv).
+  destruct IHe2 as [n2 [bv2 [Hsteps2 Hcorr2]]].
+  set (s_after_c2 := st s (Z.of_nat (base + Datatypes.length c2))
+    bv2 (Machine.stack s) (Machine.env s) (extra_args s)
+    (Machine.global s) (trap_sp s)).
+  (* Step 2: execute PUSH *)
+  assert (Hpush_fetch :
+    nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+      (base + Datatypes.length c2)%nat = Some PUSH).
+  { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+      with ((prefix ++ c2) ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+      by (rewrite <- app_assoc; reflexivity).
+    replace (base + Datatypes.length c2)%nat
+      with (Datatypes.length (prefix ++ c2))%nat
+      by (rewrite app_length; lia).
+    rewrite nth_error_prefix with
+      (i := Datatypes.length (prefix ++ c2))
+      by reflexivity.
+    reflexivity. }
+  assert (Hpc2 :
+    Z.to_nat (pc s_after_c2) = (base + Datatypes.length c2)%nat).
+  { unfold s_after_c2, st. simpl. lia. }
+  assert (Hstep_push :
+    step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+      s_after_c2 =
+    Step (st s_after_c2 (pc s_after_c2 + 1) (accu s_after_c2)
+      (accu s_after_c2 :: Machine.stack s_after_c2)
+      (Machine.env s_after_c2) (extra_args s_after_c2)
+      (Machine.global s_after_c2) (trap_sp s_after_c2))).
+  { apply step_push. rewrite Hpc2. exact Hpush_fetch. }
+  set (s_after_push := st s
+    (Z.of_nat (base + Datatypes.length c2 + 1))
+    bv2 (bv2 :: Machine.stack s) (Machine.env s) (extra_args s)
+    (Machine.global s) (trap_sp s)).
+  assert (Hstep_push' :
+    step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+      s_after_c2 = Step s_after_push).
+  { rewrite Hstep_push.
+    unfold s_after_push, s_after_c2, st. simpl.
+    f_equal. f_equal; try reflexivity; try lia. }
+  (* Step 3: execute c1 via IHe1 with shifted env *)
+  assert (Heinv_push : env_invariant (shift ce 1) senv s_after_push).
+  { unfold s_after_push. apply env_invariant_shift1. exact Heinv. }
+  assert (Hpc_push :
+    pc s_after_push = Z.of_nat (base + Datatypes.length c2 + 1)).
+  { unfold s_after_push, st. reflexivity. }
+  assert (Hplen_push :
+    length (prefix ++ c2 ++ [PUSH]) =
+    (base + Datatypes.length c2 + 1)%nat).
+  { rewrite !app_length. simpl. lia. }
+  specialize (IHe1 fuel' senv (shift ce 1) fe
+    (base + Datatypes.length c2 + 1)%nat
+    s_after_push (SVal_bool b0) out out
+    (prefix ++ c2 ++ [PUSH]) ([ANDINT] ++ suffix)
+    He1 eq_refl Hpc_push Hplen_push Heinv_push).
+  destruct IHe1 as [n1 [bv1 [Hsteps1 Hcorr1]]].
+  (* Case split on boolean values to extract concrete integer encodings *)
+  destruct b0; destruct b1.
+  + (* b0 = true, b1 = true *)
+    apply val_corresponds_bool_true_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_true_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 1) (Val_int 1 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    (* Step 4: execute ANDINT *)
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ANDINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ANDINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.land 1 1))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_andint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.land 1 1)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.land 1 1)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ANDINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ANDINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+  + (* b0 = true, b1 = false *)
+    apply val_corresponds_bool_true_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_false_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 1) (Val_int 0 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ANDINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ANDINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.land 1 0))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_andint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.land 1 0)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.land 1 0)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ANDINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ANDINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+  + (* b0 = false, b1 = true *)
+    apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_true_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 0) (Val_int 1 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ANDINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ANDINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.land 0 1))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_andint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.land 0 1)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.land 0 1)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ANDINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ANDINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+  + (* b0 = false, b1 = false *)
+    apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_false_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 0) (Val_int 0 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ANDINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ANDINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.land 0 0))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_andint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.land 0 0)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.land 0 0)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ANDINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ANDINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ANDINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+Qed.
+
+(* --- expr_correct_gen_binop_or --- *)
+
+(* For Op_or: source evaluates SVal_bool a || SVal_bool b,
+   compiler uses ORINT which computes Z.lor on the integer encodings
+   (true=1, false=0). Z.lor 1 1 = 1, Z.lor 1 0 = 1, Z.lor 0 1 = 1, Z.lor 0 0 = 0,
+   matching orb. *)
+
+Lemma expr_correct_gen_binop_or : forall e1 e2,
+  expr_correct_gen e1 ->
+  expr_correct_gen e2 ->
+  forall fuel senv ce fe base s a b out prefix suffix,
+    eval fuel (Exp_binop Op_or e1 e2) senv out = Eval_ok (SVal_bool (a || b)) out ->
+    pc s = Z.of_nat base ->
+    length prefix = base ->
+    env_invariant ce senv s ->
+    exists n v,
+      nsteps n (prefix ++ compile_expr fuel (Exp_binop Op_or e1 e2) ce fe base ++ suffix) s =
+        Step (st s (Z.of_nat (base + length (compile_expr fuel (Exp_binop Op_or e1 e2) ce fe base)))
+                v (Machine.stack s) (Machine.env s) (extra_args s)
+                (Machine.global s) (trap_sp s)) /\
+      val_corresponds (SVal_bool (a || b)) v.
+Proof.
+  intros e1 e2 IHe1 IHe2 fuel senv ce fe base s a b out prefix suffix
+    Heval Hpc Hplen Heinv.
+  destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
+  simpl in Heval.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
+  destruct v1; try discriminate.
+  destruct v2; try discriminate.
+  simpl in Heval.
+  injection Heval; intros Hout_eq Hval_eq.
+  subst out2.
+  assert (He1_pure : out1 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out1.
+  simpl (compile_expr (S fuel') (Exp_binop Op_or e1 e2) ce fe base).
+  set (c2 := compile_expr fuel' e2 ce fe base).
+  set (c1 := compile_expr fuel' e1 (shift ce 1) fe
+               (base + Datatypes.length c2 + 1)).
+  (* Step 1: execute c2 via IHe2 *)
+  specialize (IHe2 fuel' senv ce fe base s (SVal_bool b1) out out
+    prefix ([PUSH] ++ c1 ++ [ORINT] ++ suffix)
+    He2 eq_refl Hpc Hplen Heinv).
+  destruct IHe2 as [n2 [bv2 [Hsteps2 Hcorr2]]].
+  set (s_after_c2 := st s (Z.of_nat (base + Datatypes.length c2))
+    bv2 (Machine.stack s) (Machine.env s) (extra_args s)
+    (Machine.global s) (trap_sp s)).
+  (* Step 2: execute PUSH *)
+  assert (Hpush_fetch :
+    nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+      (base + Datatypes.length c2)%nat = Some PUSH).
+  { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+      with ((prefix ++ c2) ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+      by (rewrite <- app_assoc; reflexivity).
+    replace (base + Datatypes.length c2)%nat
+      with (Datatypes.length (prefix ++ c2))%nat
+      by (rewrite app_length; lia).
+    rewrite nth_error_prefix with
+      (i := Datatypes.length (prefix ++ c2))
+      by reflexivity.
+    reflexivity. }
+  assert (Hpc2 :
+    Z.to_nat (pc s_after_c2) = (base + Datatypes.length c2)%nat).
+  { unfold s_after_c2, st. simpl. lia. }
+  assert (Hstep_push :
+    step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+      s_after_c2 =
+    Step (st s_after_c2 (pc s_after_c2 + 1) (accu s_after_c2)
+      (accu s_after_c2 :: Machine.stack s_after_c2)
+      (Machine.env s_after_c2) (extra_args s_after_c2)
+      (Machine.global s_after_c2) (trap_sp s_after_c2))).
+  { apply step_push. rewrite Hpc2. exact Hpush_fetch. }
+  set (s_after_push := st s
+    (Z.of_nat (base + Datatypes.length c2 + 1))
+    bv2 (bv2 :: Machine.stack s) (Machine.env s) (extra_args s)
+    (Machine.global s) (trap_sp s)).
+  assert (Hstep_push' :
+    step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+      s_after_c2 = Step s_after_push).
+  { rewrite Hstep_push.
+    unfold s_after_push, s_after_c2, st. simpl.
+    f_equal. f_equal; try reflexivity; try lia. }
+  (* Step 3: execute c1 via IHe1 with shifted env *)
+  assert (Heinv_push : env_invariant (shift ce 1) senv s_after_push).
+  { unfold s_after_push. apply env_invariant_shift1. exact Heinv. }
+  assert (Hpc_push :
+    pc s_after_push = Z.of_nat (base + Datatypes.length c2 + 1)).
+  { unfold s_after_push, st. reflexivity. }
+  assert (Hplen_push :
+    length (prefix ++ c2 ++ [PUSH]) =
+    (base + Datatypes.length c2 + 1)%nat).
+  { rewrite !app_length. simpl. lia. }
+  specialize (IHe1 fuel' senv (shift ce 1) fe
+    (base + Datatypes.length c2 + 1)%nat
+    s_after_push (SVal_bool b0) out out
+    (prefix ++ c2 ++ [PUSH]) ([ORINT] ++ suffix)
+    He1 eq_refl Hpc_push Hplen_push Heinv_push).
+  destruct IHe1 as [n1 [bv1 [Hsteps1 Hcorr1]]].
+  (* Case split on boolean values to extract concrete integer encodings *)
+  destruct b0; destruct b1.
+  + (* b0 = true, b1 = true *)
+    apply val_corresponds_bool_true_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_true_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 1) (Val_int 1 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ORINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ORINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.lor 1 1))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_orint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.lor 1 1)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.lor 1 1)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ORINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ORINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+  + (* b0 = true, b1 = false *)
+    apply val_corresponds_bool_true_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_false_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 1) (Val_int 0 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ORINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ORINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.lor 1 0))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_orint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.lor 1 0)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.lor 1 0)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ORINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ORINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+  + (* b0 = false, b1 = true *)
+    apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_true_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 0) (Val_int 1 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ORINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ORINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.lor 0 1))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_orint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.lor 0 1)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.lor 0 1)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ORINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ORINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+  + (* b0 = false, b1 = false *)
+    apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
+    apply val_corresponds_bool_false_inv in Hcorr2. subst bv2.
+    set (s_after_c1 := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 + Datatypes.length c1))
+      (Val_int 0) (Val_int 0 :: Machine.stack s)
+      (Machine.env s) (extra_args s)
+      (Machine.global s) (trap_sp s)).
+    assert (Hop_fetch :
+      nth_error (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat =
+      Some ORINT).
+    { replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        with ((prefix ++ c2 ++ [PUSH] ++ c1) ++ [ORINT] ++ suffix)
+        by (rewrite <- !app_assoc; reflexivity).
+      replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
+        with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
+        by (rewrite !app_length; simpl; lia).
+      rewrite nth_error_prefix with
+        (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
+        by reflexivity.
+      reflexivity. }
+    assert (Hpc_c1 :
+      Z.to_nat (pc s_after_c1) =
+      (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat).
+    { unfold s_after_c1, st. simpl. lia. }
+    assert (Hstep_op :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 =
+      Step (st s_after_c1 (pc s_after_c1 + 1) (Val_int (Z.lor 0 0))
+        (Machine.stack s) (Machine.env s_after_c1)
+        (extra_args s_after_c1) (Machine.global s_after_c1)
+        (trap_sp s_after_c1))).
+    { apply step_orint with (rest := Machine.stack s).
+      - rewrite Hpc_c1. exact Hop_fetch.
+      - unfold s_after_c1, st. reflexivity.
+      - unfold s_after_c1, st. reflexivity. }
+    set (s_after_op := st s
+      (Z.of_nat (base + Datatypes.length c2 + 1 +
+                 Datatypes.length c1 + 1))
+      (Val_int (Z.lor 0 0)) (Machine.stack s) (Machine.env s)
+      (extra_args s) (Machine.global s) (trap_sp s)).
+    assert (Hstep_op' :
+      step_list (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+        s_after_c1 = Step s_after_op).
+    { rewrite Hstep_op.
+      unfold s_after_op, s_after_c1, st. simpl.
+      f_equal. f_equal; try reflexivity; try lia. }
+    exists (n2 + 1 + n1 + 1)%nat, (Val_int (Z.lor 0 0)). split.
+    * set (fc := prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix).
+      assert (Hsteps_n2 : nsteps n2 fc s = Step s_after_c2).
+      { unfold fc. exact Hsteps2. }
+      assert (Hsteps_n2_1 : nsteps (n2 + 1)%nat fc s = Step s_after_push).
+      { rewrite (nsteps_trans n2 1 _ _ _ Hsteps_n2). simpl.
+        unfold fc. rewrite Hstep_push'. reflexivity. }
+      assert (Hsteps_n2_1_n1 : nsteps (n2 + 1 + n1)%nat fc s = Step s_after_c1).
+      { replace (n2 + 1 + n1)%nat with ((n2 + 1) + n1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1)%nat n1 _ _ _ Hsteps_n2_1).
+        unfold fc.
+        replace (prefix ++ c2 ++ [PUSH] ++ c1 ++ [ORINT] ++ suffix)
+          with ((prefix ++ c2 ++ [PUSH]) ++ c1 ++ [ORINT] ++ suffix)
+          by (rewrite <- !app_assoc; reflexivity).
+        unfold s_after_c1, s_after_push, st in Hsteps1 |- *.
+        simpl in Hsteps1 |- *.
+        exact Hsteps1. }
+      assert (Hfull : nsteps (n2 + 1 + n1 + 1)%nat fc s = Step s_after_op).
+      { replace (n2 + 1 + n1 + 1)%nat with ((n2 + 1 + n1) + 1)%nat by lia.
+        rewrite (nsteps_trans (n2 + 1 + n1)%nat 1 _ _ _ Hsteps_n2_1_n1).
+        simpl. unfold fc. rewrite Hstep_op'. reflexivity. }
+      assert (Hcode_eq :
+        prefix ++ (c2 ++ PUSH :: c1 ++ [ORINT]) ++ suffix = fc).
+      { unfold fc. rewrite <- !app_assoc. simpl.
+        rewrite <- app_assoc. reflexivity. }
+      rewrite Hcode_eq. rewrite Hfull.
+      unfold s_after_op, st. f_equal. f_equal.
+      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    * rewrite <- Hval_eq. simpl. exact I.
+Qed.
+
 
 
 (* --- expr_correct_gen for Exp_unop Op_neg --- *)
@@ -5014,20 +5838,15 @@ Proof.
      e2 evaluates in extended env with output = out (pure overall). *)
   (* Establish purity: since eval (Exp_let ...) is pure (out -> out),
      both sub-evals must also be pure. *)
-  assert (He1_extends : exists ne1, out1 = ne1 ++ out).
-  { eapply eval_extends_output. exact He1. }
-  destruct He1_extends as [ne1 Hout1_eq].
-  assert (He2_extends : exists ne2, out = ne2 ++ out1).
-  { eapply eval_extends_output. exact Heval. }
-  destruct He2_extends as [ne2 Hout_eq].
   assert (He1_pure : out1 = out).
-  { subst out1. rewrite app_assoc in Hout_eq.
+  { destruct (eval_extends_output _ _ _ _ _ _ He1) as [ne1 Hout1_eq].
+    destruct (eval_extends_output _ _ _ _ _ _ Heval) as [ne2 Hout_eq].
+    subst out1. rewrite app_assoc in Hout_eq.
     apply list_app_eq_self in Hout_eq.
     apply app_eq_nil in Hout_eq. destruct Hout_eq as [_ Hne1].
     subst ne1. reflexivity. }
-  subst out1.
-  assert (He2_pure : eval fuel' e2 (env_extend senv x sv1) out = Eval_ok sv out).
-  { exact Heval. }
+  rewrite He1_pure in He1.
+  rewrite He1_pure in Heval.
 
   simpl (compile_expr (S fuel') (Exp_let x e1 e2) ce fe base).
   set (c1 := compile_expr fuel' e1 ce fe base).
@@ -5135,7 +5954,7 @@ Proof.
     (base + c1_len + 1)%nat
     s_after_push sv out out
     (prefix ++ c1 ++ [PUSH]) ([POP 1] ++ suffix)
-    He2_pure eq_refl Hpc_push Hplen_push Heinv_ext).
+    Heval eq_refl Hpc_push Hplen_push Heinv_ext).
   destruct IHe2 as [n2 [v2 [Hsteps2 Hcorr2]]].
   set (s_after_c2 := st s
     (Z.of_nat (base + c1_len + 1 + c2_len))
