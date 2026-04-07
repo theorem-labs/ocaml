@@ -1,542 +1,290 @@
-# Unified Handler Verification Plan
+# Plan: Eliminate 70 Remaining Admitted Handlers via Parallel Agents
 
-**Goal: 151 handler proofs, 0 axioms, 0 Admitted.**
+## Context
 
----
+151 bytecode handler correctness theorems need preconditions composed from named building blocks in InstructSpec.v. **81 are proved (Definition), 70 are Admitted.** All 70 Admitted handlers have completed proofs (Qed) in their `_correct.v` files — the `Admitted` in InstructVerification.v exists because the step_pres don't yet match the Module Type signatures.
 
-## Current State (2026-04-02)
+**Goal**: Zero Admitted, zero False preconditions, zero contradictory step_pres. Every step_pre auditable by reading InstructSpec.v alone.
 
-| Category | Count | Details |
-|----------|-------|---------|
-| Handler files exist | 128 / 151 | |
-| Clean (Qed, 0 Axiom) | 118 | Compile, no Admitted, no Axiom |
-| Compile failures | 8 | APPLY, APPTERM1, CLOSURE, GETDYNMET, MAKEBLOCK2, POPTRAP, SETVECTITEM, VECTLENGTH |
-| Timeout/Admitted | 2 | GRAB (line 617), SWITCH (line 738) -- eval_cbn too slow |
-| Missing handler files | 23 | Need new files created |
-| Not in _RocqProject | 15 | 6 clean + 7 broken + 2 admitted |
-| HandlerLemmas.v axioms | 0 | Was 5, all eliminated |
-| VECTLENGTH axioms | 6 | Blocked on Phase 6 (heap_block_well_formed) |
+## Two Distinct Problems
 
-**Completed infrastructure** (from prior sessions):
-- store_succeeds_sb, store_to_sp_after_sb_store proved in HandlerLemmas.v
-- ExternalCallSpecs.v created (heap_alloc_spec, caml_modify_spec)
-- MAKEBLOCK1 refactored (0 axiom, 0 Admitted)
-- SETGLOBAL refactored (0 axiom, 0 Admitted)
-- abs_rel alignment field added to InstructSpec.v
+### Problem 1: 53 handlers need wrapper theorems (building-block step_pres)
+These have working proofs with non-contradictory step_pres. They just need wrapper theorems using `handler_correct_weaken` to bridge from building blocks to internal step_pres.
 
----
+### Problem 2: ~12 handlers have contradictory step_pres (val_repr gap)
+These close by `inversion` on an impossible `val_repr` case. The root cause: `val_repr` maps `Val_int` exclusively to `Vlong` (tagged integer), but code pointers in C are `Vptr`. When return addresses or handler PCs are stored on the stack as `Val_int pc` in Rocq, `stack_repr` (which uses `val_repr`) can't represent the corresponding `Vptr` in C memory.
 
-## CRITICAL RULES
+**Affected handlers**:
+- APPLY1, APPLY2, APPLY3 — push return address (Val_int pc) as Vptr on stack
+- PUSHTRAP, PUSH_RETADDR — push handler_pc / ret_addr as Vptr
+- RAISE, RAISE_NOTRACE, RERAISE — read handler_pc (Val_int) as Vptr from trap frame
+- RETURN — read return address (Val_int) from stack
+- RESTART — step_pre is literally `False` (different issue: data-dependent loop)
 
-These rules are NON-NEGOTIABLE. Every agent prompt MUST include them.
-Paste the block below into every agent prompt verbatim.
+Handlers that DON'T have the contradiction despite being in Batch H:
+- APPTERM1-3, APPTERM — tail calls, no return address push
+- GRAB — closure code loading, not PC contradiction  
+- POPTRAP — stack manipulation, no PC val_repr issue
+- APPLY — need to verify
 
-```
-=== ABSOLUTE RULES (violating any of these = immediate failure) ===
+### Problem 2 Root Cause
 
-1. NEVER write `Admitted.` in any file. NOT EVEN TEMPORARILY.
-   If you cannot close a goal, add a step_pre precondition instead.
-
-2. NEVER write `Axiom` in any file. NOT EVEN AS A PLACEHOLDER.
-   If you need a fact, prove it or add it to step_pre.
-
-3. NEVER run `dune build`. NOT EVEN ONCE.
-   Multiple agents run in parallel. dune takes a global lock and will
-   fail or corrupt state. Use coqc DIRECTLY:
-
-   cd /workspaces/theorem-work/theorem-ocaml/verified-ocaml/instruct-verification
-   coqc -R ../_build/default/instruct-verification/theories InstructVerification \
-        -Q ../_build/default/manual OCamlInterp.Manual theories/HANDLER_correct.v
-
-4. NEVER use compute, vm_compute, native_compute on large terms.
-   These cause memory blowup. Use rewrite, simpl, cbn only on small
-   focused subterms. If compilation takes >60s, restructure.
-
-5. Every proof MUST end with `Qed.` -- never Defined, never Admitted.
-
-6. NEVER use `(fun _ _ => True)` as the error predicate (P_error).
-   The error predicate MUST precisely characterize when errors occur.
-   For example, if the handler errors on non-integer accu, write:
-     `(fun s _ => match Machine.accu s with Val_int _ => False | _ => True end)`
-   NOT `(fun _ _ => True)`. The whole point of the error predicate is to
-   specify exactly which states produce errors. `True` is vacuously
-   satisfied and provides no information.
-
-7. NEVER use `False` as step_pre. If you cannot prove the Step case,
-   add the missing facts as ASSUMPTIONS in step_pre. For example, if
-   the proof needs a code pointer to satisfy val_repr, add:
-     `val_repr hm (Val_int pc') pc_cval`
-   as a step_pre assumption. This gives a non-vacuous theorem
-   conditioned on those assumptions. `False` step_pre proves nothing
-   about successful execution — it is as bad as Admitted.
-
-8. Before declaring success, run BOTH:
-   a) coqc command above (must exit 0 with no errors)
-   b) grep -c "Admitted\|^Axiom" theories/HANDLER_correct.v (must print 0)
-
-=== END ABSOLUTE RULES ===
+`handler_correct` (InstructSpec.v:261-280) requires:
+```rocq
+| Step s' =>
+    forall ard, abs_rel_with_ard e le m s ard -> step_pre e m s ard ->
+    exists le' m' out,
+      exec_stmt ... e le m f.(fn_body) E0 le' m' out /\
+      abs_rel e le' m' s'    (* POST-state must satisfy abs_rel *)
 ```
 
----
-
-## Agent Protocol
-
-### Concurrency: MAX 5 AGENTS AT ANY TIME
-
-- Launch agents for one batch at a time.
-- Wait for ALL agents in the current batch to finish before launching the next.
-- If a batch has <5 agents AND the next batch is independent, you MAY
-  start both simultaneously (but total running must stay <= 5).
-- Example: Batch 1B (3 agents) + Batch 2 (2 agents) = 5 total. OK.
-
-### Per-agent checklist
-
-1. Agent prompt includes the CRITICAL RULES block above.
-2. Agent prompt specifies: file to fix/create, exact error or template, coqc command.
-3. Agent uses `coqc` (not dune) to verify.
-4. Agent runs `grep -c "Admitted\|^Axiom"` on the file.
-5. Agent reports success/failure.
-
-### Between batches
-
-After all agents in a batch return:
-1. Check each file compiles: `coqc ... theories/HANDLER_correct.v`
-2. Check no Admitted/Axiom: `grep -rn "^Admitted\.\|^Axiom " theories/HANDLER_correct.v`
-3. If any agent failed, queue the file for the next batch.
-4. Update PROGRESS.md with results.
-5. Only then launch the next batch.
-
----
-
-## Phase 1: Fix Compile Failures (8 files)
-
-All 8 files are independent. Fix in 2 batches.
-
-### Batch 1A: Launch 5 agents in parallel
-
-**Agent 1A-1: Fix VECTLENGTH_correct.v**
-- Error at line 365: `store_succeeds_from_load` not found
-- Fix: replace `store_succeeds_from_load` with `store_succeeds_sb` throughout
-- The signature is the same. This is a trivial rename.
-- Also has 6 local axioms -- DO NOT touch those yet (Phase 6).
-  The 6 axioms are allowed to remain for now. Only fix the compile error.
-- Read ADDINT_correct.v for reference on how store_succeeds_sb is used.
-- Verify: `coqc -R ../../_build/default/instruct-verification/theories InstructVerification -Q ../../_build/default/manual OCamlInterp.Manual theories/VECTLENGTH_correct.v`
-
-**Agent 1A-2: Fix GETDYNMET_correct.v**
-- Error at line 181: `Machine.set_accu` not found in current environment
-- Fix: `Machine.set_accu` does not exist. Replace with the record update
-  pattern used by all other handlers. Read ADDINT_correct.v to see how
-  the post-state is constructed (direct record literal or `mk_state`).
-- Verify: `coqc ... theories/GETDYNMET_correct.v`
-
-**Agent 1A-3: Fix APPLY_correct.v**
-- Error at line 334: `Found no subterm matching "Mem.store Mint64 m sb (Ptrofs.unsigned so + 32) ea_val"`
-- Fix: the rewrite target doesn't match the goal. Read the file around line 334,
-  understand the goal shape, and fix the store offset or variable name to
-  match what's actually in the goal.
-- Verify: `coqc ... theories/APPLY_correct.v`
-
-**Agent 1A-4: Fix POPTRAP_correct.v**
-- Error at line 363: `Found no subterm matching "(PTree.set ?M ?M ?M) ! ?M"`
-- Fix: the PTree.gss/gso rewrite doesn't find a matching pattern. Read the
-  proof around line 363, print/understand the goal, and fix the PTree lemma
-  application order or target.
-- Verify: `coqc ... theories/POPTRAP_correct.v`
-
-**Agent 1A-5: Fix CLOSURE_correct.v**
-- Error at line 192: `Unable to unify "Some (Vlong (Int64.or a (Int64.repr b)))" with "sem_binary_operation ge Oor (Vlong a) tlong (Vint (Int.repr b)) tint m"`
-- Fix: CompCert's `sem_binary_operation Oor` with mixed Vlong/Vint (tlong/tint)
-  doesn't reduce to Int64.or directly. Either: (a) both arguments need to be
-  Vlong/tlong, requiring a cast; or (b) the C AST needs an Ecast wrapping.
-  Check how ORINT_correct.v handles the `Oor` operation for reference.
-- Verify: `coqc ... theories/CLOSURE_correct.v`
-
-### Batch 1B + Batch 2: Launch 5 agents in parallel (3 fixes + 2 timeouts)
-
-Wait for Batch 1A to complete. Then launch these 5 together:
-
-**Agent 1B-1: Fix MAKEBLOCK2_correct.v**
-- Error at line 1355: type mismatch -- hypothesis has `... -> stack_repr ...`
-  but goal expects plain `stack_repr ...`
-- Fix: the proof provides a term with undischarged `->` premises. Need to
-  apply/discharge the extra hypotheses before passing as the stack_repr witness.
-  Read the file around line 1355, understand what premises are dangling, and
-  apply them. Use `assert` + `exact` or feed the hypotheses explicitly.
-- Read MAKEBLOCK1_correct.v for reference on how stack_repr is handled
-  after heap allocation.
-- Verify: `coqc ... theories/MAKEBLOCK2_correct.v`
-
-**Agent 1B-2: Fix SETVECTITEM_correct.v**
-- Error at line 89: `Tactic failure: Cannot find witness`
-- Fix: an eexists or eauto can't find a memory state witness (likely for a
-  Mem.store existence proof). Provide an explicit `exists m'` where m' comes
-  from a Mem.store success hypothesis. Check that store_succeeds_sb is being
-  used correctly, and that the right Hsb_writable + load hypotheses are available.
-- Read SETGLOBAL_correct.v for reference on external-call handler patterns.
-- Verify: `coqc ... theories/SETVECTITEM_correct.v`
-
-**Agent 1B-3: Fix APPTERM1_correct.v**
-- Error at line 338: `Unable to unify ... Ptrofs.unsigned (Ptrofs.neg (Ptrofs.repr 8)) = k * Ptrofs.modulus + (Z.of_nat slotsize - 1) * 8`
-- Fix: `Ptrofs.unsigned (Ptrofs.neg (Ptrofs.repr 8))` doesn't simplify
-  automatically. It equals `Ptrofs.modulus - 8` when 8 < Ptrofs.modulus.
-  Add a rewrite using `Ptrofs.unsigned_neg` or prove an intermediate lemma.
-  May also need `Ptrofs.unsigned_repr` with modulus bounds.
-- Verify: `coqc ... theories/APPTERM1_correct.v`
-
-**Agent 2-1: Fix GRAB_correct.v (remove Admitted)**
-- Admitted at line 617. The eval_cbn tactic times out on ~40 C statements.
-- Fix: replace the entire Part 1 proof (C execution) with **explicit bigstep
-  proof construction** using exec_Ssequence, exec_Sset, eval_Elvalue,
-  eval_Ederef, eval_Ebinop, etc. For each C statement `Sset id expr`,
-  construct an explicit `exec_Sset` with `eval_expr` derivations that
-  use the known hypotheses (Hle_s, Hpc_load, Haccu_load, etc.).
-- Lines 347-415 show commented-out eval_cbn attempts -- these show the
-  proof structure but eval_cbn is too slow. Build it manually instead.
-- Read MAKEBLOCK1_correct.v Part 1 for an example of explicit bigstep style.
-- GRAB has two branches (if extra_args >= 1 vs closure construction case).
-  Both branches need explicit bigstep proofs.
-- **CRITICAL: The proof MUST end with `Qed.` NOT `Admitted.`**
-- Verify: `coqc ... theories/GRAB_correct.v`
-- Verify: `grep -c "Admitted" theories/GRAB_correct.v` prints 0
-
-**Agent 2-2: Fix SWITCH_correct.v (remove Admitted)**
-- Admitted at line 738. Same timeout problem as GRAB.
-- Fix: same approach -- replace eval_cbn with explicit bigstep construction.
-- Lines 441-581 show eval_cbn calls that work individually but combined
-  they timeout. Build the proof manually step by step.
-- SWITCH has two code paths (block tag vs int tag). Both need explicit proofs.
-- Read MAKEBLOCK1_correct.v Part 1 for explicit bigstep reference.
-- **CRITICAL: The proof MUST end with `Qed.` NOT `Admitted.`**
-- Verify: `coqc ... theories/SWITCH_correct.v`
-- Verify: `grep -c "Admitted" theories/SWITCH_correct.v` prints 0
-
----
-
-## Phase 3: Create Easy Missing Handlers (4 files)
-
-Template clones with 2-4 line diffs. 1 batch of 4 agents.
-Can run as soon as Phase 1+2 finishes (or in parallel if slots available).
-
-### Batch 3: Launch 4 agents
-
-**Agent 3-1: Create BLTINT_correct.v**
-- Clone BEQ_correct.v. Change comparison operator from `Ceq` to `Clt`.
-- Change the Rocq handler from `handle_BEQ` to whatever the BLTINT handler is
-  (check instruct_handlers.v and InstructSpec.v).
-- Change the C function from `f_instr_BEQ` to `f_instr_BLTINT`.
-- Verify: `coqc ... theories/BLTINT_correct.v`
-
-**Agent 3-2: Create BLEINT_correct.v**
-- Clone BEQ_correct.v. Change comparison operator from `Ceq` to `Cle`.
-- Same pattern as BLTINT. Check instruct_handlers.v for handler name.
-- Verify: `coqc ... theories/BLEINT_correct.v`
-
-**Agent 3-3: Create MAKEBLOCK3_correct.v**
-- Clone MAKEBLOCK1_correct.v. Add a third field store (for field index 2).
-- The handler allocates a 3-field block. Needs one additional Mem.store for
-  the third field and corresponding load-preservation / writable-preservation
-  chaining.
-- Verify: `coqc ... theories/MAKEBLOCK3_correct.v`
-
-**Agent 3-4: Create SETBYTESCHAR_correct.v**
-- Clone GETSTRINGCHAR_correct.v. Reverse direction: write instead of read.
-- Check instruct_handlers.v for the exact handler semantics.
-- Verify: `coqc ... theories/SETBYTESCHAR_correct.v`
-
----
-
-## Phase 4: Create Medium Missing Handlers (13 files)
-
-**Prerequisite**: Phase 1 must complete (APPLY, APPTERM1, CLOSURE are templates).
-Phase 2 should complete too (GRAB is template for RESTART).
-
-### Batch 4A: Launch 5 agents
-
-**Agent 4A-1: Create RETURN_correct.v**
-- Template: STOP_correct.v + POP_correct.v
-- Semantics: pop pc, env, extra_args from stack; if extra_args > 0, apply;
-  else jump to pc. Check instruct_handlers.v.
-
-**Agent 4A-2: Create APPLY1_correct.v**
-- Template: APPLY_correct.v (must be fixed first)
-- Semantics: fixed 1-arg apply. Push retaddr frame, jump to closure.
-
-**Agent 4A-3: Create APPLY2_correct.v**
-- Template: APPLY_correct.v (fixed)
-- Semantics: fixed 2-arg apply.
-
-**Agent 4A-4: Create APPLY3_correct.v**
-- Template: APPLY_correct.v (fixed)
-- Semantics: fixed 3-arg apply.
-
-**Agent 4A-5: Create PUSH_RETADDR_correct.v**
-- Template: PUSH_correct.v
-- Semantics: push PC+offset, env, extra_args (3 values) to stack.
-
-All agents: verify with coqc, no Admitted, no Axiom.
-
-### Batch 4B: Launch 5 agents
-
-**Agent 4B-1: Create APPTERM_correct.v**
-- Template: APPTERM1_correct.v (must be fixed first)
-- Semantics: parametric appterm with stack copy loop.
-
-**Agent 4B-2: Create APPTERM2_correct.v**
-- Template: APPTERM1_correct.v (fixed)
-- Semantics: fixed 2-arg tail apply.
-
-**Agent 4B-3: Create APPTERM3_correct.v**
-- Template: APPTERM1_correct.v (fixed)
-- Semantics: fixed 3-arg tail apply.
-
-**Agent 4B-4: Create RESTART_correct.v**
-- Template: GRAB_correct.v (must be fixed first -- no Admitted)
-- Semantics: inverse of GRAB. Unpack closure fields back to stack.
-
-**Agent 4B-5: Create CLOSUREREC_correct.v**
-- Template: CLOSURE_correct.v (must be fixed first)
-- Semantics: recursive closure. Multiple heap allocs + infix headers.
-- This is the hardest handler in this batch.
-
-All agents: verify with coqc, no Admitted, no Axiom.
-
-### Batch 4C: Launch 3 agents
-
-**Agent 4C-1: Create SETFLOATFIELD_correct.v**
-- Template: GETFLOATFIELD_correct.v + SETGLOBAL_correct.v
-- Semantics: float field write using caml_modify.
-
-**Agent 4C-2: Create GETPUBMET_correct.v**
-- Template: GETMETHOD_correct.v
-- Semantics: public method lookup. Code buffer read + push + method table scan.
-
-**Agent 4C-3: Create MAKEBLOCK_correct.v (parametric)**
-- Template: MAKEBLOCK1_correct.v
-- Semantics: parametric MAKEBLOCK with loop over fields. Uses Sloop in C.
-
-All agents: verify with coqc, no Admitted, no Axiom.
-
----
-
-## Phase 5: Create Hard Missing Handlers (6 files)
-
-**Prerequisite**: Phase 4 must complete (PUSH_RETADDR, POPTRAP, RAISE templates).
-
-### Batch 5A: Launch 3 agents
-
-**Agent 5A-1: Create PUSHTRAP_correct.v**
-- Template: PUSH_RETADDR_correct.v (from Phase 4)
-- Semantics: push 4 values (pc+offset, env, extra_args, trap_sp) to stack,
-  update trap_sp to current sp.
-
-**Agent 5A-2: Create RAISE_correct.v**
-- Template: POPTRAP_correct.v (must be fixed in Phase 1)
-- Semantics: pop trap frame, restore pc/sp/trap_sp/extra_args. Complex.
-
-**Agent 5A-3: Create SETFIELD_correct.v (parametric)**
-- Template: SETFIELD0_correct.v + SETGLOBAL_correct.v
-- Semantics: parametric field set with caml_modify external call.
-
-All agents: verify with coqc, no Admitted, no Axiom.
-
-### Batch 5B: Launch 3 agents
-
-**Agent 5B-1: Create RERAISE_correct.v**
-- Template: RAISE_correct.v (from 5A -- must complete first)
-- Semantics: same C body as RAISE, different backtrace behavior.
-
-**Agent 5B-2: Create RAISE_NOTRACE_correct.v**
-- Template: RAISE_correct.v (from 5A)
-- Semantics: same C body as RAISE, no backtrace.
-
-**Agent 5B-3: Create MAKEFLOATBLOCK_correct.v**
-- Template: MAKEBLOCK1_correct.v
-- Semantics: heap allocation for float array. Double_tag header.
-
-All agents: verify with coqc, no Admitted, no Axiom.
-
----
-
-## Phase 6: Finalize
-
-### Batch 6A: VECTLENGTH Axiom Elimination (1 agent, run alone)
-
-This touches InstructSpec.v and potentially all handler files.
-Run this agent ALONE (no other agents) to avoid conflicts.
-
-**Agent 6A-1: Eliminate VECTLENGTH axioms**
-- Add `heap_block_well_formed` invariant to `abs_rel_with_ard` in InstructSpec.v
-- Update all 120+ handler proofs (mechanical: thread new conjunct through destructs)
-- Refactor VECTLENGTH_correct.v to use new invariant (eliminates 6 local axioms)
-- Delete the 6 axiom declarations from VECTLENGTH_correct.v
-- **RISK**: touches every handler file. Verify each one compiles after changes.
-- Verify: run coqc on EVERY handler file (write a shell loop)
-- Verify: `grep -rn "^Axiom " theories/*_correct.v` returns nothing
-
-### Batch 6B: _RocqProject Registration + Final Build (manual, no agents)
-
-After all files compile clean:
-1. Add all missing entries to `theories/_RocqProject`
-2. Remove stale .glob/.vo/.vos/.vok from source tree:
-   `cd theories && rm -f *.glob *.vo *.vos *.vok *.aux`
-3. Run `dune build instruct-verification` (OK here -- single build, no agents)
-4. Final verification:
-   - `grep -rn "^Admitted\." theories/*_correct.v` returns nothing
-   - `grep -rn "^Axiom " theories/*_correct.v` returns nothing
-   - `ls theories/*_correct.v | wc -l` prints 151
-
----
-
-## Execution Summary
-
-```
-Batch 1A:  5 agents  [VECTLENGTH, GETDYNMET, APPLY, POPTRAP, CLOSURE]
-           wait...
-Batch 1B:  3 agents  [MAKEBLOCK2, SETVECTITEM, APPTERM1]
-Batch 2:  +2 agents  [GRAB, SWITCH]                        = 5 total
-           wait...
-Batch 3:   4 agents  [BLTINT, BLEINT, MAKEBLOCK3, SETBYTESCHAR]
-           wait...
-Batch 4A:  5 agents  [RETURN, APPLY1, APPLY2, APPLY3, PUSH_RETADDR]
-           wait...
-Batch 4B:  5 agents  [APPTERM, APPTERM2, APPTERM3, RESTART, CLOSUREREC]
-           wait...
-Batch 4C:  3 agents  [SETFLOATFIELD, GETPUBMET, MAKEBLOCK(param)]
-           wait...
-Batch 5A:  3 agents  [PUSHTRAP, RAISE, SETFIELD(param)]
-           wait...
-Batch 5B:  3 agents  [RERAISE, RAISE_NOTRACE, MAKEFLOATBLOCK]
-           wait...
-Batch 6A:  1 agent   [VECTLENGTH axiom elimination -- run ALONE]
-           wait...
-Batch 6B:  manual    [_RocqProject, dune build, final checks]
+After APPLY1 pushes `Val_int (pc+1)` onto the Rocq stack, the post-state `s'` has this value in `s'.stack`. The C code stores `Vptr code_b (code_ofs + (pc+1)*4)` at the same stack position. `abs_rel` requires `stack_repr` to hold, which uses `val_repr`. Since `val_repr` maps `Val_int` only to `Vlong`, `stack_repr` cannot relate the Rocq and C post-states. **The fix must change either val_repr or stack_repr.**
+
+## val_repr Extension: Add Code Pointer Constructor
+
+```rocq
+Inductive val_repr (hm : nat -> option (block * ptrofs)) (cb : block) (co : ptrofs)
+    : Value.value -> val -> Prop :=
+  | vr_int : forall z,
+      val_repr hm cb co (Val_int z) (Vlong (Int64.repr (z * 2 + 1)))
+  | vr_ptr : forall addr b ofs,
+      hm addr = Some (b, ofs) ->
+      val_repr hm cb co (Val_ptr addr) (Vptr b ofs)
+  | vr_closure : forall addr offset b ofs delta,
+      hm addr = Some (b, ofs) ->
+      delta = Ptrofs.repr (Z.of_nat offset * 8) ->
+      val_repr hm cb co (Val_closure addr offset) (Vptr b (Ptrofs.add ofs delta))
+  | vr_block_atom : forall tag,
+      val_repr hm cb co (Val_block tag nil)
+        (Vlong (Int64.repr (Z.of_nat tag * 1024)))
+  | vr_code_ptr : forall pc,
+      val_repr hm cb co (Val_int pc)
+        (Vptr cb (Ptrofs.add co (Ptrofs.repr (pc * sizeof_code_t)))).
 ```
 
-**Total: 10 agent batches + 1 manual step. Never >5 agents running.**
+**Impact**: val_repr gains 2 parameters (cb, co). ~661 occurrences across 118 files need `cb co` added. stack_repr, global_repr, abs_rel all propagate cb/co. Mechanical but pervasive.
 
----
+**Tradeoff**: val_repr becomes non-deterministic for `Val_int` — a `Val_int z` can be represented as either `Vlong` (tagged integer) or `Vptr` (code pointer). Proofs that invert on `val_repr (Val_int ...)` get an extra case to handle.
 
-## Reference: Error Details for Phase 1
+The non-determinism in val_repr is benign — in practice, the proof context always disambiguates which constructor applies (e.g., if we know the C value is Vlong, only vr_int can fire; if Vptr in the code section, only vr_code_ptr).
 
-### VECTLENGTH_correct.v:365
+## Execution Plan
+
+### Phase 0: val_repr Extension (prerequisite for ~12 handlers)
+
+**Step 0a**: Extend val_repr with `vr_code_ptr` + add `cb co` parameters
+**Step 0b**: Update stack_repr, global_repr, abs_rel to propagate cb/co
+**Step 0c**: Fix all compilation errors in existing 81 proved handlers
+**Step 0d**: Fix the 14 already-converted wrapper theorems (ACC, GETGLOBAL, BEQ, etc.)
+**Step 0e**: Build and verify: `dune build instruct-verification/`
+**Step 0f**: Commit
+
+This is a large mechanical change. It can be partially parallelized:
+- Agent in worktree: fix _correct.v files (add cb co to val_repr/stack_repr uses)
+- Main: fix InstructSpec.v, InstructVerification.v, HandlerLemmas.v
+
+**Estimated scope**: ~700 mechanical edits across ~120 files. Each edit is adding `cb co` or `(ar_code_base_block ard) (ar_code_base_ofs ard)` to val_repr/stack_repr calls.
+
+### Phase 1: Central Preparation (building blocks + Module Type)
+
+**Step 1a**: Read all 70 _correct.v files, catalog step_pres, determine building blocks
+**Step 1b**: Add new building blocks to InstructSpec.v
+**Step 1c**: Update all 70 Module Type entries to use building blocks
+**Step 1d**: Update all 70 IV entries to match (still Admitted)
+**Step 1e**: Build, commit
+
+### Phase 2: Parallel Wrappers — Non-contradictory Handlers (3 agents, ~53 handlers)
+
+**Constraint**: Maximum 5 agents can run in parallel at any time.
+
+**Agent 1** (Batch A+B — 15 files): Heap read + env access
+GETFIELD0-3, GETFIELD, GETFLOATFIELD, GETSTRINGCHAR, GETBYTESCHAR, GETVECTITEM, VECTLENGTH, ENVACC1-4, ENVACC
+
+**Agent 2** (Batch C+D — 15 files): Heap write + closure offset
+SETFIELD0-3, SETFIELD, SETFLOATFIELD, SETBYTESCHAR, SETVECTITEM, OFFSETREF, OFFSETCLOSURE2/M2/n, PUSHOFFSETCLOSURE2/M2/n
+
+**Agent 3** (Batch E+F+misc — 23 files): Push+env, code/branch, C-function, non-contradictory control flow
+PUSHENVACC1-4, PUSHENVACC, PUSHGETGLOBALFIELD, PUSHCONSTINT, ASSIGN, BRANCHIF, BRANCHIFNOT, GETGLOBALFIELD, SWITCH, GETDYNMET, GETMETHOD, GETPUBMET, MAKEBLOCK1-3, MAKEBLOCK, MAKEFLOATBLOCK, CLOSURE, CLOSUREREC, SETGLOBAL, APPTERM1-3, APPTERM, GRAB, POPTRAP
+
+After agents complete: merge, update IV.v, build.
+
+### Phase 3: Re-prove Contradictory Handlers (~12 handlers)
+
+These need REAL Step case proofs, not inversion tricks. The val_repr extension enables this.
+
+**Agent 4** (5 files): APPLY1, APPLY2, APPLY3, PUSHTRAP, PUSH_RETADDR
+- Re-prove Step case: construct post-state abs_rel using `vr_code_ptr` for return address / handler_pc
+- Building block step_pre: e.g., `sp_at_least 32` (APPLY) or `sp_at_least 40` (PUSHTRAP)
+
+**Agent 5** (4 files): RAISE, RAISE_NOTRACE, RERAISE, RETURN
+- Re-prove Step case: when reading return address / handler_pc from stack, use `vr_code_ptr` case of val_repr inversion (instead of contradiction)
+- Building block step_pre: `no_pre` or `stack_has_return_frame`
+
+**RESTART** (1 file): Full axiom-free proof using loop induction. Building block: `pre_and heap_header_consistent (sp_at_least N)`. Proof by induction on num_args (see RESTART section below). This is the hardest handler — ~280 lines of new proof code.
+
+### Phase 4: Final Integration
+
+- Wire all IV.v entries from Admitted to Definition
+- `grep -c "Admitted" InstructVerification.v` → 0
+- Full build: `dune build instruct-verification/`
+
+## Phase 0 Approach: Mechanical val_repr Extension
+
+The val_repr change is mechanical. Each occurrence follows one of these patterns:
+
+**Pattern 1: val_repr in a type annotation / step_pre**
+```diff
+- val_repr hm v cv
++ val_repr hm cb co v cv
 ```
-The variable store_succeeds_from_load was not found
+where `cb = ar_code_base_block ard` and `co = ar_code_base_ofs ard` (available from ard).
+
+**Pattern 2: stack_repr usage**
+```diff
+- stack_repr hm m stk sp_b sp_ofs
++ stack_repr hm cb co m stk sp_b sp_ofs
 ```
-Trivial rename to `store_succeeds_sb`.
 
-### GETDYNMET_correct.v:181
+**Pattern 3: Constructing val_repr (apply vr_int, etc.)**
+No change needed — constructors just gain implicit parameters.
+
+**Pattern 4: Inverting val_repr**
+Extra case for `vr_code_ptr`. For most handlers, this case is vacuous (e.g., if we know the value is `Val_ptr`, the `Val_int` code pointer case can't fire).
+
+**Parallelization** (max 5 agents in parallel): Since each _correct.v file is independent, agents in worktrees can fix batches of files in parallel. The main thread handles InstructSpec.v + HandlerLemmas.v + InstructVerification.v.
+
+## RESTART: Axiom-Free Proof Strategy
+
+RESTART's `False` step_pre is NOT due to val_repr — it's because the C code contains a data-dependent loop. The fix requires real loop verification.
+
+### C Loop Structure
+```c
+_num_args = (int)((*((long*)env - 1) >> 10) - 3);
+s->sp -= _num_args;
+for (_i = 0; _i < _num_args; _i++)
+    sp[_i] = ((long*)env)[_i + 3];
+s->env = ((long*)env)[2];
+s->extra_args += _num_args;
 ```
-The reference Machine.set_accu was not found
+
+### Rocq Semantics
+```rocq
+let fields := skipn ofs all_fields in
+let num_args := length fields - 3 in
+let args := skipn 3 fields in
+Step (s <|stack := args ++ s.(stack)|> <|env := saved_env|> ...)
 ```
-Replace with record update (see ADDINT_correct.v).
 
-### APPLY_correct.v:334
+### Building Blocks Needed
+
+**heap_header_consistent** (extend heap_consistent with header access):
+```rocq
+Definition heap_header_consistent : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
+  fun _ m s ard =>
+    let hm := ar_heap_map ard in
+    forall addr b ofs tag fields,
+      hm addr = Some (b, ofs) ->
+      heap_lookup s.(hp) addr = Some (tag, fields) ->
+      (* Fields loadable *)
+      (forall i v, nth_error fields i = Some v ->
+        exists cv, Mem.load Mint64 m b (Ptrofs.unsigned ofs + Z.of_nat i * 8) = Some cv /\
+                   val_repr hm cb co v cv) /\
+      (* Header loadable with correct size *)
+      (exists hdr_word,
+        Mem.load Mint64 m b (Ptrofs.unsigned ofs - 8) = Some (Vlong hdr_word) /\
+        Int64.shru hdr_word (Int64.repr 10) = Int64.repr (Z.of_nat (length fields))) /\
+      (* Block is separate from struct/stack/global *)
+      b <> ar_sptr_block ard /\ b <> ar_global_block ard.
 ```
-Found no subterm matching "Mem.store Mint64 m sb (Ptrofs.unsigned so + 32) ea_val"
+
+**RESTART step_pre building block**:
+```rocq
+pre_and heap_header_consistent (sp_at_least (num_args * 8))
 ```
-Read goal, fix store offset or variable name.
+where num_args is derived from the closure structure.
 
-### POPTRAP_correct.v:363
+### Proof Structure (Axiom-Free)
+
+The proof uses **induction on the number of fields to copy** (num_args):
+
+1. **Extract num_args**: From heap_header_consistent, load header word. The C expression `(header >> 10) - 3` equals `length fields - 3` by the header consistency hypothesis.
+
+2. **SP room**: From sp_at_least, the stack pointer can be decremented by num_args * 8 without underflowing.
+
+3. **Loop invariant**: After iteration `i`, the first `i` stack slots contain the corresponding closure fields:
+   ```
+   forall j < i,
+     Mem.load Mint64 m' sp_b (sp_ofs - num_args*8 + j*8) = Some cv_j /\
+     val_repr hm (nth (j+3) fields) cv_j
+   ```
+
+4. **Base case** (num_args = 0): Loop body doesn't execute. The C code just updates env and extra_args. Straightforward.
+
+5. **Inductive step**: One loop iteration:
+   - Load field[i+3] from closure block (from heap_header_consistent)
+   - Store to sp[i] (Mem.store succeeds because SP region is writable from abs_rel)
+   - Memory after store still satisfies the loop invariant for previous fields (because closure block ≠ stack block, from block separation)
+   - Advance loop counter
+
+6. **Post-loop**: After all iterations, the stack region contains `args` (= skipn 3 fields). Load saved_env from field[2] (from heap_header_consistent). Construct post-state abs_rel:
+   - Stack: args ++ old_stack → stack_repr holds (each field has val_repr from heap_header_consistent)
+   - Env: saved_env → val_repr from heap_header_consistent
+   - PC: unchanged (same pc_rel)
+   - Extra_args: old + num_args (integer arithmetic)
+
+### CompCert Loop Semantics
+
+In Clight bigstep, the `for` loop is desugared to `Sloop (Sseq Sifthenelse body) Sskip`. Verification uses `exec_Sloop_loop` (loop body returns normally → continue) and `exec_Sloop_stop` (condition false → exit).
+
+The key lemma to prove:
+```rocq
+Lemma restart_loop_correct :
+  forall n env_b env_ofs sp_b sp_ofs m i_val,
+    (* n remaining iterations *)
+    (* heap fields at env_b are loadable *)
+    (* SP region is writable *)
+    ...
+    exec_stmt ... e le m loop_body ... le' m' Out_normal.
 ```
-Found no subterm matching "(PTree.set ?M ?M ?M) ! ?M"
+
+This is proved by well-founded induction on `n` (iterations remaining), which decreases at each step.
+
+### Estimated Complexity
+
+This is the hardest single handler proof in the project:
+- Loop invariant formulation: ~50 lines
+- Loop correctness lemma: ~200 lines (induction + memory reasoning)  
+- Wrapper integration: ~30 lines
+- Total: ~280 lines of new proof code
+
+But it is **fully axiom-free** — all reasoning follows from heap_header_consistent + abs_rel + CompCert memory model.
+
+## Key Risks
+
+1. **val_repr non-determinism**: After extension, `val_repr hm cb co (Val_int z) cv` has two possible `cv` values. Proofs that assumed determinism (e.g., `val_repr uniqueness lemmas`) may need updating.
+
+2. **Scope of Phase 0**: ~700 mechanical edits is large. May take significant time even with parallel agents. Mitigated by the mechanical nature — each edit follows a fixed pattern.
+
+3. **Re-proving Step cases (Phase 3)**: The ~12 contradictory handlers need real proofs, not just wrappers. This is genuine proof engineering work, not mechanical editing.
+
+4. **RESTART loop proof**: ~280 lines of loop induction reasoning. The hardest single handler, but axiom-free.
+
+## Critical Files
+
+- `instruct-verification/theories/InstructSpec.v` — val_repr, stack_repr, abs_rel, building blocks, Module Type
+- `instruct-verification/theories/InstructVerification.v` — Pure direct assignments
+- `instruct-verification/theories/HandlerLemmas.v` — Shared lemmas (heavily uses val_repr/stack_repr)
+- 151 `_correct.v` files — Per-handler proofs
+
+## Verification
+
+After each phase:
+```bash
+cd verified-ocaml && dune build instruct-verification/
 ```
-Fix PTree.gss/gso application order.
 
-### CLOSURE_correct.v:192
+Final checks:
+```bash
+grep -c "Admitted" instruct-verification/theories/InstructVerification.v  # 0
+grep "False" instruct-verification/theories/InstructSpec.v | grep -c "step_pre\|:="  # 0
 ```
-Unable to unify "Some (Vlong (Int64.or a (Int64.repr b)))" with
-"sem_binary_operation ge Oor (Vlong a) tlong (Vint (Int.repr b)) tint m"
-```
-Mixed tlong/tint. Both args must be Vlong. See ORINT_correct.v.
-
-### MAKEBLOCK2_correct.v:1355
-```
-Type mismatch: "... -> stack_repr ..." expected "stack_repr ..."
-```
-Discharge `->` premises before passing witness. See MAKEBLOCK1_correct.v.
-
-### SETVECTITEM_correct.v:89
-```
-Tactic failure: Cannot find witness
-```
-Provide explicit `exists m'` from store success.
-
-### APPTERM1_correct.v:338
-```
-Unable to unify ... Ptrofs.unsigned (Ptrofs.neg (Ptrofs.repr 8)) =
-k * Ptrofs.modulus + (Z.of_nat slotsize - 1) * 8
-```
-Add `Ptrofs.unsigned_neg` rewriting.
-
----
-
-## Reference: External Call Specs (ExternalCallSpecs.v)
-
-| Spec | Used by |
-|------|---------|
-| `heap_alloc_spec` | MAKEBLOCK1/2/3, MAKEBLOCK(loop), MAKEFLOATBLOCK, CLOSURE, CLOSUREREC, GRAB |
-| `caml_modify_spec` | SETGLOBAL, SETFIELD(param), SETVECTITEM, SETFLOATFIELD, SETBYTESCHAR |
-| `ext_func_findable` | All external-call handlers |
-
-### step_pre patterns
-
-| Handler family | step_pre includes |
-|---------------|-------------------|
-| Simple (ACC, CONST, PUSH, ADDINT, ...) | `True` |
-| PUSH family | `sp_ofs >= 16` (stack room) |
-| MAKEBLOCK1/2/3, CLOSURE, CLOSUREREC, GRAB | `heap_alloc_spec` + `ext_func_findable _heap_alloc` |
-| SETGLOBAL, SETFIELD(param), SETVECTITEM | `caml_modify_spec` + `ext_func_findable _caml_modify` |
-| APPLY, APPTERM, RETURN | `closure_code_loadable` |
-| PUSHTRAP, POPTRAP, RAISE | `trap_frame_well_formed` |
-
----
-
-## Reference: Invariants
-
-### heap_block_well_formed (Phase 6A -- add to abs_rel_with_ard)
-
-Needed by ~40 handlers. Eliminates VECTLENGTH's 6 axioms. Provides
-field-loadability for GETFIELD, ENVACC, etc.
-
-Maintenance: non-heap-modifying handlers preserve it via `Mem.load_store_other`.
-Heap-modifying handlers (MAKEBLOCK, SETFIELD, CLOSURE) re-establish it.
-
-### closure_code_loadable (in step_pre)
-
-Needed by ~25 handlers (APPLY, APPTERM, RETURN, GRAB, CLOSURE, CLOSUREREC).
-Ensures closure code pointer is loadable from heap block.
-
-### trap_frame_well_formed (in abs_rel_with_ard)
-
-Needed by 5 handlers (PUSHTRAP, POPTRAP, RAISE, RERAISE, RAISE_NOTRACE).
-PUSHTRAP establishes it; POPTRAP and RAISE consume it.
-
----
-
-## Reference: Writable Preservation Patterns
-
-Every handler must prove sp_writable and sb_writable in postcondition.
-
-| Family | Memory chain | Pattern |
-|--------|-------------|---------|
-| Simple (ACC, CONST, ADDINT) | m -> m1 (sb store) | 1x perm_store_1 |
-| PUSH (PUSHACC, PUSHCONST) | m -> m1 (sb) -> m2 (sp) | 2x perm_store_1 |
-| MAKEBLOCK | m -> m1 (sb) -> m_alloc (ext) -> m2..n | perm_store_1 + ext_perm + Nx perm_store_1 |
-| SETGLOBAL | m -> m1 (sb) -> m_cm (ext) -> m2 (sb) | perm_store_1 + ext_perm + perm_store_1 |
-| SETFIELD0-3 | m -> m1 (sp) -> m2 (heap) -> m3 (sb) | 3x perm_store_1 |
-
----
-
-## Risk Areas
-
-1. **GRAB and SWITCH timeouts**: Explicit bigstep is labor-intensive (~40-50 steps).
-   These are the hardest fixes. May need multiple attempts.
-2. **CLOSUREREC**: Most complex handler (multiple allocs + loop). May need
-   Sloop bigstep reasoning.
-3. **Phase 6A**: Touches every handler file. One mistake breaks all.
-   Run this agent ALONE and verify every file.
-4. **Template dependencies**: APPLY1-3 need APPLY fixed. APPTERM2-3 need
-   APPTERM1 fixed. CLOSUREREC needs CLOSURE fixed. RERAISE/RAISE_NOTRACE
-   need RAISE done. RESTART needs GRAB done. Batches are ordered for this.
-5. **dune build**: NEVER during agent execution. Only in Phase 6B final check.
