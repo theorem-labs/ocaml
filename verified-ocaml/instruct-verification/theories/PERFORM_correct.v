@@ -26,17 +26,13 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-(* Local stub handler: identity on state (no real Rocq handler exists). *)
-Local Definition handle_PERFORM (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|>).
-
 Theorem verify_PERFORM_correct :
-    handler_correct handle_PERFORM f_instr_PERFORM
+    handler_correct handle_PERFORM_stub f_instr_PERFORM
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_PERFORM.
+  unfold handler_correct, handle_PERFORM_stub.
   intros ard Hpre _.
   exists le. exists m.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).

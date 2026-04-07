@@ -60,12 +60,7 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-(* ================================================================== *)
-(* Corrected handler for PUSHATOM                                      *)
-(* ================================================================== *)
-
-Definition handle_PUSHATOM_fixed (t : nat) (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|> <|accu := Val_block t []|> <|stack := s.(accu) :: s.(stack)|>).
+(* Handler definition is in InstructSpec.v as handle_PUSHATOM_fixed. *)
 
 (* ================================================================== *)
 (* Struct layout facts                                                 *)

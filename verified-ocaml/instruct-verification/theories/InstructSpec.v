@@ -14,6 +14,7 @@ From compcert Require Import Coqlib Integers Floats Ctypes Cop
   Clight Clightdefs Globalenvs Maps Memory Memdata Events Values.
 From compcert Require Import ClightBigstep.
 From compcert Require Import AST.
+From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine Bytecode.Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
@@ -327,6 +328,54 @@ Definition handler_with_pre_verified
     (P_ccall : nat -> list value -> state -> Prop) : Prop :=
   exists step_pre, handler_correct_with_pre handler f step_pre P_error P_halt P_ccall.
 
+(* Helpers for wrapping concrete proofs into existential form. *)
+Definition mk_handler_verified {handler f sp pe ph pc}
+    (H : handler_correct handler f sp pe ph pc) : handler_verified handler f pe ph pc :=
+  ex_intro _ sp H.
+
+Definition mk_handler_with_pre_verified {handler f sp pe ph pc}
+    (H : handler_correct_with_pre handler f sp pe ph pc) : handler_with_pre_verified handler f pe ph pc :=
+  ex_intro _ sp H.
+
+(* ================================================================== *)
+(* Stub / fixed handler definitions                                    *)
+(*                                                                      *)
+(* These are trivial handlers whose definitions live here (rather than *)
+(* in Interpret.v) so that the Module Type can reference them.         *)
+(* ================================================================== *)
+
+(* Stub handlers: identity or pc+1 for unimplemented/trivial opcodes *)
+Definition handle_BREAK_stub (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|>).
+
+Definition handle_EVENT_stub (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|>).
+
+Definition handle_PERFORM_stub (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|>).
+
+Definition handle_RESUME_stub (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|>).
+
+Definition handle_RESUMETERM_stub (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc' + 1|>).
+
+Definition handle_REPERFORMTERM_stub (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc' + 1|>).
+
+(* Fixed ATOM handlers: use Val_block instead of heap allocation *)
+Definition handle_ATOM0_fixed (pc' : Z) (s : state) : step_result :=
+  Step (s <|accu := Val_block 0 []|>).
+
+Definition handle_ATOM_fixed (t : nat) (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|> <|accu := Val_block t []|>).
+
+Definition handle_PUSHATOM0_fixed (pc' : Z) (s : state) : step_result :=
+  Step (s <|accu := Val_block 0 []|> <|stack := s.(accu) :: s.(stack)|>).
+
+Definition handle_PUSHATOM_fixed (t : nat) (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|> <|accu := Val_block t []|> <|stack := s.(accu) :: s.(stack)|>).
+
 (* ================================================================== *)
 (* Module Type: per-instruction correctness obligations                *)
 (*                                                                      *)
@@ -335,7 +384,6 @@ Definition handler_with_pre_verified
 (* the concrete preconditions from each handler's proof file.          *)
 (* ================================================================== *)
 
-(* WIP — Module Type under construction; uncomment when complete.
 
 Module Type InstructVerificationSpec.
 
@@ -396,7 +444,8 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_ACC :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_ACC n) f_instr_ACC
       (fun _ s => nth_error s.(Machine.stack) n = None)
       (fun _ => False)
@@ -431,6 +480,16 @@ Module Type InstructVerificationSpec.
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_APPLY2 :
+    handler_verified
+      (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
+      (fun msg s =>
+         (msg = "APPLY2: accu is not a closure"%string /\
+          get_code_ptr_s s s.(Machine.accu) = None) \/
+         (msg = "APPLY2: stack underflow"%string))
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_APPLY3 :
     handler_verified
       (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
@@ -440,6 +499,57 @@ Module Type InstructVerificationSpec.
           get_code_ptr_s s s.(Machine.accu) = None
         | _ => True
         end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_APPLY :
+    forall n,
+    handler_verified
+      (fun _ s => handle_APPLY n s) f_instr_APPLY
+      (fun msg s => get_code_ptr_s s s.(Machine.accu) = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_APPTERM1 :
+    forall slotsize,
+    handler_verified
+      (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
+      (fun msg s =>
+         s.(Machine.stack) = nil \/
+         get_code_ptr_s s s.(Machine.accu) = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_APPTERM2 :
+    forall slotsize,
+    handler_verified
+      (fun _ s => handle_APPTERM2 slotsize s) f_instr_APPTERM2
+      (fun msg s =>
+         s.(Machine.stack) = nil \/
+         (exists a, s.(Machine.stack) = a :: nil) \/
+         get_code_ptr_s s s.(Machine.accu) = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_APPTERM3 :
+    forall slotsize,
+    handler_verified
+      (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
+      (fun msg s =>
+         match s.(Machine.stack) with
+         | _ :: _ :: _ :: _ => False
+         | _ => True
+         end \/
+         get_code_ptr_s s s.(Machine.accu) = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_APPTERM :
+    forall nargs slotsize,
+    handler_verified
+      (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
+      (fun msg s =>
+         get_code_ptr_s s s.(Machine.accu) = None)
       (fun _ => False)
       (fun _ _ _ => False).
 
@@ -453,42 +563,64 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_ASSIGN :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_ASSIGN n) f_instr_ASSIGN
       (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None)
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_ATOM0 :
+    handler_verified
+      handle_ATOM0_fixed f_instr_ATOM0
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_ATOM :
+    forall t,
+    Z.of_nat t <= 2097151 ->
+    handler_verified
+      (handle_ATOM_fixed t) f_instr_ATOM
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_BEQ :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BEQ n target) f_instr_BEQ
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BGEINT :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BGEINT n target) f_instr_BGEINT
       (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BGTINT :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BGTINT n target) f_instr_BGTINT
       (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BLEINT :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BLEINT n target) f_instr_BLEINT
       (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BLTINT :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BLTINT n target) f_instr_BLTINT
       (fun msg s =>
          msg = "BLTINT: not an integer"%string /\
@@ -497,28 +629,39 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_BNEQ :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BNEQ n target) f_instr_BNEQ
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_BOOLNOT :
+    handler_verified
+      handle_BOOLNOT f_instr_BOOLNOT
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_BRANCHIFNOT :
-    forall target, handler_with_pre_verified
+    forall target,
+    handler_with_pre_verified
       (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BRANCHIF :
-    forall target, handler_with_pre_verified
+    forall target,
+    handler_with_pre_verified
       (handle_BRANCHIF target) f_instr_BRANCHIF
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BRANCH :
-    forall target, handler_verified
+    forall target,
+    handler_verified
       (fun _ s => handle_BRANCH target s) f_instr_BRANCH
       (fun _ _ => False)
       (fun _ => False)
@@ -526,20 +669,22 @@ Module Type InstructVerificationSpec.
 
   Parameter verified_BREAK :
     handler_verified
-      handle_BREAK f_instr_BREAK
+      handle_BREAK_stub f_instr_BREAK
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BUGEINT :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BUGEINT n target) f_instr_BUGEINT
       (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_BULTINT :
-    forall n target, handler_verified
+    forall n target,
+    handler_verified
       (handle_BULTINT n target) f_instr_BULTINT
       (fun _ _ => True)
       (fun _ => False)
@@ -553,14 +698,16 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_CLOSUREREC :
-    forall code_ofs, handler_verified
+    forall code_ofs,
+    handler_verified
       (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
       (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_CLOSURE :
-    forall code_ofs, handler_verified
+    forall code_ofs,
+    handler_verified
       (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
       (fun _ _ => False)
       (fun _ => False)
@@ -595,49 +742,56 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_CONSTINT :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_CONSTINT n) f_instr_CONSTINT
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_C_CALL1 :
-    forall prim_idx, handler_verified
+    forall prim_idx,
+    handler_verified
       (handle_C_CALL 1 prim_idx) f_instr_C_CALL1
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => True).
 
   Parameter verified_C_CALL2 :
-    forall prim_idx, handler_verified
+    forall prim_idx,
+    handler_verified
       (handle_C_CALL 2 prim_idx) f_instr_C_CALL2
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => True).
 
   Parameter verified_C_CALL3 :
-    forall prim_idx, handler_verified
+    forall prim_idx,
+    handler_verified
       (handle_C_CALL 3 prim_idx) f_instr_C_CALL3
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => True).
 
   Parameter verified_C_CALL4 :
-    forall prim_idx, handler_verified
+    forall prim_idx,
+    handler_verified
       (handle_C_CALL 4 prim_idx) f_instr_C_CALL4
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => True).
 
   Parameter verified_C_CALL5 :
-    forall prim_idx, handler_verified
+    forall prim_idx,
+    handler_verified
       (handle_C_CALL 5 prim_idx) f_instr_C_CALL5
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => True).
 
   Parameter verified_C_CALLN :
-    forall nargs prim_idx, handler_verified
+    forall nargs prim_idx,
+    handler_verified
       (handle_C_CALL nargs prim_idx) f_instr_C_CALLN
       (fun _ _ => False)
       (fun _ => False)
@@ -653,8 +807,37 @@ Module Type InstructVerificationSpec.
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_ENVACC1 :
+    handler_verified
+      (handle_ENVACC 1) f_instr_ENVACC1
+      (fun _ s => field_or_heap s s.(Machine.env) 1 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_ENVACC2 :
+    handler_verified
+      (handle_ENVACC 2) f_instr_ENVACC2
+      (fun _ s => field_or_heap s s.(Machine.env) 2 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_ENVACC3 :
+    handler_verified
+      (handle_ENVACC 3) f_instr_ENVACC3
+      (fun _ s => field_or_heap s s.(Machine.env) 3 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_ENVACC4 :
+    handler_verified
+      (handle_ENVACC 4) f_instr_ENVACC4
+      (fun _ s => field_or_heap s s.(Machine.env) 4 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_ENVACC :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_ENVACC n) f_instr_ENVACC
       (fun _ s => field_or_heap s s.(Machine.env) n = None)
       (fun _ => False)
@@ -669,7 +852,7 @@ Module Type InstructVerificationSpec.
 
   Parameter verified_EVENT :
     handler_verified
-      handle_EVENT f_instr_EVENT
+      handle_EVENT_stub f_instr_EVENT
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
@@ -681,6 +864,28 @@ Module Type InstructVerificationSpec.
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETBYTESCHAR :
+    handler_verified
+      handle_GETSTRINGCHAR f_instr_GETBYTESCHAR
+      (fun msg s =>
+         match s.(Machine.stack) with
+         | Val_int idx :: _ =>
+             match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
+             | Some (Val_int _) => False
+             | _ => True
+             end
+         | _ => True
+         end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETDYNMET :
+    handler_verified
+      handle_GETDYNMET f_instr_GETDYNMET
+      (fun msg s => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
@@ -713,21 +918,24 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_GETFIELD :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_GETFIELD n) f_instr_GETFIELD
       (fun _ s => field_or_heap s s.(Machine.accu) n = None)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_GETFLOATFIELD :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
       (fun _ s => field_or_heap s s.(Machine.accu) n = None)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_GETGLOBALFIELD :
-    forall n p, handler_verified
+    forall n p,
+    handler_verified
       (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
       (fun msg s =>
          (nth_error s.(Machine.global) n = None /\ msg = "GETGLOBALFIELD: index out of bounds"%string) \/
@@ -737,14 +945,59 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_GETGLOBAL :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_GETGLOBAL n) f_instr_GETGLOBAL
       (fun _ s => nth_error s.(Machine.global) n = None)
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_GETMETHOD :
+    handler_verified
+      handle_GETMETHOD f_instr_GETMETHOD
+      (fun msg s =>
+         match msg with
+         | _ => True
+         end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETPUBMET :
+    forall tag,
+    handler_verified
+      (handle_GETPUBMET tag) f_instr_GETPUBMET
+      (fun msg s => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETSTRINGCHAR :
+    handler_verified
+      handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
+      (fun msg s =>
+         match s.(Machine.stack) with
+         | Val_int idx :: _ =>
+             match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
+             | Some (Val_int _) => False
+             | _ => True
+             end
+         | _ => True
+         end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_GETVECTITEM :
+    handler_verified
+      handle_GETVECTITEM f_instr_GETVECTITEM
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | _, Val_int idx :: _ =>
+                    field_or_heap s s.(Machine.accu) (Z.to_nat idx) = None
+                  | _, _ => True end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_GRAB :
-    forall required, handler_verified
+    forall required,
+    handler_verified
       (handle_GRAB required) f_instr_GRAB
       (fun msg s =>
          msg = "GRAB: malformed return frame"%string /\
@@ -763,6 +1016,13 @@ Module Type InstructVerificationSpec.
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_ISINT :
+    handler_verified
+      handle_ISINT f_instr_ISINT
+      (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
@@ -806,41 +1066,42 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_MAKEBLOCK1 :
-    forall t, handler_verified
+    forall t,
+    handler_verified
       (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_MAKEBLOCK2 :
-    forall t, handler_verified
+    forall t,
+    handler_verified
       (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
       (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_MAKEBLOCK3 :
-    forall t, handler_verified
+    forall t,
+    handler_verified
       (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
       (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_MAKEBLOCK :
-    forall (t size : nat), (size >= 1)%nat ->
+    forall (t size : nat),
+    (size >= 1)%nat ->
     handler_verified
       (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
-      (fun _ _ => False)
-      (fun _ => False)
-      (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter verified_MAKEFLOATBLOCK :
-    forall (n : nat), (n >= 1)%nat ->
+    forall (n : nat),
+    (n >= 1)%nat ->
     handler_verified
       (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
-      (fun _ _ => False)
-      (fun _ => False)
-      (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter verified_MODINT :
     handler_with_pre_verified
@@ -884,22 +1145,39 @@ Module Type InstructVerificationSpec.
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_OFFSETCLOSURE2 :
+    handler_verified
+      (handle_OFFSETCLOSURE 2) f_instr_OFFSETCLOSURE2
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_OFFSETCLOSUREM2 :
+    handler_verified
+      (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM2
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_OFFSETCLOSURE :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
       (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_OFFSETINT :
-    forall ofs, handler_verified
+    forall ofs,
+    handler_verified
       (handle_OFFSETINT ofs) f_instr_OFFSETINT
       (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_OFFSETREF :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_OFFSETREF n) f_instr_OFFSETREF
       (fun _ s => match s.(Machine.accu) with
                   | Val_ptr addr =>
@@ -922,6 +1200,13 @@ Module Type InstructVerificationSpec.
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_PERFORM :
+    handler_verified
+      handle_PERFORM_stub f_instr_PERFORM
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_POPTRAP :
     handler_verified
       (handle_POPTRAP) f_instr_POPTRAP
@@ -930,7 +1215,8 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_POP :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_POP n) f_instr_POP
       (fun _ _ => False)
       (fun _ => False)
@@ -985,6 +1271,22 @@ Module Type InstructVerificationSpec.
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_PUSHATOM0 :
+    handler_verified
+      handle_PUSHATOM0_fixed f_instr_PUSHATOM0
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHATOM :
+    forall t,
+    Z.of_nat t <= 2097151 ->
+    handler_verified
+      (handle_PUSHATOM_fixed t) f_instr_PUSHATOM
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_PUSHCONST0 :
     handler_verified
       (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
@@ -1014,14 +1316,52 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_PUSHCONSTINT :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_PUSHENVACC1 :
+    handler_verified
+      (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
+      (fun _ s => field_or_heap s s.(Machine.env) 1 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHENVACC2 :
+    handler_verified
+      (handle_PUSHENVACC 2) f_instr_PUSHENVACC2
+      (fun _ s => field_or_heap s s.(Machine.env) 2 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHENVACC3 :
+    handler_verified
+      (handle_PUSHENVACC 3) f_instr_PUSHENVACC3
+      (fun _ s => field_or_heap s s.(Machine.env) 3 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHENVACC4 :
+    handler_verified
+      (handle_PUSHENVACC 4) f_instr_PUSHENVACC4
+      (fun _ s => field_or_heap s s.(Machine.env) 4 = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHENVACC :
+    forall n,
+    handler_verified
+      (handle_PUSHENVACC n) f_instr_PUSHENVACC
+      (fun _ s => field_or_heap s s.(Machine.env) n = None)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_PUSHGETGLOBALFIELD :
-    forall n p, handler_verified
+    forall n p,
+    handler_verified
       (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
       (fun msg s =>
          nth_error s.(Machine.global) n = None \/
@@ -1031,21 +1371,53 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_PUSHGETGLOBAL :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
       (fun _ s => nth_error s.(Machine.global) n = None)
       (fun _ => False)
       (fun _ _ _ => False).
 
+  Parameter verified_PUSHOFFSETCLOSURE0 :
+    handler_verified
+      (handle_PUSHOFFSETCLOSURE 0) f_instr_PUSHOFFSETCLOSURE0
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHOFFSETCLOSURE2 :
+    handler_verified
+      (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE2
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHOFFSETCLOSUREM2 :
+    handler_verified
+      (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM2
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_PUSHOFFSETCLOSURE :
+    forall ofs,
+    handler_verified
+      (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
+      (fun _ _ => True)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
   Parameter verified_PUSHTRAP :
-    forall handler_pc, handler_verified
+    forall handler_pc,
+    handler_verified
       (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
   Parameter verified_PUSH_RETADDR :
-    forall ret_addr, handler_verified
+    forall ret_addr,
+    handler_verified
       (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
       (fun _ _ => False)
       (fun _ => False)
@@ -1073,6 +1445,13 @@ Module Type InstructVerificationSpec.
       (fun msg _ =>
          msg = "unhandled exception"%string \/
          msg = "RAISE: malformed trap frame"%string)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_REPERFORMTERM :
+    handler_verified
+      handle_REPERFORMTERM_stub f_instr_REPERFORMTERM
+      (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 
@@ -1123,6 +1502,67 @@ Module Type InstructVerificationSpec.
               nth_error fs 2 = None))))
       (fun _ => False)
       (fun _ _ _ => False).
+
+  Parameter verified_RESUMETERM :
+    handler_verified
+      handle_RESUMETERM_stub f_instr_RESUMETERM
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_RESUME :
+    handler_verified
+      handle_RESUME_stub f_instr_RESUME
+      (fun _ _ => False)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_RETURN :
+    forall stacksize,
+    handler_verified
+      (fun _ => handle_RETURN stacksize) f_instr_RETURN
+      (* Error predicates *)
+      (fun msg _ => msg = "RETURN: accu is not a closure"%string \/
+                    msg = "RETURN: malformed return frame"%string)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_SETBYTESCHAR :
+    handler_verified
+      handle_SETBYTESCHAR f_instr_SETBYTESCHAR
+      (fun _ s =>
+         match s.(Machine.stack) with
+         | Val_int idx :: Val_int newchar :: _ =>
+             match s.(Machine.accu) with
+             | Val_ptr addr =>
+               match heap_lookup s.(Machine.hp) addr with
+               | Some (_, fields) =>
+                   set_nth fields (Z.to_nat idx) (Val_int newchar) = None
+               | None => True
+               end
+             | _ => True
+             end
+         | _ => True
+         end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_SETFIELD :
+    forall n,
+    handler_verified
+      (handle_SETFIELD n) f_instr_SETFIELD
+      (fun _ s => match s.(Machine.stack) with
+                  | newval :: _ =>
+                    match s.(Machine.accu) with
+                    | Val_ptr addr =>
+                      match heap_lookup s.(Machine.hp) addr with
+                      | Some (_, fields) => set_nth fields n newval = None
+                      | None => True
+                      end
+                    | _ => True
+                    end
+                  | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter verified_SETFIELD0 :
     handler_verified
@@ -1192,25 +1632,9 @@ Module Type InstructVerificationSpec.
       (fun _ => False)
       (fun _ _ _ => False).
 
-  Parameter verified_SETFIELD :
-    forall n, handler_verified
-      (handle_SETFIELD n) f_instr_SETFIELD
-      (fun _ s => match s.(Machine.stack) with
-                  | newval :: _ =>
-                    match s.(Machine.accu) with
-                    | Val_ptr addr =>
-                      match heap_lookup s.(Machine.hp) addr with
-                      | Some (_, fields) => set_nth fields n newval = None
-                      | None => True
-                      end
-                    | _ => True
-                    end
-                  | _ => True end)
-      (fun _ => False)
-      (fun _ _ _ => False).
-
   Parameter verified_SETFLOATFIELD :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
@@ -1228,7 +1652,8 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
   Parameter verified_SETGLOBAL :
-    forall n, handler_verified
+    forall n,
+    handler_verified
       (handle_SETGLOBAL n) f_instr_SETGLOBAL
       (fun _ _ => False)
       (fun _ => False)
@@ -1265,6 +1690,14 @@ Module Type InstructVerificationSpec.
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+
+  Parameter verified_SWITCH :
+    forall (_nc _nb : nat) (const_targets block_targets : list Z),
+    handler_verified
+      (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s) f_instr_SWITCH
+      (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
 
@@ -1306,5 +1739,3 @@ Module Type InstructVerificationSpec.
       (fun _ _ _ => False).
 
 End InstructVerificationSpec.
-
-*)

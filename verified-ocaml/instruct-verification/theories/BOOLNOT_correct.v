@@ -506,3 +506,18 @@ Proof.
        destruct Hbool as [Hbool | Hbool];
        rewrite Haccu_eq in Hbool; discriminate.
 Qed.
+
+(* Wrapper: convert to handler_correct form for the Module Type. *)
+Theorem verify_BOOLNOT_handler_correct :
+    handler_correct handle_BOOLNOT f_instr_BOOLNOT
+      (fun _ _ s _ => boolnot_precond s)
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros e le m s.
+  pose proof (verify_BOOLNOT_correct e le m s) as H.
+  destruct (handle_BOOLNOT (Machine.pc s) s) eqn:Hmatch.
+  - intros ard Hrel Hpre. apply H; auto. exists ard. exact Hrel.
+  - exact H.
+  - exact H.
+  - exact H.
+Qed.

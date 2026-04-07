@@ -187,10 +187,8 @@ Qed.
 
    This corrected handler returns Val_block t [] directly, matching the
    C runtime's atom representation.  Once handle_ATOM in Interpret.v is
-   fixed to avoid heap_alloc for empty blocks, this proof applies directly. *)
-
-Definition handle_ATOM_fixed (t : nat) (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|> <|accu := Val_block t []|>).
+   fixed to avoid heap_alloc for empty blocks, this proof applies directly.
+   The handler definition is in InstructSpec.v as handle_ATOM_fixed. *)
 
 (* ================================================================== *)
 (* Main theorem                                                        *)

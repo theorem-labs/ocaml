@@ -1252,3 +1252,44 @@ Proof.
     - exact I.
   }
 Qed.
+
+(* Wrapper: convert to handler_correct form for the Module Type.
+   SWITCH's existing statement already uses forall ard / abs_rel_with_ard,
+   so the wrapper is a direct unfolding. *)
+Theorem verify_SWITCH_handler_correct :
+  forall (_nc _nb : nat) (const_targets block_targets : list Z),
+    handler_correct (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s) f_instr_SWITCH
+      (fun _ m s ard =>
+         match Machine.accu s with
+         | Val_int n =>
+             0 <= n /\
+             -4611686018427387904 <= n <= 4611686018427387903 /\
+             (exists sizes_v,
+               Mem.load Mint32 m (ar_code_base_block ard)
+                 (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+                    (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+               = Some (Vint sizes_v)) /\
+             (exists ofs_int,
+               Mem.load Mint32 m (ar_code_base_block ard)
+                 (Ptrofs.unsigned
+                   (Ptrofs.add
+                     (Ptrofs.add (ar_code_base_ofs ard)
+                       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
+                     (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
+                       (Ptrofs.of_int64 (Int64.repr n)))))
+               = Some (Vint ofs_int) /\
+               forall target,
+                 nth_error const_targets (Z.to_nat n) = Some target ->
+                 Ptrofs.add
+                   (Ptrofs.add (ar_code_base_ofs ard)
+                     (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
+                   (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
+                     (ptrofs_of_int Signed ofs_int))
+                 = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t)))
+         | _ => False
+         end)
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros _nc _nb ct bt.
+  exact (verify_SWITCH_correct _nc _nb ct bt).
+Qed.

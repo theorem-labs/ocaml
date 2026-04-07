@@ -661,3 +661,18 @@ Proof.
     unfold isint_accu_vlong in Hok. rewrite Haccu_eq in Hok. simpl in Hok. contradiction.
   }
 Qed.
+
+(* Wrapper: convert to handler_correct form for the Module Type. *)
+Theorem verify_ISINT_handler_correct :
+    handler_correct handle_ISINT f_instr_ISINT
+      (fun _ _ s _ => isint_accu_vlong s)
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros e le m s.
+  pose proof (verify_ISINT_correct e le m s) as H.
+  destruct (handle_ISINT (Machine.pc s) s) eqn:Hmatch.
+  - intros ard Hrel Hpre. apply H; auto. exists ard. exact Hrel.
+  - exact H.
+  - exact H.
+  - exact H.
+Qed.

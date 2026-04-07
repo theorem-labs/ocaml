@@ -44,15 +44,6 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 (* ================================================================== *)
-(* Corrected handler for ATOM0                                         *)
-(* ================================================================== *)
-
-(* Like handle_ATOM_fixed from ATOM_correct.v but specialized to tag 0
-   and without PC advancement (ATOM0 has no operand). *)
-Definition handle_ATOM0_fixed (pc' : Z) (s : state) : step_result :=
-  Step (s <|accu := Val_block 0 []|>).
-
-(* ================================================================== *)
 (* Semantic helpers                                                    *)
 (* ================================================================== *)
 

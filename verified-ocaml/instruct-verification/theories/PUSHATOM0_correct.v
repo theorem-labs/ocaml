@@ -53,9 +53,8 @@ Local Ltac eval_cbn :=
 (* handle_PUSHATOM in Interpret.v uses heap_alloc, returning Val_ptr.
    The C code computes Vlong(0 << 10) = Vlong 0, which corresponds to
    Val_block 0 [] via vr_block_atom.  This corrected handler returns
-   Val_block 0 [] directly, matching the C semantics. *)
-Definition handle_PUSHATOM0_fixed (pc' : Z) (s : state) : step_result :=
-  Step (s <|accu := Val_block 0 []|> <|stack := s.(accu) :: s.(stack)|>).
+   Val_block 0 [] directly, matching the C semantics.
+   The handler definition is in InstructSpec.v as handle_PUSHATOM0_fixed. *)
 
 (* ================================================================== *)
 (* Semantic helpers for (0 << 10) computation                          *)

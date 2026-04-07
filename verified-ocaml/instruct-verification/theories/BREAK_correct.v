@@ -26,17 +26,13 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-(* Local handler: identity on state (same as CHECK_SIGNALS). *)
-Local Definition handle_BREAK (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|>).
-
 Theorem verify_BREAK_correct :
-    handler_correct handle_BREAK f_instr_BREAK
+    handler_correct handle_BREAK_stub f_instr_BREAK
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_BREAK.
+  unfold handler_correct, handle_BREAK_stub.
   intros ard Hpre _.
   exists le. exists m.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).

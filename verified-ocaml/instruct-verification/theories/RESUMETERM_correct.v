@@ -26,10 +26,6 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-(* Local stub handler: advances pc by 1. *)
-Local Definition handle_RESUMETERM (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc' + 1|>).
-
 (* ================================================================== *)
 (* Struct layout: pc field offset                                      *)
 (* ================================================================== *)
@@ -76,12 +72,12 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_RESUMETERM_correct :
-    handler_correct handle_RESUMETERM f_instr_RESUMETERM
+    handler_correct handle_RESUMETERM_stub f_instr_RESUMETERM
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_RESUMETERM. simpl.
+  unfold handler_correct, handle_RESUMETERM_stub. simpl.
   intros ard Hpre _.
   unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
