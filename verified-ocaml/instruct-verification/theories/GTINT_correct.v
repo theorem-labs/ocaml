@@ -228,3 +228,19 @@ Proof.
     (* 9. sb_writable -- permission preserved *)
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
+
+Theorem verify_GTINT_handler_correct :
+    handler_correct handle_GTINT f_instr_GTINT
+      signed_int_op_safe
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  apply handler_correct_weaken with (sp := fun _ => gtint_range_pre).
+  - exact verify_GTINT_correct.
+  - intros e le m s ard _ Hsio.
+    unfold signed_int_op_safe in Hsio.
+    destruct Hsio as (a & b & rest & Ha & Hs & Hra & Hrb).
+    unfold gtint_range_pre. rewrite Ha, Hs. exact (conj Hra Hrb).
+Qed.

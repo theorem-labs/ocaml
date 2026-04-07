@@ -1,4 +1,4 @@
-(* RESUMETERM_correct.v -- stub handler: C body is pc += 1; return 0. *)
+(* RESUMETERM_correct.v -- C body is pc += 1; return 0. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -72,12 +72,12 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_RESUMETERM_correct :
-    handler_correct handle_RESUMETERM_stub f_instr_RESUMETERM
+    handler_correct handle_RESUMETERM f_instr_RESUMETERM
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_RESUMETERM_stub. simpl.
+  unfold handler_correct, handle_RESUMETERM. simpl.
   intros ard Hpre _.
   unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.

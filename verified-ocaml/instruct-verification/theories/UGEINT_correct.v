@@ -390,3 +390,26 @@ Proof.
     (* 9. sb_writable -- permission preserved *)
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
+
+Theorem verify_UGEINT_handler_correct :
+    handler_correct handle_UGEINT f_instr_UGEINT
+      unsigned_ints_safe
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True
+                  end) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  apply handler_correct_weaken with
+    (sp := fun _ _ s _ =>
+       match s.(Machine.accu), s.(Machine.stack) with
+       | Val_int a, Val_int b :: _ =>
+           0 <= a < 4611686018427387904 /\
+           0 <= b < 4611686018427387904
+       | _, _ => True
+       end).
+  - exact verify_UGEINT_correct.
+  - intros e le m s ard _ Huis.
+    unfold unsigned_ints_safe in Huis.
+    destruct Huis as (a & b & rest & Ha & Hs & Hra & Hrb).
+    rewrite Ha, Hs. exact (conj Hra Hrb).
+Qed.

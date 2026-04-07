@@ -23,7 +23,7 @@
    - accu != Val_int 0: C takes then branch, reads offset, stores
      pc + offset.
 
-   Preconditions (via handler_correct_with_pre):
+   Preconditions (via handler_correct):
    - code_base_block != sptr_block (code buffer separate from struct)
    - code buffer at pc contains the branch offset as Vint
    - comparison well-definedness: for non-zero accu, the C ne-comparison
@@ -194,8 +194,8 @@ Local Ltac prove_field_survives Hstore Hload :=
 (* ================================================================== *)
 
 Theorem verify_BRANCHIF_correct : forall target,
-    handler_correct_with_pre (handle_BRANCHIF target) f_instr_BRANCHIF
-      (fun m s ard =>
+    handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
+      (fun _ m s ard =>
          (* Code block is separate from struct block *)
          ar_code_base_block ard <> ar_sptr_block ard /\
          (* Code buffer at pc contains the branch offset *)
@@ -214,7 +214,7 @@ Theorem verify_BRANCHIF_correct : forall target,
 Proof.
   intro target.
   intros e le m s.
-  unfold handler_correct_with_pre, handle_BRANCHIF.
+  unfold handler_correct, handle_BRANCHIF.
 
   (* Case split on accu *)
   destruct (Machine.accu s) as [n | tag fields | addr | addr ofs_cl] eqn:Haccu_eq.

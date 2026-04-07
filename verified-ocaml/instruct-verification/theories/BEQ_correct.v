@@ -776,3 +776,17 @@ Proof.
   - simpl; intros ard _ Hstep; destruct Hstep as (_ & _ & _ & _ & H); destruct H.
   - simpl; intros ard _ Hstep; destruct Hstep as (_ & _ & _ & _ & H); destruct H.
 Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_BEQ_handler_correct : forall n target,
+    Int.min_signed <= n <= Int.max_signed ->
+    handler_correct (handle_BEQ n target) f_instr_BEQ
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n target Hn.
+  eapply handler_correct_weaken.
+  - exact (verify_BEQ_correct n target).
+  - intros e le m s ard _ [[[Hne Hca] Hbo] Hai].
+    exact (conj Hne (conj Hn (conj Hca (conj Hbo Hai)))).
+Qed.

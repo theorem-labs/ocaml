@@ -27,12 +27,12 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_BREAK_correct :
-    handler_correct handle_BREAK_stub f_instr_BREAK
+    handler_correct handle_BREAK f_instr_BREAK
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_BREAK_stub.
+  unfold handler_correct, handle_BREAK.
   intros ard Hpre _.
   exists le. exists m.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).

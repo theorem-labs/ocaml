@@ -305,3 +305,15 @@ Proof.
     + (* 9. sb_writable *)
       { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsb_writable. exact Hofs'. }
 Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_BRANCH_handler_correct : forall target,
+    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+      code_loadable
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros target.
+  eapply handler_correct_weaken.
+  - exact (verify_BRANCH_correct target).
+  - intros e le m s ard _ Hcl. exact Hcl.
+Qed.

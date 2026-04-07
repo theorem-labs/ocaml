@@ -582,3 +582,18 @@ Proof.
       { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. }
   }
 Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_GETGLOBAL_handler_correct : forall n,
+    0 <= Z.of_nat n <= Int.max_signed ->
+    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
+      (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n))
+      (fun _ s => nth_error s.(Machine.global) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n Hn.
+  eapply handler_correct_weaken.
+  - exact (verify_GETGLOBAL_correct n).
+  - intros e le m s ard _ [Hca Hgs].
+    exact (conj Hca (conj Hn Hgs)).
+Qed.

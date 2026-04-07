@@ -466,3 +466,27 @@ Proof.
     (* 9. sb_writable -- permission preserved *)
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
+
+Theorem verify_ASRINT_handler_correct :
+    handler_correct handle_ASRINT f_instr_ASRINT
+      shift_in_range
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int _ :: _ => False
+                  | _, _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
+Proof.
+  apply handler_correct_weaken with
+    (sp := fun _ _ s _ =>
+       match s.(Machine.accu), s.(Machine.stack) with
+       | Val_int a, Val_int b :: _ =>
+           0 <= b < 64 /\
+           Int64.min_signed <= a * 2 + 1 <= Int64.max_signed
+       | _, Val_int b :: _ => 0 <= b < 64
+       | _, _ => True
+       end).
+  - exact verify_ASRINT_correct.
+  - intros e le m s ard _ Hsr.
+    unfold shift_in_range in Hsr.
+    destruct Hsr as (a & b & rest & Ha & Hs & Hb & Hra).
+    rewrite Ha, Hs. exact (conj Hb Hra).
+Qed.

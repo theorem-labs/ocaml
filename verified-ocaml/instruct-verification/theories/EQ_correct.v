@@ -230,3 +230,18 @@ Proof.
     (* 9. sb_writable -- permission preserved *)
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
+
+(* Exported version with named building-block precondition *)
+Theorem verify_EQ_handler_correct :
+    handler_correct handle_EQ f_instr_EQ
+      int_op_safe
+      (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  apply handler_correct_weaken with
+    (sp := fun _ => eq_int_range_pre).
+  - exact verify_EQ_correct.
+  - intros e le m s ard _ Hios.
+    unfold int_op_safe in Hios.
+    destruct Hios as (a & b & rest & Ha & Hs & Hra & Hrb).
+    unfold eq_int_range_pre. rewrite Ha, Hs. exact (conj Hra Hrb).
+Qed.

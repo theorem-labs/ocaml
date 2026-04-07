@@ -1,4 +1,4 @@
-(* PUSHATOM_correct.v -- PUSHATOM completeness proof.
+(* PUSHATOM_correct.v -- PUSHATOM correctness proof.
 
    PUSHATOM t = PUSH then ATOM t.
    C code (f_instr_PUSHATOM):
@@ -15,21 +15,17 @@
 
    Rocq handler (handle_PUSHATOM):
      handle_PUSHATOM t pc' s =
-       let new_stack := accu :: stack in
-       let '(s', ptr) := heap_alloc s t [] in
-       Step (s' <|pc:=pc'|> <|accu:=ptr|> <|stack:=new_stack|>)
+       Step (s <|pc := pc'|> <|accu := Val_block t []|>
+               <|stack := accu :: stack|>)
 
-   ABSTRACTION MISMATCH: heap_alloc returns Val_ptr, C computes Vlong(tag*1024).
-   Corrected handler returns Val_block t [] via vr_block_atom.
+   Atoms are empty blocks represented as tagged integers (tag * 1024),
+   matching vr_block_atom in val_repr.
 
    Four stores:
      Store 1: sp field  (sb, uso+16)     <- Vptr sp_b new_sp_ofs
      Store 2: *new_sp   (sp_b, new_sp)   <- accu_v
      Store 3: pc field  (sb, uso+0)      <- Vptr cb new_pc_ofs
      Store 4: accu field (sb, uso+8)     <- Vlong (tag * 1024)
-
-   Combines patterns of PUSHATOM0_correct.v (push + atom) and
-   ATOM_correct.v (code buffer read, pc advancement, ard update).
 
    NO AXIOMS.  NO ADMITTED. *)
 
@@ -60,7 +56,6 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-(* Handler definition is in InstructSpec.v as handle_PUSHATOM_fixed. *)
 
 (* ================================================================== *)
 (* Struct layout facts                                                 *)
@@ -182,7 +177,7 @@ Qed.
 
 Theorem verify_PUSHATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_PUSHATOM_fixed t) f_instr_PUSHATOM
+    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
       (fun _ m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -198,7 +193,7 @@ Theorem verify_PUSHATOM_correct : forall t,
       (fun _ _ _ => False).
 Proof.
   intros t Ht_range.
-  intros e le m s. unfold handler_correct, handle_PUSHATOM_fixed. simpl.
+  intros e le m s. unfold handler_correct, handle_PUSHATOM. simpl.
   intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
@@ -648,4 +643,17 @@ Proof.
       eapply Mem.perm_store_1. exact Hstore1.
       apply Hsb_writable. exact Hofs'. }
   }
+Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_PUSHATOM_handler_correct : forall t,
+    Z.of_nat t <= 2097151 ->
+    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
+      (pre_and (sp_at_least 16) (code_at (Int.repr (Z.of_nat t))))
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros t Ht.
+  eapply handler_correct_weaken.
+  - exact (verify_PUSHATOM_correct t Ht).
+  - intros e le m s ard _ [Hsp Hca]. exact (conj Hsp Hca).
 Qed.

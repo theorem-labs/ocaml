@@ -27,12 +27,12 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_EVENT_correct :
-    handler_correct handle_EVENT_stub f_instr_EVENT
+    handler_correct handle_EVENT f_instr_EVENT
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_EVENT_stub.
+  unfold handler_correct, handle_EVENT.
   intros ard Hpre _.
   exists le. exists m.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).

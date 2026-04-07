@@ -6,7 +6,7 @@
      *sp = accu;            // push old accu onto stack
      accu = (long)(0 << 10); // set accu to atom0 = 0
    Rocq:
-     handle_PUSHATOM0_fixed pc' s =
+     handle_PUSHATOM0 pc' s =
        Step (s <|accu := Val_block 0 []|> <|stack := accu :: stack|>)
 
    Three stores:
@@ -46,15 +46,8 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-(* ================================================================== *)
-(* Corrected handler for PUSHATOM0                                     *)
-(* ================================================================== *)
-
-(* handle_PUSHATOM in Interpret.v uses heap_alloc, returning Val_ptr.
-   The C code computes Vlong(0 << 10) = Vlong 0, which corresponds to
-   Val_block 0 [] via vr_block_atom.  This corrected handler returns
-   Val_block 0 [] directly, matching the C semantics.
-   The handler definition is in InstructSpec.v as handle_PUSHATOM0_fixed. *)
+(* handle_PUSHATOM0 returns Val_block 0 [], matching the C runtime's
+   atom representation (Vlong 0) via vr_block_atom. *)
 
 (* ================================================================== *)
 (* Semantic helpers for (0 << 10) computation                          *)
@@ -105,7 +98,7 @@ Proof. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSHATOM0_correct :
-    handler_correct handle_PUSHATOM0_fixed f_instr_PUSHATOM0
+    handler_correct handle_PUSHATOM0 f_instr_PUSHATOM0
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -116,7 +109,7 @@ Theorem verify_PUSHATOM0_correct :
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSHATOM0_fixed. simpl.
+  intros e le m s. unfold handler_correct, handle_PUSHATOM0. simpl.
   intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.

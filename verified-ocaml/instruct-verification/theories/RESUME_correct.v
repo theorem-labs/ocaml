@@ -1,4 +1,4 @@
-(* RESUME_correct.v -- trivial stub: C body is just return 0. *)
+(* RESUME_correct.v -- trivial: C body is just return 0. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -27,12 +27,12 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_RESUME_correct :
-    handler_correct handle_RESUME_stub f_instr_RESUME
+    handler_correct handle_RESUME f_instr_RESUME
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_RESUME_stub.
+  unfold handler_correct, handle_RESUME.
   intros ard Hpre _.
   exists le. exists m.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).

@@ -9,7 +9,7 @@
    Rocq handler: handle_MODINT pops stack, computes Z.rem, with
    division-by-zero check.
 
-   Uses handler_correct_with_pre to exclude the b=0 (do_raise) case.
+   Uses handler_correct to exclude the b=0 (do_raise) case.
    The do_raise path involves complex trap frame manipulation that
    we sidestep with a nonzero-divisor precondition. *)
 
@@ -303,8 +303,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_MODINT_correct :
-    handler_correct_with_pre handle_MODINT f_instr_MODINT
-      (fun _ s _ =>
+    handler_correct handle_MODINT f_instr_MODINT
+      (fun _ _ s _ =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              b <> 0%Z /\
@@ -713,4 +713,32 @@ Proof.
       eapply Mem.perm_store_1. exact Hstore2.
       eapply Mem.perm_store_1. exact Hstore1.
       apply Hsb_writable. exact Hofs'. }  }
+Qed.
+
+(* Exported version with named building-block precondition *)
+Theorem verify_MODINT_handler_correct :
+    handler_correct handle_MODINT f_instr_MODINT
+      divmod_safe
+      (fun _ s =>
+         match s.(Machine.accu), s.(Machine.stack) with
+         | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
+         | _, _ => True
+         end)
+      (fun _ => False)
+      (fun _ _ _ => False).
+Proof.
+  apply handler_correct_weaken with
+    (sp := fun _ _ s _ =>
+       match s.(Machine.accu), s.(Machine.stack) with
+       | Val_int a, Val_int b :: _ =>
+           b <> 0%Z /\
+           Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
+           Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+       | _, _ => True
+       end).
+  - exact verify_MODINT_correct.
+  - intros e le m s ard _ Hdm.
+    unfold divmod_safe in Hdm.
+    destruct Hdm as (a & b & rest & Ha & Hs & Hbne & Hra & Hrb).
+    rewrite Ha, Hs. exact (conj Hbne (conj Hra Hrb)).
 Qed.

@@ -7,11 +7,11 @@
      s->accu = (long)(0 << 10);   // atom with tag 0
      return 0;
 
-   Rocq handler (handle_ATOM0_fixed):
-     handle_ATOM0_fixed pc' s = Step (s <|accu := Val_block 0 []|>)
+   Rocq handler (handle_ATOM0):
+     handle_ATOM0 pc' s = Step (s <|accu := Val_block 0 []|>)
 
-   Like ATOM_correct.v, uses a corrected handler that returns Val_block
-   instead of heap-allocating, matching vr_block_atom.
+   Atoms are empty blocks represented as tagged integers,
+   matching vr_block_atom in val_repr.
 
    Single store to accu field at offset +8. No PC change, no temps.
 
@@ -92,12 +92,12 @@ Proof. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_ATOM0_correct :
-    handler_correct handle_ATOM0_fixed f_instr_ATOM0
+    handler_correct handle_ATOM0 f_instr_ATOM0
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handle_ATOM0_fixed. simpl.
+  unfold handle_ATOM0. simpl.
 
   intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.

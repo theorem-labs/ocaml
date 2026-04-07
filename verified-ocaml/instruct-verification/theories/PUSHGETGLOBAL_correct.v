@@ -865,3 +865,23 @@ Proof.
       apply Hsb_writable. exact Hofs'. }
   }
 Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_PUSHGETGLOBAL_handler_correct : forall n,
+    0 <= Z.of_nat n <= Int.max_signed ->
+    handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
+      (pre_and (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n)) (sp_at_least 16))
+      (fun _ s => nth_error s.(Machine.global) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n Hn.
+  eapply handler_correct_weaken.
+  - exact (verify_PUSHGETGLOBAL_correct n).
+  - intros e le m s ard _ [[Hca Hgs] Hsp].
+    split. { exact Hca. }
+    split. { exact Hn. }
+    split. { exact Hgs. }
+    intros sp_b sp_ofs Hload.
+    destruct Hsp as [sp_b0 [sp_ofs0 [Hload0 Hge0]]].
+    rewrite Hload0 in Hload. injection Hload as -> ->. exact Hge0.
+Qed.

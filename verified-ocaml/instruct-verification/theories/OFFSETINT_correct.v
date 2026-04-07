@@ -574,3 +574,37 @@ Proof.
     }
   }
 Qed.
+
+(* Exported version with named building-block precondition *)
+Theorem verify_OFFSETINT_handler_correct : forall ofs,
+    Int.min_signed <= ofs * 2 <= Int.max_signed ->
+    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
+      (code_at (Int.repr ofs))
+      (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros ofs Hrange.
+  apply handler_correct_weaken with
+    (sp := fun _ m s ard =>
+       exists (i : int),
+         Mem.load Mint32 m (ar_code_base_block ard)
+           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+         = Some (Vint i) /\
+         Int.signed i = ofs /\
+         Int.min_signed <= Int.signed i * 2 <= Int.max_signed).
+  - exact (verify_OFFSETINT_correct ofs).
+  - intros e le m s ard _ Hca.
+    unfold code_at in Hca.
+    exists (Int.repr ofs). split; [|split].
+    + exact Hca.
+    + apply Int.signed_repr.
+      change Int.min_signed with (-2147483648) in *.
+      change Int.max_signed with 2147483647 in *.
+      lia.
+    + rewrite Int.signed_repr.
+      * exact Hrange.
+      * change Int.min_signed with (-2147483648) in *.
+        change Int.max_signed with 2147483647 in *.
+        lia.
+Qed.

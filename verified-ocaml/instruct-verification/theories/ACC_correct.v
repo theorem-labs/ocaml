@@ -573,3 +573,31 @@ Proof.
     }
   }
 Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_ACC_handler_correct : forall n,
+    Z.of_nat n < Int.half_modulus ->
+    handler_correct (handle_ACC n) f_instr_ACC
+      (code_at (Int.repr (Z.of_nat n)))
+      (fun _ s => nth_error s.(Machine.stack) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n Hn.
+  eapply handler_correct_weaken_step.
+  - exact (verify_ACC_correct n).
+  - intros e le m s s' ard Hstep Hrel Hca.
+    split. { exact Hca. }
+    split. { exact Hn. }
+    (* Derive SP offset constraint from abs_rel + Step case *)
+    intros sp_b sp_ofs Hsp_load.
+    (* From Step case: n < length stack *)
+    unfold handle_ACC in Hstep.
+    destruct (nth_error (Machine.stack s) n) eqn:Hnth; [|discriminate].
+    assert (Hn_lt : (n < length (Machine.stack s))%nat).
+    { apply nth_error_Some. congruence. }
+    (* From abs_rel: extract SP bound *)
+    destruct Hrel as (_ & _ & _ & (sp_ptr' & sp_b' & sp_ofs' & Hsp_load' & Heq' & _ & _ & _ & _ & _ & Hsp_bound & _ & _) & _).
+    subst sp_ptr'.
+    rewrite Hsp_load' in Hsp_load. injection Hsp_load. intros; subst.
+    lia.
+Qed.

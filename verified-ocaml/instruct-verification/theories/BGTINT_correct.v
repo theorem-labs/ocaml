@@ -783,3 +783,17 @@ Proof.
   - exact I.
   - exact I.
 Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_BGTINT_handler_correct : forall n target,
+    Int.min_signed <= n <= Int.max_signed ->
+    handler_correct (handle_BGTINT n target) f_instr_BGTINT
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n target Hn.
+  eapply handler_correct_weaken.
+  - exact (verify_BGTINT_correct n target).
+  - intros e le m s ard _ [[[Hne Hca] Hbo] Hai].
+    exact (conj Hne (conj Hn (conj Hca (conj Hbo Hai)))).
+Qed.

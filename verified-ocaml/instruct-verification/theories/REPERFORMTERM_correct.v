@@ -1,4 +1,4 @@
-(* REPERFORMTERM_correct.v -- stub handler: C body is pc += 1; return 0. *)
+(* REPERFORMTERM_correct.v -- C body is pc += 1; return 0. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -72,12 +72,12 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_REPERFORMTERM_correct :
-    handler_correct handle_REPERFORMTERM_stub f_instr_REPERFORMTERM
+    handler_correct handle_REPERFORMTERM f_instr_REPERFORMTERM
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_REPERFORMTERM_stub. simpl.
+  unfold handler_correct, handle_REPERFORMTERM. simpl.
   intros ard Hpre _.
   unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.

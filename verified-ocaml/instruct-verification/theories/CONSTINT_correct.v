@@ -514,3 +514,24 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. }
   }
 Qed.
+
+(* Exported version with named building-block precondition *)
+Theorem verify_CONSTINT_handler_correct : forall n,
+    Int.min_signed <= n <= Int.max_signed ->
+    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
+      (code_at (Int.repr n))
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n Hn.
+  apply handler_correct_weaken with
+    (sp := fun _ m s ard =>
+       Mem.load Mint32 m (ar_code_base_block ard)
+         (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+            (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+       = Some (Vint (Int.repr n)) /\
+       Int.min_signed <= n <= Int.max_signed).
+  - exact (verify_CONSTINT_correct n).
+  - intros e le m s ard _ Hca.
+    unfold code_at in Hca.
+    exact (conj Hca Hn).
+Qed.

@@ -16,7 +16,7 @@
            else Step (s<|pc:=pc'|><|accu:=Val_int(Z.quot a b)|><|stack:=rest|>)
        | _, _ => Error ...
 
-   Precondition (handler_correct_with_pre):
+   Precondition (handler_correct):
      b <> 0 -- the stack top is nonzero
      Tagged values are in Int64 signed range (true for OCaml 63-bit ints)
 
@@ -221,8 +221,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_DIVINT_correct :
-    handler_correct_with_pre handle_DIVINT f_instr_DIVINT
-      (fun _ s _ =>
+    handler_correct handle_DIVINT f_instr_DIVINT
+      (fun _ _ s _ =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              b <> 0%Z /\
@@ -700,4 +700,30 @@ Proof.
       eapply Mem.perm_store_1. exact Hstore2.
       eapply Mem.perm_store_1. exact Hstore1.
       apply Hsb_writable. exact Hofs'. }
+Qed.
+
+(* Exported version with named building-block precondition *)
+Theorem verify_DIVINT_handler_correct :
+    handler_correct handle_DIVINT f_instr_DIVINT
+      divmod_safe
+      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                  | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
+                  | _, _ => True
+                  end)
+      (fun _ => False) (fun _ _ _ => False).
+Proof.
+  apply handler_correct_weaken with
+    (sp := fun _ _ s _ =>
+       match s.(Machine.accu), s.(Machine.stack) with
+       | Val_int a, Val_int b :: _ =>
+           b <> 0%Z /\
+           Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
+           Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+       | _, _ => True
+       end).
+  - exact verify_DIVINT_correct.
+  - intros e le m s ard _ Hdm.
+    unfold divmod_safe in Hdm.
+    destruct Hdm as (a & b & rest & Ha & Hs & Hbne & Hra & Hrb).
+    rewrite Ha, Hs. exact (conj Hbne (conj Hra Hrb)).
 Qed.

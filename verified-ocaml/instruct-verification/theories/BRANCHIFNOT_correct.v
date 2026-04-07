@@ -80,7 +80,7 @@ Qed.
 (* ================================================================== *)
 
 (* code_block_ne_sptr and code_contains_branch_offset have been moved
-   into the precondition of handler_correct_with_pre.  The caller must
+   into the precondition of handler_correct.  The caller must
    supply these facts when instantiating the spec. *)
 
 (* ================================================================== *)
@@ -254,8 +254,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_BRANCHIFNOT_correct : forall target,
-    handler_correct_with_pre (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
-      (fun m s ard =>
+    handler_correct (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
+      (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
          (exists ofs_int,
            Mem.load Mint32 m (ar_code_base_block ard)

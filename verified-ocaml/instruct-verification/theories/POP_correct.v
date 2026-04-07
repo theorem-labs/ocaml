@@ -573,3 +573,28 @@ Proof.
       { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore_sp. eapply Mem.perm_store_1. exact Hstore_pc. apply Hsb_writable. exact Hofs'. }
   }
 Qed.
+
+(* Wrapper with building-block precondition for Module Type *)
+Theorem verify_POP_handler_correct : forall n,
+    Z.of_nat n < Int.half_modulus ->
+    handler_correct (handle_POP n) f_instr_POP
+      (pre_and (pre_and (code_at (Int.repr (Z.of_nat n))) code_ne_struct) (stack_length_ge n))
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n Hn.
+  eapply handler_correct_weaken.
+  - exact (verify_POP_correct n).
+  - intros e le m s ard Hrel [[Hca Hne] Hslg].
+    unfold stack_length_ge in Hslg.
+    split. { exact Hca. }
+    split. { exact Hne. }
+    split. { exact Hn. }
+    split.
+    + (* SP offset: derive from abs_rel + stack_length_ge *)
+      intros sp_b sp_ofs Hsp_load.
+      destruct Hrel as (_ & _ & _ & (sp_ptr' & sp_b' & sp_ofs' & Hsp_load' & Heq' & _ & _ & _ & _ & _ & Hsp_bound & _ & _) & _).
+      subst sp_ptr'.
+      rewrite Hsp_load' in Hsp_load. injection Hsp_load. intros; subst.
+      lia.
+    + exact Hslg.
+Qed.

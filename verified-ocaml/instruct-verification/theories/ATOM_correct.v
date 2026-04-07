@@ -11,23 +11,10 @@
      return 0;
 
    Rocq handler (handle_ATOM):
-     handle_ATOM t pc' s =
-       let '(s', ptr) := heap_alloc s t [] in
-       Step (s' <|pc:=pc'|> <|accu:=ptr|>)
+     handle_ATOM t pc' s = Step (s <|pc := pc'|> <|accu := Val_block t []|>)
 
-   ABSTRACTION MISMATCH:
-   heap_alloc returns Val_ptr addr, but C computes Vlong(tag * 1024).
-   val_repr has no constructor relating Val_ptr to Vlong:
-   - vr_ptr:        Val_ptr addr   <-> Vptr b ofs    (pointer, not long)
-   - vr_block_atom: Val_block tag nil <-> Vlong(tag * 1024)
-   Proved: val_repr hm (Val_ptr addr) (Vlong n) -> False  (by inversion).
-
-   The proof is provided for a corrected handler handle_ATOM_fixed that
-   returns Val_block t [] (matching vr_block_atom) instead of Val_ptr.
-
-   TODO: Fix handle_ATOM in Interpret.v to return Val_block t [] instead of
-   heap-allocating.  Then update InstructSpec.v to reference handle_ATOM
-   and use handler_correct (code buffer precondition required).
+   Atoms are empty blocks represented as tagged integers (tag * 1024),
+   matching vr_block_atom in val_repr.
 
    Two stores: pc field at offset +0, accu field at offset +8.
    Reads tag operand from code block (precondition via handler_correct).
@@ -178,17 +165,8 @@ Qed.
 (* Corrected handler                                                   *)
 (* ================================================================== *)
 
-(* handle_ATOM in Interpret.v uses heap_alloc, returning Val_ptr addr.
-   The C code computes Vlong(tag * 1024).  val_repr relates:
-     Val_ptr addr      <-> Vptr b ofs      (vr_ptr)
-     Val_block tag nil <-> Vlong(tag*1024)  (vr_block_atom)
-   No constructor relates Val_ptr to Vlong, so the proof for handle_ATOM
-   as-is is impossible.
-
-   This corrected handler returns Val_block t [] directly, matching the
-   C runtime's atom representation.  Once handle_ATOM in Interpret.v is
-   fixed to avoid heap_alloc for empty blocks, this proof applies directly.
-   The handler definition is in InstructSpec.v as handle_ATOM_fixed. *)
+(* handle_ATOM returns Val_block t [], matching the C runtime's atom
+   representation (Vlong(tag * 1024)) via vr_block_atom. *)
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -196,7 +174,7 @@ Qed.
 
 Theorem verify_ATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_ATOM_fixed t) f_instr_ATOM
+    handler_correct (handle_ATOM t) f_instr_ATOM
       (fun _ m s ard =>
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -206,7 +184,7 @@ Theorem verify_ATOM_correct : forall t,
 Proof.
   intros t Ht_range.
   intros e le m s.
-  unfold handle_ATOM_fixed. simpl.
+  unfold handle_ATOM. simpl.
 
   intros ard Hpre Hcode_load.
   unfold abs_rel_with_ard in Hpre.
