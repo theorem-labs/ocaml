@@ -1028,6 +1028,10 @@ Definition setfloatfield_code_pre (n : nat)
        (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
     = Some (Vint (Int.repr (Z.of_nat n))).
 
+Definition setfloatfield_step_pre (n : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  setfloatfield_heap_pre n m s ard /\ setfloatfield_code_pre n m s ard.
+
 Definition apply3_closure_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data)
     (sp_b : block) : Prop :=
@@ -1051,7 +1055,7 @@ Definition apply3_closure_pre
           code_b = cb).
 
 Definition apply3_step_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
@@ -1081,7 +1085,7 @@ Definition apply3_step_pre
   Z.of_nat (Machine.extra_args s) < Int64.half_modulus.
 
 Definition apply2_step_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
@@ -1772,7 +1776,7 @@ Definition apply1_closure_pre
           code_b = cb).
 
 Definition apply1_step_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
@@ -2715,17 +2719,17 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_APPLY1 :
     handler_correct (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
-      (fun _ m s ard => apply1_step_pre m s ard)
+      apply1_step_pre
       (fun msg s => (msg = "APPLY1: accu is not a closure"%string /\ get_code_ptr_s s s.(Machine.accu) = None) \/ (msg = "APPLY1: stack underflow"%string)) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPLY2 :
     handler_correct (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
-      (fun _ m s ard => apply2_step_pre m s ard)
+      apply2_step_pre
       (fun msg s => (msg = "APPLY2: accu is not a closure"%string /\ get_code_ptr_s s s.(Machine.accu) = None) \/ (msg = "APPLY2: stack underflow"%string)) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPLY3 :
     handler_correct (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
-      (fun _ m s ard => apply3_step_pre m s ard)
+      apply3_step_pre
       (fun msg s => match s.(Machine.stack) with | _ :: _ :: _ :: _ => get_code_ptr_s s s.(Machine.accu) = None | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPLY :
@@ -3493,9 +3497,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_SETFLOATFIELD :
     forall n,
     handler_correct (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
-      (fun _ m s ard =>
-         setfloatfield_heap_pre n m s ard /\
-         setfloatfield_code_pre n m s ard)
+      (setfloatfield_step_pre n)
       (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields n (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_SETGLOBAL :

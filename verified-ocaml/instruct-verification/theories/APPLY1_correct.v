@@ -245,7 +245,7 @@ Qed.
 
 Theorem verify_APPLY1_correct :
     handler_correct (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
-      (fun _ m s ard => apply1_step_pre m s ard)
+      apply1_step_pre
       (fun msg s =>
          (msg = "APPLY1: accu is not a closure"%string /\
           get_code_ptr_s s s.(Machine.accu) = None) \/

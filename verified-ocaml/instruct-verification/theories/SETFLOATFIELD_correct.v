@@ -284,9 +284,7 @@ Definition setfloatfield_code_pre (n : nat)
 
 Theorem verify_SETFLOATFIELD_correct : forall n,
     handler_correct (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
-      (fun e m s ard =>
-         setfloatfield_heap_pre n m s ard /\
-         setfloatfield_code_pre n m s ard)
+      (setfloatfield_step_pre n)
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
                     match s.(Machine.accu) with

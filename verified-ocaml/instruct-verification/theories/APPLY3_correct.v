@@ -271,7 +271,7 @@ Definition apply3_closure_pre
    4. The stack region around new sp is writable
    5. extra_args fits in representable range *)
 Definition apply3_step_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
@@ -317,7 +317,7 @@ Definition apply3_step_pre
 
 Theorem verify_APPLY3_correct :
     handler_correct (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
-      (fun _ m s ard => apply3_step_pre m s ard)
+      apply3_step_pre
       (fun msg s =>
         match s.(Machine.stack) with
         | _ :: _ :: _ :: _ =>

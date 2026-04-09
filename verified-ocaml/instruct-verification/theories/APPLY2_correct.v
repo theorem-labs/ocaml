@@ -258,7 +258,7 @@ Definition apply2_closure_pre
    3. The sp has enough room (3 extra slots below current sp).
    4. extra_args fits in int64 for the shl encoding. *)
 Definition apply2_step_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
@@ -316,7 +316,7 @@ Qed.
 
 Theorem verify_APPLY2_correct :
     handler_correct (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
-      (fun _ m s ard => apply2_step_pre m s ard)
+      apply2_step_pre
       (fun msg s =>
          (msg = "APPLY2: accu is not a closure"%string /\
           get_code_ptr_s s s.(Machine.accu) = None) \/
