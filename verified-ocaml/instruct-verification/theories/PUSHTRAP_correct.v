@@ -224,7 +224,7 @@ Qed.
 
 Theorem verify_PUSHTRAP_correct : forall handler_pc,
     handler_correct (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
-      (fun _ m s ard => pushtrap_step_pre handler_pc m s ard)
+      (pushtrap_step_pre handler_pc)
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).

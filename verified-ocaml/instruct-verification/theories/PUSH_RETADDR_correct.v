@@ -181,7 +181,7 @@ Qed.
    2. sp >= 32 to accommodate 3 pushes.
    3. extra_args fits for shl encoding. *)
 Definition push_retaddr_step_pre (ret_addr : Z)
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
@@ -233,7 +233,7 @@ Qed.
 
 Theorem verify_PUSH_RETADDR_correct : forall ret_addr,
     handler_correct (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
-      (fun _ m s ard => push_retaddr_step_pre ret_addr m s ard)
+      (push_retaddr_step_pre ret_addr)
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).

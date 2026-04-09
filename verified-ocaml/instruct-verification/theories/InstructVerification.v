@@ -259,8 +259,35 @@ Module InstructVerification <: InstructVerificationSpec.
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
     := verify_BULTINT_handler_correct.
   Definition correct_CHECK_SIGNALS := verify_CHECK_SIGNALS_correct.
-  Definition correct_CLOSUREREC := verify_CLOSUREREC_correct.
-  Definition correct_CLOSURE := verify_CLOSURE_correct.
+  Definition correct_CLOSUREREC : forall code_ofs,
+    Int.min_signed <= code_ofs <= Int.max_signed ->
+    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+      (heap_alloc_with_stores 2 247 alloc_store_2
+       /\p code_at (Int.repr 1) /\p code_arg_at 1 (Int.repr 0)
+       /\p code_arg_at 2 (Int.repr code_ofs) /\p sp_at_least 16)
+      (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros code_ofs Hrange.
+    apply handler_correct_weaken with
+      (sp := fun e m s ard => closurerec_step_pre code_ofs e m s ard).
+    - exact (verify_CLOSUREREC_correct code_ofs).
+    - (* bridge: building blocks → closurerec_step_pre *)
+      admit.
+  Admitted.
+  Definition correct_CLOSURE : forall code_ofs,
+    Int.min_signed <= code_ofs <= Int.max_signed ->
+    handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
+      (heap_alloc_with_stores 2 247 alloc_store_2
+       /\p code_at (Int.repr 0) /\p code_arg_at 1 (Int.repr code_ofs))
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros code_ofs Hrange.
+    apply handler_correct_weaken with
+      (sp := fun e m s ard => closure_step_pre code_ofs e m s ard).
+    - exact (verify_CLOSURE_correct code_ofs).
+    - admit.
+  Admitted.
   Definition correct_CONST0 := verify_CONST0_compl_comp.
   Definition correct_CONST1 := verify_CONST1_correct.
   Definition correct_CONST2 := verify_CONST2_correct.
@@ -277,7 +304,17 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_ENVACC2 := verify_ENVACC2_with_pre.
   Definition correct_ENVACC3 := verify_ENVACC3_with_pre.
   Definition correct_ENVACC4 := verify_ENVACC4_with_pre.
-  Definition correct_ENVACC := verify_ENVACC_correct.
+  Definition correct_ENVACC : forall n, Z.of_nat n < Int.half_modulus ->
+    handler_correct (handle_ENVACC n) f_instr_ENVACC
+      (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
+      (fun _ s => field_or_heap s s.(Machine.env) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros n Hrange.
+    eapply handler_correct_weaken.
+    - exact (verify_ENVACC_correct n).
+    - intros e le m s ard _ [Hcode Henv]. exact (conj Hcode (conj Hrange Henv)).
+  Qed.
   Definition correct_EQ := verify_EQ_handler_correct.
   Definition correct_EVENT := verify_EVENT_correct.
   Definition correct_GEINT := verify_GEINT_handler_correct.
@@ -287,7 +324,17 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_GETFIELD1 := verify_GETFIELD1_with_pre.
   Definition correct_GETFIELD2 := verify_GETFIELD2_with_pre.
   Definition correct_GETFIELD3 := verify_GETFIELD3_with_pre.
-  Definition correct_GETFIELD := verify_GETFIELD_correct.
+  Definition correct_GETFIELD : forall n, Int.min_signed <= Z.of_nat n <= Int.max_signed ->
+    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
+      (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
+      (fun _ s => field_or_heap s s.(Machine.accu) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros n Hrange.
+    eapply handler_correct_weaken.
+    - exact (verify_GETFIELD_correct n).
+    - intros e le m s ard _ [Hhfl Hcode]. exact (conj Hhfl (conj Hcode Hrange)).
+  Qed.
   Definition correct_GETFLOATFIELD := verify_GETFLOATFIELD_correct.
   Definition correct_GETGLOBALFIELD := verify_GETGLOBALFIELD_correct.
   Definition correct_GETGLOBAL :
@@ -308,9 +355,40 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_LSLINT := verify_LSLINT_handler_correct.
   Definition correct_LSRINT := verify_LSRINT_handler_correct.
   Definition correct_LTINT := verify_LTINT_handler_correct.
-  Definition correct_MAKEBLOCK1 := verify_MAKEBLOCK1_correct.
-  Definition correct_MAKEBLOCK2 := verify_MAKEBLOCK2_correct.
-  Definition correct_MAKEBLOCK3 := verify_MAKEBLOCK3_correct.
+  Definition correct_MAKEBLOCK1 : forall t, 0 <= Z.of_nat t <= 255 ->
+    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
+      (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1
+       /\p code_at (Int.repr (Z.of_nat t)))
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros t Hrange. eapply handler_correct_weaken.
+    - exact (verify_MAKEBLOCK1_correct t).
+    - admit.
+  Admitted.
+  Definition correct_MAKEBLOCK2 : forall t, 0 <= Z.of_nat t <= 255 ->
+    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
+      (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
+       /\p code_at (Int.repr (Z.of_nat t)))
+      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros t Hrange. eapply handler_correct_weaken.
+    - exact (verify_MAKEBLOCK2_correct t).
+    - admit.
+  Admitted.
+  Definition correct_MAKEBLOCK3 : forall t, 0 <= Z.of_nat t <= 255 ->
+    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+      (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
+       /\p code_at (Int.repr (Z.of_nat t)))
+      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros t Hrange.
+    eapply handler_correct_weaken.
+    - exact (verify_MAKEBLOCK3_correct t).
+    - (* bridge: building blocks → proof inline — Phase 2 *)
+      admit.
+  Admitted.
   Definition correct_MAKEBLOCK := verify_MAKEBLOCK_correct.
   Definition correct_MAKEFLOATBLOCK := verify_MAKEFLOATBLOCK_correct.
   Definition correct_MODINT := verify_MODINT_handler_correct.

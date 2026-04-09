@@ -324,6 +324,15 @@ Definition code_at (expected : int) : Clight.env -> mem -> state -> abs_rel_data
          (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
     = Some (Vint expected).
 
+(* Code buffer at PC + k contains an expected int32 value.
+   code_arg_at 0 v is definitionally equal to code_at v. *)
+Definition code_arg_at (k : nat) (expected : int) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
+  fun _ m s ard =>
+    Mem.load Mint32 m (ar_code_base_block ard)
+      (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+         (Ptrofs.repr ((Machine.pc s + Z.of_nat k) * sizeof_code_t))))
+    = Some (Vint expected).
+
 (* Conjunction of two preconditions. *)
 Definition pre_and (P Q : Clight.env -> mem -> state -> abs_rel_data -> Prop)
     : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
@@ -748,6 +757,150 @@ Definition heap_alloc_fundef : Ctypes.fundef function :=
   Ctypes.External heap_alloc_ef
     ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
     tlong cc_default.
+
+(* ================================================================== *)
+(* Heap allocation building block                                      *)
+(*                                                                      *)
+(* Captures the common pattern shared by MAKEBLOCK1-3, MAKEBLOCK,      *)
+(* MAKEFLOATBLOCK, CLOSURE, CLOSUREREC, GETFLOATFIELD:                 *)
+(*  1. _heap_alloc is not a local variable in C env                    *)
+(*  2. next_addr is fresh in the heap map                              *)
+(*  3. global block is valid                                           *)
+(*  4. heap_alloc function is findable in the Clight global env        *)
+(*  5. For any memory state m', calling heap_alloc succeeds and        *)
+(*     returns a fresh block with load/perm preservation               *)
+(*                                                                      *)
+(* Store chains are handler-specific and composed via /\p.             *)
+(* ================================================================== *)
+
+Definition heap_alloc_pre (n_fields : Z) (tag : Z)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let gb := ar_global_block ard in
+  e ! _heap_alloc = None /\
+  (ar_heap_map ard) (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr n_fields) :: Vlong (Int64.repr tag) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p)).
+
+(* Store chain building blocks: after heap_alloc, the returned block
+   supports N sequential Mint64 stores.  Each level guarantees store
+   success, read-back, load preservation on other blocks, and
+   (at the deepest level) permission preservation from m_alloc. *)
+
+(* 1-field store chain: one Mint64 slot at new_ofs. *)
+Definition alloc_store_1
+    (new_b : block) (new_ofs : ptrofs) (m_alloc : mem) : Prop :=
+  forall cv, exists m_store,
+    Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+    Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+      Some (Val.load_result Mint64 cv) /\
+    (forall b ofs chunk v, b <> new_b ->
+       Mem.load chunk m_alloc b ofs = Some v ->
+       Mem.load chunk m_store b ofs = Some v).
+
+(* 2-field store chain: two Mint64 slots at new_ofs and new_ofs+8. *)
+Definition alloc_store_2
+    (new_b : block) (new_ofs : ptrofs) (m_alloc : mem) : Prop :=
+  forall cv, exists m_store,
+    Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+    Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+      Some (Val.load_result Mint64 cv) /\
+    (forall b ofs chunk v, b <> new_b ->
+       Mem.load chunk m_alloc b ofs = Some v ->
+       Mem.load chunk m_store b ofs = Some v) /\
+    (forall cv1, exists m_store1,
+       Mem.store Mint64 m_store new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_store1 /\
+       Mem.load Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+         Some (Val.load_result Mint64 cv1) /\
+       (forall v0, Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
+          Mem.load Mint64 m_store1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
+       (forall b ofs chunk v, b <> new_b ->
+          Mem.load chunk m_store b ofs = Some v ->
+          Mem.load chunk m_store1 b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m_store b -> Mem.perm m_store b ofs k p ->
+          Mem.perm m_store1 b ofs k p)).
+
+(* 3-field store chain: three Mint64 slots at new_ofs, +8, +16. *)
+Definition alloc_store_3
+    (new_b : block) (new_ofs : ptrofs) (m_alloc : mem) : Prop :=
+  forall cv, exists m_store,
+    Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+    Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+      Some (Val.load_result Mint64 cv) /\
+    (forall b ofs chunk v, b <> new_b ->
+       Mem.load chunk m_alloc b ofs = Some v ->
+       Mem.load chunk m_store b ofs = Some v) /\
+    (forall cv1, exists m_store1,
+       Mem.store Mint64 m_store new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_store1 /\
+       Mem.load Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+         Some (Val.load_result Mint64 cv1) /\
+       (forall b ofs chunk v, b <> new_b ->
+          Mem.load chunk m_store b ofs = Some v ->
+          Mem.load chunk m_store1 b ofs = Some v) /\
+       (forall cv2, exists m_store2,
+          Mem.store Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 16))) cv2 = Some m_store2 /\
+          Mem.load Mint64 m_store2 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 16))) =
+            Some (Val.load_result Mint64 cv2) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_store1 b ofs = Some v ->
+             Mem.load chunk m_store2 b ofs = Some v) /\
+          (forall b ofs k p,
+             Mem.perm m_alloc b ofs k p ->
+             Mem.perm m_store2 b ofs k p))).
+
+(* 1-field store + perm: like alloc_store_1 but also preserves perms. *)
+Definition alloc_store_1_perm
+    (new_b : block) (new_ofs : ptrofs) (m_alloc : mem) : Prop :=
+  forall cv, exists m_store,
+    Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+    Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+      Some (Val.load_result Mint64 cv) /\
+    (forall b ofs chunk v, b <> new_b ->
+       Mem.load chunk m_alloc b ofs = Some v ->
+       Mem.load chunk m_store b ofs = Some v) /\
+    (forall b ofs k p,
+       Mem.perm m_alloc b ofs k p ->
+       Mem.perm m_store b ofs k p).
+
+(* heap_alloc_pre with store chain: combines allocation + storability.
+   Used by MAKEBLOCK1-3, CLOSURE, CLOSUREREC to avoid repeating both
+   the heap_alloc boilerplate AND the store chain in each entry. *)
+Definition heap_alloc_with_stores (n_fields : Z) (tag : Z)
+    (store_spec : block -> ptrofs -> mem -> Prop)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  heap_alloc_pre n_fields tag e m s ard /\
+  (forall m' m_alloc new_b new_ofs,
+     external_call heap_alloc_ef
+       (Genv.to_senv (genv_genv clight_ge))
+       (Vptr (ar_sptr_block ard) (ar_sptr_ofs ard)
+        :: Vlong (Int64.repr n_fields) :: Vlong (Int64.repr tag) :: nil)
+       m' E0 (Vptr new_b new_ofs) m_alloc ->
+     (forall b, Mem.valid_block m' b -> new_b <> b) ->
+     (forall b ofs chunk v,
+        Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+        Mem.load chunk m_alloc b ofs = Some v) ->
+     (forall b ofs k p,
+        Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+        Mem.perm m_alloc b ofs k p) ->
+     store_spec new_b new_ofs m_alloc).
 
 Definition setvectitem_pre
     (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
@@ -1635,7 +1788,7 @@ Definition apply1_step_pre
   Z.of_nat (Machine.extra_args s) < Int64.half_modulus.
 
 Definition pushtrap_step_pre (handler_pc : Z)
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
@@ -1671,7 +1824,7 @@ Definition pushtrap_step_pre (handler_pc : Z)
        (S (S (S (S (length (Machine.stack s))))))).
 
 Definition push_retaddr_step_pre (ret_addr : Z)
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
@@ -1692,6 +1845,1059 @@ Definition push_retaddr_step_pre (ret_addr : Z)
      Ptrofs.unsigned sp_ofs >= 32) /\
   (* extra_args fits for shl encoding *)
   Z.of_nat (Machine.extra_args s) < Int64.half_modulus.
+
+(* ================================================================== *)
+(* Named step_pre definitions for Module Type readability              *)
+(*                                                                      *)
+(* Each definition is definitionally equal to the corresponding        *)
+(* inline lambda, so no downstream files need changes.                 *)
+(* ================================================================== *)
+
+Definition apply_n_step_pre (n : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Int.min_signed <= Z.of_nat n <= Int.max_signed /\
+  (1 <= n)%nat /\
+  apply_step_pre m s ard.
+
+Definition appterm1_step_pre (slotsize : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat slotsize))) /\
+  Z.of_nat slotsize < Int.half_modulus /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + Z.of_nat slotsize * 8 < Ptrofs.modulus) /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + (Z.of_nat slotsize - 1) * 8 >= 8) /\
+  (1 <= slotsize)%nat /\
+  (slotsize <= Datatypes.length (Machine.stack s))%nat /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     apply3_closure_pre m s ard sp_b).
+
+Definition appterm2_step_pre (slotsize : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat slotsize))) /\
+  Z.of_nat slotsize < Int.half_modulus /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + Z.of_nat slotsize * 8 < Ptrofs.modulus) /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + (Z.of_nat slotsize - 2) * 8 >= 8) /\
+  (2 <= slotsize)%nat /\
+  (slotsize <= Datatypes.length (Machine.stack s))%nat /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     apply3_closure_pre m s ard sp_b) /\
+  Z.of_nat (Machine.extra_args s) + 1 < Int64.modulus.
+
+Definition appterm3_step_pre (slotsize : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat slotsize))) /\
+  Z.of_nat slotsize < Int.half_modulus /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + Z.of_nat slotsize * 8 < Ptrofs.modulus) /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + (Z.of_nat slotsize - 3) * 8 >= 8) /\
+  (3 <= slotsize)%nat /\
+  (slotsize <= Datatypes.length (Machine.stack s))%nat /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     apply3_closure_pre m s ard sp_b) /\
+  Z.of_nat (extra_args s) <= Int64.max_unsigned /\
+  Z.of_nat (extra_args s) <= Int64.max_signed.
+
+Definition appterm_step_pre (nargs slotsize : nat)
+    (e0 : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  get_code_ptr_s s s.(Machine.accu) <> None /\
+  let s' := match get_code_ptr_s s s.(Machine.accu) with
+            | Some target_pc =>
+              s <|pc := target_pc|>
+                <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
+                <|env := s.(Machine.accu)|>
+                <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
+            | None => s
+            end in
+  forall le,
+    abs_rel_with_ard e0 le m s ard ->
+    exists le' m' out,
+      exec_stmt function_entry1 clight_ge e0 le m
+        (fn_body f_instr_APPTERM) E0 le' m' out /\
+      abs_rel e0 le' m' s'.
+
+Definition assign_step_pre (n : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  ar_code_base_block ard <> ar_sptr_block ard /\
+  (0 <= Z.of_nat n <= Int.max_signed)%Z /\
+  (forall m1 sp_b sp_ofs accu_v,
+    stack_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m1 (Machine.stack s) sp_b sp_ofs ->
+    val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) accu_v ->
+    Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n < Ptrofs.modulus ->
+    exists m_sw,
+      Mem.store Mint64 m1 sp_b
+        (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) accu_v = Some m_sw).
+
+Definition branchifnot_step_pre (target : Z)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  ar_code_base_block ard <> ar_sptr_block ard /\
+  (exists ofs_int,
+    Mem.load Mint32 m (ar_code_base_block ard)
+      (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+         (Ptrofs.repr (Machine.pc s * sizeof_code_t)))) = Some (Vint ofs_int) /\
+    Ptrofs.add
+      (Ptrofs.add (ar_code_base_ofs ard)
+         (Ptrofs.repr (Machine.pc s * sizeof_code_t)))
+      (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
+                  (ptrofs_of_int Signed ofs_int))
+    = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t))) /\
+  match Machine.accu s with
+  | Val_int n => -4611686018427387904 <= n <= 4611686018427387903
+  | Val_block _ nil => True
+  | Val_ptr _ | Val_closure _ _ => False
+  | Val_block _ (_ :: _) => True
+  end /\
+  (forall n, Machine.accu s = Val_int n ->
+     forall cv,
+     val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
+     exists z, cv = Vlong z).
+
+Definition branchif_step_pre (target : Z)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  ar_code_base_block ard <> ar_sptr_block ard /\
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+    = Some (Vint (Int.repr (target - Machine.pc s))) /\
+  (Machine.accu s <> Val_int 0 ->
+     forall cv,
+     val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
+     sem_binary_operation (genv_cenv clight_ge) Cop.One
+       cv tlong (Vlong (Int64.repr 1)) tlong m
+       = Some (Vint Int.one)) /\
+  (Machine.accu s = Val_int 0 ->
+     forall cv,
+     val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
+     exists z, cv = Vlong z).
+
+Definition closurerec_step_pre (code_ofs : Z)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  e ! _heap_alloc = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr 1)) /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
+  = Some (Vint (Int.repr 0)) /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr ((Machine.pc s + 2) * sizeof_code_t))))
+  = Some (Vint (Int.repr code_ofs)) /\
+  (Int.min_signed <= code_ofs <= Int.max_signed) /\
+  (ar_heap_map ard) (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr 2) :: Vlong (Int64.repr 247) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (forall cv, exists m_s0,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
+          Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_s0 b ofs = Some v) /\
+          (forall cv1, exists m_s1,
+             Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
+             Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+               Some (Val.load_result Mint64 cv1) /\
+             (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
+                Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
+             (forall b ofs chunk v, b <> new_b ->
+                Mem.load chunk m_s0 b ofs = Some v ->
+                Mem.load chunk m_s1 b ofs = Some v) /\
+             (forall b ofs k p,
+                Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
+                Mem.perm m_s1 b ofs k p)))) /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs >= 16 /\
+     (align_chunk Mint64 | Ptrofs.unsigned sp_ofs - 8) /\
+     Ptrofs.unsigned sp_ofs - 8 + 8 < Ptrofs.modulus).
+
+Definition closure_step_pre (code_ofs : Z)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  e ! _heap_alloc = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr 0)) /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
+  = Some (Vint (Int.repr code_ofs)) /\
+  (Int.min_signed <= code_ofs <= Int.max_signed) /\
+  (ar_heap_map ard) (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr 2) :: Vlong (Int64.repr 247) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (forall cv, exists m_s0,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
+          Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_s0 b ofs = Some v) /\
+          (forall cv1, exists m_s1,
+             Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
+             Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+               Some (Val.load_result Mint64 cv1) /\
+             (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
+                Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
+             (forall b ofs chunk v, b <> new_b ->
+                Mem.load chunk m_s0 b ofs = Some v ->
+                Mem.load chunk m_s1 b ofs = Some v) /\
+             (forall b ofs k p,
+                Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
+                Mem.perm m_s1 b ofs k p)))).
+
+Definition envacc_step_pre (n : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Z.of_nat n < Int.half_modulus /\
+  env_field_loadable n e m s ard.
+
+Definition getbyteschar_step_pre
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  getstringchar_heap_pre m s ard /\
+  match s.(Machine.stack) with
+  | Val_int idx :: _ =>
+      0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
+      match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
+      | Some (Val_int c) => 0 <= c <= 255
+      | _ => True
+      end /\
+      (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
+       exists z, cv = Vlong z)
+  | _ => True
+  end.
+
+Definition getfield_step_pre (n : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  heap_field_loadable n e m s ard /\
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Int.min_signed <= Z.of_nat n <= Int.max_signed.
+
+Definition getfloatfield_step_pre (n : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let hm := ar_heap_map ard in
+  e ! _heap_alloc = None /\
+  float_field_loadable_sep n m s ard /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Int.min_signed <= Z.of_nat n <= Int.max_signed /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  Mem.valid_block m gb /\
+  (forall m' fv,
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr 253) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v0,
+          Mem.load chunk m' b ofs = Some v0 -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v0) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (exists m_fstore,
+          Mem.store Mfloat64 m_alloc new_b (Ptrofs.unsigned new_ofs) (Vfloat fv) = Some m_fstore /\
+          (forall b ofs chunk v0, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v0 ->
+             Mem.load chunk m_fstore b ofs = Some v0) /\
+          (forall b ofs k p,
+             Mem.perm m_alloc b ofs k p ->
+             Mem.perm m_fstore b ofs k p))) /\
+  (forall v new_b new_ofs,
+     field_or_heap s s.(Machine.accu) n = Some v ->
+     exists hm',
+       val_repr hm' cb co v (Vptr new_b new_ofs) /\
+       (forall v0 cv, val_repr hm cb co v0 cv -> val_repr hm' cb co v0 cv) /\
+       (forall stk m0 sp_b0 sp_ofs0,
+          stack_repr hm cb co m0 stk sp_b0 sp_ofs0 ->
+          stack_repr hm' cb co m0 stk sp_b0 sp_ofs0) /\
+       (forall gs m0 gb0 gofs0,
+          global_repr hm cb co m0 gs gb0 gofs0 ->
+          global_repr hm' cb co m0 gs gb0 gofs0)).
+
+Definition getglobalfield_step_pre (n p : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))) (Ptrofs.repr 4)))
+  = Some (Vint (Int.repr (Z.of_nat p))) /\
+  0 <= Z.of_nat n <= Int.max_signed /\
+  0 <= Z.of_nat p <= Int.max_signed /\
+  Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus /\
+  (forall glob v cv_global,
+     nth_error s.(Machine.global) n = Some glob ->
+     field_or_heap s glob p = Some v ->
+     val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) glob cv_global ->
+     exists b ofs cv,
+       cv_global = Vptr b ofs /\
+       b <> ar_sptr_block ard /\
+       Mem.load Mint64 m b
+         (Ptrofs.unsigned (Ptrofs.add ofs
+            (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed (Int.repr (Z.of_nat p))))))
+         = Some cv /\
+       val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) v cv).
+
+Definition getmethod_step_pre
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  getmethod_heap_pre m s ard /\
+  match s.(Machine.accu) with
+  | Val_int n => 0 <= n /\
+                 n * 2 + 1 <= Int64.max_signed /\
+                 n < Ptrofs.half_modulus /\
+                 (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int n) cv -> exists z, cv = Vlong z)
+  | _ => True
+  end.
+
+Definition getstringchar_step_pre
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  getstringchar_heap_pre m s ard /\
+  match s.(Machine.stack) with
+  | Val_int idx :: _ =>
+      0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
+      match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
+      | Some (Val_int c) => 0 <= c <= 255
+      | _ => True
+      end /\
+      (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
+       exists z, cv = Vlong z)
+  | _ => True
+  end.
+
+Definition getvectitem_step_pre
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  getvectitem_heap_pre m s ard /\
+  match s.(Machine.stack) with
+  | Val_int idx :: _ =>
+      0 <= idx /\
+      idx * 2 + 1 <= Int64.max_signed /\
+      idx < Ptrofs.half_modulus /\
+      (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
+       exists z, cv = Vlong z)
+  | _ => True
+  end.
+
+Definition grab_step_pre (required : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat required))) /\
+  0 <= Z.of_nat required <= Int.max_signed /\
+  Z.of_nat (extra_args s) <= Int64.max_signed /\
+  Z.of_nat (extra_args s) <= Int64.max_unsigned /\
+  Nat.leb required (extra_args s) = true.
+
+Definition makeblock1_step_pre (t : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let sp_b := ar_stack_block ard in
+  e ! _heap_alloc = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat t))) /\
+  (0 <= Z.of_nat t <= 255) /\
+  (ar_heap_map ard) (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (forall cv, exists m_store,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+          Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_store b ofs = Some v))).
+
+Definition makeblock2_step_pre (t : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let sp_b := ar_stack_block ard in
+  e ! _heap_alloc = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat t))) /\
+  (0 <= Z.of_nat t <= 255) /\
+  (ar_heap_map ard) (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr 2) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (forall cv, exists m_store,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+          Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_store b ofs = Some v) /\
+          (forall cv1, exists m_store1,
+             Mem.store Mint64 m_store new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_store1 /\
+             Mem.load Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+               Some (Val.load_result Mint64 cv1) /\
+             (forall b ofs chunk v, b <> new_b ->
+                Mem.load chunk m_store b ofs = Some v ->
+                Mem.load chunk m_store1 b ofs = Some v) /\
+             (forall b ofs k p,
+                Mem.perm m_alloc b ofs k p ->
+                Mem.perm m_store1 b ofs k p)))).
+
+Definition makeblock3_step_pre (t : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let sp_b := ar_stack_block ard in
+  e ! _heap_alloc = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat t))) /\
+  (0 <= Z.of_nat t <= 255) /\
+  (ar_heap_map ard) (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr 3) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (forall cv, exists m_store,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+          Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_store b ofs = Some v) /\
+          (forall cv1, exists m_store1,
+             Mem.store Mint64 m_store new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_store1 /\
+             Mem.load Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+               Some (Val.load_result Mint64 cv1) /\
+             (forall b ofs chunk v, b <> new_b ->
+                Mem.load chunk m_store b ofs = Some v ->
+                Mem.load chunk m_store1 b ofs = Some v) /\
+             (forall cv2, exists m_store2,
+                Mem.store Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 16))) cv2 = Some m_store2 /\
+                Mem.load Mint64 m_store2 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 16))) =
+                  Some (Val.load_result Mint64 cv2) /\
+                (forall b ofs chunk v, b <> new_b ->
+                   Mem.load chunk m_store1 b ofs = Some v ->
+                   Mem.load chunk m_store2 b ofs = Some v) /\
+                (forall b ofs k p,
+                   Mem.perm m_alloc b ofs k p ->
+                   Mem.perm m_store2 b ofs k p))))).
+
+Definition makeblock_step_pre (t size : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let sp_b := ar_stack_block ard in
+  let hm := ar_heap_map ard in
+  e ! _heap_alloc = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat size))) /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t)))
+       (Ptrofs.repr 4)))
+  = Some (Vint (Int.repr (Z.of_nat t))) /\
+  (0 <= Z.of_nat t <= 255) /\
+  (0 < Z.of_nat size <= Int.max_signed) /\
+  hm (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr (Z.of_nat size)) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (forall cv, exists m_store,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
+          Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_store b ofs = Some v) /\
+          (forall b ofs k p,
+             Mem.perm m_alloc b ofs k p ->
+             Mem.perm m_store b ofs k p))) /\
+  (forall le_pre m_field0 new_b new_ofs sp_b sp_ofs,
+     le_pre ! _s = Some (Vptr sb so) ->
+     le_pre ! _block = Some (Vptr new_b new_ofs) ->
+     le_pre ! _wosize = Some (Vlong (Int64.repr (Z.of_nat size))) ->
+     new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
+     Mem.load Mint64 m_field0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
+     stack_repr hm cb co m_field0 (Machine.stack s) sp_b sp_ofs ->
+     Mem.range_perm m_field0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
+       Cur Writable ->
+     exists le_loop m_loop sp_ofs_loop,
+       exec_stmt function_entry1 clight_ge e le_pre m_field0
+         (Ssequence
+           (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
+           makeblock_loop)
+         E0 le_loop m_loop Out_normal /\
+       le_loop ! _s = Some (Vptr sb so) /\
+       le_loop ! _block = Some (Vptr new_b new_ofs) /\
+       (forall ofs v,
+          Mem.load Mint64 m_field0 sb ofs = Some v ->
+          ofs <> Ptrofs.unsigned so + 16 ->
+          Mem.load Mint64 m_loop sb ofs = Some v) /\
+       Mem.load Mint64 m_loop sb (Ptrofs.unsigned so + 16) =
+         Some (Vptr sp_b sp_ofs_loop) /\
+       stack_repr hm cb co m_loop (skipn (Nat.sub size 1) (Machine.stack s))
+         sp_b sp_ofs_loop /\
+       Ptrofs.unsigned sp_ofs_loop >= 8 /\
+       (align_chunk Mint64 | Ptrofs.unsigned sp_ofs_loop) /\
+       Ptrofs.unsigned sp_ofs_loop + 8 * Z.of_nat (length (skipn (Nat.sub size 1) (Machine.stack s))) < Ptrofs.modulus /\
+       Ptrofs.unsigned sp_ofs_loop + 8 * Z.of_nat (length (skipn (Nat.sub size 1) (Machine.stack s))) <=
+         Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)) /\
+       (forall b ofs k p,
+          Mem.perm m_field0 b ofs k p ->
+          Mem.perm m_loop b ofs k p) /\
+       (forall b ofs chunk v,
+          b <> sb -> b <> sp_b -> b <> new_b ->
+          Mem.load chunk m_field0 b ofs = Some v ->
+          Mem.load chunk m_loop b ofs = Some v)).
+
+Definition makefloatblock_step_pre (n : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let sp_b := ar_stack_block ard in
+  let hm := ar_heap_map ard in
+  e ! _heap_alloc = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  (0 < Z.of_nat n <= Int.max_signed) /\
+  hm (next_addr s) = None /\
+  Mem.valid_block m gb /\
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr (Z.of_nat n)) :: Vlong (Int64.repr 254) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p)) /\
+  (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs,
+     le_pre ! _s = Some (Vptr sb so) ->
+     le_pre ! _block = Some (Vptr new_b new_ofs) ->
+     le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
+     new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
+     Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some (Vptr sp_b sp_ofs) ->
+     val_repr hm cb co (Machine.accu s) (Vptr sp_b sp_ofs) ->
+     False) /\
+  (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs accu_v0,
+     le_pre ! _s = Some (Vptr sb so) ->
+     le_pre ! _block = Some (Vptr new_b new_ofs) ->
+     le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
+     new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
+     Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some accu_v0 ->
+     val_repr hm cb co (Machine.accu s) accu_v0 ->
+     Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
+     stack_repr hm cb co m_alloc0 (Machine.stack s) sp_b sp_ofs ->
+     Mem.range_perm m_alloc0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
+       Cur Writable ->
+     (forall b ofs chunk v,
+          Mem.load chunk m_alloc0 b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc0 b ofs = Some v) ->
+     exists le_out m_out sp_ofs_out,
+       exec_stmt function_entry1 clight_ge e le_pre m_alloc0
+         makefloatblock_body_after_setblock
+         E0 le_out m_out Out_normal /\
+       le_out ! _s = Some (Vptr sb so) /\
+       le_out ! _block = Some (Vptr new_b new_ofs) /\
+       (forall v,
+          Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 0) = Some v ->
+          Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 0) = Some v) /\
+       Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 8) =
+         Some (Vptr new_b new_ofs) /\
+       Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 16) =
+         Some (Vptr sp_b sp_ofs_out) /\
+       stack_repr hm cb co m_out (skipn (Nat.sub n 1) (Machine.stack s))
+         sp_b sp_ofs_out /\
+       Ptrofs.unsigned sp_ofs_out >= 8 /\
+       (align_chunk Mint64 | Ptrofs.unsigned sp_ofs_out) /\
+       Ptrofs.unsigned sp_ofs_out + 8 * Z.of_nat (length (skipn (Nat.sub n 1) (Machine.stack s))) < Ptrofs.modulus /\
+       Ptrofs.unsigned sp_ofs_out + 8 * Z.of_nat (length (skipn (Nat.sub n 1) (Machine.stack s))) <=
+         Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)) /\
+       (forall fo v, fo >= 24 ->
+          Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + fo) = Some v ->
+          Mem.load Mint64 m_out sb (Ptrofs.unsigned so + fo) = Some v) /\
+       (forall b ofs k p,
+          Mem.perm m_alloc0 b ofs k p ->
+          Mem.perm m_out b ofs k p) /\
+       (forall ofs v,
+          Mem.load Mint64 m_alloc0 gb ofs = Some v ->
+          Mem.load Mint64 m_out gb ofs = Some v)).
+
+Definition poptrap_step_pre
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  exists v0 prev_tsp v2 v3 rest,
+    Machine.stack s = v0 :: Val_int prev_tsp :: v2 :: v3 :: rest /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Mem.load Mint64 m sp_b (Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 8)))
+       = Some (Vlong (Int64.repr (prev_tsp * 2 + 1)))) /\
+  Int64.shr (Int64.repr (prev_tsp * 2 + 1)) (Int64.repr 1) =
+    Int64.repr prev_tsp /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + 32 + 8 * Z.of_nat (length rest) < Ptrofs.modulus) /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     trap_sp_rel
+       (Vptr sp_b (Ptrofs.add sp_ofs
+          (Ptrofs.mul (Ptrofs.repr 8) (Ptrofs.of_int64 (Int64.repr prev_tsp)))))
+       (ar_stack_block ard) (ar_stack_base_ofs ard)
+       (Z.to_nat prev_tsp)).
+
+Definition pushconstint_step_pre (n : Z)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  ar_code_base_block ard <> ar_sptr_block ard /\
+  (forall sp_b sp_ofs sp_ptr,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some sp_ptr ->
+     sp_ptr = Vptr sp_b sp_ofs ->
+     ar_code_base_block ard <> sp_b) /\
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+    = Some (Vint (Int.repr n)) /\
+  Int64.add (Int64.shl (Int64.repr (Int.signed (Int.repr n)))
+                       (Int64.repr 1))
+            (Int64.repr 1) = Int64.repr (n * 2 + 1) /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs >= 16).
+
+Definition pushenvacc_n_step_pre (n : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  (exists sp_b sp_ofs,
+    Mem.load Mint64 m (ar_sptr_block ard)
+      (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) /\
+    Ptrofs.unsigned sp_ofs >= 16) /\
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Z.of_nat n < Int.half_modulus /\
+  pushenvacc_env_field_loadable n m s ard.
+
+Definition pushgetglobalfield_step_pre (n p : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+    = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
+    = Some (Vint (Int.repr (Z.of_nat p))) /\
+  0 <= Z.of_nat n <= Int.max_signed /\
+  0 <= Z.of_nat p <= Int.max_signed /\
+  Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs >= 16) /\
+  heap_field_loadable_pushgetglobalfield p m s ard.
+
+Definition pushoffsetclosure_step_pre (ofs : Z)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let hm := ar_heap_map ard in
+  (exists sp_b sp_ofs,
+     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
+     Ptrofs.unsigned sp_ofs >= 16) /\
+  (forall sp_b sp_ofs sp_ptr,
+     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some sp_ptr ->
+     sp_ptr = Vptr sp_b sp_ofs ->
+     cb <> sp_b) /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+    = Some (Vint (Int.repr ofs)) /\
+  match s.(Machine.env) with
+  | Val_closure addr base_ofs =>
+      exists env_long,
+        Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
+        val_repr hm cb co (Val_closure addr (Z.to_nat (Z.of_nat base_ofs + ofs)))
+          (Vlong (Int64.add env_long (Int64.mul (Int64.repr (Int.signed (Int.repr ofs))) (Int64.repr 8))))
+  | Val_block t _ =>
+      exists env_long,
+        Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
+        Int64.add env_long (Int64.mul (Int64.repr (Int.signed (Int.repr ofs))) (Int64.repr 8)) = env_long
+  | _ => True
+  end.
+
+Definition return_step_pre (stacksize : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat stacksize))) /\
+  Z.of_nat stacksize < Int.half_modulus /\
+  Z.of_nat (extra_args s) <= Int64.max_signed /\
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs + Z.of_nat stacksize * 8 < Ptrofs.modulus) /\
+  (stacksize <= Datatypes.length (Machine.stack s))%nat /\
+  (Nat.ltb 0 (extra_args s) = true ->
+   forall sp_b sp_ofs,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     return_tailcall_pre m s ard sp_b) /\
+  (Nat.ltb 0 (extra_args s) = false ->
+   forall sp_b sp_ofs ret_pc saved_env saved_ea rest,
+     Mem.load Mint64 m (ar_sptr_block ard)
+       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+     skipn stacksize (Machine.stack s) =
+       Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest ->
+     return_frame_pre m s ard sp_b
+       (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat stacksize * 8)))
+       ret_pc saved_env saved_ea rest).
+
+Definition setbyteschar_step_pre
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  setbyteschar_heap_pre m s ard /\
+  match s.(Machine.stack) with
+  | Val_int idx :: Val_int newchar :: _ =>
+      0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
+      0 <= newchar <= 255 /\
+      (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv -> exists z, cv = Vlong z) /\
+      (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int newchar) cv -> exists z, cv = Vlong z)
+  | _ => True
+  end.
+
+Definition setfield_step_pre (n : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  e ! _caml_modify = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Int.min_signed <= Z.of_nat n <= Int.max_signed /\
+  (exists b_cm,
+     Genv.find_symbol clight_ge _caml_modify = Some b_cm /\
+     Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
+  (forall newval rest,
+     Machine.stack s = newval :: rest ->
+     forall accu_v,
+       val_repr hm cb co (Machine.accu s) accu_v ->
+     forall sp_b sp_ofs,
+       Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
+     forall stk_top_cv,
+       val_repr hm cb co newval stk_top_cv ->
+     exists hb hofs,
+       accu_v = Vptr hb hofs /\
+       hb <> sb /\
+       hb <> sp_b /\
+       hb <> ar_global_block ard /\
+       hb <> cb /\
+       (exists m_sp,
+         Mem.store Mint64 m sb (Ptrofs.unsigned so + 16)
+           (Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))) = Some m_sp /\
+         Mem.load Mint64 m_sp sp_b (Ptrofs.unsigned sp_ofs) = Some stk_top_cv /\
+         Mem.load Mint64 m_sp sb (Ptrofs.unsigned so + 8) = Some (Vptr hb hofs) /\
+         Mem.load Mint64 m_sp sb (Ptrofs.unsigned so + 0) =
+           Some (Vptr cb (Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t)))) /\
+         (exists m_cm,
+           external_call cm_ef clight_ge
+             (Vptr hb (heap_field_target hofs (Int.repr (Z.of_nat n)))
+              :: stk_top_cv :: nil)
+             m_sp E0 Vundef m_cm /\
+           (forall ofs v,
+              Mem.load Mint64 m_sp sb ofs = Some v ->
+              Mem.load Mint64 m_cm sb ofs = Some v) /\
+           (forall ofs v_old v_new,
+              Mem.load Mint64 m_sp sb ofs = Some v_old ->
+              exists m', Mem.store Mint64 m_cm sb ofs v_new = Some m') /\
+           (forall ofs v,
+              Mem.load Mint64 m_sp sp_b ofs = Some v ->
+              Mem.load Mint64 m_cm sp_b ofs = Some v) /\
+           (forall ofs v,
+              Mem.load Mint32 m_sp cb ofs = Some v ->
+              Mem.load Mint32 m_cm cb ofs = Some v) /\
+           (global_repr hm cb co m_cm
+              (Machine.global s) (ar_global_block ard) (ar_global_ofs ard)) /\
+           (forall b ofs k p,
+              Mem.valid_block m_sp b -> Mem.perm m_sp b ofs k p ->
+              Mem.perm m_cm b ofs k p)))).
+
+Definition setglobal_step_pre (n : nat)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let go := ar_global_ofs ard in
+  let sb := ar_sptr_block ard in
+  let hm := ar_heap_map ard in
+  e ! _caml_modify = None /\
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Int.min_signed <= Z.of_nat n <= Int.max_signed /\
+  (exists b_cm,
+     Genv.find_symbol clight_ge _caml_modify = Some b_cm /\
+     Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
+  (forall accu_v,
+     val_repr hm cb co (Machine.accu s) accu_v ->
+     exists m_cm,
+       external_call cm_ef clight_ge
+         (Vptr gb (heap_field_target go (Int.repr (Z.of_nat n)))
+          :: accu_v :: nil)
+         m E0 Vundef m_cm /\
+       (forall ofs v,
+          Mem.load Mint64 m sb ofs = Some v ->
+          Mem.load Mint64 m_cm sb ofs = Some v) /\
+       (forall ofs v_old v_new,
+          Mem.load Mint64 m sb ofs = Some v_old ->
+          exists m', Mem.store Mint64 m_cm sb ofs v_new = Some m') /\
+       (forall sp_b, sp_b <> gb ->
+          forall ofs v,
+          Mem.load Mint64 m sp_b ofs = Some v ->
+          Mem.load Mint64 m_cm sp_b ofs = Some v) /\
+       (forall new_gs,
+          set_nth (Machine.global s) n (Machine.accu s) = Some new_gs ->
+          global_repr hm cb co m_cm new_gs gb go) /\
+       (set_nth (Machine.global s) n (Machine.accu s) = None ->
+          global_repr hm cb co m_cm (Machine.global s) gb go) /\
+       (forall b ofs k p,
+          Mem.valid_block m b -> Mem.perm m b ofs k p ->
+          Mem.perm m_cm b ofs k p)).
+
+Definition switch_step_pre (_nc _nb : nat) (const_targets block_targets : list Z)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  match Machine.accu s with
+  | Val_int n =>
+      0 <= n /\
+      -4611686018427387904 <= n <= 4611686018427387903 /\
+      int_vlong ard n /\
+      (exists sizes_v,
+        Mem.load Mint32 m (ar_code_base_block ard)
+          (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+             (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+        = Some (Vint sizes_v)) /\
+      (exists ofs_int,
+        Mem.load Mint32 m (ar_code_base_block ard)
+          (Ptrofs.unsigned
+            (Ptrofs.add
+              (Ptrofs.add (ar_code_base_ofs ard)
+                (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
+              (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
+                (Ptrofs.of_int64 (Int64.repr n)))))
+        = Some (Vint ofs_int) /\
+        forall target,
+          nth_error const_targets (Z.to_nat n) = Some target ->
+          Ptrofs.add
+            (Ptrofs.add (ar_code_base_ofs ard)
+              (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
+            (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
+              (ptrofs_of_int Signed ofs_int))
+          = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t)))
+  | _ => False
+  end.
 
 (* ================================================================== *)
 (* Module Type                                                         *)
@@ -1774,113 +2980,31 @@ Module Type InstructVerificationSpec.
   Parameter correct_APPLY :
     forall n,
     handler_correct (fun _ s => handle_APPLY n s) f_instr_APPLY
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Int.min_signed <= Z.of_nat n <= Int.max_signed /\
-         (1 <= n)%nat /\
-         apply_step_pre m s ard)
+      (apply_n_step_pre n)
       (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPTERM1 :
     forall slotsize,
     handler_correct (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat slotsize))) /\
-         Z.of_nat slotsize < Int.half_modulus /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + Z.of_nat slotsize * 8 < Ptrofs.modulus) /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + (Z.of_nat slotsize - 1) * 8 >= 8) /\
-         (1 <= slotsize)%nat /\
-         (slotsize <= Datatypes.length (Machine.stack s))%nat /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            apply3_closure_pre m s ard sp_b))
+      (appterm1_step_pre slotsize)
       (fun msg s => s.(Machine.stack) = nil \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPTERM2 :
     forall slotsize,
     handler_correct (fun _ s => handle_APPTERM2 slotsize s) f_instr_APPTERM2
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat slotsize))) /\
-         Z.of_nat slotsize < Int.half_modulus /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + Z.of_nat slotsize * 8 < Ptrofs.modulus) /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + (Z.of_nat slotsize - 2) * 8 >= 8) /\
-         (2 <= slotsize)%nat /\
-         (slotsize <= Datatypes.length (Machine.stack s))%nat /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            apply3_closure_pre m s ard sp_b) /\
-         Z.of_nat (Machine.extra_args s) + 1 < Int64.modulus)
+      (appterm2_step_pre slotsize)
       (fun msg s => s.(Machine.stack) = nil \/ (exists a, s.(Machine.stack) = a :: nil) \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPTERM3 :
     forall slotsize,
     handler_correct (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat slotsize))) /\
-         Z.of_nat slotsize < Int.half_modulus /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + Z.of_nat slotsize * 8 < Ptrofs.modulus) /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + (Z.of_nat slotsize - 3) * 8 >= 8) /\
-         (3 <= slotsize)%nat /\
-         (slotsize <= Datatypes.length (Machine.stack s))%nat /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            apply3_closure_pre m s ard sp_b) /\
-         Z.of_nat (extra_args s) <= Int64.max_unsigned /\
-         Z.of_nat (extra_args s) <= Int64.max_signed)
+      (appterm3_step_pre slotsize)
       (fun msg s => match s.(Machine.stack) with | _ :: _ :: _ :: _ => False | _ => True end \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPTERM :
     forall nargs slotsize,
     handler_correct (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
-      (fun e0 m s ard =>
-         get_code_ptr_s s s.(Machine.accu) <> None /\
-         let s' := match get_code_ptr_s s s.(Machine.accu) with
-                   | Some target_pc =>
-                     s <|pc := target_pc|>
-                       <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
-                       <|env := s.(Machine.accu)|>
-                       <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
-                   | None => s
-                   end in
-         forall le,
-           abs_rel_with_ard e0 le m s ard ->
-           exists le' m' out,
-             exec_stmt function_entry1 clight_ge e0 le m
-               (fn_body f_instr_APPTERM) E0 le' m' out /\
-             abs_rel e0 le' m' s')
+      (appterm_step_pre nargs slotsize)
       (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ASRINT :
@@ -1891,20 +3015,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_ASSIGN :
     forall n,
     handler_correct (handle_ASSIGN n) f_instr_ASSIGN
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (0 <= Z.of_nat n <= Int.max_signed)%Z /\
-         (forall m1 sp_b sp_ofs accu_v,
-           stack_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m1 (Machine.stack s) sp_b sp_ofs ->
-           val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) accu_v ->
-           Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n < Ptrofs.modulus ->
-           exists m_sw,
-             Mem.store Mint64 m1 sp_b
-               (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) accu_v = Some m_sw))
+      (assign_step_pre n)
       (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ATOM0 :
@@ -1968,49 +3079,13 @@ Module Type InstructVerificationSpec.
   Parameter correct_BRANCHIFNOT :
     forall target,
     handler_correct (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
-      (fun _ m s ard =>
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (exists ofs_int,
-           Mem.load Mint32 m (ar_code_base_block ard)
-             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t)))) = Some (Vint ofs_int) /\
-           Ptrofs.add
-             (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t)))
-             (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                         (ptrofs_of_int Signed ofs_int))
-           = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t))) /\
-         match Machine.accu s with
-         | Val_int n => -4611686018427387904 <= n <= 4611686018427387903
-         | Val_block _ nil => True
-         | Val_ptr _ | Val_closure _ _ => False
-         | Val_block _ (_ :: _) => True
-         end /\
-         (forall n, Machine.accu s = Val_int n ->
-            forall cv,
-            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
-            exists z, cv = Vlong z))
+      (branchifnot_step_pre target)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BRANCHIF :
     forall target,
     handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
-      (fun _ m s ard =>
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint (Int.repr (target - Machine.pc s))) /\
-         (Machine.accu s <> Val_int 0 ->
-            forall cv,
-            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
-            sem_binary_operation (genv_cenv clight_ge) Cop.One
-              cv tlong (Vlong (Int64.repr 1)) tlong m
-              = Some (Vint Int.one)) /\
-         (Machine.accu s = Val_int 0 ->
-            forall cv,
-            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
-            exists z, cv = Vlong z))
+      (branchif_step_pre target)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BRANCH :
@@ -2044,130 +3119,21 @@ Module Type InstructVerificationSpec.
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_CLOSUREREC :
-    forall code_ofs,
+    forall code_ofs, Int.min_signed <= code_ofs <= Int.max_signed ->
     handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         e ! _heap_alloc = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr 1)) /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
-         = Some (Vint (Int.repr 0)) /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr ((Machine.pc s + 2) * sizeof_code_t))))
-         = Some (Vint (Int.repr code_ofs)) /\
-         (Int.min_signed <= code_ofs <= Int.max_signed) /\
-         (ar_heap_map ard) (next_addr s) = None /\
-         Mem.valid_block m gb /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr 2) :: Vlong (Int64.repr 247) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (forall cv, exists m_s0,
-                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
-                 Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
-                   Some (Val.load_result Mint64 cv) /\
-                 (forall b ofs chunk v, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v ->
-                    Mem.load chunk m_s0 b ofs = Some v) /\
-                 (forall cv1, exists m_s1,
-                    Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
-                    Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
-                      Some (Val.load_result Mint64 cv1) /\
-                    (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
-                       Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
-                    (forall b ofs chunk v, b <> new_b ->
-                       Mem.load chunk m_s0 b ofs = Some v ->
-                       Mem.load chunk m_s1 b ofs = Some v) /\
-                    (forall b ofs k p,
-                       Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
-                       Mem.perm m_s1 b ofs k p)))) /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs >= 16 /\
-            (align_chunk Mint64 | Ptrofs.unsigned sp_ofs - 8) /\
-            Ptrofs.unsigned sp_ofs - 8 + 8 < Ptrofs.modulus))
+      (heap_alloc_with_stores 2 247 alloc_store_2
+       /\p code_at (Int.repr 1)
+       /\p code_arg_at 1 (Int.repr 0)
+       /\p code_arg_at 2 (Int.repr code_ofs)
+       /\p sp_at_least 16)
       (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_CLOSURE :
-    forall code_ofs,
+    forall code_ofs, Int.min_signed <= code_ofs <= Int.max_signed ->
     handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         e ! _heap_alloc = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr 0)) /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
-         = Some (Vint (Int.repr code_ofs)) /\
-         (Int.min_signed <= code_ofs <= Int.max_signed) /\
-         (ar_heap_map ard) (next_addr s) = None /\
-         Mem.valid_block m gb /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr 2) :: Vlong (Int64.repr 247) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (forall cv, exists m_s0,
-                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
-                 Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
-                   Some (Val.load_result Mint64 cv) /\
-                 (forall b ofs chunk v, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v ->
-                    Mem.load chunk m_s0 b ofs = Some v) /\
-                 (forall cv1, exists m_s1,
-                    Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
-                    Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
-                      Some (Val.load_result Mint64 cv1) /\
-                    (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
-                       Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
-                    (forall b ofs chunk v, b <> new_b ->
-                       Mem.load chunk m_s0 b ofs = Some v ->
-                       Mem.load chunk m_s1 b ofs = Some v) /\
-                    (forall b ofs k p,
-                       Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
-                       Mem.perm m_s1 b ofs k p)))))
+      (heap_alloc_with_stores 2 247 alloc_store_2
+       /\p code_at (Int.repr 0)
+       /\p code_arg_at 1 (Int.repr code_ofs))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_CONST0 :
@@ -2258,15 +3224,9 @@ Module Type InstructVerificationSpec.
       (fun _ s => field_or_heap s s.(Machine.env) 4 = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ENVACC :
-    forall n,
+    forall n, Z.of_nat n < Int.half_modulus ->
     handler_correct (handle_ENVACC n) f_instr_ENVACC
-      (fun e m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Z.of_nat n < Int.half_modulus /\
-         env_field_loadable n e m s ard)
+      (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
       (fun _ s => field_or_heap s s.(Machine.env) n = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_EQ :
@@ -2286,24 +3246,12 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_GETBYTESCHAR :
     handler_correct handle_GETSTRINGCHAR f_instr_GETBYTESCHAR
-      (fun e m s ard =>
-         getstringchar_heap_pre m s ard /\
-         match s.(Machine.stack) with
-         | Val_int idx :: _ =>
-             0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
-             match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
-             | Some (Val_int c) => 0 <= c <= 255
-             | _ => True
-             end /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
-              exists z, cv = Vlong z)
-         | _ => True
-         end)
+      getstringchar_step_pre
       (fun msg s => match s.(Machine.stack) with | Val_int idx :: _ => match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with | Some (Val_int _) => False | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETDYNMET :
     handler_correct handle_GETDYNMET f_instr_GETDYNMET
-      (fun e m s ard => getdynmet_pre e m s ard)
+      getdynmet_pre
       (fun msg s => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETFIELD0 :
@@ -2327,100 +3275,21 @@ Module Type InstructVerificationSpec.
       (fun _ s => field_or_heap s s.(Machine.accu) 3 = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETFIELD :
-    forall n,
+    forall n, Int.min_signed <= Z.of_nat n <= Int.max_signed ->
     handler_correct (handle_GETFIELD n) f_instr_GETFIELD
-      (fun e m s ard =>
-         heap_field_loadable n e m s ard /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Int.min_signed <= Z.of_nat n <= Int.max_signed)
+      (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
       (fun _ s => field_or_heap s s.(Machine.accu) n = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETFLOATFIELD :
     forall n,
     handler_correct (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let hm := ar_heap_map ard in
-         e ! _heap_alloc = None /\
-         float_field_loadable_sep n m s ard /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Int.min_signed <= Z.of_nat n <= Int.max_signed /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         Mem.valid_block m gb /\
-         (forall m' fv,
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr 253) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v0,
-                 Mem.load chunk m' b ofs = Some v0 -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v0) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (exists m_fstore,
-                 Mem.store Mfloat64 m_alloc new_b (Ptrofs.unsigned new_ofs) (Vfloat fv) = Some m_fstore /\
-                 (forall b ofs chunk v0, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v0 ->
-                    Mem.load chunk m_fstore b ofs = Some v0) /\
-                 (forall b ofs k p,
-                    Mem.perm m_alloc b ofs k p ->
-                    Mem.perm m_fstore b ofs k p))) /\
-         (forall v new_b new_ofs,
-            field_or_heap s s.(Machine.accu) n = Some v ->
-            exists hm',
-              val_repr hm' cb co v (Vptr new_b new_ofs) /\
-              (forall v0 cv, val_repr hm cb co v0 cv -> val_repr hm' cb co v0 cv) /\
-              (forall stk m0 sp_b0 sp_ofs0,
-                 stack_repr hm cb co m0 stk sp_b0 sp_ofs0 ->
-                 stack_repr hm' cb co m0 stk sp_b0 sp_ofs0) /\
-              (forall gs m0 gb0 gofs0,
-                 global_repr hm cb co m0 gs gb0 gofs0 ->
-                 global_repr hm' cb co m0 gs gb0 gofs0)))
+      (getfloatfield_step_pre n)
       (fun _ s => field_or_heap s s.(Machine.accu) n = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETGLOBALFIELD :
     forall n p,
     handler_correct (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))) (Ptrofs.repr 4)))
-         = Some (Vint (Int.repr (Z.of_nat p))) /\
-         0 <= Z.of_nat n <= Int.max_signed /\
-         0 <= Z.of_nat p <= Int.max_signed /\
-         Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus /\
-         (forall glob v cv_global,
-            nth_error s.(Machine.global) n = Some glob ->
-            field_or_heap s glob p = Some v ->
-            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) glob cv_global ->
-            exists b ofs cv,
-              cv_global = Vptr b ofs /\
-              b <> ar_sptr_block ard /\
-              Mem.load Mint64 m b
-                (Ptrofs.unsigned (Ptrofs.add ofs
-                   (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed (Int.repr (Z.of_nat p))))))
-                = Some cv /\
-              val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) v cv))
+      (getglobalfield_step_pre n p)
       (fun msg s => (nth_error s.(Machine.global) n = None /\ msg = "GETGLOBALFIELD: index out of bounds"%string) \/ (exists glob, nth_error s.(Machine.global) n = Some glob /\ field_or_heap s glob p = None /\ msg = "GETGLOBALFIELD: field access failed"%string)) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETGLOBAL :
@@ -2432,15 +3301,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_GETMETHOD :
     handler_correct handle_GETMETHOD f_instr_GETMETHOD
-      (fun _ m s ard =>
-         getmethod_heap_pre m s ard /\
-         match s.(Machine.accu) with
-         | Val_int n => 0 <= n /\
-                        n * 2 + 1 <= Int64.max_signed /\
-                        n < Ptrofs.half_modulus /\
-                        (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int n) cv -> exists z, cv = Vlong z)
-         | _ => True
-         end)
+      getmethod_step_pre
       (fun msg s =>
          match msg with
          | _ => True
@@ -2450,24 +3311,12 @@ Module Type InstructVerificationSpec.
   Parameter correct_GETPUBMET :
     forall tag,
     handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
-      (fun e m s ard => getpubmet_pre tag e m s ard)
+      (getpubmet_pre tag)
       (fun msg s => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETSTRINGCHAR :
     handler_correct handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
-      (fun _ m s ard =>
-         getstringchar_heap_pre m s ard /\
-         match s.(Machine.stack) with
-         | Val_int idx :: _ =>
-             0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
-             match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
-             | Some (Val_int c) => 0 <= c <= 255
-             | _ => True
-             end /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
-              exists z, cv = Vlong z)
-         | _ => True
-         end)
+      getstringchar_step_pre
       (fun msg s =>
          match s.(Machine.stack) with
          | Val_int idx :: _ =>
@@ -2481,17 +3330,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_GETVECTITEM :
     handler_correct handle_GETVECTITEM f_instr_GETVECTITEM
-      (fun _ m s ard =>
-         getvectitem_heap_pre m s ard /\
-         match s.(Machine.stack) with
-         | Val_int idx :: _ =>
-             0 <= idx /\
-             idx * 2 + 1 <= Int64.max_signed /\
-             idx < Ptrofs.half_modulus /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
-              exists z, cv = Vlong z)
-         | _ => True
-         end)
+      getvectitem_step_pre
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | _, Val_int idx :: _ =>
                     field_or_heap s s.(Machine.accu) (Z.to_nat idx) = None
@@ -2501,15 +3340,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_GRAB :
     forall required,
     handler_correct (handle_GRAB required) f_instr_GRAB
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat required))) /\
-         0 <= Z.of_nat required <= Int.max_signed /\
-         Z.of_nat (extra_args s) <= Int64.max_signed /\
-         Z.of_nat (extra_args s) <= Int64.max_unsigned /\
-         Nat.leb required (extra_args s) = true)
+      (grab_step_pre required)
       (fun msg s => msg = "GRAB: malformed return frame"%string /\ Nat.leb required (extra_args s) = false /\ match skipn (S (extra_args s)) (Machine.stack s) with | Val_int _ :: _ :: Val_int _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GTINT :
@@ -2543,342 +3374,36 @@ Module Type InstructVerificationSpec.
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MAKEBLOCK1 :
-    forall t,
+    forall t, 0 <= Z.of_nat t <= 255 ->
     handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let sp_b := ar_stack_block ard in
-         e ! _heap_alloc = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat t))) /\
-         (0 <= Z.of_nat t <= 255) /\
-         (ar_heap_map ard) (next_addr s) = None /\
-         Mem.valid_block m gb /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr 1) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (forall cv, exists m_store,
-                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
-                 Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
-                   Some (Val.load_result Mint64 cv) /\
-                 (forall b ofs chunk v, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v ->
-                    Mem.load chunk m_store b ofs = Some v))))
+      (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1
+       /\p code_at (Int.repr (Z.of_nat t)))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MAKEBLOCK2 :
-    forall t,
+    forall t, 0 <= Z.of_nat t <= 255 ->
     handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let sp_b := ar_stack_block ard in
-         e ! _heap_alloc = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat t))) /\
-         (0 <= Z.of_nat t <= 255) /\
-         (ar_heap_map ard) (next_addr s) = None /\
-         Mem.valid_block m gb /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr 2) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (forall cv, exists m_store,
-                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
-                 Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
-                   Some (Val.load_result Mint64 cv) /\
-                 (forall b ofs chunk v, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v ->
-                    Mem.load chunk m_store b ofs = Some v) /\
-                 (forall cv1, exists m_store1,
-                    Mem.store Mint64 m_store new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_store1 /\
-                    Mem.load Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
-                      Some (Val.load_result Mint64 cv1) /\
-                    (forall b ofs chunk v, b <> new_b ->
-                       Mem.load chunk m_store b ofs = Some v ->
-                       Mem.load chunk m_store1 b ofs = Some v) /\
-                    (forall b ofs k p,
-                       Mem.perm m_alloc b ofs k p ->
-                       Mem.perm m_store1 b ofs k p)))))
+      (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
+       /\p code_at (Int.repr (Z.of_nat t)))
       (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MAKEBLOCK3 :
-    forall t,
+    forall t, 0 <= Z.of_nat t <= 255 ->
     handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let sp_b := ar_stack_block ard in
-         e ! _heap_alloc = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat t))) /\
-         (0 <= Z.of_nat t <= 255) /\
-         (ar_heap_map ard) (next_addr s) = None /\
-         Mem.valid_block m gb /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr 3) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (forall cv, exists m_store,
-                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
-                 Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
-                   Some (Val.load_result Mint64 cv) /\
-                 (forall b ofs chunk v, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v ->
-                    Mem.load chunk m_store b ofs = Some v) /\
-                 (forall cv1, exists m_store1,
-                    Mem.store Mint64 m_store new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_store1 /\
-                    Mem.load Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
-                      Some (Val.load_result Mint64 cv1) /\
-                    (forall b ofs chunk v, b <> new_b ->
-                       Mem.load chunk m_store b ofs = Some v ->
-                       Mem.load chunk m_store1 b ofs = Some v) /\
-                    (forall cv2, exists m_store2,
-                       Mem.store Mint64 m_store1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 16))) cv2 = Some m_store2 /\
-                       Mem.load Mint64 m_store2 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 16))) =
-                         Some (Val.load_result Mint64 cv2) /\
-                       (forall b ofs chunk v, b <> new_b ->
-                          Mem.load chunk m_store1 b ofs = Some v ->
-                          Mem.load chunk m_store2 b ofs = Some v) /\
-                       (forall b ofs k p,
-                          Mem.perm m_alloc b ofs k p ->
-                          Mem.perm m_store2 b ofs k p))))))
+      (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
+       /\p code_at (Int.repr (Z.of_nat t)))
       (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MAKEBLOCK :
     forall (t size : nat), (size >= 1)%nat ->
     handler_correct (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let sp_b := ar_stack_block ard in
-         let hm := ar_heap_map ard in
-         e ! _heap_alloc = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat size))) /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t)))
-              (Ptrofs.repr 4)))
-         = Some (Vint (Int.repr (Z.of_nat t))) /\
-         (0 <= Z.of_nat t <= 255) /\
-         (0 < Z.of_nat size <= Int.max_signed) /\
-         hm (next_addr s) = None /\
-         Mem.valid_block m gb /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr (Z.of_nat size)) :: Vlong (Int64.repr (Z.of_nat t)) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (forall cv, exists m_store,
-                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
-                 Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
-                   Some (Val.load_result Mint64 cv) /\
-                 (forall b ofs chunk v, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v ->
-                    Mem.load chunk m_store b ofs = Some v) /\
-                 (forall b ofs k p,
-                    Mem.perm m_alloc b ofs k p ->
-                    Mem.perm m_store b ofs k p))) /\
-         (forall le_pre m_field0 new_b new_ofs sp_b sp_ofs,
-            le_pre ! _s = Some (Vptr sb so) ->
-            le_pre ! _block = Some (Vptr new_b new_ofs) ->
-            le_pre ! _wosize = Some (Vlong (Int64.repr (Z.of_nat size))) ->
-            new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
-            Mem.load Mint64 m_field0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-            stack_repr hm cb co m_field0 (Machine.stack s) sp_b sp_ofs ->
-            Mem.range_perm m_field0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
-              Cur Writable ->
-            exists le_loop m_loop sp_ofs_loop,
-              exec_stmt function_entry1 clight_ge e le_pre m_field0
-                (Ssequence
-                  (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
-                  makeblock_loop)
-                E0 le_loop m_loop Out_normal /\
-              le_loop ! _s = Some (Vptr sb so) /\
-              le_loop ! _block = Some (Vptr new_b new_ofs) /\
-              (forall ofs v,
-                 Mem.load Mint64 m_field0 sb ofs = Some v ->
-                 ofs <> Ptrofs.unsigned so + 16 ->
-                 Mem.load Mint64 m_loop sb ofs = Some v) /\
-              Mem.load Mint64 m_loop sb (Ptrofs.unsigned so + 16) =
-                Some (Vptr sp_b sp_ofs_loop) /\
-              stack_repr hm cb co m_loop (skipn (Nat.sub size 1) (Machine.stack s))
-                sp_b sp_ofs_loop /\
-              Ptrofs.unsigned sp_ofs_loop >= 8 /\
-              (align_chunk Mint64 | Ptrofs.unsigned sp_ofs_loop) /\
-              Ptrofs.unsigned sp_ofs_loop + 8 * Z.of_nat (length (skipn (Nat.sub size 1) (Machine.stack s))) < Ptrofs.modulus /\
-              Ptrofs.unsigned sp_ofs_loop + 8 * Z.of_nat (length (skipn (Nat.sub size 1) (Machine.stack s))) <=
-                Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)) /\
-              (forall b ofs k p,
-                 Mem.perm m_field0 b ofs k p ->
-                 Mem.perm m_loop b ofs k p) /\
-              (forall b ofs chunk v,
-                 b <> sb -> b <> sp_b -> b <> new_b ->
-                 Mem.load chunk m_field0 b ofs = Some v ->
-                 Mem.load chunk m_loop b ofs = Some v)))
+      (makeblock_step_pre t size)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MAKEFLOATBLOCK :
     forall (n : nat), (n >= 1)%nat ->
     handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let sp_b := ar_stack_block ard in
-         let hm := ar_heap_map ard in
-         e ! _heap_alloc = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         (0 < Z.of_nat n <= Int.max_signed) /\
-         hm (next_addr s) = None /\
-         Mem.valid_block m gb /\
-         (exists b_ha,
-            Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv clight_ge))
-                (Vptr sb so :: Vlong (Int64.repr (Z.of_nat n)) :: Vlong (Int64.repr 254) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p)) /\
-         (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs,
-            le_pre ! _s = Some (Vptr sb so) ->
-            le_pre ! _block = Some (Vptr new_b new_ofs) ->
-            le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
-            new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
-            Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some (Vptr sp_b sp_ofs) ->
-            val_repr hm cb co (Machine.accu s) (Vptr sp_b sp_ofs) ->
-            False) /\
-         (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs accu_v0,
-            le_pre ! _s = Some (Vptr sb so) ->
-            le_pre ! _block = Some (Vptr new_b new_ofs) ->
-            le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
-            new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
-            Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some accu_v0 ->
-            val_repr hm cb co (Machine.accu s) accu_v0 ->
-            Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-            stack_repr hm cb co m_alloc0 (Machine.stack s) sp_b sp_ofs ->
-            Mem.range_perm m_alloc0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
-              Cur Writable ->
-            (forall b ofs chunk v,
-                 Mem.load chunk m_alloc0 b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc0 b ofs = Some v) ->
-            exists le_out m_out sp_ofs_out,
-              exec_stmt function_entry1 clight_ge e le_pre m_alloc0
-                makefloatblock_body_after_setblock
-                E0 le_out m_out Out_normal /\
-              le_out ! _s = Some (Vptr sb so) /\
-              le_out ! _block = Some (Vptr new_b new_ofs) /\
-              (forall v,
-                 Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 0) = Some v ->
-                 Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 0) = Some v) /\
-              Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 8) =
-                Some (Vptr new_b new_ofs) /\
-              Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 16) =
-                Some (Vptr sp_b sp_ofs_out) /\
-              stack_repr hm cb co m_out (skipn (Nat.sub n 1) (Machine.stack s))
-                sp_b sp_ofs_out /\
-              Ptrofs.unsigned sp_ofs_out >= 8 /\
-              (align_chunk Mint64 | Ptrofs.unsigned sp_ofs_out) /\
-              Ptrofs.unsigned sp_ofs_out + 8 * Z.of_nat (length (skipn (Nat.sub n 1) (Machine.stack s))) < Ptrofs.modulus /\
-              Ptrofs.unsigned sp_ofs_out + 8 * Z.of_nat (length (skipn (Nat.sub n 1) (Machine.stack s))) <=
-                Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)) /\
-              (forall fo v, fo >= 24 ->
-                 Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + fo) = Some v ->
-                 Mem.load Mint64 m_out sb (Ptrofs.unsigned so + fo) = Some v) /\
-              (forall b ofs k p,
-                 Mem.perm m_alloc0 b ofs k p ->
-                 Mem.perm m_out b ofs k p) /\
-              (forall ofs v,
-                 Mem.load Mint64 m_alloc0 gb ofs = Some v ->
-                 Mem.load Mint64 m_out gb ofs = Some v)))
+      (makefloatblock_step_pre n)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MODINT :
@@ -2919,7 +3444,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_OFFSETCLOSURE :
     forall n,
     handler_correct (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
-      (fun e m s ard => offsetclosure_pre n e m s ard)
+      (offsetclosure_pre n)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_OFFSETINT :
@@ -2954,28 +3479,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_POPTRAP :
     handler_correct (handle_POPTRAP) f_instr_POPTRAP
-      (fun _ m s ard =>
-         exists v0 prev_tsp v2 v3 rest,
-           Machine.stack s = v0 :: Val_int prev_tsp :: v2 :: v3 :: rest /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Mem.load Mint64 m sp_b (Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 8)))
-              = Some (Vlong (Int64.repr (prev_tsp * 2 + 1)))) /\
-         Int64.shr (Int64.repr (prev_tsp * 2 + 1)) (Int64.repr 1) =
-           Int64.repr prev_tsp /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + 32 + 8 * Z.of_nat (length rest) < Ptrofs.modulus) /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            trap_sp_rel
-              (Vptr sp_b (Ptrofs.add sp_ofs
-                 (Ptrofs.mul (Ptrofs.repr 8) (Ptrofs.of_int64 (Int64.repr prev_tsp)))))
-              (ar_stack_block ard) (ar_stack_base_ofs ard)
-              (Z.to_nat prev_tsp)))
+      poptrap_step_pre
       (fun msg _ => msg = "POPTRAP: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_POP :
@@ -3054,24 +3558,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_PUSHCONSTINT :
     forall n,
     handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
-      (fun _ m s ard =>
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (forall sp_b sp_ofs sp_ptr,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some sp_ptr ->
-            sp_ptr = Vptr sp_b sp_ofs ->
-            ar_code_base_block ard <> sp_b) /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint (Int.repr n)) /\
-         Int64.add (Int64.shl (Int64.repr (Int.signed (Int.repr n)))
-                              (Int64.repr 1))
-                   (Int64.repr 1) = Int64.repr (n * 2 + 1) /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs >= 16))
+      (pushconstint_step_pre n)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSHENVACC1 :
@@ -3114,23 +3601,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_PUSHGETGLOBALFIELD :
     forall n p,
     handler_correct (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
-           = Some (Vint (Int.repr (Z.of_nat p))) /\
-         0 <= Z.of_nat n <= Int.max_signed /\
-         0 <= Z.of_nat p <= Int.max_signed /\
-         Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs >= 16) /\
-         heap_field_loadable_pushgetglobalfield p m s ard)
+      (pushgetglobalfield_step_pre n p)
       (fun msg s =>
          nth_error s.(Machine.global) n = None \/
          (exists glob, nth_error s.(Machine.global) n = Some glob /\
@@ -3162,47 +3633,19 @@ Module Type InstructVerificationSpec.
   Parameter correct_PUSHOFFSETCLOSURE :
     forall ofs,
     handler_correct (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let hm := ar_heap_map ard in
-         (exists sp_b sp_ofs,
-            Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-            Ptrofs.unsigned sp_ofs >= 16) /\
-         (forall sp_b sp_ofs sp_ptr,
-            Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some sp_ptr ->
-            sp_ptr = Vptr sp_b sp_ofs ->
-            cb <> sp_b) /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint (Int.repr ofs)) /\
-         match s.(Machine.env) with
-         | Val_closure addr base_ofs =>
-             exists env_long,
-               Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
-               val_repr hm cb co (Val_closure addr (Z.to_nat (Z.of_nat base_ofs + ofs)))
-                 (Vlong (Int64.add env_long (Int64.mul (Int64.repr (Int.signed (Int.repr ofs))) (Int64.repr 8))))
-         | Val_block t _ =>
-             exists env_long,
-               Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
-               Int64.add env_long (Int64.mul (Int64.repr (Int.signed (Int.repr ofs))) (Int64.repr 8)) = env_long
-         | _ => True
-         end)
+      (pushoffsetclosure_step_pre ofs)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSHTRAP :
     forall handler_pc,
     handler_correct (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
-      (fun _ m s ard => pushtrap_step_pre handler_pc m s ard)
+      (pushtrap_step_pre handler_pc)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSH_RETADDR :
     forall ret_addr,
     handler_correct (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
-      (fun _ m s ard => push_retaddr_step_pre ret_addr m s ard)
+      (push_retaddr_step_pre ret_addr)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSH :
@@ -3248,46 +3691,12 @@ Module Type InstructVerificationSpec.
   Parameter correct_RETURN :
     forall stacksize,
     handler_correct (fun _ => handle_RETURN stacksize) f_instr_RETURN
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat stacksize))) /\
-         Z.of_nat stacksize < Int.half_modulus /\
-         Z.of_nat (extra_args s) <= Int64.max_signed /\
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + Z.of_nat stacksize * 8 < Ptrofs.modulus) /\
-         (stacksize <= Datatypes.length (Machine.stack s))%nat /\
-         (Nat.ltb 0 (extra_args s) = true ->
-          forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            return_tailcall_pre m s ard sp_b) /\
-         (Nat.ltb 0 (extra_args s) = false ->
-          forall sp_b sp_ofs ret_pc saved_env saved_ea rest,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            skipn stacksize (Machine.stack s) =
-              Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest ->
-            return_frame_pre m s ard sp_b
-              (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat stacksize * 8)))
-              ret_pc saved_env saved_ea rest))
+      (return_step_pre stacksize)
       (fun msg _ => msg = "RETURN: accu is not a closure"%string \/ msg = "RETURN: malformed return frame"%string) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_SETBYTESCHAR :
     handler_correct handle_SETBYTESCHAR f_instr_SETBYTESCHAR
-      (fun _ m s ard =>
-         setbyteschar_heap_pre m s ard /\
-         match s.(Machine.stack) with
-         | Val_int idx :: Val_int newchar :: _ =>
-             0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
-             0 <= newchar <= 255 /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv -> exists z, cv = Vlong z) /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int newchar) cv -> exists z, cv = Vlong z)
-         | _ => True
-         end)
+      setbyteschar_step_pre
       (fun _ s =>
          match s.(Machine.stack) with
          | Val_int idx :: Val_int newchar :: _ =>
@@ -3327,72 +3736,13 @@ Module Type InstructVerificationSpec.
   Parameter correct_SETFIELD :
     forall n,
     handler_correct (handle_SETFIELD n) f_instr_SETFIELD
-      (fun e m s ard =>
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let hm := ar_heap_map ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         e ! _caml_modify = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Int.min_signed <= Z.of_nat n <= Int.max_signed /\
-         (exists b_cm,
-            Genv.find_symbol clight_ge _caml_modify = Some b_cm /\
-            Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
-         (forall newval rest,
-            Machine.stack s = newval :: rest ->
-            forall accu_v,
-              val_repr hm cb co (Machine.accu s) accu_v ->
-            forall sp_b sp_ofs,
-              Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-            forall stk_top_cv,
-              val_repr hm cb co newval stk_top_cv ->
-            exists hb hofs,
-              accu_v = Vptr hb hofs /\
-              hb <> sb /\
-              hb <> sp_b /\
-              hb <> ar_global_block ard /\
-              hb <> cb /\
-              (exists m_sp,
-                Mem.store Mint64 m sb (Ptrofs.unsigned so + 16)
-                  (Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))) = Some m_sp /\
-                Mem.load Mint64 m_sp sp_b (Ptrofs.unsigned sp_ofs) = Some stk_top_cv /\
-                Mem.load Mint64 m_sp sb (Ptrofs.unsigned so + 8) = Some (Vptr hb hofs) /\
-                Mem.load Mint64 m_sp sb (Ptrofs.unsigned so + 0) =
-                  Some (Vptr cb (Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t)))) /\
-                (exists m_cm,
-                  external_call cm_ef clight_ge
-                    (Vptr hb (heap_field_target hofs (Int.repr (Z.of_nat n)))
-                     :: stk_top_cv :: nil)
-                    m_sp E0 Vundef m_cm /\
-                  (forall ofs v,
-                     Mem.load Mint64 m_sp sb ofs = Some v ->
-                     Mem.load Mint64 m_cm sb ofs = Some v) /\
-                  (forall ofs v_old v_new,
-                     Mem.load Mint64 m_sp sb ofs = Some v_old ->
-                     exists m', Mem.store Mint64 m_cm sb ofs v_new = Some m') /\
-                  (forall ofs v,
-                     Mem.load Mint64 m_sp sp_b ofs = Some v ->
-                     Mem.load Mint64 m_cm sp_b ofs = Some v) /\
-                  (forall ofs v,
-                     Mem.load Mint32 m_sp cb ofs = Some v ->
-                     Mem.load Mint32 m_cm cb ofs = Some v) /\
-                  (global_repr hm cb co m_cm
-                     (Machine.global s) (ar_global_block ard) (ar_global_ofs ard)) /\
-                  (forall b ofs k p,
-                     Mem.valid_block m_sp b -> Mem.perm m_sp b ofs k p ->
-                     Mem.perm m_cm b ofs k p)))))
+      (setfield_step_pre n)
       (fun _ s => match s.(Machine.stack) with | newval :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields n newval = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_SETFLOATFIELD :
     forall n,
     handler_correct (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
-      (fun e m s ard =>
+      (fun _ m s ard =>
          setfloatfield_heap_pre n m s ard /\
          setfloatfield_code_pre n m s ard)
       (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields n (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
@@ -3400,52 +3750,12 @@ Module Type InstructVerificationSpec.
   Parameter correct_SETGLOBAL :
     forall n,
     handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
-      (fun e m s ard =>
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let go := ar_global_ofs ard in
-         let sb := ar_sptr_block ard in
-         let hm := ar_heap_map ard in
-         e ! _caml_modify = None /\
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Int.min_signed <= Z.of_nat n <= Int.max_signed /\
-         (exists b_cm,
-            Genv.find_symbol clight_ge _caml_modify = Some b_cm /\
-            Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
-         (forall accu_v,
-            val_repr hm cb co (Machine.accu s) accu_v ->
-            exists m_cm,
-              external_call cm_ef clight_ge
-                (Vptr gb (heap_field_target go (Int.repr (Z.of_nat n)))
-                 :: accu_v :: nil)
-                m E0 Vundef m_cm /\
-              (forall ofs v,
-                 Mem.load Mint64 m sb ofs = Some v ->
-                 Mem.load Mint64 m_cm sb ofs = Some v) /\
-              (forall ofs v_old v_new,
-                 Mem.load Mint64 m sb ofs = Some v_old ->
-                 exists m', Mem.store Mint64 m_cm sb ofs v_new = Some m') /\
-              (forall sp_b, sp_b <> gb ->
-                 forall ofs v,
-                 Mem.load Mint64 m sp_b ofs = Some v ->
-                 Mem.load Mint64 m_cm sp_b ofs = Some v) /\
-              (forall new_gs,
-                 set_nth (Machine.global s) n (Machine.accu s) = Some new_gs ->
-                 global_repr hm cb co m_cm new_gs gb go) /\
-              (set_nth (Machine.global s) n (Machine.accu s) = None ->
-                 global_repr hm cb co m_cm (Machine.global s) gb go) /\
-              (forall b ofs k p,
-                 Mem.valid_block m b -> Mem.perm m b ofs k p ->
-                 Mem.perm m_cm b ofs k p)))
+      (setglobal_step_pre n)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_SETVECTITEM :
     handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
-      (fun e m s ard => setvectitem_pre e m s ard)
+      setvectitem_pre
       (fun _ s => match s.(Machine.stack) with | Val_int idx :: newval :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields (Z.to_nat idx) newval = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_STOP :
@@ -3461,36 +3771,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_SWITCH :
     forall (_nc _nb : nat) (const_targets block_targets : list Z),
     handler_correct (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s) f_instr_SWITCH
-      (fun _ m s ard =>
-         match Machine.accu s with
-         | Val_int n =>
-             0 <= n /\
-             -4611686018427387904 <= n <= 4611686018427387903 /\
-             int_vlong ard n /\
-             (exists sizes_v,
-               Mem.load Mint32 m (ar_code_base_block ard)
-                 (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                    (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-               = Some (Vint sizes_v)) /\
-             (exists ofs_int,
-               Mem.load Mint32 m (ar_code_base_block ard)
-                 (Ptrofs.unsigned
-                   (Ptrofs.add
-                     (Ptrofs.add (ar_code_base_ofs ard)
-                       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
-                     (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                       (Ptrofs.of_int64 (Int64.repr n)))))
-               = Some (Vint ofs_int) /\
-               forall target,
-                 nth_error const_targets (Z.to_nat n) = Some target ->
-                 Ptrofs.add
-                   (Ptrofs.add (ar_code_base_ofs ard)
-                     (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
-                   (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                     (ptrofs_of_int Signed ofs_int))
-                 = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t)))
-         | _ => False
-         end)
+      (switch_step_pre _nc _nb const_targets block_targets)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_UGEINT :
