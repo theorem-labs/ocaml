@@ -815,7 +815,10 @@ Definition alloc_store_1
        Mem.load chunk m_alloc b ofs = Some v ->
        Mem.load chunk m_store b ofs = Some v).
 
-(* 2-field store chain: two Mint64 slots at new_ofs and new_ofs+8. *)
+(* 2-field store chain: two Mint64 slots at new_ofs and new_ofs+8.
+   Perm clause preserves from m_alloc through both stores.
+   Field0-load-pres and valid_block variants can be derived via
+   Mem.perm_store_2 / Mem.load_store_other in bridge proofs. *)
 Definition alloc_store_2
     (new_b : block) (new_ofs : ptrofs) (m_alloc : mem) : Prop :=
   forall cv, exists m_store,
@@ -835,7 +838,7 @@ Definition alloc_store_2
           Mem.load chunk m_store b ofs = Some v ->
           Mem.load chunk m_store1 b ofs = Some v) /\
        (forall b ofs k p,
-          Mem.valid_block m_store b -> Mem.perm m_store b ofs k p ->
+          Mem.perm m_alloc b ofs k p ->
           Mem.perm m_store1 b ofs k p)).
 
 (* 3-field store chain: three Mint64 slots at new_ofs, +8, +16. *)

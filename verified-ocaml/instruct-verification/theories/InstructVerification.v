@@ -1,6 +1,6 @@
 (* InstructVerification.v — Instantiation of InstructVerificationSpec. *)
 
-From Stdlib Require Import ZArith List Strings.String PeanoNat.
+From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
 From compcert Require Import Integers Ctypes Cop Clight Globalenvs Memory Values.
 From OCamlInterp.Manual Require Import Utils.Value.
@@ -272,9 +272,44 @@ Module InstructVerification <: InstructVerificationSpec.
     apply handler_correct_weaken with
       (sp := fun e m s ard => closurerec_step_pre code_ofs e m s ard).
     - exact (verify_CLOSUREREC_correct code_ofs).
-    - (* bridge: building blocks → closurerec_step_pre *)
-      admit.
-  Admitted.
+    - intros e le m s ard Hrel [Hhaw [Hc0 [Hc1 [Hc2 Hsp16]]]].
+      destruct Hhaw as [Hhap Hsu].
+      unfold heap_alloc_pre in Hhap.
+      destruct Hhap as (He & Hhm & Hvb & Hfs & H5).
+      unfold closurerec_step_pre.
+      split; [exact He|].
+      split; [exact Hc0|].
+      split; [exact Hc1|].
+      split; [exact Hc2|].
+      split; [exact Hrange|].
+      split; [exact Hhm|].
+      split; [exact Hvb|].
+      split; [exact Hfs|].
+      split.
+      { intros m'. destruct (H5 m') as (ma & nb & no & Hex & Hfr & Hld & Hpm).
+        exists ma, nb, no.
+        split; [exact Hex|]. split; [exact Hfr|]. split; [exact Hld|].
+        split; [exact Hpm|].
+        pose proof (Hsu m' ma nb no Hex Hfr Hld Hpm) as Has2.
+        intros cv. destruct (Has2 cv) as (ms & Hs & Hl & Hlo & Hinner).
+        exists ms. split; [exact Hs|]. split; [exact Hl|]. split; [exact Hlo|].
+        intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hl1 & Hf0ld & Hlo1 & Hperm).
+        exists ms1. split; [exact Hs1|]. split; [exact Hl1|].
+        split; [exact Hf0ld|]. split; [exact Hlo1|].
+        intros b ofs k p Hvb_s Hpm_s.
+        apply Hperm. eapply Mem.perm_store_2. exact Hs. exact Hpm_s. }
+      { intros sp_b sp_ofs Hsp_load.
+        destruct Hsp16 as (sp_b' & sp_ofs' & Hsp_load' & Hsp_ge16).
+        rewrite Hsp_load in Hsp_load'. inversion Hsp_load'. subst sp_b' sp_ofs'.
+        destruct Hrel as (_ & _ & _ & (sp_ptr0 & sp_b0 & sp_ofs0 & Hsp_load0 & Hsp_eq0 & _ & _ & _ & _ & _ & Hsp_bounded0 & _ & Hsp_align0) & _).
+        subst sp_ptr0.
+        rewrite Hsp_load in Hsp_load0. inversion Hsp_load0. subst sp_b0 sp_ofs0.
+        split; [exact Hsp_ge16|].
+        split.
+        - destruct Hsp_align0 as [k Hk].
+          exists (k - 1). simpl align_chunk in *. lia.
+        - lia. }
+  Qed.
   Definition correct_CLOSURE : forall code_ofs,
     Int.min_signed <= code_ofs <= Int.max_signed ->
     handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
@@ -282,12 +317,28 @@ Module InstructVerification <: InstructVerificationSpec.
        /\p code_at (Int.repr 0) /\p code_arg_at 1 (Int.repr code_ofs))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
   Proof.
-    intros code_ofs Hrange.
-    apply handler_correct_weaken with
-      (sp := fun e m s ard => closure_step_pre code_ofs e m s ard).
+    intros code_ofs Hrange. eapply handler_correct_weaken.
     - exact (verify_CLOSURE_correct code_ofs).
-    - admit.
-  Admitted.
+    - intros e le m s ard _ [[Hhap Hsu] [Hc0 Hc1]].
+      unfold heap_alloc_pre in Hhap.
+      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
+      split; [exact H0|]. split; [exact Hc0|]. split; [exact Hc1|].
+      split; [exact Hrange|]. split; [exact H2|]. split; [exact H3|].
+      split; [exact H4|].
+      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
+      exists ma, nb, no.
+      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
+      split; [exact Hp|].
+      (* alloc_store_2 has m_alloc perm; CLOSURE inline has valid_block + m_store perm *)
+      pose proof (Hsu m' ma nb no He Hf Hl Hp) as Has2.
+      intros cv. destruct (Has2 cv) as (ms & Hs & Hld & Hld_other & Hinner).
+      exists ms. split; [exact Hs|]. split; [exact Hld|]. split; [exact Hld_other|].
+      intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hld1 & Hf0ld & Hld1_other & Hperm).
+      exists ms1. split; [exact Hs1|]. split; [exact Hld1|].
+      split; [exact Hf0ld|]. split; [exact Hld1_other|].
+      intros b ofs k p _ Hpm.
+      apply Hperm. eapply Mem.perm_store_2. exact Hs. exact Hpm.
+  Qed.
   Definition correct_CONST0 := verify_CONST0_compl_comp.
   Definition correct_CONST1 := verify_CONST1_correct.
   Definition correct_CONST2 := verify_CONST2_correct.
@@ -363,8 +414,17 @@ Module InstructVerification <: InstructVerificationSpec.
   Proof.
     intros t Hrange. eapply handler_correct_weaken.
     - exact (verify_MAKEBLOCK1_correct t).
-    - admit.
-  Admitted.
+    - intros e le m s ard _ [[Hhap Hsu] Hcode].
+      unfold heap_alloc_pre in Hhap.
+      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
+      split; [exact H0|]. split; [exact Hcode|]. split; [exact Hrange|].
+      split; [exact H2|]. split; [exact H3|]. split; [exact H4|].
+      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
+      exists ma, nb, no.
+      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
+      split; [exact Hp|].
+      exact (Hsu m' ma nb no He Hf Hl Hp).
+  Qed.
   Definition correct_MAKEBLOCK2 : forall t, 0 <= Z.of_nat t <= 255 ->
     handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
       (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
@@ -374,8 +434,23 @@ Module InstructVerification <: InstructVerificationSpec.
   Proof.
     intros t Hrange. eapply handler_correct_weaken.
     - exact (verify_MAKEBLOCK2_correct t).
-    - admit.
-  Admitted.
+    - intros e le m s ard _ [[Hhap Hsu] Hcode].
+      unfold heap_alloc_pre in Hhap.
+      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
+      split; [exact H0|]. split; [exact Hcode|]. split; [exact Hrange|].
+      split; [exact H2|]. split; [exact H3|]. split; [exact H4|].
+      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
+      exists ma, nb, no.
+      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
+      split; [exact Hp|].
+      (* alloc_store_2 has 5 inner conjuncts; MAKEBLOCK2 inline has 4 (no field0-load-pres) *)
+      pose proof (Hsu m' ma nb no He Hf Hl Hp) as Has2.
+      intros cv. destruct (Has2 cv) as (ms & Hs & Hld & Hld_other & Hinner).
+      exists ms. split; [exact Hs|]. split; [exact Hld|]. split; [exact Hld_other|].
+      intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hld1 & _ & Hld1_other & Hperm).
+      exists ms1. split; [exact Hs1|]. split; [exact Hld1|]. split; [exact Hld1_other|].
+      exact Hperm.
+  Qed.
   Definition correct_MAKEBLOCK3 : forall t, 0 <= Z.of_nat t <= 255 ->
     handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
       (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
@@ -383,12 +458,19 @@ Module InstructVerification <: InstructVerificationSpec.
       (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
-    intros t Hrange.
-    eapply handler_correct_weaken.
+    intros t Hrange. eapply handler_correct_weaken.
     - exact (verify_MAKEBLOCK3_correct t).
-    - (* bridge: building blocks → proof inline — Phase 2 *)
-      admit.
-  Admitted.
+    - intros e le m s ard _ [[Hhap Hsu] Hcode].
+      unfold heap_alloc_pre in Hhap.
+      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
+      split; [exact H0|]. split; [exact Hcode|]. split; [exact Hrange|].
+      split; [exact H2|]. split; [exact H3|]. split; [exact H4|].
+      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
+      exists ma, nb, no.
+      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
+      split; [exact Hp|].
+      exact (Hsu m' ma nb no He Hf Hl Hp).
+  Qed.
   Definition correct_MAKEBLOCK := verify_MAKEBLOCK_correct.
   Definition correct_MAKEFLOATBLOCK := verify_MAKEFLOATBLOCK_correct.
   Definition correct_MODINT := verify_MODINT_handler_correct.
