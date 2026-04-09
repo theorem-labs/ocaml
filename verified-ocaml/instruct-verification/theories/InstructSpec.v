@@ -563,6 +563,30 @@ Definition accu_is_immediate : Clight.env -> mem -> state -> abs_rel_data -> Pro
     | _ => False
     end.
 
+(* Parameterized accumulator check — auditor reads one definition for all 5 variants. *)
+Inductive accu_kind := ak_long | ak_signed_range | ak_unsigned_range | ak_bool | ak_immediate.
+
+Definition accu_check (k : accu_kind) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
+  match k with
+  | ak_long => accu_is_long
+  | ak_signed_range => accu_signed_int
+  | ak_unsigned_range => accu_unsigned_int
+  | ak_bool => accu_is_bool
+  | ak_immediate => accu_is_immediate
+  end.
+
+(* Parameterized arithmetic safety — auditor reads one definition for all 5 variants. *)
+Inductive arith_kind := arith_unsigned | arith_signed | arith_divmod | arith_shift | arith_ucompare.
+
+Definition arith_safe (k : arith_kind) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
+  match k with
+  | arith_unsigned => int_op_safe
+  | arith_signed => signed_int_op_safe
+  | arith_divmod => divmod_safe
+  | arith_shift => shift_in_range
+  | arith_ucompare => unsigned_ints_safe
+  end.
+
 (* ================================================================== *)
 (* Heap field loadability building blocks                              *)
 (* ================================================================== *)
@@ -2717,12 +2741,12 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_ADDINT :
     handler_correct handle_ADDINT f_instr_ADDINT
-      (accu_is_long /\p stack_head_is_long)
+      (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => forall a b rest, s.(Machine.accu) = Val_int a -> s.(Machine.stack) = Val_int b :: rest -> False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ANDINT :
     handler_correct handle_ANDINT f_instr_ANDINT
-      (accu_is_long /\p stack_head_is_long)
+      (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_APPLY1 :
@@ -2772,7 +2796,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_ASRINT :
     handler_correct handle_ASRINT f_instr_ASRINT
-      shift_in_range
+      (arith_safe arith_shift)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ASSIGN :
@@ -2796,47 +2820,47 @@ Module Type InstructVerificationSpec.
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BEQ n target) f_instr_BEQ
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_signed_int /\p accu_is_long))
+      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BGEINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGEINT n target) f_instr_BGEINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_signed_int /\p accu_is_long))
+      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BGTINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGTINT n target) f_instr_BGTINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_signed_int /\p accu_is_long))
+      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BLEINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BLEINT n target) f_instr_BLEINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_signed_int /\p accu_is_long))
+      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BLTINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BLTINT n target) f_instr_BLTINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_signed_int /\p accu_is_long))
+      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
       (fun msg s => msg = "BLTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BNEQ :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BNEQ n target) f_instr_BNEQ
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_signed_int /\p accu_is_long))
+      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BOOLNOT :
     handler_correct handle_BOOLNOT f_instr_BOOLNOT
-      (accu_is_bool /\p accu_is_long)
+      (accu_check ak_bool /\p accu_check ak_long)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BRANCHIFNOT :
@@ -2866,14 +2890,14 @@ Module Type InstructVerificationSpec.
     forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
-      ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_unsigned_int) /\p accu_is_long)
+      ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BULTINT :
     forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BULTINT n target) f_instr_BULTINT
-      ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_unsigned_int) /\p accu_is_long)
+      ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_CHECK_SIGNALS :
@@ -2963,7 +2987,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_DIVINT :
     handler_correct handle_DIVINT f_instr_DIVINT
-      divmod_safe
+      (arith_safe arith_divmod)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int b :: _ => Z.eqb b 0 = true | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ENVACC1 :
@@ -2994,7 +3018,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_EQ :
     handler_correct handle_EQ f_instr_EQ
-      int_op_safe
+      (arith_safe arith_unsigned)
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_EVENT :
@@ -3004,7 +3028,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_GEINT :
     handler_correct handle_GEINT f_instr_GEINT
-      signed_int_op_safe
+      (arith_safe arith_signed)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETBYTESCHAR :
@@ -3108,32 +3132,32 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_GTINT :
     handler_correct handle_GTINT f_instr_GTINT
-      signed_int_op_safe
+      (arith_safe arith_signed)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ISINT :
     handler_correct handle_ISINT f_instr_ISINT
-      accu_is_immediate
+      (accu_check ak_immediate)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_LEINT :
     handler_correct handle_LEINT f_instr_LEINT
-      signed_int_op_safe
+      (arith_safe arith_signed)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_LSLINT :
     handler_correct handle_LSLINT f_instr_LSLINT
-      shift_in_range
+      (arith_safe arith_shift)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_LSRINT :
     handler_correct handle_LSRINT f_instr_LSRINT
-      shift_in_range
+      (arith_safe arith_shift)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_LTINT :
     handler_correct handle_LTINT f_instr_LTINT
-      signed_int_op_safe
+      (arith_safe arith_signed)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MAKEBLOCK1 :
@@ -3171,22 +3195,22 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_MODINT :
     handler_correct handle_MODINT f_instr_MODINT
-      divmod_safe
+      (arith_safe arith_divmod)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int b :: _ => Z.eqb b 0 = true | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_MULINT :
     handler_correct handle_MULINT f_instr_MULINT
-      (accu_is_long /\p stack_head_is_long)
+      (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_NEGINT :
     handler_correct handle_NEGINT f_instr_NEGINT
-      accu_is_long
+      (accu_check ak_long)
       (fun _ s => forall n, s.(Machine.accu) <> Val_int n) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_NEQ :
     handler_correct handle_NEQ f_instr_NEQ
-      int_op_safe
+      (arith_safe arith_unsigned)
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_OFFSETCLOSURE0 :
@@ -3213,7 +3237,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_OFFSETINT :
     forall ofs, Int.min_signed <= ofs * 2 <= Int.max_signed ->
     handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (code_at (Int.repr ofs) /\p accu_is_long)
+      (code_at (Int.repr ofs) /\p accu_check ak_long)
       (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_OFFSETREF :
@@ -3232,7 +3256,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_ORINT :
     handler_correct handle_ORINT f_instr_ORINT
-      (accu_is_long /\p stack_head_is_long)
+      (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PERFORM :
@@ -3516,7 +3540,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_SUBINT :
     handler_correct handle_SUBINT f_instr_SUBINT
-      (accu_is_long /\p stack_head_is_long)
+      (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_SWITCH :
@@ -3527,12 +3551,12 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_UGEINT :
     handler_correct handle_UGEINT f_instr_UGEINT
-      unsigned_ints_safe
+      (arith_safe arith_ucompare)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ULTINT :
     handler_correct handle_ULTINT f_instr_ULTINT
-      unsigned_ints_safe
+      (arith_safe arith_ucompare)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_VECTLENGTH :
@@ -3542,7 +3566,7 @@ Module Type InstructVerificationSpec.
 
   Parameter correct_XORINT :
     handler_correct handle_XORINT f_instr_XORINT
-      (accu_is_long /\p stack_head_is_long)
+      (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
 End InstructVerificationSpec.

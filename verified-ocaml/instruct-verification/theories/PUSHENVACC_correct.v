@@ -205,6 +205,7 @@ Proof.
     set (uso := Ptrofs.unsigned so) in *.
 
     unfold pushenvacc_generic_step_pre in Hstep_pre.
+    fold sb so uso cb co in Hstep_pre.
     destruct Hstep_pre as [[sp_b' [sp_ofs' [Hsp_load' Hsp_ge16]]] [Hcode_load [Hn_bound Hefl]]].
     assert (sp_b' = sp_b /\ sp_ofs' = sp_ofs) as [-> ->]
       by (rewrite Hsp_load in Hsp_load'; injection Hsp_load'; auto).
