@@ -57,6 +57,8 @@ Proof.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
@@ -114,10 +116,10 @@ Proof.
     split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
     { exact Hle_s. }
     { exists pc_ptr. split. exact Hpc_load'. simpl. exact Hpc_rel. }
-    { exists (Vlong (Int64.repr 3)). split. exact Haccu_load'. simpl. exact (vr_int _ 1). }
+    { exists (Vlong (Int64.repr 3)). split. exact Haccu_load'. simpl. exact (vr_int _ _ _ 1). }
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       exact Hsp_load'. reflexivity. simpl.
-      apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) (Vlong (Int64.repr 3))
+      apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) (Vlong (Int64.repr 3))
                               Hstack_repr Hstore). intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
@@ -129,7 +131,7 @@ Proof.
     { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
     { simpl. exact Hextra_load'. }
     { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
-      apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) (Vlong (Int64.repr 3))
+      apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) (Vlong (Int64.repr 3))
                               Hglobal_repr Hstore). intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. }

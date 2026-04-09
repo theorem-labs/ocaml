@@ -160,6 +160,7 @@ Definition gd_target (go : ptrofs) (n_int : int) : ptrofs :=
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+#[warnings="-not-a-closed-proof"]
 Theorem verify_SETGLOBAL_correct : forall n,
     handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
       (fun e m s ard =>
@@ -170,6 +171,8 @@ Theorem verify_SETGLOBAL_correct : forall n,
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
          let hm := ar_heap_map ard in
+         let cb := ar_code_base_block ard in
+         let co := ar_code_base_ofs ard in
          (* 0. e does not bind _caml_modify (holds after function_entry1
             for fn_vars=nil, fn_params=[(_s, ...)] ) *)
          e ! _caml_modify = None /\
@@ -187,7 +190,7 @@ Theorem verify_SETGLOBAL_correct : forall n,
          (* 4. caml_modify external call: for the actual accu value,
             there exists m_cm witnessing the call with empty trace *)
          (forall accu_v,
-            val_repr hm (Machine.accu s) accu_v ->
+            val_repr hm cb co (Machine.accu s) accu_v ->
             exists m_cm,
               external_call caml_modify_ef ge
                 (Vptr gb (gd_target go (Int.repr (Z.of_nat n)))
@@ -209,10 +212,10 @@ Theorem verify_SETGLOBAL_correct : forall n,
               (* global_repr for the updated globals *)
               (forall new_gs,
                  set_nth (Machine.global s) n (Machine.accu s) = Some new_gs ->
-                 global_repr hm m_cm new_gs gb go) /\
+                 global_repr hm cb co m_cm new_gs gb go) /\
               (* global_repr unchanged if set_nth fails *)
               (set_nth (Machine.global s) n (Machine.accu s) = None ->
-                 global_repr hm m_cm (Machine.global s) gb go) /\
+                 global_repr hm cb co m_cm (Machine.global s) gb go) /\
               (* Permission preservation through caml_modify *)
               (forall b ofs k p,
                  Mem.valid_block m b -> Mem.perm m b ofs k p ->
@@ -452,7 +455,7 @@ Proof.
               eapply eval_Etempvar.
               subst le4. rewrite PTree.gss. reflexivity.
             * (* sem_cast for arg2: accu_v tlong -> tlong *)
-              apply (sem_cast_long_val_repr hm _ accu_v m Haccu_repr).
+              apply (sem_cast_long_val_repr hm cb co _ accu_v m Haccu_repr).
             * econstructor.
         - (* Genv.find_funct *)
           exact Hfind_funct.
@@ -651,7 +654,7 @@ Proof.
        m -> m_cm: preserved by Hcm_other_loads (sp_b <> gb)
        m_cm -> m1: store on sb, sp_b <> sb
        m1 -> m2: store on sb, sp_b <> sb *)
-    assert (Hstack_repr_cm : stack_repr hm m_cm (Machine.stack s) sp_b sp_ofs).
+    assert (Hstack_repr_cm : stack_repr hm cb co m_cm (Machine.stack s) sp_b sp_ofs).
     { (* Use the fact that stack_repr depends only on loads from sp_b,
          and Hcm_other_loads preserves loads on blocks <> gb.
          But we need sp_b <> gb -- we have Hsp_ne_gb. *)
@@ -665,19 +668,19 @@ Proof.
         + exact H2.
         + apply IH. exact H5. }
 
-    assert (Hstack_repr_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-    { apply (stack_repr_store_other_block hm m_cm m1 _ sp_b sp_ofs sb (uso + 8) unit_v
+    assert (Hstack_repr_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+    { apply (stack_repr_store_other_block hm cb co m_cm m1 _ sp_b sp_ofs sb (uso + 8) unit_v
                Hstack_repr_cm Hstore1).
       intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
 
-    assert (Hstack_repr_m2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
-    { apply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v
+    assert (Hstack_repr_m2 : stack_repr hm cb co m2 (Machine.stack s) sp_b sp_ofs).
+    { apply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v
                Hstack_repr_m1 Hstore2).
       intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
 
     (* global_repr in m2: globals are on gb which is different from sb.
        m_cm already has the right global_repr, stores to sb preserve it. *)
-    assert (Hglobal_new : global_repr hm m_cm
+    assert (Hglobal_new : global_repr hm cb co m_cm
               (match set_nth (Machine.global s) n (Machine.accu s) with
                | Some g => g | None => Machine.global s end)
               gb go).
@@ -685,19 +688,19 @@ Proof.
       - apply Hcm_global_repr_some. reflexivity.
       - apply Hcm_global_repr_none. reflexivity. }
 
-    assert (Hglobal_m1 : global_repr hm m1
+    assert (Hglobal_m1 : global_repr hm cb co m1
               (match set_nth (Machine.global s) n (Machine.accu s) with
                | Some g => g | None => Machine.global s end)
               gb go).
-    { apply (global_repr_store_other_block hm m_cm m1 _ gb go sb (uso + 8) unit_v
+    { apply (global_repr_store_other_block hm cb co m_cm m1 _ gb go sb (uso + 8) unit_v
                Hglobal_new Hstore1).
       intro Heq; exact (Hgb_ne (eq_sym Heq)). }
 
-    assert (Hglobal_m2 : global_repr hm m2
+    assert (Hglobal_m2 : global_repr hm cb co m2
               (match set_nth (Machine.global s) n (Machine.accu s) with
                | Some g => g | None => Machine.global s end)
               gb go).
-    { apply (global_repr_store_other_block hm m1 m2 _ gb go sb (uso + 0) new_pc_v
+    { apply (global_repr_store_other_block hm cb co m1 m2 _ gb go sb (uso + 0) new_pc_v
                Hglobal_m1 Hstore2).
       intro Heq; exact (Hgb_ne (eq_sym Heq)). }
 
@@ -720,14 +723,14 @@ Proof.
     (* 3. accu field -- val_unit = Val_int 0 *)
     { exists unit_v. split.
       - exact Haccu_final.
-      - simpl. subst unit_v. exact (vr_int _ 0). }
+      - simpl. subst unit_v. exact (vr_int _ _ _ 0). }
 
     (* 4. sp field *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_final.
       - reflexivity.
-      - simpl. exact Hstack_repr_m2.
+      - simpl. eapply stack_repr_co_shift. eassumption.
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp.
@@ -747,7 +750,7 @@ Proof.
     (* 5. env field *)
     { exists env_v. split.
       - exact Henv_final.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. eassumption. }
 
     (* 6. extra_args field *)
     { simpl. exact Hextra_final. }
@@ -756,7 +759,7 @@ Proof.
     { exists (Vptr gb go). split; [| split; [| split]].
       - exact Hgd_final.
       - simpl. reflexivity.
-      - simpl. exact Hglobal_m2.
+      - simpl. eapply global_repr_co_shift. eassumption.
       - exact Hgb_ne_sb. }
 
     (* 8. trap_sp field *)

@@ -79,29 +79,12 @@ Local Lemma sem_cast_tulong_tlong : forall n m,
   sem_cast (Vlong n) tulong tlong m = Some (Vlong n).
 Proof. intros. reflexivity. Qed.
 
-(* ================================================================== *)
-(* Precondition: sp has room + closure env representable as Vlong      *)
-(* ================================================================== *)
-
-Definition pushoffsetclosurem2_pre
-    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let sb := ar_sptr_block ard in
-  let so := ar_sptr_ofs ard in
-  let hm := ar_heap_map ard in
-  (* sp has room for push *)
-  (exists sp_b sp_ofs,
-     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-     Ptrofs.unsigned sp_ofs >= 16)
-  /\
-  (* closure env precondition (only matters for Val_closure case) *)
-  match s.(Machine.env) with
-  | Val_closure addr base_ofs =>
-      exists env_long,
-        Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
-        val_repr hm (Val_closure addr (Z.to_nat (Z.of_nat base_ofs + (-2))))
-          (Vlong (Int64.sub env_long (Int64.repr 24)))
-  | _ => True
-  end.
+(* Bridge: Int64.sub x (repr 24) = Int64.add x (repr (-24)) *)
+Local Lemma sub_24_eq_add_neg24 : forall x,
+  Int64.sub x (Int64.repr 24) = Int64.add x (Int64.repr (-24)).
+Proof.
+  intros. rewrite Int64.sub_add_opp. f_equal.
+Qed.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -109,7 +92,7 @@ Definition pushoffsetclosurem2_pre
 
 Theorem verify_PUSHOFFSETCLOSUREM2_correct :
     handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM2
-      (fun e m s ard => pushoffsetclosurem2_pre e m s ard)
+      (sp_at_least 16 /\p closure_offset_pre (-2) (-24))
       (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
@@ -143,6 +126,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -154,11 +139,15 @@ Proof.
     subst sp_ptr.
 
     (* Extract preconditions *)
-    unfold pushoffsetclosurem2_pre in Hstep_pre.
+    unfold pre_and, sp_at_least, closure_offset_pre in Hstep_pre.
     rewrite Henv_eq in Hstep_pre.
     fold sb so hm in Hstep_pre.
     destruct Hstep_pre as [[sp_b' [sp_ofs' [Hsp_load' Hsp_ge16]]] [env_long [Henv_long_load Hresult_repr]]].
     simpl in Hsp_load'. fold sb so in Hsp_load'.
+
+    (* Bridge: the generic precondition uses Int64.add with (-24),
+       but C semantics produce Int64.sub with 24. *)
+    rewrite <- sub_24_eq_add_neg24 in Hresult_repr.
     assert (sp_b' = sp_b /\ sp_ofs' = sp_ofs) as [-> ->]
       by (rewrite Hsp_load in Hsp_load'; injection Hsp_load'; auto).
 
@@ -281,7 +270,7 @@ Proof.
       rewrite PTree.gso by (compute; congruence).
       rewrite PTree.gss; eval_cbn.
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Haccu_repr); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Haccu_repr); eval_cbn.
       fold new_sp_ofs.
       rewrite Hstore_accu; eval_cbn.
 
@@ -432,16 +421,16 @@ Proof.
         - exact Hsp_load3.
         - reflexivity.
         - simpl.
-          assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-          { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+          assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+          { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
                      (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)
                      Hstack_repr Hstore_sp).
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-          assert (Hstack_cons_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-          { exact (stack_repr_cons_after_store hm m1 m2
+          assert (Hstack_cons_m2 : stack_repr hm cb co m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+          { exact (stack_repr_cons_after_store hm cb co m1 m2
                      (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
                      Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 Hsp_rep). }
-          apply (stack_repr_store_other_block hm m2 m3 _ sp_b new_sp_ofs sb
+          apply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b new_sp_ofs sb
                    (Ptrofs.unsigned so + 8) result_v
                    Hstack_cons_m2 Hstore_result).
                   intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -477,13 +466,13 @@ Proof.
         - exact Hgd_load3.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m2 m3 _
+          apply (global_repr_store_other_block hm cb co m2 m3 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (Ptrofs.unsigned so + 8) result_v).
-          + apply (global_repr_store_other_block hm m1 m2 _
+          + apply (global_repr_store_other_block hm cb co m1 m2 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sp_b (Ptrofs.unsigned new_sp_ofs) accu_v).
-            * apply (global_repr_store_other_block hm m m1 _
+            * apply (global_repr_store_other_block hm cb co m m1 _
                        (ar_global_block ard) (ar_global_ofs ard)
                        sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)
                        Hglobal_repr Hstore_sp).

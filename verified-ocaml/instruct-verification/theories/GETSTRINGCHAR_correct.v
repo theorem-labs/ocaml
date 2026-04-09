@@ -199,6 +199,8 @@ Qed.
 Definition getstringchar_heap_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   forall idx rest c,
     s.(Machine.stack) = Val_int idx :: rest ->
     field_or_heap s s.(Machine.accu) (Z.to_nat idx) = Some (Val_int c) ->
@@ -206,7 +208,7 @@ Definition getstringchar_heap_pre
     idx * 2 + 1 <= Int64.max_signed ->
     0 <= c <= 255 ->
     forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
+      val_repr hm cb co s.(Machine.accu) accu_v ->
       exists b ofs,
         accu_v = Vptr b ofs /\
         Mem.load Mint8unsigned m b
@@ -216,6 +218,7 @@ Definition getstringchar_heap_pre
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+#[warnings="-not-a-closed-proof"]
 Theorem verify_GETSTRINGCHAR_correct :
     handler_correct handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
       (fun _ m s ard =>
@@ -226,7 +229,9 @@ Theorem verify_GETSTRINGCHAR_correct :
              match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
              | Some (Val_int c) => 0 <= c <= 255
              | _ => True
-             end
+             end /\
+             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
+              exists z, cv = Vlong z)
          | _ => True
          end)
       (fun msg s =>
@@ -267,7 +272,7 @@ Proof.
   {
     intros ard Hpre [Hhfl Hidx_bounds].
 
-    destruct Hidx_bounds as [Hidx_ge [Hidx_lt Hc_range]].
+    destruct Hidx_bounds as [Hidx_ge [Hidx_lt [Hc_range Hidx_tagged]]].
 
     (* Unpack abs_rel_with_ard *)
     destruct Hpre as (Hle_s &
@@ -283,6 +288,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     (* Structural invariants *)
     pose proof (sptr_ofs_representable ard) as Hso_bound.
@@ -310,7 +317,10 @@ Proof.
     intros Hgd_load Hgd_eq Hglobal_repr Hgb_ne_sb.
 
     (* Stack head is Val_int idx *)
-    inversion Hval_repr_idx; subst cv_idx. rename H0 into Hidx_is_int.
+    pose proof Hval_repr_idx as Hval_repr_idx'.
+    inversion Hval_repr_idx; subst cv_idx.
+    2: { exfalso. destruct (Hidx_tagged _ Hval_repr_idx') as [z Hz]. discriminate Hz. }
+    rename H0 into Hidx_is_int.
 
     (* Use heap precondition to get the byte value in C memory *)
     unfold getstringchar_heap_pre in Hhfl.
@@ -581,9 +591,9 @@ Proof.
         - exact Hsp_load_m'.
         - reflexivity.
         - simpl.
-          eapply (stack_repr_store_other_block hm m1 m' _ sp_b
+          eapply (stack_repr_store_other_block hm cb co m1 m' _ sp_b
                    (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
-          + eapply (stack_repr_store_other_block hm m m1 _ sp_b
+          + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b
                      (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
             * exact Hstack_repr_rest.
             * exact Hstore_accu.
@@ -621,8 +631,8 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 16) new_sp_v).
-          + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 8) result_v).
+          eapply (global_repr_store_other_block hm cb co m1 m' _ _ _ sb (uso + 16) new_sp_v).
+          + eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb (uso + 8) result_v).
             * exact Hglobal_repr.
             * exact Hstore_accu.
             * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).

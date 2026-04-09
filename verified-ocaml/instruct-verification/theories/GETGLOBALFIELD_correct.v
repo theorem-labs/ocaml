@@ -182,16 +182,16 @@ Proof.
   - simpl. f_equal. apply IH.
 Qed.
 
-Lemma global_repr_nth_error_ptrofs_ggf : forall hm m gs gb go n v,
-  global_repr hm m gs gb go ->
+Lemma global_repr_nth_error_ptrofs_ggf : forall hm cb0 co0 m gs gb go n v,
+  global_repr hm cb0 co0 m gs gb go ->
   nth_error gs n = Some v ->
   exists cv,
     Mem.load Mint64 m gb
       (Ptrofs.unsigned (Nat.iter n (fun p => Ptrofs.add p (Ptrofs.repr 8)) go))
     = Some cv /\
-    val_repr hm v cv.
+    val_repr hm cb0 co0 v cv.
 Proof.
-  intros hm m gs gb go n v Hgr.
+  intros hm cb0 co0 m gs gb go n v Hgr.
   revert n.
   induction Hgr as [| v0 vs b ofs cv0 Hload Hval_repr Hgr' IH];
     intros n Hnth.
@@ -233,16 +233,16 @@ Proof.
       replace (Z.of_nat (S n')) with (Z.of_nat n' + 1)%Z in Hbound by lia. lia.
 Qed.
 
-Lemma global_repr_nth_error_ggf : forall hm m gs gb go n v,
-  global_repr hm m gs gb go ->
+Lemma global_repr_nth_error_ggf : forall hm cb0 co0 m gs gb go n v,
+  global_repr hm cb0 co0 m gs gb go ->
   nth_error gs n = Some v ->
   Ptrofs.unsigned go + Z.of_nat n * 8 < Ptrofs.modulus ->
   exists cv,
     Mem.load Mint64 m gb (Ptrofs.unsigned go + Z.of_nat n * 8) = Some cv /\
-    val_repr hm v cv.
+    val_repr hm cb0 co0 v cv.
 Proof.
-  intros hm m gs gb go n v Hgr Hnth Hbound.
-  destruct (global_repr_nth_error_ptrofs_ggf hm m gs gb go n v Hgr Hnth)
+  intros hm cb0 co0 m gs gb go n v Hgr Hnth Hbound.
+  destruct (global_repr_nth_error_ptrofs_ggf hm cb0 co0 m gs gb go n v Hgr Hnth)
     as [cv [Hload Hval_repr]].
   exists cv. split; [| exact Hval_repr].
   rewrite <- (iter_add_8_unsigned_ggf go n Hbound).
@@ -337,7 +337,7 @@ Theorem verify_GETGLOBALFIELD_correct : forall n p,
          (forall glob v cv_global,
             nth_error s.(Machine.global) n = Some glob ->
             field_or_heap s glob p = Some v ->
-            val_repr (ar_heap_map ard) glob cv_global ->
+            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) glob cv_global ->
             exists b ofs cv,
               cv_global = Vptr b ofs /\
               b <> ar_sptr_block ard /\
@@ -345,7 +345,7 @@ Theorem verify_GETGLOBALFIELD_correct : forall n p,
                 (Ptrofs.unsigned (Ptrofs.add ofs
                    (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed (Int.repr (Z.of_nat p))))))
                 = Some cv /\
-              val_repr (ar_heap_map ard) v cv))
+              val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) v cv))
       (fun msg s =>
          (nth_error s.(Machine.global) n = None /\ msg = "GETGLOBALFIELD: index out of bounds"%string) \/
          (exists glob, nth_error s.(Machine.global) n = Some glob /\
@@ -402,7 +402,7 @@ Proof.
   set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
 
   (* Get global value from memory *)
-  destruct (global_repr_nth_error_ggf hm m _ gb go n glob Hglobal_repr Hnth Hgo_bound)
+  destruct (global_repr_nth_error_ggf hm cb co m _ gb go n glob Hglobal_repr Hnth Hgo_bound)
     as [cv_global [Hglobal_load Hglobal_val_repr]].
 
   (* Pointer arithmetic for global *)
@@ -638,7 +638,7 @@ Proof.
     repeat rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Hfield_val_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hfield_val_repr); eval_cbn.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     rewrite Hstore3; eval_cbn.
 
@@ -691,7 +691,7 @@ Proof.
     assert (Haccu_load4 : Mem.load Mint64 m4 sb (Ptrofs.unsigned so + 8) = Some cv_field).
     { assert (Haccu_m3 : Mem.load Mint64 m3 sb (Ptrofs.unsigned so + 8) = Some cv_field).
       { pose proof (load_after_store_same m2 m3 sb (Ptrofs.unsigned so + 8) cv_field Hstore3) as Htmp.
-        rewrite (val_repr_load_result hm fval cv_field Hfield_val_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co fval cv_field Hfield_val_repr) in Htmp.
         exact Htmp. }
       apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so + 0) (Ptrofs.unsigned so + 8)
                pc_v_2 cv_field Hstore4 Haccu_m3). right. lia. }
@@ -795,7 +795,7 @@ Proof.
     (* 3. accu field -- updated to field value *)
     { exists cv_field. split.
       - exact Haccu_load4.
-      - simpl. exact Hfield_val_repr. }
+      - simpl. eapply val_repr_co_shift. exact Hfield_val_repr. }
 
     (* 4. sp field -- unchanged *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -803,10 +803,11 @@ Proof.
       - exact Hsp_load4.
       - reflexivity.
       - simpl.
-        eapply (stack_repr_store_other_block hm m3 m4 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 0) pc_v_2).
-        + eapply (stack_repr_store_other_block hm m2 m3 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 8) cv_field).
-          * eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 0) pc_v_1).
-            -- eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 8) (Vptr fb fofs)).
+        eapply stack_repr_co_shift.
+        eapply (stack_repr_store_other_block hm cb co m3 m4 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 0) pc_v_2).
+        + eapply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 8) cv_field).
+          * eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 0) pc_v_1).
+            -- eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 8) (Vptr fb fofs)).
                ++ exact Hstack_repr.
                ++ exact Hstore1.
                ++ intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -832,7 +833,7 @@ Proof.
     (* 5. env field -- unchanged *)
     { exists env_v. split.
       - exact Henv_load4.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
     (* 6. extra_args field -- unchanged *)
     { simpl. exact Hextra_load4. }
@@ -842,13 +843,14 @@ Proof.
       - exact Hgd_load4.
       - simpl. reflexivity.
       - simpl.
-        eapply (global_repr_store_other_block hm m3 m4 _
+        eapply global_repr_co_shift.
+        eapply (global_repr_store_other_block hm cb co m3 m4 _
                  gb go sb (Ptrofs.unsigned so + 0) pc_v_2).
-        + eapply (global_repr_store_other_block hm m2 m3 _
+        + eapply (global_repr_store_other_block hm cb co m2 m3 _
                    gb go sb (Ptrofs.unsigned so + 8) cv_field).
-          * eapply (global_repr_store_other_block hm m1 m2 _
+          * eapply (global_repr_store_other_block hm cb co m1 m2 _
                      gb go sb (Ptrofs.unsigned so + 0) pc_v_1).
-            -- eapply (global_repr_store_other_block hm m m1 _
+            -- eapply (global_repr_store_other_block hm cb co m m1 _
                          gb go sb (Ptrofs.unsigned so + 8) (Vptr fb fofs)).
                ++ exact Hglobal_repr.
                ++ exact Hstore1.

@@ -57,6 +57,8 @@ Local Ltac eval_cbn :=
 Definition heap_block_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
   forall addr b ofs tag fields,
     hm addr = Some (b, ofs) ->
@@ -306,6 +308,8 @@ Proof.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
+      set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -587,7 +591,7 @@ Proof.
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                      Hstack_repr Hstore).
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           - exact Hsp_ne_sb.
@@ -606,7 +610,7 @@ Proof.
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
-            apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv_result
                      Hglobal_repr Hstore).
             intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           - exact Hgb_ne_sb. }

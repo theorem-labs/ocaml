@@ -69,11 +69,13 @@ Proof.
     destruct (zlt (b * 2 + 1) (a * 2 + 1)); [reflexivity | lia].
 Qed.
 
-Definition le_int_range_pre (m : mem) (s : state) (_ : abs_rel_data) : Prop :=
+Definition le_int_range_pre (m : mem) (s : state) (ard : abs_rel_data) : Prop :=
   match s.(Machine.accu), s.(Machine.stack) with
   | Val_int a, Val_int b :: _ =>
       Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
-      Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+      Int64.min_signed <= b * 2 + 1 <= Int64.max_signed /\
+      int_vlong ard a /\
+      int_vlong ard b
   | _, _ => False
   end.
 
@@ -94,17 +96,22 @@ Proof.
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
   intros ard Hpre Hrange. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable). subst sp_ptr.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
-  rewrite Haccu_eq in Haccu_repr. inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+  unfold le_int_range_pre in Hrange. rewrite Haccu_eq, Hstk in Hrange.
+  destruct Hrange as [Ha_range [Hb_range [Hint_tagged_a Hint_tagged_b]]].
+  rewrite Haccu_eq in Haccu_repr. inversion Haccu_repr; subst accu_v.
+  2: { exfalso. destruct (Hint_tagged_a _ Haccu_repr) as [z Hz]. discriminate Hz. }
+  rename H0 into Haccu_is_int.
   rewrite Hstk in Hstack_repr.
   inversion Hstack_repr as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
   revert Hgd_load Hgd_eq Hglobal_repr. subst. intros Hgd_load Hgd_eq Hglobal_repr.
   inversion Hval_repr0; subst cv0.
-  unfold le_int_range_pre in Hrange. rewrite Haccu_eq, Hstk in Hrange.
-  destruct Hrange as [Ha_range Hb_range].
+  2: { exfalso. destruct (Hint_tagged_b _ Hval_repr0) as [z Hz]. discriminate Hz. }
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
   destruct (store_succeeds_sb m sb so 16 (Vptr sp_b sp_ofs) Hsb_writable Hsp_load ltac:(lia) ltac:(lia) new_sp_v) as [m1 Hstore1].
@@ -183,8 +190,8 @@ Proof.
       assert (Hadd : Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 8)) = Ptrofs.unsigned sp_ofs + 8). { apply ptrofs_add_unsigned; lia. }
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]. exact Hsp_load'. reflexivity.
       { simpl.
-        eapply (stack_repr_store_other_block hm m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-        + eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
+        eapply (stack_repr_store_other_block hm cb co m1 m' _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
+        + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
           * exact Hstack_repr_rest. * exact Hstore1. * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         + exact Hstore2. + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
       exact Hsp_ne_sb. exact Hsp_ne_gb. exact Hcb_ne_sp.
@@ -196,8 +203,8 @@ Proof.
     { simpl. exact Hextra_load'. }
     { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq.
       { simpl.
-        eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-        + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        eapply (global_repr_store_other_block hm cb co m1 m' _ _ _ sb (uso + 8) result_v).
+        + eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb (uso + 16) new_sp_v). * exact Hglobal_repr. * exact Hstore1. * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
       exact Hgb_ne_sb. }
     { exists ts_ptr. split. exact Hts_load'. simpl. exact Htrap_rel. }
@@ -218,6 +225,6 @@ Proof.
   - exact verify_LEINT_correct.
   - intros e le m s ard _ Hsio.
     unfold signed_int_op_safe in Hsio.
-    destruct Hsio as (a & b & rest & Ha & Hs & Hra & Hrb).
-    unfold le_int_range_pre. rewrite Ha, Hs. exact (conj Hra Hrb).
+    destruct Hsio as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
+    unfold le_int_range_pre. rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.

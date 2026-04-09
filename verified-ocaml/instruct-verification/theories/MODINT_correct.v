@@ -304,12 +304,14 @@ Qed.
 
 Theorem verify_MODINT_correct :
     handler_correct handle_MODINT f_instr_MODINT
-      (fun _ _ s _ =>
+      (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              b <> 0%Z /\
              Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
-             Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+             Int64.min_signed <= b * 2 + 1 <= Int64.max_signed /\
+             int_vlong ard a /\
+             int_vlong ard b
          | _, _ => True
          end)
       (fun _ s =>
@@ -366,12 +368,14 @@ Proof.
   (* ================================================================ *)
   {
     intros ard Hpre_abs Hpre_extra.
-    destruct Hpre_extra as (Hb_ne & Ha_range & Hb_range).
+    destruct Hpre_extra as (Hb_ne & Ha_range & Hb_range & Hint_tagged_a & Hint_tagged_b).
 
     (* Unpack abs_rel_with_ard *)
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre_abs as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -395,7 +399,9 @@ Proof.
 
     (* Accu is Val_int a *)
     rewrite Haccu_eq in Haccu_repr.
-    inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+    inversion Haccu_repr; subst accu_v.
+    2: { exfalso. destruct (Hint_tagged_a _ Haccu_repr) as [z Hz]. discriminate Hz. }
+    rename H0 into Haccu_is_int.
 
     (* Extract stack head *)
     rewrite Hstk in Hstack_repr.
@@ -405,7 +411,9 @@ Proof.
     intros Hgd_load Hgd_eq Hglobal_repr.
 
     (* Stack head is Val_int b *)
-    inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
+    inversion Hval_repr0; subst cv0.
+    2: { exfalso. destruct (Hint_tagged_b _ Hval_repr0) as [z Hz]. discriminate Hz. }
+    rename H0 into Hstk_is_int.
 
     (* Composite environment facts *)
     destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
@@ -653,9 +661,9 @@ Proof.
         split. { exact Hsp_load'. }
         split. { reflexivity. }
         split. { simpl.
-          eapply (stack_repr_store_other_block hm m1 m' _ sp_b
+          eapply (stack_repr_store_other_block hm cb co m1 m' _ sp_b
                    (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-          - eapply (stack_repr_store_other_block hm m m1 _ sp_b
+          - eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b
                      (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
             + exact Hstack_repr_rest.
             + exact Hstore1.
@@ -695,8 +703,8 @@ Proof.
         split. { simpl. exact Hgd_eq. }
         split.
         { simpl.
-          eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-          - eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v).
+          eapply (global_repr_store_other_block hm cb co m1 m' _ _ _ sb (uso + 8) result_v).
+          - eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb (uso + 16) new_sp_v).
             + exact Hglobal_repr.
             + exact Hstore1.
             + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
@@ -728,17 +736,19 @@ Theorem verify_MODINT_handler_correct :
       (fun _ _ _ => False).
 Proof.
   apply handler_correct_weaken with
-    (sp := fun _ _ s _ =>
+    (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
            b <> 0%Z /\
            Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
-           Int64.min_signed <= b * 2 + 1 <= Int64.max_signed
+           Int64.min_signed <= b * 2 + 1 <= Int64.max_signed /\
+           int_vlong ard a /\
+           int_vlong ard b
        | _, _ => True
        end).
   - exact verify_MODINT_correct.
   - intros e le m s ard _ Hdm.
     unfold divmod_safe in Hdm.
-    destruct Hdm as (a & b & rest & Ha & Hs & Hbne & Hra & Hrb).
-    rewrite Ha, Hs. exact (conj Hbne (conj Hra Hrb)).
+    destruct Hdm as (a & b & rest & Ha & Hs & Hbne & Hra & Hrb & Hva & Hvb).
+    rewrite Ha, Hs. exact (conj Hbne (conj Hra (conj Hrb (conj Hva Hvb)))).
 Qed.

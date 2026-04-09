@@ -273,6 +273,7 @@ Theorem verify_SWITCH_correct :
          | Val_int n =>
              0 <= n /\
              -4611686018427387904 <= n <= 4611686018427387903 /\
+             int_vlong ard n /\
              (* sizes word is readable from code buffer *)
              (exists sizes_v,
                Mem.load Mint32 m (ar_code_base_block ard)
@@ -325,7 +326,7 @@ Proof.
     {
       intros ard Hpre Hstep_pre.
 
-      destruct Hstep_pre as (Hn_pos & Hn_range & [sizes_v Hsizes_load] & [ofs_int [Hofs_load Hofs_eq]]).
+      destruct Hstep_pre as (Hn_pos & Hn_range & Haccu_vlong & [sizes_v Hsizes_load] & [ofs_int [Hofs_load Hofs_eq]]).
 
       unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *.
@@ -358,8 +359,9 @@ Proof.
       set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
 
       (* accu representation *)
+      pose proof Haccu_repr as Haccu_repr'.
       rewrite Haccu_eq in Haccu_repr.
-      inversion Haccu_repr; subst accu_v.
+      inversion Haccu_repr; subst accu_v. 2: { exfalso. rewrite Haccu_eq in Haccu_repr'. destruct (Haccu_vlong _ Haccu_repr') as [z Hz]. discriminate Hz. }
       set (tagged_n := Int64.repr (n * 2 + 1)) in *.
 
       (* Compute intermediate pc values *)
@@ -1102,112 +1104,76 @@ Proof.
         { exact Hexec_S12. }
       }
 
-      (* ============================================================ *)
-      (* Part 2: abs_rel for post-state                                *)
-      (* ============================================================ *)
+      (* Part 2: abs_rel for post-state *)
       {
+        exists ard.
+
+        (* new_pc computes to target in co *)
         assert (Hnew_pc_eq : new_pc = Ptrofs.add co (Ptrofs.repr (target * sizeof_code_t))).
-        { unfold new_pc, jump_ofs. rewrite Hpc1_eq. exact Hofs_eq. }
+        { unfold new_pc. rewrite Hpc1_eq. exact Hofs_eq. }
 
-        set (new_co := Ptrofs.sub new_pc (Ptrofs.repr (target * sizeof_code_t))).
-        set (ard' := mk_abs_rel sb so hm cb new_co
-                       (ar_global_block ard) (ar_global_ofs ard)
-                       (ar_stack_block ard) (ar_stack_base_ofs ard)
-                       (ar_code_ne_sptr ard) (ar_code_ne_global ard)
-                       (ar_global_ne_sptr ard) (ar_sptr_ofs_bound ard)).
-        exists ard'.
-        set (uso := Ptrofs.unsigned so) in *.
-
-        (* pc field in m2: written by store2 *)
-        assert (Hpc2 : Mem.load Mint64 m2 sb (uso + 0) = Some new_pc_v).
-        { pose proof (load_after_store_same m1 m2 sb (uso + 0) new_pc_v Hstore2) as H.
+        (* Loads survive the two stores (both at Ptrofs.unsigned so + 0, other fields at +8..+48) *)
+        assert (Hpc_m2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 0) = Some new_pc_v).
+        { pose proof (load_after_store_same m1 m2 sb (Ptrofs.unsigned so + 0) new_pc_v Hstore2) as H.
           unfold new_pc_v in H |- *. rewrite load_result_vptr in H. exact H. }
-
-        (* accu field: written by neither store (both at offset 0) *)
-        assert (Ha2 : Mem.load Mint64 m2 sb (uso + 8) = Some (Vlong tagged_n)).
-        { assert (Hx : Mem.load Mint64 m1 sb (uso + 8) = Some (Vlong tagged_n)) by exact Haccu_m1.
+        assert (Ha2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 8) = Some (Vlong tagged_n)).
+        { prove_field_survives Hstore2 Haccu_m1. }
+        assert (Hs2' : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs)).
+        { assert (Hx : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs)) by (prove_field_survives Hstore1 Hsp_load).
           prove_field_survives Hstore2 Hx. }
-
-        (* sp field *)
-        assert (Hsp2 : Mem.load Mint64 m2 sb (uso + 16) = Some (Vptr sp_b sp_ofs)).
-        { assert (Hx : Mem.load Mint64 m1 sb (uso + 16) = Some (Vptr sp_b sp_ofs)) by (prove_field_survives Hstore1 Hsp_load).
+        assert (He2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 24) = Some env_v).
+        { assert (Hx : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 24) = Some env_v) by (prove_field_survives Hstore1 Henv_load).
           prove_field_survives Hstore2 Hx. }
-
-        (* env field *)
-        assert (He2 : Mem.load Mint64 m2 sb (uso + 24) = Some env_v).
-        { assert (Hx : Mem.load Mint64 m1 sb (uso + 24) = Some env_v) by (prove_field_survives Hstore1 Henv_load).
+        assert (Hx2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 32) = Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
+        { assert (Hx : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 32) = Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))) by (prove_field_survives Hstore1 Hextra_load).
           prove_field_survives Hstore2 Hx. }
-
-        (* extra_args field *)
-        assert (Hx2 : Mem.load Mint64 m2 sb (uso + 32) = Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))).
-        { assert (Hx : Mem.load Mint64 m1 sb (uso + 32) = Some (Vlong (Int64.repr (Z.of_nat (extra_args s))))) by (prove_field_survives Hstore1 Hextra_load).
+        assert (Hg2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 40) = Some gd_ptr).
+        { assert (Hx : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 40) = Some gd_ptr) by (prove_field_survives Hstore1 Hgd_load).
           prove_field_survives Hstore2 Hx. }
-
-        (* global_data field *)
-        assert (Hg2 : Mem.load Mint64 m2 sb (uso + 40) = Some gd_ptr).
-        { assert (Hx : Mem.load Mint64 m1 sb (uso + 40) = Some gd_ptr) by (prove_field_survives Hstore1 Hgd_load).
-          prove_field_survives Hstore2 Hx. }
-
-        (* trap_sp field *)
-        assert (Ht2 : Mem.load Mint64 m2 sb (uso + 48) = Some ts_ptr).
-        { assert (Hx : Mem.load Mint64 m1 sb (uso + 48) = Some ts_ptr) by (prove_field_survives Hstore1 Hts_load).
+        assert (Ht2 : Mem.load Mint64 m2 sb (Ptrofs.unsigned so + 48) = Some ts_ptr).
+        { assert (Hx : Mem.load Mint64 m1 sb (Ptrofs.unsigned so + 48) = Some ts_ptr) by (prove_field_survives Hstore1 Hts_load).
           prove_field_survives Hstore2 Hx. }
 
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
-
-        (* 1. _s in le' *)
+        (* 1. le' ! _s *)
         - subst le'. repeat (rewrite PTree.gso by (compute; congruence)). exact Hle_s.
-
         (* 2. pc field *)
         - exists new_pc_v. split.
-          + exact Hpc2.
-          + simpl. unfold pc_rel, new_pc_v. f_equal.
-            unfold new_co. rewrite Ptrofs.sub_add_opp. rewrite Ptrofs.add_assoc.
-            rewrite (Ptrofs.add_commut (Ptrofs.neg _) _). rewrite <- Ptrofs.sub_add_opp.
-            rewrite Ptrofs.sub_idem. symmetry. apply Ptrofs.add_zero.
-
-        (* 3. accu field -- unchanged *)
-        - exists (Vlong tagged_n). split.
-          + exact Ha2.
-          + simpl. rewrite Haccu_eq. constructor.
-
-        (* 4. sp field -- unchanged *)
+          + exact Hpc_m2.
+          + simpl. unfold pc_rel, new_pc_v. f_equal. exact Hnew_pc_eq.
+        (* 3. accu field *)
+        - exists (Vlong tagged_n). split. exact Ha2. simpl. rewrite Haccu_eq. constructor.
+        (* 4. sp field *)
         - exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
           split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
-          + exact Hsp2.
+          + exact Hs2'.
           + reflexivity.
-          + simpl. eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-            * eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 0) pc1_v).
-              exact Hstack_repr. exact Hstore1. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
-            * exact Hstore2. * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+          + simpl. eapply stack_repr_co_shift.
+            eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (Ptrofs.unsigned so) new_pc_v).
+            * eapply stack_repr_co_shift.
+              eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (Ptrofs.unsigned so) pc1_v).
+              exact Hstack_repr. exact Hs1. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+            * exact Hs2. * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           + exact Hsp_ne_sb. + exact Hsp_ne_gb. + exact Hcb_ne_sp. + exact Hsp_ge8. + exact Hsp_rep.
           + intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hs2. eapply Mem.perm_store_1. exact Hs1. apply Hsp_writable. exact Hofs'.
           + exact Hsp_align.
-
-        (* 5. env field -- unchanged *)
-        - exists env_v. split.
-          + exact He2.
-          + simpl. exact Henv_repr.
-
-        (* 6. extra_args field -- unchanged *)
+        (* 5. env field *)
+        - exists env_v. split. exact He2. simpl. eapply val_repr_co_shift. exact Henv_repr.
+        (* 6. extra_args field *)
         - simpl. exact Hx2.
-
-        (* 7. global_data field -- unchanged *)
+        (* 7. global_data field *)
         - exists gd_ptr. split; [| split; [| split]].
-          + exact Hg2.
-          + simpl. exact Hgd_eq.
-          + simpl. eapply (global_repr_store_other_block hm m1 m2 _ _ _ sb (uso + 0) new_pc_v).
-            * eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 0) pc1_v).
-              exact Hglobal_repr. exact Hstore1. intro Heq; exact (Hgb_ne (eq_sym Heq)).
-            * exact Hstore2. * intro Heq; exact (Hgb_ne (eq_sym Heq)).
+          + exact Hg2. + simpl. exact Hgd_eq.
+          + simpl. eapply global_repr_co_shift.
+            eapply (global_repr_store_other_block hm cb co m1 m2 _ _ _ sb (Ptrofs.unsigned so) new_pc_v).
+            * eapply global_repr_co_shift.
+              eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb (Ptrofs.unsigned so) pc1_v).
+              exact Hglobal_repr. exact Hs1. intro Heq; exact (Hgb_ne (eq_sym Heq)).
+            * exact Hs2. * intro Heq; exact (Hgb_ne (eq_sym Heq)).
           + exact Hgb_ne.
-
-        (* 8. trap_sp field -- unchanged *)
-        - exists ts_ptr. split.
-          + exact Ht2.
-          + simpl. exact Htrap_rel.
-
-        (* 9. sb_writable -- permission preserved through both stores *)
+        (* 8. trap_sp field *)
+        - exists ts_ptr. split. exact Ht2. simpl. exact Htrap_rel.
+        (* 9. sb_writable *)
         - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hs2. eapply Mem.perm_store_1. exact Hs1.
           apply Hsb_writable. exact Hofs'.
       }
@@ -1264,6 +1230,7 @@ Theorem verify_SWITCH_handler_correct :
          | Val_int n =>
              0 <= n /\
              -4611686018427387904 <= n <= 4611686018427387903 /\
+             int_vlong ard n /\
              (exists sizes_v,
                Mem.load Mint32 m (ar_code_base_block ard)
                  (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)

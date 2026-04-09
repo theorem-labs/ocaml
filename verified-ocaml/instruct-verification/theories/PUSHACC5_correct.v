@@ -54,6 +54,8 @@ Proof.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
@@ -219,7 +221,7 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gss; eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Haccu_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Haccu_repr); eval_cbn.
     fold new_sp_ofs.
     rewrite Hstore_accu; eval_cbn.
 
@@ -256,7 +258,7 @@ Proof.
     rewrite Hle_s; eval_cbn.
     try rewrite Haccu_offset; eval_cbn.
     try rewrite PTree.gss; eval_cbn.
-    try rewrite (sem_cast_long_val_repr _ _ _ _ Hval_repr4); eval_cbn.
+    try rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hval_repr4); eval_cbn.
     try rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     rewrite Hstore_accu_field; eval_cbn.
 
@@ -292,7 +294,7 @@ Proof.
     (* accu field: uso + 8, overwritten by store 3 *)
     assert (Haccu_load3 : Mem.load Mint64 m3 sb (uso + 8) = Some cv4).
     { pose proof (load_after_store_same m2 m3 sb (uso + 8) cv4 Hstore_accu_field) as Htmp.
-      rewrite (val_repr_load_result hm v4 cv4 Hval_repr4) in Htmp.
+      rewrite (val_repr_load_result hm cb co v4 cv4 Hval_repr4) in Htmp.
       exact Htmp. }
 
     (* sp field: uso + 16 *)
@@ -371,17 +373,17 @@ Proof.
 
     (* 4. sp field -- updated to new_sp; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      assert (Hstack_m1 : stack_repr hm m1 (v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b sp_ofs).
-      { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+      assert (Hstack_m1 : stack_repr hm cb co m1 (v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b sp_ofs).
+      { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
                  (uso + 16) (Vptr sp_b new_sp_ofs)
                  Hstack_repr Hstore_sp).
         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-      assert (Hstack_m2 : stack_repr hm m2 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b new_sp_ofs).
-      { exact (stack_repr_cons_after_store hm m1 m2
+      assert (Hstack_m2 : stack_repr hm cb co m2 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b new_sp_ofs).
+      { exact (stack_repr_cons_after_store hm cb co m1 m2
                  (v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b sp_ofs (Machine.accu s) accu_v
                  Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 (Hsp_rep)). }
-      assert (Hstack_m3 : stack_repr hm m3 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b new_sp_ofs).
-      { apply (stack_repr_store_other_block hm m2 m3
+      assert (Hstack_m3 : stack_repr hm cb co m3 (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b new_sp_ofs).
+      { apply (stack_repr_store_other_block hm cb co m2 m3
                  (Machine.accu s :: v0 :: v1 :: v2 :: v3 :: v4 :: rest) sp_b new_sp_ofs sb
                  (uso + 8) cv4
                  Hstack_m2 Hstore_accu_field).
@@ -419,13 +421,13 @@ Proof.
       - exact Hgd_load3.
       - simpl. exact Hgd_eq.
       - simpl.
-        apply (global_repr_store_other_block hm m2 m3 _
+        apply (global_repr_store_other_block hm cb co m2 m3 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (uso + 8) cv4).
-        + apply (global_repr_store_other_block hm m1 m2 _
+        + apply (global_repr_store_other_block hm cb co m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sp_b (Ptrofs.unsigned new_sp_ofs) accu_v).
-          * apply (global_repr_store_other_block hm m m1 _
+          * apply (global_repr_store_other_block hm cb co m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 16) (Vptr sp_b new_sp_ofs)
                      Hglobal_repr Hstore_sp).

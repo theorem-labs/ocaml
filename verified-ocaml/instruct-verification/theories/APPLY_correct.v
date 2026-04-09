@@ -144,12 +144,14 @@ Qed.
 Definition apply_step_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
   let cb := ar_code_base_block ard in
   forall target_pc,
     get_code_ptr_s s s.(Machine.accu) = Some target_pc ->
     forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
+      val_repr hm cb co s.(Machine.accu) accu_v ->
       exists accu_b accu_ofs code_b code_ofs,
         accu_v = Vptr accu_b accu_ofs /\
         Mem.load Mptr m accu_b (Ptrofs.unsigned accu_ofs) = Some (Vptr code_b code_ofs) /\
@@ -162,6 +164,26 @@ Definition apply_step_pre
 (* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
+
+Local Lemma val_repr_co_shift : forall hm cb co co' v cv,
+  val_repr hm cb co v cv -> val_repr hm cb co' v cv.
+Proof.
+  intros. inversion H; subst.
+  - constructor. - eapply vr_ptr; eassumption.
+  - eapply vr_closure; eauto. - constructor. - eapply vr_code_ptr.
+Qed.
+Local Lemma stack_repr_co_shift : forall hm cb co co' m stk b ofs,
+  stack_repr hm cb co m stk b ofs -> stack_repr hm cb co' m stk b ofs.
+Proof.
+  intros hm0 cb0 co0 co' m0 stk0 b0 ofs0 H. induction H.
+  - constructor. - econstructor; [eassumption | eapply val_repr_co_shift; eassumption | assumption].
+Qed.
+Local Lemma global_repr_co_shift : forall hm cb co co' m vs b ofs,
+  global_repr hm cb co m vs b ofs -> global_repr hm cb co' m vs b ofs.
+Proof.
+  intros hm0 cb0 co0 co' m0 vs0 b0 ofs0 H. induction H.
+  - constructor. - econstructor; [eassumption | eapply val_repr_co_shift; eassumption | assumption].
+Qed.
 
 Theorem verify_APPLY_correct : forall n,
     handler_correct (fun _ s => handle_APPLY n s) f_instr_APPLY
@@ -510,7 +532,7 @@ Proof.
     (* 3. accu field -- unchanged *)
     { exists (Vptr accu_b accu_ofs). split.
       - exact Haccu_load3.
-      - simpl. exact Haccu_repr. }
+      - simpl. eapply val_repr_co_shift; exact Haccu_repr. }
 
     (* 4. sp field -- unchanged *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -518,9 +540,10 @@ Proof.
       - exact Hsp_load3.
       - reflexivity.
       - simpl.
-        apply (stack_repr_store_other_block hm m2 m3 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 24) new_env_v).
-        + apply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 0) new_pc_v).
-          * apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 32) ea_val).
+        eapply stack_repr_co_shift.
+        apply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 24) new_env_v).
+        + apply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 0) new_pc_v).
+          * apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (Ptrofs.unsigned so + 32) ea_val).
             exact Hstack_repr. exact Hstore1.
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           * exact Hstore2.
@@ -542,7 +565,7 @@ Proof.
     (* 5. env field -- updated to accu *)
     { exists new_env_v. split.
       - exact Henv_load3.
-      - simpl. exact Haccu_repr. }
+      - simpl. eapply val_repr_co_shift; exact Haccu_repr. }
 
     (* 6. extra_args field -- updated to (n-1) *)
     { simpl. rewrite Hextra_load3.
@@ -566,13 +589,14 @@ Proof.
       - exact Hgd_load3.
       - simpl. exact Hgd_eq.
       - simpl.
-        apply (global_repr_store_other_block hm m2 m3 _
+        eapply global_repr_co_shift.
+        apply (global_repr_store_other_block hm cb co m2 m3 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (Ptrofs.unsigned so + 24) new_env_v).
-        + apply (global_repr_store_other_block hm m1 m2 _
+        + apply (global_repr_store_other_block hm cb co m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (Ptrofs.unsigned so + 0) new_pc_v).
-          * apply (global_repr_store_other_block hm m m1 _
+          * apply (global_repr_store_other_block hm cb co m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (Ptrofs.unsigned so + 32) ea_val).
             exact Hglobal_repr. exact Hstore1.

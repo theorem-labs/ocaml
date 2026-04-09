@@ -169,11 +169,11 @@ Qed.
 
 (* sp_ofs_aligned: stack offsets from stack_repr are 8-aligned,
    since Mem.load Mint64 succeeds only at aligned addresses. *)
-Lemma sp_ofs_aligned : forall hm m v vs sp_b sp_ofs,
-  stack_repr hm m (v :: vs) sp_b sp_ofs ->
+Lemma sp_ofs_aligned : forall hm cb co m v vs sp_b sp_ofs,
+  stack_repr hm cb co m (v :: vs) sp_b sp_ofs ->
   (align_chunk Mint64 | Ptrofs.unsigned sp_ofs).
 Proof.
-  intros hm m v vs sp_b sp_ofs Hsr.
+  intros hm cb co m v vs sp_b sp_ofs Hsr.
   inversion Hsr as [| ? ? ? ? cv Hload Hvr Htail].
   exact (proj2 (Mem.load_valid_access _ _ _ _ _ Hload)).
 Qed.
@@ -233,13 +233,13 @@ Qed.
 (* Representation preservation under store to other block              *)
 (* ================================================================== *)
 
-Lemma stack_repr_store_other_block : forall hm m m' stk sp_b sp_ofs sb ofs v,
-  stack_repr hm m stk sp_b sp_ofs ->
+Lemma stack_repr_store_other_block : forall hm cb co m m' stk sp_b sp_ofs sb ofs v,
+  stack_repr hm cb co m stk sp_b sp_ofs ->
   Mem.store Mint64 m sb ofs v = Some m' ->
   sb <> sp_b ->
-  stack_repr hm m' stk sp_b sp_ofs.
+  stack_repr hm cb co m' stk sp_b sp_ofs.
 Proof.
-  intros hm m m' stk. revert m m'.
+  intros hm cb co m m' stk. revert m m'.
   induction stk as [| hd tl IH]; intros m m' sp_b sp_ofs sb ofs v Hsr Hstore Hne.
   - constructor.
   - inversion Hsr; subst. econstructor.
@@ -248,13 +248,13 @@ Proof.
     + eapply IH; eauto.
 Qed.
 
-Lemma global_repr_store_other_block : forall hm m m' gs gb gofs sb ofs v,
-  global_repr hm m gs gb gofs ->
+Lemma global_repr_store_other_block : forall hm cb co m m' gs gb gofs sb ofs v,
+  global_repr hm cb co m gs gb gofs ->
   Mem.store Mint64 m sb ofs v = Some m' ->
   sb <> gb ->
-  global_repr hm m' gs gb gofs.
+  global_repr hm cb co m' gs gb gofs.
 Proof.
-  intros hm m m' gs. revert m m'.
+  intros hm cb co m m' gs. revert m m'.
   induction gs as [| hd tl IH]; intros m m' gb gofs sb ofs v Hgr Hstore Hne.
   - constructor.
   - inversion Hgr; subst. econstructor.
@@ -272,16 +272,17 @@ Qed.
 (* Value representation                                                *)
 (* ================================================================== *)
 
-Lemma val_repr_load_result : forall hm v cv,
-  val_repr hm v cv ->
+Lemma val_repr_load_result : forall hm cb co v cv,
+  val_repr hm cb co v cv ->
   Val.load_result Mint64 cv = cv.
 Proof.
-  intros hm v cv Hvr. inversion Hvr; subst; simpl.
+  intros hm cb co v cv Hvr. inversion Hvr; subst; simpl.
   - (* vr_int: Vlong *) reflexivity.
   - (* vr_ptr: Vptr — needs ptr64 *)
     rewrite ptr64_true. reflexivity.
   - (* vr_closure: Vptr *) rewrite ptr64_true. reflexivity.
   - (* vr_block_atom: Vlong *) reflexivity.
+  - (* vr_code_ptr: Vptr *) rewrite ptr64_true. reflexivity.
 Qed.
 
 (* ================================================================== *)
@@ -316,15 +317,16 @@ Qed.
    Vsingle, and Vint when ptr64 = true (cast_case_pointer path).
    ACC0_bigstep_compl_allresults.v uses it at a point where the value
    satisfies val_repr, so this proved lemma is a sound replacement. *)
-Lemma sem_cast_long_val_repr : forall hm v cv m,
-  val_repr hm v cv ->
+Lemma sem_cast_long_val_repr : forall hm cb co v cv m,
+  val_repr hm cb co v cv ->
   sem_cast cv tlong tlong m = Some cv.
 Proof.
-  intros hm v cv m Hvr. inversion Hvr; subst.
+  intros hm cb co v cv m Hvr. inversion Hvr; subst.
   - (* vr_int: Vlong *) apply sem_cast_long_vlong.
   - (* vr_ptr: Vptr *) apply sem_cast_long_vptr.
   - (* vr_closure: Vptr *) apply sem_cast_long_vptr.
   - (* vr_block_atom: Vlong *) apply sem_cast_long_vlong.
+  - (* vr_code_ptr: Vptr *) apply sem_cast_long_vptr.
 Qed.
 
 Lemma sem_add_sp_0 : forall sp_b sp_ofs m,
@@ -410,14 +412,14 @@ Qed.
    This is needed when PUSH decrements sp and stores there: the old
    stack_repr at the old sp is unaffected because the store is at
    old_sp - 8, which does not overlap old_sp, old_sp + 8, ... *)
-Lemma stack_repr_store_same_block_lower : forall hm m m' stk sp_b sp_ofs ofs v,
-  stack_repr hm m stk sp_b sp_ofs ->
+Lemma stack_repr_store_same_block_lower : forall hm cb co m m' stk sp_b sp_ofs ofs v,
+  stack_repr hm cb co m stk sp_b sp_ofs ->
   Mem.store Mint64 m sp_b ofs v = Some m' ->
   ofs + 8 <= Ptrofs.unsigned sp_ofs ->
   Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus ->
-  stack_repr hm m' stk sp_b sp_ofs.
+  stack_repr hm cb co m' stk sp_b sp_ofs.
 Proof.
-  intros hm m m' stk. revert m m'.
+  intros hm cb co m m' stk. revert m m'.
   induction stk as [| hd tl IH]; intros m m' sp_b sp_ofs ofs v Hsr Hstore Hle Hrep.
   - constructor.
   - inversion Hsr; subst. econstructor.
@@ -436,18 +438,18 @@ Qed.
 
    This combines load_after_store_same for the head element with
    stack_repr_store_same_block_lower for the tail. *)
-Lemma stack_repr_cons_after_store : forall hm m m' stk sp_b sp_ofs v cv,
-  stack_repr hm m stk sp_b sp_ofs ->
-  val_repr hm v cv ->
+Lemma stack_repr_cons_after_store : forall hm cb co m m' stk sp_b sp_ofs v cv,
+  stack_repr hm cb co m stk sp_b sp_ofs ->
+  val_repr hm cb co v cv ->
   Mem.store Mint64 m sp_b (Ptrofs.unsigned (Ptrofs.sub sp_ofs (Ptrofs.repr 8))) cv = Some m' ->
   Ptrofs.unsigned sp_ofs >= 8 ->
   Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus ->
-  stack_repr hm m' (v :: stk) sp_b (Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
+  stack_repr hm cb co m' (v :: stk) sp_b (Ptrofs.sub sp_ofs (Ptrofs.repr 8)).
 Proof.
-  intros hm m m' stk sp_b sp_ofs v cv Hsr Hvr Hstore Hge8 Hrep.
+  intros hm cb co m m' stk sp_b sp_ofs v cv Hsr Hvr Hstore Hge8 Hrep.
   econstructor.
   - pose proof (Mem.load_store_same _ _ _ _ _ _ Hstore) as Hload.
-    rewrite (val_repr_load_result hm v cv Hvr) in Hload. exact Hload.
+    rewrite (val_repr_load_result hm cb co v cv Hvr) in Hload. exact Hload.
   - exact Hvr.
   - replace (Ptrofs.add (Ptrofs.sub sp_ofs (Ptrofs.repr 8)) (Ptrofs.repr 8)) with sp_ofs.
     + eapply stack_repr_store_same_block_lower; eauto.
@@ -586,6 +588,88 @@ Proof. reflexivity. Qed.
        left. exact Hcb_ne. }
 
    This lemma packages that three-line proof into a single apply. *)
+(* ================================================================== *)
+(* pc_rel lemmas: prove pc_rel with same code base, new rocq_pc      *)
+(* ================================================================== *)
+
+Local Lemma ptrofs_add_repr_hl : forall a b,
+  Ptrofs.add (Ptrofs.repr a) (Ptrofs.repr b) = Ptrofs.repr (a + b).
+Proof.
+  intros. rewrite Ptrofs.add_unsigned. apply Ptrofs.eqm_samerepr.
+  apply Ptrofs.eqm_add; apply Ptrofs.eqm_sym; apply Ptrofs.eqm_unsigned_repr.
+Qed.
+
+(* PC advances by 1 instruction *)
+Lemma pc_rel_next : forall cb co rocq_pc,
+  pc_rel (Vptr cb (Ptrofs.add (Ptrofs.add co (Ptrofs.repr (rocq_pc * sizeof_code_t)))
+                               (Ptrofs.repr sizeof_code_t)))
+         cb co (rocq_pc + 1).
+Proof.
+  intros. unfold pc_rel, sizeof_code_t.
+  f_equal. rewrite Ptrofs.add_assoc. f_equal.
+  rewrite ptrofs_add_repr_hl. f_equal. lia.
+Qed.
+
+(* PC advances by 2 instructions *)
+Lemma pc_rel_next2 : forall cb co rocq_pc,
+  pc_rel (Vptr cb (Ptrofs.add (Ptrofs.add co (Ptrofs.repr (rocq_pc * sizeof_code_t)))
+                               (Ptrofs.repr (2 * sizeof_code_t))))
+         cb co (rocq_pc + 2).
+Proof.
+  intros. unfold pc_rel, sizeof_code_t.
+  f_equal. rewrite Ptrofs.add_assoc. f_equal.
+  rewrite ptrofs_add_repr_hl. f_equal. lia.
+Qed.
+
+(* PC advances by 3 instructions *)
+Lemma pc_rel_next3 : forall cb co rocq_pc,
+  pc_rel (Vptr cb (Ptrofs.add (Ptrofs.add co (Ptrofs.repr (rocq_pc * sizeof_code_t)))
+                               (Ptrofs.repr (3 * sizeof_code_t))))
+         cb co (rocq_pc + 3).
+Proof.
+  intros. unfold pc_rel, sizeof_code_t.
+  f_equal. rewrite Ptrofs.add_assoc. f_equal.
+  rewrite ptrofs_add_repr_hl. f_equal. lia.
+Qed.
+
+(* PC jumps to target via branch offset *)
+Lemma pc_rel_branch : forall cb co target,
+  pc_rel (Vptr cb (Ptrofs.add co (Ptrofs.repr (target * sizeof_code_t))))
+         cb co target.
+Proof. intros. unfold pc_rel. reflexivity. Qed.
+
+(* ================================================================== *)
+(* val_repr / stack_repr / global_repr are independent of co           *)
+(* (since vr_code_ptr uses its own co_val, not the parameter co).      *)
+(* ================================================================== *)
+
+Lemma val_repr_co_shift : forall hm cb co co' v cv,
+  val_repr hm cb co v cv -> val_repr hm cb co' v cv.
+Proof.
+  intros hm0 cb0 co0 co' v0 cv0 H. inversion H; subst.
+  - constructor.
+  - eapply vr_ptr; eassumption.
+  - eapply vr_closure; eauto.
+  - constructor.
+  - eapply vr_code_ptr.
+Qed.
+
+Lemma stack_repr_co_shift : forall hm cb co co' m stk b ofs,
+  stack_repr hm cb co m stk b ofs -> stack_repr hm cb co' m stk b ofs.
+Proof.
+  intros hm0 cb0 co0 co' m0 stk0 b0 ofs0 H. induction H.
+  - constructor.
+  - econstructor; [eassumption | eapply val_repr_co_shift; eassumption | assumption].
+Qed.
+
+Lemma global_repr_co_shift : forall hm cb co co' m vs b ofs,
+  global_repr hm cb co m vs b ofs -> global_repr hm cb co' m vs b ofs.
+Proof.
+  intros hm0 cb0 co0 co' m0 vs0 b0 ofs0 H. induction H.
+  - constructor.
+  - econstructor; [eassumption | eapply val_repr_co_shift; eassumption | assumption].
+Qed.
+
 Lemma code_buffer_load_at : forall chunk chunk' m m' cb sb ofs_code ofs_store v_code v_store,
   Mem.load chunk m cb ofs_code = Some v_code ->
   Mem.store chunk' m sb ofs_store v_store = Some m' ->

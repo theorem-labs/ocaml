@@ -153,16 +153,16 @@ Proof.
   - simpl. f_equal. apply IH.
 Qed.
 
-Lemma global_repr_nth_error_ptrofs : forall hm m gs gb go n v,
-  global_repr hm m gs gb go ->
+Lemma global_repr_nth_error_ptrofs : forall hm cb co m gs gb go n v,
+  global_repr hm cb co m gs gb go ->
   nth_error gs n = Some v ->
   exists cv,
     Mem.load Mint64 m gb
       (Ptrofs.unsigned (Nat.iter n (fun p => Ptrofs.add p (Ptrofs.repr 8)) go))
     = Some cv /\
-    val_repr hm v cv.
+    val_repr hm cb co v cv.
 Proof.
-  intros hm m gs gb go n v Hgr.
+  intros hm cb co m gs gb go n v Hgr.
   revert n.
   induction Hgr as [| v0 vs b ofs cv0 Hload Hval_repr Hgr' IH];
     intros n Hnth.
@@ -204,16 +204,16 @@ Proof.
       replace (Z.of_nat (S n')) with (Z.of_nat n' + 1)%Z in Hbound by lia. lia.
 Qed.
 
-Lemma global_repr_nth_error : forall hm m gs gb go n v,
-  global_repr hm m gs gb go ->
+Lemma global_repr_nth_error : forall hm cb co m gs gb go n v,
+  global_repr hm cb co m gs gb go ->
   nth_error gs n = Some v ->
   Ptrofs.unsigned go + Z.of_nat n * 8 < Ptrofs.modulus ->
   exists cv,
     Mem.load Mint64 m gb (Ptrofs.unsigned go + Z.of_nat n * 8) = Some cv /\
-    val_repr hm v cv.
+    val_repr hm cb co v cv.
 Proof.
-  intros hm m gs gb go n v Hgr Hnth Hbound.
-  destruct (global_repr_nth_error_ptrofs hm m gs gb go n v Hgr Hnth)
+  intros hm cb co m gs gb go n v Hgr Hnth Hbound.
+  destruct (global_repr_nth_error_ptrofs hm cb co m gs gb go n v Hgr Hnth)
     as [cv [Hload Hval_repr]].
   exists cv. split; [| exact Hval_repr].
   rewrite <- (iter_add_8_unsigned go n Hbound).
@@ -345,7 +345,7 @@ Proof.
   { apply (Hsp_ge16 sp_b sp_ofs). exact Hsp_load. }
 
   (* Global value from global_repr *)
-  destruct (global_repr_nth_error hm m _ gb go n gval Hglobal_repr Hnth Hgo_bound)
+  destruct (global_repr_nth_error hm cb co m _ gb go n gval Hglobal_repr Hnth Hgo_bound)
     as [cv_global [Hglobal_load Hglobal_val_repr]].
 
   (* New pc after advancement *)
@@ -521,7 +521,7 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gss; eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Haccu_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Haccu_repr); eval_cbn.
     fold new_sp_ofs.
     rewrite Hstore2; eval_cbn.
 
@@ -580,7 +580,7 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite Hle_s; eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Hglobal_val_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hglobal_val_repr); eval_cbn.
     rewrite (ptrofs_add_unsigned (ar_sptr_ofs ard) 8 ltac:(lia) ltac:(lia)).
     rewrite Hstore3; eval_cbn.
 
@@ -673,7 +673,7 @@ Proof.
     (* accu field at uso+8: written by store 3, survives store 4 *)
     assert (Haccu_load_m3 : Mem.load Mint64 m3 sb (uso + 8) = Some cv_global).
     { pose proof (load_after_store_same m2 m3 sb (uso + 8) cv_global Hstore3) as Htmp.
-      rewrite (val_repr_load_result hm gval cv_global Hglobal_val_repr) in Htmp.
+      rewrite (val_repr_load_result hm cb co gval cv_global Hglobal_val_repr) in Htmp.
       exact Htmp. }
     assert (Haccu_load4 : Mem.load Mint64 m4 sb (uso + 8) = Some cv_global).
     { apply (load_after_store_other m3 m4 sb (uso + 0) (uso + 8)
@@ -767,7 +767,7 @@ Proof.
     (* 3. accu field -- updated to global[n] *)
     { exists cv_global. split.
       - exact Haccu_load4.
-      - simpl. exact Hglobal_val_repr. }
+      - simpl. eapply val_repr_co_shift. exact Hglobal_val_repr. }
 
     (* 4. sp field -- updated to new_sp_ofs; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
@@ -775,25 +775,23 @@ Proof.
       - exact Hsp_load4.
       - reflexivity.
       - simpl.
-        (* Build stack_repr through all 4 stores *)
-        assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-        { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
-                   (uso + 16) (Vptr sp_b new_sp_ofs)
-                   Hstack_repr Hstore1).
-          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-        assert (Hstack_cons_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-        { exact (stack_repr_cons_after_store hm m1 m2
-                   (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
-                   Hstack_m1 Haccu_repr Hstore2 Hsp_ge8 Hsp_rep). }
-        assert (Hstack_cons_m3 : stack_repr hm m3 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-        { apply (stack_repr_store_other_block hm m2 m3 _ sp_b new_sp_ofs sb
-                   (uso + 8) cv_global
-                   Hstack_cons_m2 Hstore3).
-          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-        apply (stack_repr_store_other_block hm m3 m4 _ sp_b new_sp_ofs sb
-                 (uso + 0) new_pc_v
-                 Hstack_cons_m3 Hstore4).
-                intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        eapply stack_repr_co_shift.
+        apply (stack_repr_store_other_block hm cb co m3 m4 _ sp_b new_sp_ofs sb
+                 (uso + 0) new_pc_v).
+        + apply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b new_sp_ofs sb
+                   (uso + 8) cv_global).
+          * assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+            { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
+                       (uso + 16) (Vptr sp_b new_sp_ofs)
+                       Hstack_repr Hstore1).
+              intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
+            exact (stack_repr_cons_after_store hm cb co m1 m2
+                     (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
+                     Hstack_m1 Haccu_repr Hstore2 Hsp_ge8 Hsp_rep).
+          * exact Hstore3.
+          * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        + exact Hstore4.
+        + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp.
@@ -818,7 +816,7 @@ Proof.
     (* 5. env field -- unchanged *)
     { exists env_v. split.
       - exact Henv_load4.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
     (* 6. extra_args field -- unchanged *)
     { simpl. exact Hextra_load4. }
@@ -828,23 +826,19 @@ Proof.
       - exact Hgd_load4.
       - simpl. reflexivity.
       - simpl.
-        (* global_repr survives all 4 stores (different blocks) *)
-        apply (global_repr_store_other_block hm m3 m4 _
-                 (ar_global_block ard) (ar_global_ofs ard)
-                 sb (uso + 0) new_pc_v).
-        + apply (global_repr_store_other_block hm m2 m3 _
-                   (ar_global_block ard) (ar_global_ofs ard)
-                   sb (uso + 8) cv_global).
-          * apply (global_repr_store_other_block hm m1 m2 _
-                     (ar_global_block ard) (ar_global_ofs ard)
-                     sp_b (Ptrofs.unsigned new_sp_ofs) accu_v).
-            -- apply (global_repr_store_other_block hm m m1 _
-                       (ar_global_block ard) (ar_global_ofs ard)
-                       sb (uso + 16) (Vptr sp_b new_sp_ofs)
+        eapply global_repr_co_shift.
+        apply (global_repr_store_other_block hm cb co m3 m4 _
+                 gb go sb (uso + 0) new_pc_v).
+        + apply (global_repr_store_other_block hm cb co m2 m3 _
+                   gb go sb (uso + 8) cv_global).
+          * apply (global_repr_store_other_block hm cb co m1 m2 _
+                     gb go sp_b (Ptrofs.unsigned new_sp_ofs) accu_v).
+            { apply (global_repr_store_other_block hm cb co m m1 _
+                       gb go sb (uso + 16) (Vptr sp_b new_sp_ofs)
                        Hglobal_repr Hstore1).
-               intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
-            -- exact Hstore2.
-            -- exact Hsp_ne_gb.
+              intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
+            { exact Hstore2. }
+            { exact Hsp_ne_gb. }
           * exact Hstore3.
           * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         + exact Hstore4.

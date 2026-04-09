@@ -131,12 +131,15 @@ Definition boolnot_precond (s : Machine.state) : Prop :=
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+#[warnings="-not-a-closed-proof"]
 Theorem verify_BOOLNOT_correct :
   forall e le m s,
     match handle_BOOLNOT s.(pc) s with
     | Step s' =>
         boolnot_precond s ->
-        abs_rel e le m s ->
+        forall ard,
+        abs_rel_with_ard e le m s ard ->
+        accu_is_long e m s ard ->
         exists le' m' out,
           exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_BOOLNOT) E0 le' m' out /\
           abs_rel e le' m' s'
@@ -161,12 +164,15 @@ Proof.
     (* Case 1a: accu = Val_int 0 => Step with val_true = Val_int 1    *)
     (* ============================================================== *)
     {
-      intros _Hbool Hpre.
+      intros _Hbool ard Hpre Haccu_long.
 
-      destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
+      unfold accu_is_long in Haccu_long.
+      unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
+      set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -184,8 +190,11 @@ Proof.
       fold sb in Hgb_ne.
 
       (* accu = Val_int 0, val_repr gives Vlong (Int64.repr 1) *)
+      pose proof Haccu_repr as Haccu_repr_rw.
       rewrite Haccu_eq in Haccu_repr.
       inversion Haccu_repr; subst accu_v.
+      2: { exfalso.
+           destruct (Haccu_long _ Haccu_repr_rw) as [z Hz]. discriminate Hz. }
 
       destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
@@ -278,14 +287,14 @@ Proof.
           - exact Haccu_load'.
           - simpl. subst cv_result.
             rewrite tagged_boolnot_arith_0.
-            constructor. }
+            apply vr_int. }
 
         { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
           split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                      Hstack_repr Hstore).
                         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           - exact Hsp_ne_sb.
@@ -306,7 +315,7 @@ Proof.
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
-            apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv_result
                      Hglobal_repr Hstore).
                         intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           - exact Hgb_ne_sb. }
@@ -324,7 +333,7 @@ Proof.
     (* Case 1b: accu = Val_int (Z.pos p) => Step with val_false       *)
     (* ============================================================== *)
     {
-      intros Hbool Hpre.
+      intros Hbool ard Hpre Haccu_long.
 
       (* From boolnot_precond + accu = Val_int (Z.pos p): must be Val_int 1 *)
       destruct Hbool as [Hbool | Hbool];
@@ -332,10 +341,13 @@ Proof.
       rewrite Haccu_eq in Hbool. injection Hbool as Hp.
       assert (Hp1 : p = xH) by lia. subst p.
 
-      destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
+      unfold accu_is_long in Haccu_long.
+      unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
+      set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -353,8 +365,11 @@ Proof.
       fold sb in Hgb_ne.
 
       (* accu = Val_int 1, val_repr gives Vlong (Int64.repr 3) *)
+      pose proof Haccu_repr as Haccu_repr_rw.
       rewrite Haccu_eq in Haccu_repr.
       inversion Haccu_repr; subst accu_v.
+      2: { exfalso.
+           destruct (Haccu_long _ Haccu_repr_rw) as [z Hz]. discriminate Hz. }
 
       destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
@@ -447,14 +462,14 @@ Proof.
           - exact Haccu_load'.
           - simpl. subst cv_result.
             rewrite tagged_boolnot_arith_1.
-            constructor. }
+            apply vr_int. }
 
         { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
           split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                      Hstack_repr Hstore).
                         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           - exact Hsp_ne_sb.
@@ -475,7 +490,7 @@ Proof.
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
-            apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv_result
                      Hglobal_repr Hstore).
                         intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           - exact Hgb_ne_sb. }
@@ -493,7 +508,7 @@ Proof.
     (* Case 1c: accu = Val_int (Z.neg p) => excluded by precondition  *)
     (* ============================================================== *)
     {
-      intros Hbool _Hpre.
+      intros Hbool _ _ _.
       destruct Hbool as [Hbool | Hbool];
         rewrite Haccu_eq in Hbool; discriminate.
     }
@@ -502,7 +517,7 @@ Proof.
   (* ================================================================ *)
   (* Cases 2-4: non-integer accu => excluded by boolean precondition   *)
   (* ================================================================ *)
-  all: intros Hbool _Hpre;
+  all: intros Hbool _ _ _;
        destruct Hbool as [Hbool | Hbool];
        rewrite Haccu_eq in Hbool; discriminate.
 Qed.
@@ -510,13 +525,14 @@ Qed.
 (* Wrapper: convert to handler_correct form for the Module Type. *)
 Theorem verify_BOOLNOT_handler_correct :
     handler_correct handle_BOOLNOT f_instr_BOOLNOT
-      (fun _ _ s _ => boolnot_precond s)
+      (pre_and accu_is_bool accu_is_long)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
   pose proof (verify_BOOLNOT_correct e le m s) as H.
   destruct (handle_BOOLNOT (Machine.pc s) s) eqn:Hmatch.
-  - intros ard Hrel Hpre. apply H; auto. exists ard. exact Hrel.
+  - intros ard Hrel [Hbool Hlong].
+    exact (H Hbool ard Hrel Hlong).
   - exact H.
   - exact H.
   - exact H.

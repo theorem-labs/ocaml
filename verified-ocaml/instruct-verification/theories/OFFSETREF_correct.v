@@ -225,14 +225,14 @@ Definition offsetref_heap_pre
      s.(Machine.accu) = Val_ptr addr ->
      heap_lookup s.(Machine.hp) addr = Some (tag, Val_int old_z :: rest) ->
      forall accu_v,
-       val_repr hm (Val_ptr addr) accu_v ->
+       val_repr hm cb co (Val_ptr addr) accu_v ->
        exists b ofs,
          accu_v = Vptr b ofs /\
          Mem.load Mint64 m b (Ptrofs.unsigned ofs) =
            Some (Vlong (Int64.repr (old_z * 2 + 1))) /\
          b <> sb /\ b <> gb /\ b <> cb /\
          (forall sp_b sp_ofs,
-            stack_repr hm m s.(Machine.stack) sp_b sp_ofs ->
+            stack_repr hm cb co m s.(Machine.stack) sp_b sp_ofs ->
             b <> sp_b) /\
          (forall new_cv, exists m_h,
             Mem.store Mint64 m b (Ptrofs.unsigned ofs) new_cv = Some m_h /\
@@ -242,13 +242,13 @@ Definition offsetref_heap_pre
                Mem.load Mint64 m_h b' ofs' = Some v') /\
             Mem.range_perm m_h sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable /\
             (forall sp_b sp_ofs,
-               stack_repr hm m s.(Machine.stack) sp_b sp_ofs ->
+               stack_repr hm cb co m s.(Machine.stack) sp_b sp_ofs ->
                b <> sp_b ->
-               stack_repr hm m_h s.(Machine.stack) sp_b sp_ofs) /\
+               stack_repr hm cb co m_h s.(Machine.stack) sp_b sp_ofs) /\
             (forall gbl go,
-               global_repr hm m s.(Machine.global) gbl go ->
+               global_repr hm cb co m s.(Machine.global) gbl go ->
                b <> gbl ->
-               global_repr hm m_h s.(Machine.global) gbl go) /\
+               global_repr hm cb co m_h s.(Machine.global) gbl go) /\
             (forall sp_b lo hi,
                Mem.range_perm m sp_b lo hi Cur Writable ->
                Mem.range_perm m_h sp_b lo hi Cur Writable))).
@@ -321,7 +321,7 @@ Proof.
 
     (* Determine accu_v from val_repr + accu = Val_ptr addr *)
     rewrite Haccu_eq in Haccu_repr.
-    assert (Haccu_is_ptr : val_repr hm (Val_ptr addr) accu_v) by exact Haccu_repr.
+    assert (Haccu_is_ptr : val_repr hm cb co (Val_ptr addr) accu_v) by exact Haccu_repr.
 
     (* Use heap precondition *)
     destruct (Hheap_pre addr old_z rest tag_v Haccu_eq Hheap accu_v Haccu_is_ptr)
@@ -626,22 +626,20 @@ Proof.
       { exists unit_v. split.
         - exact Haccu_load'.
         - simpl. simpl ar_heap_map. fold hm.
-          subst unit_v. exact (vr_int _ 0). }
+          subst unit_v. exact (vr_int _ _ _ 0). }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load'.
         - reflexivity.
-        - simpl. simpl ar_heap_map. fold hm.
-          pose proof (Hhb_ne_sp sp_b sp_ofs Hstack_repr) as Hhb_ne_spb.
-          eapply (stack_repr_store_other_block hm m2 m' _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-          + eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 8) unit_v).
-            * apply (Hstack_m1 sp_b sp_ofs Hstack_repr Hhb_ne_spb).
-            * exact Hstore_accu.
-            * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
-          + exact Hstore_pc.
-          + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        - simpl.
+          eapply stack_repr_store_other_block; [| exact Hstore_pc | auto].
+          eapply stack_repr_store_other_block; [| exact Hstore_accu | auto].
+          eapply stack_repr_co_shift.
+          eapply Hstack_m1.
+          + exact Hstack_repr.
+          + exact (Hhb_ne_sp sp_b sp_ofs Hstack_repr).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - simpl. exact Hcb_ne_sp.
@@ -655,7 +653,7 @@ Proof.
       (* 5. env field -- unchanged *)
       { exists env_v. split.
         - exact Henv_load'.
-        - simpl. simpl ar_heap_map. fold hm. exact Henv_repr. }
+        - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
       (* 6. extra_args field -- unchanged *)
       { simpl. exact Hextra_load'. }
@@ -663,19 +661,14 @@ Proof.
       (* 7. global_data field -- unchanged *)
       { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load'.
-        - simpl. simpl ar_global_block. simpl ar_global_ofs. fold gb go.
-          exact Hgd_eq.
-        - simpl. simpl ar_heap_map. simpl ar_global_block. simpl ar_global_ofs.
-          fold hm gb go.
-          subst gd_ptr.
-          eapply (global_repr_store_other_block hm m2 m' _ gb go sb (uso + 0) new_pc_v).
-          + eapply (global_repr_store_other_block hm m1 m2 _ gb go sb (uso + 8) unit_v).
-            * apply (Hglobal_m1 gb go Hglobal_repr Hhb_ne_gb).
-            * exact Hstore_accu.
-            * intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
-          + exact Hstore_pc.
-          + intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
-        - exact Hgb_ne_sb. }
+        - simpl. exact Hgd_eq.
+        - simpl. eapply global_repr_co_shift.
+          eapply global_repr_store_other_block; [| exact Hstore_pc | auto].
+          eapply global_repr_store_other_block; [| exact Hstore_accu | auto].
+          eapply Hglobal_m1.
+          + exact Hglobal_repr.
+          + exact Hhb_ne_gb.
+        - simpl. exact Hgb_ne_sb. }
 
       (* 8. trap_sp field -- unchanged *)
       { exists ts_ptr. split.

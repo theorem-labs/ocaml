@@ -172,6 +172,26 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+Local Lemma val_repr_co_shift : forall hm cb co co' v cv,
+  val_repr hm cb co v cv -> val_repr hm cb co' v cv.
+Proof.
+  intros. inversion H; subst.
+  - constructor. - eapply vr_ptr; eassumption.
+  - eapply vr_closure; eauto. - constructor. - eapply vr_code_ptr.
+Qed.
+Local Lemma stack_repr_co_shift : forall hm cb co co' m stk b ofs,
+  stack_repr hm cb co m stk b ofs -> stack_repr hm cb co' m stk b ofs.
+Proof.
+  intros hm0 cb0 co0 co' m0 stk0 b0 ofs0 H. induction H.
+  - constructor. - econstructor; [eassumption | eapply val_repr_co_shift; eassumption | assumption].
+Qed.
+Local Lemma global_repr_co_shift : forall hm cb co co' m vs b ofs,
+  global_repr hm cb co m vs b ofs -> global_repr hm cb co' m vs b ofs.
+Proof.
+  intros hm0 cb0 co0 co' m0 vs0 b0 ofs0 H. induction H.
+  - constructor. - econstructor; [eassumption | eapply val_repr_co_shift; eassumption | assumption].
+Qed.
+
 Theorem verify_ATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
     handler_correct (handle_ATOM t) f_instr_ATOM
@@ -394,16 +414,16 @@ Proof.
     { exists atom_v. split.
       - exact Haccu_load2.
       - simpl. subst atom_v atom_long.
-        exact (vr_block_atom _ t). }
+        exact (vr_block_atom _ _ _ t). }
 
     (* 4. sp field -- unchanged *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
-      - simpl.
-        eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 8) atom_v).
-        + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
+      - simpl. eapply stack_repr_co_shift.
+        eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (uso + 8) atom_v).
+        + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
           * exact Hstack_repr.
           * exact Hstore1.
           * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -420,7 +440,7 @@ Proof.
     (* 5. env field -- unchanged *)
     { exists env_v. split.
       - exact Henv_load2.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
     (* 6. extra_args field -- unchanged *)
     { simpl. exact Hextra_load2. }
@@ -429,11 +449,11 @@ Proof.
     { exists gd_ptr. split; [| split; [| split]].
       - exact Hgd_load2.
       - simpl. exact Hgd_eq.
-      - simpl.
-        eapply (global_repr_store_other_block hm m1 m2 _
+      - simpl. eapply global_repr_co_shift.
+        eapply (global_repr_store_other_block hm cb co m1 m2 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (uso + 8) atom_v).
-        + eapply (global_repr_store_other_block hm m m1 _
+        + eapply (global_repr_store_other_block hm cb co m m1 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 0) new_pc_v).
           * exact Hglobal_repr.

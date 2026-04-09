@@ -154,16 +154,16 @@ Proof.
 Qed.
 
 (* Ptrofs-level version: after n steps of add-8, we get a load. *)
-Lemma global_repr_nth_error_ptrofs : forall hm m gs gb go n v,
-  global_repr hm m gs gb go ->
+Lemma global_repr_nth_error_ptrofs : forall hm cb0 co0 m gs gb go n v,
+  global_repr hm cb0 co0 m gs gb go ->
   nth_error gs n = Some v ->
   exists cv,
     Mem.load Mint64 m gb
       (Ptrofs.unsigned (Nat.iter n (fun p => Ptrofs.add p (Ptrofs.repr 8)) go))
     = Some cv /\
-    val_repr hm v cv.
+    val_repr hm cb0 co0 v cv.
 Proof.
-  intros hm m gs gb go n v Hgr.
+  intros hm cb0 co0 m gs gb go n v Hgr.
   revert n.
   induction Hgr as [| v0 vs b ofs cv0 Hload Hval_repr Hgr' IH];
     intros n Hnth.
@@ -207,16 +207,16 @@ Proof.
 Qed.
 
 (* Combined: global_repr + nth_error + offset representability => load at go + n*8 *)
-Lemma global_repr_nth_error : forall hm m gs gb go n v,
-  global_repr hm m gs gb go ->
+Lemma global_repr_nth_error : forall hm cb0 co0 m gs gb go n v,
+  global_repr hm cb0 co0 m gs gb go ->
   nth_error gs n = Some v ->
   Ptrofs.unsigned go + Z.of_nat n * 8 < Ptrofs.modulus ->
   exists cv,
     Mem.load Mint64 m gb (Ptrofs.unsigned go + Z.of_nat n * 8) = Some cv /\
-    val_repr hm v cv.
+    val_repr hm cb0 co0 v cv.
 Proof.
-  intros hm m gs gb go n v Hgr Hnth Hbound.
-  destruct (global_repr_nth_error_ptrofs hm m gs gb go n v Hgr Hnth)
+  intros hm cb0 co0 m gs gb go n v Hgr Hnth Hbound.
+  destruct (global_repr_nth_error_ptrofs hm cb0 co0 m gs gb go n v Hgr Hnth)
     as [cv [Hload Hval_repr]].
   exists cv. split; [| exact Hval_repr].
   rewrite <- (iter_add_8_unsigned go n Hbound).
@@ -325,7 +325,7 @@ Proof.
   unfold pc_rel in Hpc_rel. subst pc_ptr.
   set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
 
-  destruct (global_repr_nth_error hm m _ gb go n gval Hglobal_repr Hnth Hgo_bound)
+  destruct (global_repr_nth_error hm cb co m _ gb go n gval Hglobal_repr Hnth Hgo_bound)
     as [cv_global [Hglobal_load Hglobal_val_repr]].
 
   destruct (store_succeeds_sb m sb so 8 accu_v Hsb_writable Haccu_load ltac:(lia) ltac:(lia) cv_global)
@@ -419,7 +419,7 @@ Proof.
     rewrite Hle_s; eval_cbn.
     rewrite Haccu_offset; eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Hglobal_val_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hglobal_val_repr); eval_cbn.
     rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
     rewrite Hstore1; eval_cbn.
 
@@ -473,7 +473,7 @@ Proof.
     assert (Haccu_load2 : Mem.load Mint64 m2 sb (uso + 8) = Some cv_global).
     { assert (Haccu_m1 : Mem.load Mint64 m1 sb (uso + 8) = Some cv_global).
       { pose proof (load_after_store_same m m1 sb (uso + 8) cv_global Hstore1) as Htmp.
-        rewrite (val_repr_load_result hm gval cv_global Hglobal_val_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co gval cv_global Hglobal_val_repr) in Htmp.
         exact Htmp. }
       apply (load_after_store_other m1 m2 sb (uso + 0) (uso + 8)
                new_pc_v cv_global Hstore2 Haccu_m1). right. lia. }
@@ -532,14 +532,15 @@ Proof.
 
     { exists cv_global. split.
       - exact Haccu_load2.
-      - simpl. exact Hglobal_val_repr. }
+      - simpl. eapply val_repr_co_shift. exact Hglobal_val_repr. }
 
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
-        eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-        + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 8) cv_global).
+        eapply stack_repr_co_shift.
+        eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
+        + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (uso + 8) cv_global).
           * exact Hstack_repr.
           * exact Hstore1.
           * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -555,7 +556,7 @@ Proof.
 
     { exists env_v. split.
       - exact Henv_load2.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
     { simpl. exact Hextra_load2. }
 
@@ -563,9 +564,10 @@ Proof.
       - exact Hgd_load2.
       - simpl. reflexivity.
       - simpl.
-        eapply (global_repr_store_other_block hm m1 m2 _
+        eapply global_repr_co_shift.
+        eapply (global_repr_store_other_block hm cb co m1 m2 _
                  gb go sb (uso + 0) new_pc_v).
-        + eapply (global_repr_store_other_block hm m m1 _
+        + eapply (global_repr_store_other_block hm cb co m m1 _
                    gb go sb (uso + 8) cv_global).
           * exact Hglobal_repr.
           * exact Hstore1.

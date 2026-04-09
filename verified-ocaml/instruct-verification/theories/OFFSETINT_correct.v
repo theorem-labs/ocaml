@@ -202,9 +202,9 @@ Qed.
 (* Value representation for the result                                 *)
 (* ================================================================== *)
 
-Lemma val_repr_offsetint_result : forall hm a (i : int),
+Lemma val_repr_offsetint_result : forall hm cb co a (i : int),
   Int.min_signed <= Int.signed i * 2 <= Int.max_signed ->
-  val_repr hm (Val_int (a + Int.signed i))
+  val_repr hm cb co (Val_int (a + Int.signed i))
     (Vlong (Int64.add (Int64.repr (a * 2 + 1))
                        (Int64.repr (Int.signed (Int.shl i (Int.repr 1)))))).
 Proof.
@@ -236,14 +236,15 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
 Theorem verify_OFFSETINT_correct : forall ofs,
     handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (fun _ m s ard =>
-         exists (i : int),
+      (fun e m s ard =>
+         (exists (i : int),
            Mem.load Mint32 m (ar_code_base_block ard)
              (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
                 (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
            = Some (Vint i) /\
            Int.signed i = ofs /\
-           Int.min_signed <= Int.signed i * 2 <= Int.max_signed)
+           Int.min_signed <= Int.signed i * 2 <= Int.max_signed) /\
+         accu_is_long e m s ard)
       (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -281,7 +282,7 @@ Proof.
     subst sp_ptr.
 
     (* Unpack step precondition *)
-    destruct Hstep_pre as [i [Hcode_load [Hofs_eq Hshift_range]]].
+    destruct Hstep_pre as [[i [Hcode_load [Hofs_eq Hshift_range]]] Haccu_is_long].
 
     (* Structural invariants from the record *)
     pose proof (ar_code_ne_sptr ard) as Hcb_ne. fold cb sb in Hcb_ne.
@@ -291,7 +292,14 @@ Proof.
 
     (* Determine accu_v from val_repr + accu = Val_int a *)
     rewrite Haccu_eq in Haccu_repr.
+    pose proof Haccu_repr as Haccu_repr_rw.
     inversion Haccu_repr; subst accu_v.
+    2: { (* vr_code_ptr case: accu_v = Vptr but accu_is_long says Vlong *)
+         exfalso.
+         unfold accu_is_long in Haccu_is_long.
+         rewrite Haccu_eq in Haccu_is_long.
+         destruct (Haccu_is_long _ Haccu_repr_rw) as [z Hz].
+         discriminate Hz. }
     set (cv_accu := Vlong (Int64.repr (a * 2 + 1))) in *.
 
     (* Composite environment facts *)
@@ -523,26 +531,24 @@ Proof.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load'.
         - reflexivity.
-        - simpl. simpl ar_heap_map. fold hm.
-          eapply (stack_repr_store_other_block hm m1 m' _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-          + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 8) cv_result).
-            * exact Hstack_repr.
-            * exact Hstore1.
-            * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
-          + exact Hstore2.
-          + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        - eapply stack_repr_store_other_block.
+          eapply stack_repr_store_other_block.
+          eapply stack_repr_co_shift. exact Hstack_repr.
+          exact Hstore1. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+          exact Hstore2. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - simpl. exact Hcb_ne_sp.
         - exact Hsp_ge8.
         - exact Hsp_rep.
-        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. exact Hofs'. 
+        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. exact Hofs'.
         - exact Hsp_align. }
 
       (* 5. env field -- unchanged *)
       { exists env_v. split.
         - exact Henv_load'.
-        - simpl. simpl ar_heap_map. fold hm. exact Henv_repr. }
+        - simpl. simpl ar_heap_map. fold hm.
+          eapply val_repr_co_shift. exact Henv_repr. }
 
       (* 6. extra_args field -- unchanged *)
       { simpl. exact Hextra_load'. }
@@ -550,18 +556,12 @@ Proof.
       (* 7. global_data field -- unchanged *)
       { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load'.
-        - simpl. simpl ar_global_block. simpl ar_global_ofs.
-          fold gb go. exact Hgd_eq.
-        - simpl. simpl ar_heap_map. simpl ar_global_block. simpl ar_global_ofs.
-          fold hm gb go.
-          subst gd_ptr.
-          eapply (global_repr_store_other_block hm m1 m' _ gb go sb (uso + 0) new_pc_v).
-          + eapply (global_repr_store_other_block hm m m1 _ gb go sb (uso + 8) cv_result).
-            * exact Hglobal_repr.
-            * exact Hstore1.
-            * intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
-          + exact Hstore2.
-          + intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
+        - exact Hgd_eq.
+        - eapply global_repr_store_other_block.
+          eapply global_repr_store_other_block.
+          eapply global_repr_co_shift. exact Hglobal_repr.
+          exact Hstore1. intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
+          exact Hstore2. intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
         - exact Hgb_ne_sb. }
 
       (* 8. trap_sp field -- unchanged *)
@@ -579,32 +579,36 @@ Qed.
 Theorem verify_OFFSETINT_handler_correct : forall ofs,
     Int.min_signed <= ofs * 2 <= Int.max_signed ->
     handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (code_at (Int.repr ofs))
+      (pre_and (code_at (Int.repr ofs)) accu_is_long)
       (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros ofs Hrange.
   apply handler_correct_weaken with
-    (sp := fun _ m s ard =>
-       exists (i : int),
+    (sp := fun e m s ard =>
+       (exists (i : int),
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
               (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
          = Some (Vint i) /\
          Int.signed i = ofs /\
-         Int.min_signed <= Int.signed i * 2 <= Int.max_signed).
+         Int.min_signed <= Int.signed i * 2 <= Int.max_signed) /\
+       accu_is_long e m s ard).
   - exact (verify_OFFSETINT_correct ofs).
   - intros e le m s ard _ Hca.
-    unfold code_at in Hca.
-    exists (Int.repr ofs). split; [|split].
-    + exact Hca.
-    + apply Int.signed_repr.
-      change Int.min_signed with (-2147483648) in *.
-      change Int.max_signed with 2147483647 in *.
-      lia.
-    + rewrite Int.signed_repr.
-      * exact Hrange.
-      * change Int.min_signed with (-2147483648) in *.
+    unfold pre_and in Hca. destruct Hca as [Hcode Haccu_long].
+    unfold code_at in Hcode.
+    split.
+    + exists (Int.repr ofs). split; [|split].
+      * exact Hcode.
+      * apply Int.signed_repr.
+        change Int.min_signed with (-2147483648) in *.
         change Int.max_signed with 2147483647 in *.
         lia.
+      * rewrite Int.signed_repr.
+        -- exact Hrange.
+        -- change Int.min_signed with (-2147483648) in *.
+           change Int.max_signed with 2147483647 in *.
+           lia.
+    + exact Haccu_long.
 Qed.

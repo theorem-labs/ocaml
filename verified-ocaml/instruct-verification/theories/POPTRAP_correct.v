@@ -141,11 +141,11 @@ Proof.
     apply Ptrofs.eqm_unsigned_repr.
 Qed.
 
-Lemma stack_repr_skip4 : forall hm m v0 v1 v2 v3 rest sp_b sp_ofs,
-  stack_repr hm m (v0 :: v1 :: v2 :: v3 :: rest) sp_b sp_ofs ->
-  stack_repr hm m rest sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 32)).
+Lemma stack_repr_skip4 : forall hm cb co m v0 v1 v2 v3 rest sp_b sp_ofs,
+  stack_repr hm cb co m (v0 :: v1 :: v2 :: v3 :: rest) sp_b sp_ofs ->
+  stack_repr hm cb co m rest sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 32)).
 Proof.
-  intros hm m v0 v1 v2 v3 rest sp_b sp_ofs Hsr.
+  intros hm cb co m v0 v1 v2 v3 rest sp_b sp_ofs Hsr.
   inversion Hsr as [| ? ? ? ? cv0 Hload0 Hvr0 Hsr1]. subst.
   inversion Hsr1 as [| ? ? ? ? cv1 Hload1 Hvr1 Hsr2]. subst.
   inversion Hsr2 as [| ? ? ? ? cv2 Hload2 Hvr2 Hsr3]. subst.
@@ -229,6 +229,8 @@ Proof.
               set (sb := ar_sptr_block ard) in *.
               set (so := ar_sptr_ofs ard) in *.
               set (hm := ar_heap_map ard) in *.
+              set (cb := ar_code_base_block ard) in *.
+              set (co := ar_code_base_ofs ard) in *.
 
               destruct Hpre as (Hle_s &
                 [pc_ptr [Hpc_load Hpc_rel]] &
@@ -484,16 +486,16 @@ Proof.
                   - reflexivity.
                   - simpl.
                     (* stack_repr for rest at new_sp_ofs = sp_ofs + 32 *)
-                    assert (Hstack_m1 : stack_repr hm m1 (v0 :: Val_int z1 :: v2 :: v3 :: rest) sp_b sp_ofs).
+                    assert (Hstack_m1 : stack_repr hm cb co m1 (v0 :: Val_int z1 :: v2 :: v3 :: rest) sp_b sp_ofs).
                     { rewrite <- Hstk.
-                      apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+                      apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
                                (uso + 48) new_trap_ptr Hstack_repr Hstore1).
                       intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-                    assert (Hstack_m2 : stack_repr hm m2 (v0 :: Val_int z1 :: v2 :: v3 :: rest) sp_b sp_ofs).
-                    { apply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb
+                    assert (Hstack_m2 : stack_repr hm cb co m2 (v0 :: Val_int z1 :: v2 :: v3 :: rest) sp_b sp_ofs).
+                    { apply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb
                                (uso + 16) (Vptr sp_b new_sp_ofs) Hstack_m1 Hstore2).
                       intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-                    exact (stack_repr_skip4 hm m2 v0 (Val_int z1) v2 v3 rest sp_b sp_ofs Hstack_m2).
+                    exact (stack_repr_skip4 hm cb co m2 v0 (Val_int z1) v2 v3 rest sp_b sp_ofs Hstack_m2).
                   - exact Hsp_ne_sb.
                   - exact Hsp_ne_gb.
                   - exact Hcb_ne_sp.
@@ -537,10 +539,10 @@ Proof.
                   - exact Hgd_load2.
                   - simpl. exact Hgd_eq.
                   - simpl.
-                    apply (global_repr_store_other_block hm m1 m2 _
+                    apply (global_repr_store_other_block hm cb co m1 m2 _
                              (ar_global_block ard) (ar_global_ofs ard)
                              sb (uso + 16) (Vptr sp_b new_sp_ofs)).
-                    + apply (global_repr_store_other_block hm m m1 _
+                    + apply (global_repr_store_other_block hm cb co m m1 _
                                (ar_global_block ard) (ar_global_ofs ard)
                                sb (uso + 48) new_trap_ptr
                                Hglobal_repr Hstore1).

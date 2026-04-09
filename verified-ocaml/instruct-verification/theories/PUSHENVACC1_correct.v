@@ -58,27 +58,11 @@ Proof.
   intros. unfold sem_cast. simpl classify_cast. reflexivity.
 Qed.
 
-Definition pushenvacc_step_pre_1 (e : Clight.env) (m : mem) (s : Machine.state)
-    (ard : abs_rel_data) : Prop :=
-  let sb := ar_sptr_block ard in
-  let so := ar_sptr_ofs ard in
-  let hm := ar_heap_map ard in
-  exists sp_b sp_ofs,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-    Ptrofs.unsigned sp_ofs >= 16 /\
-    (forall v,
-      field_or_heap s s.(Machine.env) 1 = Some v ->
-      forall env_v,
-        val_repr hm s.(Machine.env) env_v ->
-        exists b ofs cv,
-          env_v = Vptr b ofs /\
-          Mem.load Mint64 m b (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr 8))) = Some cv /\
-          val_repr hm v cv /\
-          b <> sb /\ b <> sp_b).
+(* Step precondition for PUSHENVACC1: now uses generic pushenvacc_step_pre 1. *)
 
 Theorem verify_PUSHENVACC1_correct :
     handler_correct (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
-      pushenvacc_step_pre_1
+      (pushenvacc_step_pre 1)
       (fun _ s => field_or_heap s s.(Machine.env) 1 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -103,9 +87,11 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     (* Extract step_pre *)
-    unfold pushenvacc_step_pre_1 in Hstep_pre. fold sb so hm in Hstep_pre.
+    unfold pushenvacc_step_pre in Hstep_pre. fold sb so hm in Hstep_pre.
     destruct Hstep_pre as [sp_b' [sp_ofs' [Hsp_load' [Hsp_ge16 Hefl]]]].
     assert (sp_b' = sp_b /\ sp_ofs' = sp_ofs) as [-> ->]
       by (rewrite Hsp_load in Hsp_load'; injection Hsp_load'; auto).
@@ -248,7 +234,7 @@ Proof.
       rewrite PTree.gso by (compute; congruence).
       rewrite PTree.gss; eval_cbn.
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Haccu_repr); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Haccu_repr); eval_cbn.
       fold new_sp_ofs.
       rewrite Hstore_accu; eval_cbn.
 
@@ -277,7 +263,7 @@ Proof.
       rewrite Hle_s; eval_cbn.
       try rewrite Haccu_offset; eval_cbn.
       try rewrite PTree.gss; eval_cbn.
-      try rewrite (sem_cast_long_val_repr _ _ _ _ Hfield_repr); eval_cbn.
+      try rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hfield_repr); eval_cbn.
       try rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
       rewrite Hstore_env_field; eval_cbn.
 
@@ -310,7 +296,7 @@ Proof.
 
       assert (Haccu_load3 : Mem.load Mint64 m3 sb (uso + 8) = Some cv).
       { pose proof (load_after_store_same m2 m3 sb (uso + 8) cv Hstore_env_field) as Htmp.
-        rewrite (val_repr_load_result hm v cv Hfield_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co v cv Hfield_repr) in Htmp.
         exact Htmp. }
 
       assert (Hsp_load3 : Mem.load Mint64 m3 sb (uso + 16) = Some (Vptr sp_b new_sp_ofs)).
@@ -376,16 +362,16 @@ Proof.
         - exact Hsp_load3.
         - reflexivity.
         - simpl.
-          assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-          { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+          assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+          { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
                      (uso + 16) (Vptr sp_b new_sp_ofs)
                      Hstack_repr Hstore_sp).
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-          assert (Hstack_cons_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-          { exact (stack_repr_cons_after_store hm m1 m2
+          assert (Hstack_cons_m2 : stack_repr hm cb co m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+          { exact (stack_repr_cons_after_store hm cb co m1 m2
                      (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
                      Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 Hsp_rep). }
-          apply (stack_repr_store_other_block hm m2 m3
+          apply (stack_repr_store_other_block hm cb co m2 m3
                    (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs sb
                    (uso + 8) cv
                    Hstack_cons_m2 Hstore_env_field).
@@ -416,13 +402,13 @@ Proof.
         - exact Hgd_load3.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m2 m3 _
+          apply (global_repr_store_other_block hm cb co m2 m3 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 8) cv).
-          + apply (global_repr_store_other_block hm m1 m2 _
+          + apply (global_repr_store_other_block hm cb co m1 m2 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sp_b (Ptrofs.unsigned new_sp_ofs) accu_v).
-            * apply (global_repr_store_other_block hm m m1 _
+            * apply (global_repr_store_other_block hm cb co m m1 _
                        (ar_global_block ard) (ar_global_ofs ard)
                        sb (uso + 16) (Vptr sp_b new_sp_ofs)
                        Hglobal_repr Hstore_sp).

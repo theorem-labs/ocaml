@@ -299,7 +299,7 @@ Definition getpubmet_pre
               (Machine.env s) (Machine.extra_args s) (Machine.global s)
               (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s)) ->
     forall accu_cv,
-      val_repr hm s.(Machine.accu) accu_cv ->
+      val_repr hm cb co s.(Machine.accu) accu_cv ->
       exists accu_b accu_ofs meths_b meths_ofs hi_v
              final_li meth_cv,
         accu_cv = Vptr accu_b accu_ofs /\
@@ -329,7 +329,7 @@ Definition getpubmet_pre
             (Ptrofs.mul (Ptrofs.repr 8)
               (ptrofs_of_int Signed (Int.sub final_li (Int.repr 1))))))
           = Some meth_cv /\
-        val_repr hm method_fn meth_cv).
+        val_repr hm cb co method_fn meth_cv).
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -787,7 +787,7 @@ Proof.
               { exact Haccu_offset. }
             * eapply eval_Etempvar.
               subst le'. rewrite PTree.gss. reflexivity.
-            * rewrite (sem_cast_long_val_repr _ _ _ _ Hmeth_repr). reflexivity.
+            * rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hmeth_repr). reflexivity.
             * apply assign_loc_value with (chunk := Mint64).
               { reflexivity. }
               { simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)). exact Hstore6. }
@@ -1066,7 +1066,7 @@ Proof.
             rewrite PTree.gso by (compute; congruence).
             rewrite PTree.gss; eval_cbn.
             rewrite PTree.gss; eval_cbn.
-            rewrite (sem_cast_long_val_repr _ _ _ _ Haccu_repr); eval_cbn.
+            rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Haccu_repr); eval_cbn.
             fold new_sp_ofs. rewrite Hstore2; eval_cbn.
             subst le_after_accu. reflexivity.
         - (* Level 2: PC1_TAG | rest *)
@@ -1174,7 +1174,7 @@ Proof.
 
       assert (Haccu_m6 : Mem.load Mint64 m6 sb (uso + 8) = Some meth_cv).
       { pose proof (load_after_store_same m5 m6 sb (uso + 8) meth_cv Hstore6) as Htmp.
-        rewrite (val_repr_load_result hm method_fn meth_cv Hmeth_repr) in Htmp. exact Htmp. }
+        rewrite (val_repr_load_result hm cb co method_fn meth_cv Hmeth_repr) in Htmp. exact Htmp. }
 
       assert (Hsp_m6 : Mem.load Mint64 m6 sb (uso + 16) = Some (Vptr sp_b new_sp_ofs)).
       { apply (load_after_store_other m5 m6 sb (uso + 8) (uso + 16) meth_cv _ Hstore6 Hsp_m5).
@@ -1229,7 +1229,7 @@ Proof.
       (* 3. accu field *)
       { exists meth_cv. split.
         - exact Haccu_m6.
-        - simpl. unfold method_fn. exact Hmeth_repr. }
+        - simpl. unfold method_fn. eapply val_repr_co_shift. exact Hmeth_repr. }
 
       (* 4. sp field -- updated to new_sp_ofs, stack gets accu prepended *)
       { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
@@ -1237,33 +1237,34 @@ Proof.
         - exact Hsp_m6.
         - reflexivity.
         - simpl. rewrite Hstack_s'.
+          eapply stack_repr_co_shift.
           (* stack_repr for accu :: old_stack at new_sp_ofs in m6.
              Need to thread through all 6 stores. *)
           (* In m2 we stored accu at new_sp_ofs, building accu :: stack.
              stack_repr in m1 at sp_ofs is old_stack.
              stack_repr_cons_after_store gives us the cons in m2. *)
-          assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-          { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+          assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+          { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
                      (uso + 16) (Vptr sp_b new_sp_ofs) Hstack_repr Hstore1).
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-          assert (Hstack_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-          { exact (stack_repr_cons_after_store hm m1 m2
+          assert (Hstack_m2 : stack_repr hm cb co m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+          { exact (stack_repr_cons_after_store hm cb co m1 m2
                      (Machine.stack s) sp_b sp_ofs (Machine.accu s) (Vptr accu_b accu_ofs)
                      Hstack_m1 Haccu_repr Hstore2 Hsp_ge8 Hsp_rep). }
           (* Survive stores 3-6 (all on sb, not sp_b) *)
-          assert (Hstack_m3 : stack_repr hm m3 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-          { apply (stack_repr_store_other_block hm m2 m3 _ sp_b new_sp_ofs sb (uso + 0) pc1_v
+          assert (Hstack_m3 : stack_repr hm cb co m3 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+          { apply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b new_sp_ofs sb (uso + 0) pc1_v
                      Hstack_m2 Hstore3).
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-          assert (Hstack_m4 : stack_repr hm m4 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-          { apply (stack_repr_store_other_block hm m3 m4 _ sp_b new_sp_ofs sb (uso + 8) tagged_tag_v
+          assert (Hstack_m4 : stack_repr hm cb co m4 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+          { apply (stack_repr_store_other_block hm cb co m3 m4 _ sp_b new_sp_ofs sb (uso + 8) tagged_tag_v
                      Hstack_m3 Hstore4).
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-          assert (Hstack_m5 : stack_repr hm m5 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-          { apply (stack_repr_store_other_block hm m4 m5 _ sp_b new_sp_ofs sb (uso + 0) pc2_v
+          assert (Hstack_m5 : stack_repr hm cb co m5 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+          { apply (stack_repr_store_other_block hm cb co m4 m5 _ sp_b new_sp_ofs sb (uso + 0) pc2_v
                      Hstack_m4 Hstore5).
             intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-          apply (stack_repr_store_other_block hm m5 m6 _ sp_b new_sp_ofs sb (uso + 8) meth_cv
+          apply (stack_repr_store_other_block hm cb co m5 m6 _ sp_b new_sp_ofs sb (uso + 8) meth_cv
                    Hstack_m5 Hstore6).
           intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -1288,7 +1289,7 @@ Proof.
       (* 5. env field *)
       { exists env_v. split.
         - exact Henv_m6.
-        - simpl. rewrite Henv_s'. exact Henv_repr. }
+        - simpl. rewrite Henv_s'. eapply val_repr_co_shift. exact Henv_repr. }
 
       (* 6. extra_args field *)
       { simpl. rewrite Hextra_s'. exact Hextra_m6. }
@@ -1298,23 +1299,24 @@ Proof.
         - exact Hgd_m6.
         - simpl. exact Hgd_eq.
         - simpl. rewrite Hglobal_s'.
+          eapply global_repr_co_shift.
           (* global_repr survives all 6 stores *)
-          apply (global_repr_store_other_block hm m5 m6 _
+          apply (global_repr_store_other_block hm cb co m5 m6 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 8) meth_cv).
-          + apply (global_repr_store_other_block hm m4 m5 _
+          + apply (global_repr_store_other_block hm cb co m4 m5 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 0) pc2_v).
-            * apply (global_repr_store_other_block hm m3 m4 _
+            * apply (global_repr_store_other_block hm cb co m3 m4 _
                        (ar_global_block ard) (ar_global_ofs ard)
                        sb (uso + 8) tagged_tag_v).
-              { apply (global_repr_store_other_block hm m2 m3 _
+              { apply (global_repr_store_other_block hm cb co m2 m3 _
                          (ar_global_block ard) (ar_global_ofs ard)
                          sb (uso + 0) pc1_v).
-                { apply (global_repr_store_other_block hm m1 m2 _
+                { apply (global_repr_store_other_block hm cb co m1 m2 _
                            (ar_global_block ard) (ar_global_ofs ard)
                            sp_b (Ptrofs.unsigned new_sp_ofs) (Vptr accu_b accu_ofs)).
-                  { apply (global_repr_store_other_block hm m m1 _
+                  { apply (global_repr_store_other_block hm cb co m m1 _
                              (ar_global_block ard) (ar_global_ofs ard)
                              sb (uso + 16) (Vptr sp_b new_sp_ofs)
                              Hglobal_repr Hstore1).

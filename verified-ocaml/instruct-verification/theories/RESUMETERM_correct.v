@@ -217,12 +217,13 @@ Proof.
       rewrite Ptrofs.sub_idem.
       symmetry. apply Ptrofs.add_zero.
     + (* accu *)
-      exists accu_v. split. exact Haccu_load'. simpl. exact Haccu_repr.
+      exists accu_v. split. exact Haccu_load'. simpl. eapply val_repr_co_shift. exact Haccu_repr.
     + (* sp *)
       exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
       repeat split.
       * exact Hsp_load'.
-      * apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_ptr
+      * eapply stack_repr_co_shift.
+        apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb uso new_pc_ptr
                  Hstack_repr Hstore).
         intro Heq. exact (Hsp_ne_sb (eq_sym Heq)).
       * exact Hsp_ne_sb.
@@ -233,12 +234,13 @@ Proof.
       * intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsp_writable. exact Hofs'.
       * exact Hsp_align.
     + (* env *)
-      exists env_v. split. exact Henv_load'. simpl. exact Henv_repr.
+      exists env_v. split. exact Henv_load'. simpl. eapply val_repr_co_shift. exact Henv_repr.
     + (* extra_args *)
       simpl. exact Hextra_load'.
     + (* global_data *)
       exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq. simpl.
-      apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_ptr
+      eapply global_repr_co_shift.
+      apply (global_repr_store_other_block hm cb co m m' _ _ _ sb uso new_pc_ptr
                Hglobal_repr Hstore).
       intro Heq2. exact (global_block_ne_sptr ard (eq_sym Heq2)).
       exact Hgb_ne_sb.

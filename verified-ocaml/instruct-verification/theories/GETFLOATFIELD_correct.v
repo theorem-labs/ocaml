@@ -232,10 +232,12 @@ Definition float_field_loadable_sep (n : nat)
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let sb := ar_sptr_block ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   forall v,
     field_or_heap s s.(Machine.accu) n = Some v ->
     forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
+      val_repr hm cb co s.(Machine.accu) accu_v ->
       exists b ofs fv,
         accu_v = Vptr b ofs /\
         b <> sb /\
@@ -291,14 +293,14 @@ Theorem verify_GETFLOATFIELD_correct : forall n,
          (forall v new_b new_ofs,
             field_or_heap s s.(Machine.accu) n = Some v ->
             exists hm',
-              val_repr hm' v (Vptr new_b new_ofs) /\
-              (forall v0 cv, val_repr hm v0 cv -> val_repr hm' v0 cv) /\
+              val_repr hm' cb co v (Vptr new_b new_ofs) /\
+              (forall v0 cv, val_repr hm cb co v0 cv -> val_repr hm' cb co v0 cv) /\
               (forall stk m0 sp_b0 sp_ofs0,
-                 stack_repr hm m0 stk sp_b0 sp_ofs0 ->
-                 stack_repr hm' m0 stk sp_b0 sp_ofs0) /\
+                 stack_repr hm cb co m0 stk sp_b0 sp_ofs0 ->
+                 stack_repr hm' cb co m0 stk sp_b0 sp_ofs0) /\
               (forall gs m0 gb0 gofs0,
-                 global_repr hm m0 gs gb0 gofs0 ->
-                 global_repr hm' m0 gs gb0 gofs0)))
+                 global_repr hm cb co m0 gs gb0 gofs0 ->
+                 global_repr hm' cb co m0 gs gb0 gofs0)))
       (fun _ s => field_or_heap s s.(Machine.accu) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -974,15 +976,15 @@ Proof.
       { apply Hfield_survive; [lia | exact Hts_load]. }
 
       (* Stack repr *)
-      assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-      { eapply stack_repr_store_other_block; eauto. }
+      assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
 
       assert (Hsp_ne_new : sp_b <> new_b).
       { intro Heq; symmetry in Heq; exact (Hnew_ne_sp Heq). }
       assert (Hgb_ne_new : gb <> new_b).
       { intro Heq; symmetry in Heq; exact (Hnew_ne_gb Heq). }
 
-      assert (Hstack_alloc : stack_repr hm m_alloc (Machine.stack s) sp_b sp_ofs).
+      assert (Hstack_alloc : stack_repr hm cb co m_alloc (Machine.stack s) sp_b sp_ofs).
       { clear -Hstack_m1 Halloc_load_pres Hsp_ne_new.
         induction Hstack_m1 as [| v0 vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -991,7 +993,7 @@ Proof.
           + exact Hvr.
           + apply IH. exact Hsp_ne_new. }
 
-      assert (Hstack_fstore : stack_repr hm m_fstore (Machine.stack s) sp_b sp_ofs).
+      assert (Hstack_fstore : stack_repr hm cb co m_fstore (Machine.stack s) sp_b sp_ofs).
       { clear -Hstack_alloc Hfstore_load_pres Hsp_ne_new.
         induction Hstack_alloc as [| v0 vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -1000,14 +1002,14 @@ Proof.
           + exact Hvr.
           + apply IH. exact Hsp_ne_new. }
 
-      assert (Hstack2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
-      { eapply stack_repr_store_other_block; eauto. }
+      assert (Hstack2 : stack_repr hm cb co m2 (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
 
       (* Global repr *)
-      assert (Hglobal_m1 : global_repr hm m1 (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto. }
+      assert (Hglobal_m1 : global_repr hm cb co m1 (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
 
-      assert (Hglobal_alloc : global_repr hm m_alloc (Machine.global s) gb go0).
+      assert (Hglobal_alloc : global_repr hm cb co m_alloc (Machine.global s) gb go0).
       { clear -Hglobal_m1 Halloc_load_pres Hgb_ne_new.
         induction Hglobal_m1 as [| v0 vs gb0 gofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -1016,7 +1018,7 @@ Proof.
           + exact Hvr.
           + apply IH. exact Hgb_ne_new. }
 
-      assert (Hglobal_fstore : global_repr hm m_fstore (Machine.global s) gb go0).
+      assert (Hglobal_fstore : global_repr hm cb co m_fstore (Machine.global s) gb go0).
       { clear -Hglobal_alloc Hfstore_load_pres Hgb_ne_new.
         induction Hglobal_alloc as [| v0 vs gb0 gofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -1025,8 +1027,8 @@ Proof.
           + exact Hvr.
           + apply IH. exact Hgb_ne_new. }
 
-      assert (Hglobal2 : global_repr hm m2 (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto. }
+      assert (Hglobal2 : global_repr hm cb co m2 (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
 
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
@@ -1044,14 +1046,14 @@ Proof.
       (* 3. accu field *)
       { exists block_v. split.
         - exact Haccu_load2.
-        - simpl. exact Hval_repr_new. }
+        - simpl. eapply val_repr_co_shift. exact Hval_repr_new. }
 
       (* 4. sp field *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load2.
         - reflexivity.
-        - simpl. apply Hstack_repr_ext. exact Hstack2.
+        - simpl. eapply stack_repr_co_shift. apply Hstack_repr_ext. exact Hstack2.
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp.
@@ -1071,7 +1073,7 @@ Proof.
       (* 5. env field *)
       { exists env_v. split.
         - exact Henv_load2.
-        - simpl. apply Hval_repr_ext. exact Henv_repr. }
+        - simpl. eapply val_repr_co_shift. apply Hval_repr_ext. exact Henv_repr. }
 
       (* 6. extra_args field *)
       { simpl. exact Hextra_load2. }
@@ -1080,7 +1082,7 @@ Proof.
       { exists (Vptr gb go0). split; [| split; [| split]].
         - exact Hgd_load2.
         - simpl. reflexivity.
-        - simpl. apply Hglobal_repr_ext. exact Hglobal2.
+        - simpl. eapply global_repr_co_shift. apply Hglobal_repr_ext. exact Hglobal2.
         - exact Hgb_ne_sb. }
 
       (* 8. trap_sp field *)

@@ -177,6 +177,8 @@ Qed.
 Definition getdynmet_pre
     (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
   let so := ar_sptr_ofs ard in
   forall obj rest,
@@ -187,7 +189,7 @@ Definition getdynmet_pre
               (Machine.env s) (Machine.extra_args s) (Machine.global s)
               (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s)) ->
     forall obj_cv,
-      val_repr hm obj obj_cv ->
+      val_repr hm cb co obj obj_cv ->
       exists obj_b obj_ofs meths_v meths_b meths_ofs hi_v
              final_li meth_cv,
         (* sp[0] is a pointer (object) *)
@@ -215,7 +217,7 @@ Definition getdynmet_pre
             (Ptrofs.mul (Ptrofs.repr 8)
               (ptrofs_of_int Signed (Int.sub final_li (Int.repr 1))))))
           = Some meth_cv /\
-        val_repr hm method_fn meth_cv.
+        val_repr hm cb co method_fn meth_cv.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -283,6 +285,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     (* Structural invariants *)
     pose proof (sptr_ofs_representable ard) as Hso_bound.
@@ -550,7 +554,7 @@ Proof.
               eapply eval_Etempvar.
               subst le'. rewrite PTree.gss. reflexivity.
             * (* sem_cast *)
-              rewrite (sem_cast_long_val_repr _ _ _ _ Hmeth_repr). reflexivity.
+              rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hmeth_repr). reflexivity.
             * (* assign_loc / Store *)
               apply assign_loc_value with (chunk := Mint64).
               { reflexivity. }
@@ -689,7 +693,7 @@ Proof.
 
       assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some meth_cv).
       { pose proof (load_after_store_same m m' sb (uso + 8) meth_cv Hstore) as Htmp.
-        rewrite (val_repr_load_result hm method_fn meth_cv Hmeth_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co method_fn meth_cv Hmeth_repr) in Htmp.
         exact Htmp. }
 
       (* What is s'? We need to match the abs_rel for s'. *)
@@ -719,7 +723,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - rewrite Hstack_s'. rewrite Hstk.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) meth_cv
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) meth_cv
                    Hstack_repr Hstore).
           intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -744,7 +748,7 @@ Proof.
         - exact Hgd_load'.
         - exact Hgd_eq.
         - rewrite Hglobal_s'.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) meth_cv
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) meth_cv
                    Hglobal_repr Hstore).
           intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }

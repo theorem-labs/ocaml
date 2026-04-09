@@ -206,15 +206,15 @@ Qed.
 (* stack_repr_update: updating element n preserves stack_repr          *)
 (* ================================================================== *)
 
-Lemma stack_repr_update : forall hm m m' stk sp_b sp_ofs n v cv new_stk,
-  stack_repr hm m stk sp_b sp_ofs ->
+Lemma stack_repr_update : forall hm cb co m m' stk sp_b sp_ofs n v cv new_stk,
+  stack_repr hm cb co m stk sp_b sp_ofs ->
   set_nth stk n v = Some new_stk ->
-  val_repr hm v cv ->
+  val_repr hm cb co v cv ->
   Mem.store Mint64 m sp_b (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) cv = Some m' ->
   Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length stk) < Ptrofs.modulus ->
-  stack_repr hm m' new_stk sp_b sp_ofs.
+  stack_repr hm cb co m' new_stk sp_b sp_ofs.
 Proof.
-  intros hm m m' stk sp_b sp_ofs n v cv new_stk. revert m m' sp_ofs n new_stk.
+  intros hm cb co m m' stk sp_b sp_ofs n v cv new_stk. revert m m' sp_ofs n new_stk.
   induction stk as [| hd tl IH]; intros m m' sp_ofs n new_stk
     Hsr Hset Hvr Hstore Hrep.
   - (* stk = [] => set_nth fails *)
@@ -229,7 +229,7 @@ Proof.
         replace (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat 0)%Z
           with (Ptrofs.unsigned sp_ofs) in Hstore by lia.
         pose proof (load_after_store_same m m' sp_b (Ptrofs.unsigned sp_ofs) cv Hstore) as Htmp.
-        rewrite (val_repr_load_result hm v cv Hvr) in Htmp.
+        rewrite (val_repr_load_result hm cb co v cv Hvr) in Htmp.
         exact Htmp.
       * exact Hvr.
       * (* Tail unchanged: store at head doesn't overlap tail *)
@@ -268,6 +268,9 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+(* val_repr_co_shift, stack_repr_co_shift, global_repr_co_shift
+   are imported from HandlerLemmas. *)
+
 Theorem verify_ASSIGN_correct : forall n,
     handler_correct (handle_ASSIGN n) f_instr_ASSIGN
       (fun _ m s ard =>
@@ -282,8 +285,8 @@ Theorem verify_ASSIGN_correct : forall n,
          (0 <= Z.of_nat n <= Int.max_signed)%Z /\
          (* Stack store at sp[n] succeeds after pc store *)
          (forall m1 sp_b sp_ofs accu_v,
-           stack_repr (ar_heap_map ard) m1 (Machine.stack s) sp_b sp_ofs ->
-           val_repr (ar_heap_map ard) (Machine.accu s) accu_v ->
+           stack_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m1 (Machine.stack s) sp_b sp_ofs ->
+           val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) accu_v ->
            Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n < Ptrofs.modulus ->
            exists m_sw,
              Mem.store Mint64 m1 sp_b
@@ -380,8 +383,8 @@ Proof.
     left. exact Hcb_ne. }
 
   (* Stack repr survives store to sb *)
-  assert (Hstack_repr_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-  { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+  assert (Hstack_repr_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+  { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
              (Ptrofs.unsigned so + 0) new_pc_v Hstack_repr Hstore_pc).
     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
 
@@ -523,7 +526,7 @@ Proof.
     rewrite PTree.gss; eval_cbn.
     rewrite (sem_add_sp_n sp_b sp_ofs (Int.repr (Z.of_nat n)) m1); eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr hm _ accu_v m1 Haccu_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr hm cb co _ accu_v m1 Haccu_repr); eval_cbn.
     change (Ptrofs.repr 8) with (Ptrofs.repr (sizeof ge tlong)); rewrite Hsp_n_unsigned.
     rewrite Hstore_stack; eval_cbn.
 
@@ -633,7 +636,7 @@ Proof.
     (* 3. accu field -- updated to val_unit = Val_int 0 *)
     { exists unit_v. split.
       - exact Haccu_load3.
-      - simpl. subst unit_v. exact (vr_int _ 0). }
+      - simpl. subst unit_v. exact (vr_int _ _ _ 0). }
 
     (* 4. sp field -- same pointer, but stack_repr for new_stack *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -641,9 +644,10 @@ Proof.
       - exact Hsp_load3.
       - reflexivity.
       - simpl.
-        apply (stack_repr_store_other_block (ar_heap_map ard) m2 m3 _ sp_b sp_ofs sb
+        eapply stack_repr_co_shift.
+        apply (stack_repr_store_other_block (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m2 m3 _ sp_b sp_ofs sb
                  (uso + 8) unit_v).
-        + eapply (stack_repr_update (ar_heap_map ard) m1 m2 (Machine.stack s) sp_b sp_ofs n
+        + eapply (stack_repr_update (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m1 m2 (Machine.stack s) sp_b sp_ofs n
                     (Machine.accu s) accu_v new_stack).
           * exact Hstack_repr_m1.
           * exact Hset.
@@ -670,7 +674,7 @@ Proof.
     (* 5. env field *)
     { exists env_v. split.
       - exact Henv_load3.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift; exact Henv_repr. }
 
     (* 6. extra_args field *)
     { simpl. exact Hextra_load3. }
@@ -680,13 +684,14 @@ Proof.
       - exact Hgd_load3.
       - simpl. exact Hgd_eq.
       - simpl.
-        apply (global_repr_store_other_block (ar_heap_map ard) m2 m3 _
+        eapply global_repr_co_shift.
+        apply (global_repr_store_other_block (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m2 m3 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (uso + 8) unit_v).
-        + apply (global_repr_store_other_block (ar_heap_map ard) m1 m2 _
+        + apply (global_repr_store_other_block (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sp_b (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) accu_v).
-          * apply (global_repr_store_other_block (ar_heap_map ard) m m1 _
+          * apply (global_repr_store_other_block (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 0) new_pc_v
                      Hglobal_repr Hstore_pc).

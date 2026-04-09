@@ -158,12 +158,12 @@ Proof.
     apply Ptrofs.eqm_unsigned_repr.
 Qed.
 
-Lemma stack_repr_skipn : forall n hm m stk sp_b sp_ofs,
-  stack_repr hm m stk sp_b sp_ofs ->
-  stack_repr hm m (skipn n stk) sp_b
+Lemma stack_repr_skipn : forall n hm cb co m stk sp_b sp_ofs,
+  stack_repr hm cb co m stk sp_b sp_ofs ->
+  stack_repr hm cb co m (skipn n stk) sp_b
     (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat n * 8))).
 Proof.
-  induction n as [| n' IH]; intros hm m stk sp_b sp_ofs Hsr.
+  induction n as [| n' IH]; intros hm cb co m stk sp_b sp_ofs Hsr.
   - (* n = 0: skipn 0 stk = stk, offset + 0 = offset *)
     simpl. rewrite ptrofs_add_zero. exact Hsr.
   - (* n = S n': skipn (S n') stk = skipn n' (tl stk) *)
@@ -173,7 +173,7 @@ Proof.
     + (* stk = v :: vs: skipn (S n') (v :: vs) = skipn n' vs *)
       simpl skipn. inversion Hsr; subst.
       (* vs has stack_repr at Ptrofs.add sp_ofs (Ptrofs.repr 8) *)
-      specialize (IH hm m vs sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) H5).
+      specialize (IH hm cb co m vs sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) H5).
       (* Show the two offsets are equal *)
       replace (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat (S n') * 8)))
         with (Ptrofs.add (Ptrofs.add sp_ofs (Ptrofs.repr 8)) (Ptrofs.repr (Z.of_nat n' * 8))).
@@ -488,28 +488,24 @@ Proof.
     (* 3. accu field -- unchanged *)
     { exists accu_v. split.
       - exact Haccu_load2.
-      - simpl. exact Haccu_repr. }
+      - simpl. eapply val_repr_co_shift. exact Haccu_repr. }
 
     (* 4. sp field -- updated; stack is skipn n *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
-      - simpl.
-        (* We need: stack_repr hm m2 (skipn n (stack s)) sp_b new_sp_ofs *)
-        (* new_sp_ofs = sp_ofs + n*8 by Hnew_sp_eq *)
-        rewrite Hnew_sp_eq.
-        (* stack_repr in m is preserved through stores on sb (different block) *)
-        assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-        { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
-                   (uso + 0) new_pc_v Hstack_repr Hstore_pc).
-          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-        assert (Hstack_m2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
-        { apply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb
-                   (uso + 16) (Vptr sp_b new_sp_ofs) Hstack_m1 Hstore_sp).
-          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-        (* Now apply stack_repr_skipn *)
-                exact (stack_repr_skipn n hm m2 (Machine.stack s) sp_b sp_ofs Hstack_m2).
+      - simpl. rewrite Hnew_sp_eq.
+        eapply stack_repr_co_shift.
+        apply (stack_repr_skipn n).
+        apply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb
+                 (uso + 16) (Vptr sp_b new_sp_ofs)).
+        + apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
+                   (uso + 0) new_pc_v
+                   Hstack_repr Hstore_pc).
+          intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        + exact Hstore_sp.
+        + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp.
@@ -542,7 +538,7 @@ Proof.
     (* 5. env field -- unchanged *)
     { exists env_v. split.
       - exact Henv_load2.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
     (* 6. extra_args field -- unchanged *)
     { simpl. exact Hextra_load2. }
@@ -552,10 +548,11 @@ Proof.
       - exact Hgd_load2.
       - simpl. exact Hgd_eq.
       - simpl.
-        apply (global_repr_store_other_block hm m1 m2 _
+        eapply global_repr_co_shift.
+        apply (global_repr_store_other_block hm cb co m1 m2 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (uso + 16) (Vptr sp_b new_sp_ofs)).
-        + apply (global_repr_store_other_block hm m m1 _
+        + apply (global_repr_store_other_block hm cb co m m1 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 0) new_pc_v
                    Hglobal_repr Hstore_pc).

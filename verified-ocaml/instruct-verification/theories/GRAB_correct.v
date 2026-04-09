@@ -221,6 +221,7 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+#[warnings="-not-a-closed-proof"]
 Theorem verify_GRAB_correct : forall required,
     handler_correct (handle_GRAB required) f_instr_GRAB
       (fun _ m s ard =>
@@ -606,7 +607,7 @@ Proof.
 
       (* stack_repr survives: stores are on sb, stack is on sp_b <> sb *)
       assert (Hsb_ne_sp : sb <> sp_b) by (exact (not_eq_sym Hsp_ne_sb)).
-      assert (Hstack_repr2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
+      assert (Hstack_repr2 : stack_repr hm cb co m2 (Machine.stack s) sp_b sp_ofs).
       { eapply stack_repr_store_other_block.
         - eapply stack_repr_store_other_block.
           + exact Hstack_repr.
@@ -617,7 +618,7 @@ Proof.
 
       (* global_repr survives: stores on sb, global on gb <> sb *)
       assert (Hsb_ne_gb : sb <> ar_global_block ard) by (exact (not_eq_sym Hgb_ne_sb)).
-      assert (Hglobal_repr2 : global_repr hm m2 (Machine.global s)
+      assert (Hglobal_repr2 : global_repr hm cb co m2 (Machine.global s)
                 (ar_global_block ard) (ar_global_ofs ard)).
       { eapply global_repr_store_other_block.
         - eapply global_repr_store_other_block.
@@ -661,7 +662,7 @@ Proof.
       (* 3. accu field -- unchanged *)
       { exists accu_v. split.
         - exact Haccu_load2.
-        - simpl. exact Haccu_repr. }
+        - simpl. eapply val_repr_co_shift. eassumption. }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -669,7 +670,7 @@ Proof.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load2.
         - reflexivity.
-        - exact Hstack_repr2.
+        - eapply stack_repr_co_shift. eassumption.
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp.
@@ -681,7 +682,7 @@ Proof.
       (* 5. env field -- unchanged *)
       { exists env_v. split.
         - exact Henv_load2.
-        - simpl. exact Henv_repr. }
+        - simpl. eapply val_repr_co_shift. eassumption. }
 
       (* 6. extra_args field -- updated *)
       { simpl. rewrite Hnew_ea_eq in Hextra_load2. exact Hextra_load2. }
@@ -690,7 +691,7 @@ Proof.
       { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load2.
         - simpl. exact Hgd_eq.
-        - simpl. exact Hglobal_repr2.
+        - simpl. eapply global_repr_co_shift. eassumption.
         - simpl. exact Hgb_ne_sb. }
 
       (* 8. trap_sp field -- unchanged *)

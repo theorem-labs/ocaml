@@ -203,11 +203,13 @@ Qed.
 
 Theorem verify_UGEINT_correct :
     handler_correct handle_UGEINT f_instr_UGEINT
-      (fun _ _ s _ =>
+      (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              0 <= a < 4611686018427387904 /\
-             0 <= b < 4611686018427387904
+             0 <= b < 4611686018427387904 /\
+             int_vlong ard a /\
+             int_vlong ard b
          | _, _ => True
          end)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
@@ -223,10 +225,12 @@ Proof.
   unfold abs_rel_with_ard in Hpre.
   change (Machine.accu s) with (Val_int a) in Hstep_pre.
   change (Machine.stack s) with (Val_int b :: v_tl) in Hstep_pre.
-  simpl in Hstep_pre. destruct Hstep_pre as [Ha_range Hb_range].
+  simpl in Hstep_pre. destruct Hstep_pre as [Ha_range [Hb_range [Hint_tagged_a Hint_tagged_b]]].
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
     [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
@@ -237,7 +241,9 @@ Proof.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   pose proof (global_block_ne_sptr ard) as Hgb_ne. fold sb in Hgb_ne.
   rewrite Haccu_eq in Haccu_repr.
-  inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+  inversion Haccu_repr; subst accu_v.
+  2: { exfalso. destruct (Hint_tagged_a _ Haccu_repr) as [z Hz]. discriminate Hz. }
+  rename H0 into Haccu_is_int.
   rewrite Hstk in Hstack_repr.
   inversion Hstack_repr as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
   revert Hgd_load Hgd_eq Hglobal_repr. subst.
@@ -248,7 +254,9 @@ Proof.
   assert (Hsp_rep_tl : Ptrofs.unsigned sp_ofs + 8 + 8 * Z.of_nat (length v_tl) < Ptrofs.modulus) by lia.
   assert (Hsp_writable_new : Mem.range_perm m sp_b 0 (Ptrofs.unsigned sp_ofs + 8 + 8 * Z.of_nat (length v_tl)) Cur Writable).
   { intros ofs' Hofs'. apply Hsp_writable. lia. }
-  inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
+  inversion Hval_repr0; subst cv0.
+  2: { exfalso. destruct (Hint_tagged_b _ Hval_repr0) as [z Hz]. discriminate Hz. }
+  rename H0 into Hstk_is_int.
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
   set (new_sp_v := Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))).
   destruct (store_succeeds_sb m sb so 16 (Vptr sp_b sp_ofs) Hsb_writable Hsp_load ltac:(lia) ltac:(lia) new_sp_v) as [m1 Hstore1].
@@ -359,13 +367,13 @@ Proof.
     { exists result_v. split. exact Haccu_load'. simpl.
       unfold result_v. rewrite tagged_uge_result.
       unfold uge_bool. rewrite (tagged_ugeint_arith a b Ha_range Hb_range).
-      destruct (Z.geb (z_flip_sign a) (z_flip_sign b)); constructor. }
+      destruct (Z.geb (z_flip_sign a) (z_flip_sign b)); apply vr_int. }
     { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]]. exact Hsp_load'. reflexivity.
       { simpl.
-        eapply (stack_repr_store_other_block hm m1 m' _ sp_b
+        eapply (stack_repr_store_other_block hm cb co m1 m' _ sp_b
           (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-        + eapply (stack_repr_store_other_block hm m m1 _ sp_b
+        + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b
             (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
           * exact Hstack_repr_rest. * exact Hstore1.
           * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -379,8 +387,8 @@ Proof.
     { simpl. exact Hextra_load'. }
     { exists gd_ptr. split; [| split; [| split]]. exact Hgd_load'. simpl. exact Hgd_eq.
       { simpl.
-        eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-        + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v).
+        eapply (global_repr_store_other_block hm cb co m1 m' _ _ _ sb (uso + 8) result_v).
+        + eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb (uso + 16) new_sp_v).
           * exact Hglobal_repr. * exact Hstore1.
           * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         + exact Hstore2. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)). }
@@ -400,16 +408,18 @@ Theorem verify_UGEINT_handler_correct :
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
   apply handler_correct_weaken with
-    (sp := fun _ _ s _ =>
+    (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
            0 <= a < 4611686018427387904 /\
-           0 <= b < 4611686018427387904
+           0 <= b < 4611686018427387904 /\
+           int_vlong ard a /\
+           int_vlong ard b
        | _, _ => True
        end).
   - exact verify_UGEINT_correct.
   - intros e le m s ard _ Huis.
     unfold unsigned_ints_safe in Huis.
-    destruct Huis as (a & b & rest & Ha & Hs & Hra & Hrb).
-    rewrite Ha, Hs. exact (conj Hra Hrb).
+    destruct Huis as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
+    rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.

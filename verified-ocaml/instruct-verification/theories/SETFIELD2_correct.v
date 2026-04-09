@@ -50,34 +50,11 @@ Proof.
   unfold sem_add_ptr_int. reflexivity.
 Qed.
 
-Definition setfield2_heap_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let hm := ar_heap_map ard in
-  forall newval rest,
-    s.(Machine.stack) = newval :: rest ->
-    forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
-    forall sp_b sp_ofs,
-      Mem.load Mint64 (m) (ar_sptr_block ard)
-        (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-    forall stk_top_cv,
-      val_repr hm newval stk_top_cv ->
-    exists hb hofs,
-      accu_v = Vptr hb hofs /\
-      hb <> ar_sptr_block ard /\
-      hb <> sp_b /\
-      hb <> ar_global_block ard /\
-      (forall m1,
-        Mem.store Mint64 m (ar_sptr_block ard)
-          (Ptrofs.unsigned (ar_sptr_ofs ard) + 16)
-          (Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))) = Some m1 ->
-        exists m2, Mem.store Mint64 m1 hb
-                     (Ptrofs.unsigned (Ptrofs.add hofs (Ptrofs.repr 16)))
-                     stk_top_cv = Some m2).
+(* Heap-store precondition for field 2: now uses generic setfield_heap_pre 2. *)
 
 Theorem verify_SETFIELD2_correct :
     handler_correct (handle_SETFIELD 2) f_instr_SETFIELD2
-      (fun _ => setfield2_heap_pre)
+      (setfield_heap_pre 2)
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
                     match s.(Machine.accu) with
@@ -101,6 +78,8 @@ Proof.
   {
     intros ard Hpre Hhpre. unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] &
       [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] &
@@ -124,7 +103,7 @@ Proof.
     assert (Hsp_writable_tail : Mem.range_perm m sp_b 0 (Ptrofs.unsigned sp_ofs + 8 + 8 * Z.of_nat (length rest)) Cur Writable).
     { intros ofs' Hofs'. apply Hsp_writable. rewrite Hstk. simpl length. pose proof (Nat2Z.is_nonneg (length rest)). lia. }
 
-    unfold setfield2_heap_pre in Hhpre.
+    unfold setfield_heap_pre in Hhpre.
     specialize (Hhpre newval rest Hstk accu_v Haccu_repr sp_b sp_ofs Hsp_load stk_top_cv Hval_repr_top).
     destruct Hhpre as [hb [hofs [Haccu_is_ptr [Hhb_ne_sb [Hhb_ne_sp [Hhb_ne_gb Hheap_store_ok]]]]]]. subst accu_v.
 
@@ -137,6 +116,7 @@ Proof.
     { erewrite Mem.load_store_other. exact Hload_sp0. exact Hstore1. left. exact Hsp_ne_sb. }
 
     destruct (Hheap_store_ok m1 Hstore1) as [m2 Hstore2].
+    change (Z.of_nat 2 * 8) with 16 in Hstore2.
 
     set (unit_v := Vlong (Int64.repr 1)).
     pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore1 Hsb_writable) as Hsb_writable_m1.
@@ -169,7 +149,7 @@ Proof.
       rewrite sem_cast_long_to_ptr_vptr; eval_cbn.
       rewrite (sem_add_ptr_long_2 hb hofs m1); eval_cbn.
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hval_repr_top); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hval_repr_top); eval_cbn.
       rewrite Hstore2; eval_cbn.
 
       rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence).
@@ -214,14 +194,14 @@ Proof.
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       { subst le'. rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence). rewrite PTree.gso by (compute; congruence). exact Hle_s. }
       { exists pc_ptr. split. exact Hpc_load3. simpl. exact Hpc_rel. }
-      { exists unit_v. split. exact Haccu_load3. simpl. subst unit_v. exact (vr_int _ 0). }
+      { exists unit_v. split. exact Haccu_load3. simpl. subst unit_v. exact (vr_int _ _ _ 0). }
       { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load3. - reflexivity.
         - simpl.
-          eapply (stack_repr_store_other_block hm m2 m3 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) unit_v).
-          + eapply (stack_repr_store_other_block hm m1 m2 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) hb (Ptrofs.unsigned (Ptrofs.add hofs (Ptrofs.repr 16))) stk_top_cv).
-            * eapply (stack_repr_store_other_block hm m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
+          eapply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) unit_v).
+          + eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) hb (Ptrofs.unsigned (Ptrofs.add hofs (Ptrofs.repr 16))) stk_top_cv).
+            * eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
               -- exact Hstack_repr_rest. -- exact Hstore1. -- intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
             * exact Hstore2. * intro Heq. exact (Hhb_ne_sp Heq).
           + exact Hstore3. + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -238,9 +218,9 @@ Proof.
       { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load3. - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m2 m3 _ (ar_global_block ard) (ar_global_ofs ard) sb (uso + 8) unit_v).
-          + apply (global_repr_store_other_block hm m1 m2 _ (ar_global_block ard) (ar_global_ofs ard) hb (Ptrofs.unsigned (Ptrofs.add hofs (Ptrofs.repr 16))) stk_top_cv).
-            * apply (global_repr_store_other_block hm m m1 _ (ar_global_block ard) (ar_global_ofs ard) sb (uso + 16) new_sp_v Hglobal_repr Hstore1).
+          apply (global_repr_store_other_block hm cb co m2 m3 _ (ar_global_block ard) (ar_global_ofs ard) sb (uso + 8) unit_v).
+          + apply (global_repr_store_other_block hm cb co m1 m2 _ (ar_global_block ard) (ar_global_ofs ard) hb (Ptrofs.unsigned (Ptrofs.add hofs (Ptrofs.repr 16))) stk_top_cv).
+            * apply (global_repr_store_other_block hm cb co m m1 _ (ar_global_block ard) (ar_global_ofs ard) sb (uso + 16) new_sp_v Hglobal_repr Hstore1).
               intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
             * exact Hstore2. * intro Heq2. exact (Hhb_ne_gb Heq2).
           + exact Hstore3. + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).

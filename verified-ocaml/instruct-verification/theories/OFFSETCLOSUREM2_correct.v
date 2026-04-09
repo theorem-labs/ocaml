@@ -73,23 +73,12 @@ Local Lemma sem_cast_tulong_tlong : forall n m,
   sem_cast (Vlong n) tulong tlong m = Some (Vlong n).
 Proof. intros. reflexivity. Qed.
 
-(* ================================================================== *)
-(* Precondition: closure env is representable as Vlong with valid sub   *)
-(* ================================================================== *)
-
-Definition offsetclosurem2_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let hm := ar_heap_map ard in
-  let sb := ar_sptr_block ard in
-  let so := ar_sptr_ofs ard in
-  match s.(Machine.env) with
-  | Val_closure addr base_ofs =>
-      exists env_long,
-        Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
-        val_repr hm (Val_closure addr (Z.to_nat (Z.of_nat base_ofs + (-2))))
-          (Vlong (Int64.sub env_long (Int64.repr 24)))
-  | _ => True
-  end.
+(* Bridge: Int64.sub x (repr 24) = Int64.add x (repr (-24)) *)
+Local Lemma sub_24_eq_add_neg24 : forall x,
+  Int64.sub x (Int64.repr 24) = Int64.add x (Int64.repr (-24)).
+Proof.
+  intros. rewrite Int64.sub_add_opp. f_equal.
+Qed.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -97,7 +86,7 @@ Definition offsetclosurem2_pre
 
 Theorem verify_OFFSETCLOSUREM2_compl_comp :
     handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM2
-      (fun _ => offsetclosurem2_pre)
+      (closure_offset_pre (-2) (-24))
       (fun _ _ => True)
       (fun _ => False)
       (fun _ _ _ => False).
@@ -133,6 +122,8 @@ Proof.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
+      set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -144,10 +135,14 @@ Proof.
       subst sp_ptr.
 
       (* Extract the closure precondition *)
-      unfold offsetclosurem2_pre in Hstep_pre.
+      unfold closure_offset_pre in Hstep_pre.
       rewrite Henv_eq in Hstep_pre.
       fold sb so hm in Hstep_pre.
       destruct Hstep_pre as [env_long [Henv_long_load Hresult_repr]].
+
+      (* Bridge: the generic precondition uses Int64.add with (-24),
+         but C semantics produce Int64.sub with 24. *)
+      rewrite <- sub_24_eq_add_neg24 in Hresult_repr.
 
       (* env_v = Vlong env_long (both load from same offset) *)
       assert (Henv_v_long : env_v = Vlong env_long).
@@ -282,7 +277,7 @@ Proof.
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) result_v
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) result_v
                      Hstack_repr Hstore).
                       intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           - exact Hsp_ne_sb.
@@ -306,7 +301,7 @@ Proof.
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
-            apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) result_v
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) result_v
                      Hglobal_repr Hstore).
                       intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           - exact Hgb_ne_sb. }

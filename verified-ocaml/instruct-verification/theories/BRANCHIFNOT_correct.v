@@ -272,7 +272,11 @@ Theorem verify_BRANCHIFNOT_correct : forall target,
          | Val_block _ nil => True
          | Val_ptr _ | Val_closure _ _ => False
          | Val_block _ (_ :: _) => True
-         end)
+         end /\
+         (forall n, Machine.accu s = Val_int n ->
+            forall cv,
+            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
+            exists z, cv = Vlong z))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro target.
@@ -313,15 +317,19 @@ Proof.
       subst sp_ptr.
 
       (* Extract preconditions *)
-      destruct Hstep_pre as (Hcb_ne_sb & [ofs_int [Hcode_load Hofs_eq]] & _).
+      destruct Hstep_pre as (Hcb_ne_sb & [ofs_int [Hcode_load Hofs_eq]] & _ & Hzero_tagged).
 
       (* Structural invariants *)
       pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
 
       (* accu = Val_int 0, val_repr gives Vlong (Int64.repr 1) *)
+      pose proof Haccu_repr as Haccu_repr'.
       rewrite Haccu_eq in Haccu_repr.
       inversion Haccu_repr; subst accu_v.
+      2: { exfalso. rewrite Haccu_eq in Haccu_repr'.
+           destruct (Hzero_tagged 0%Z eq_refl _ Haccu_repr') as [z Hz].
+           discriminate Hz. }
 
       (* Composite environment facts *)
       destruct interp_state_co_pc_accu as [co_is [Hco [Hpc_offset Haccu_offset]]].
@@ -557,13 +565,14 @@ Proof.
 
         { exists (Vlong (Int64.repr 1)). split.
           - exact Haccu_load'.
-          - simpl. rewrite Haccu_eq. constructor. }
+          - simpl. rewrite Haccu_eq. apply vr_int. }
 
         { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
           split. { exact Hsp_load'. }
           split. { reflexivity. }
           split. { simpl.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_v
+            eapply stack_repr_co_shift.
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb uso new_pc_v
                      Hstack_repr Hstore).
             intro Heq; exact (Hblock_sep (eq_sym Heq)). }
           split. { exact Hblock_sep. }
@@ -578,7 +587,7 @@ Proof.
 
         { exists env_v. split.
           - exact Henv_load'.
-          - simpl. exact Henv_repr. }
+          - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
         { simpl. exact Hextra_load'. }
 
@@ -586,7 +595,8 @@ Proof.
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
-            apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_v
+            eapply global_repr_co_shift.
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb uso new_pc_v
                      Hglobal_repr Hstore).
             intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           - exact Hgb_ne. }
@@ -629,11 +639,12 @@ Proof.
         & Hblock_sep & Hsp_ne_gb & Hcb_ne_sp & Hsp_ge8 & Hsp_bound & Hsp_writable & Hsp_align)]]];
       subst sp_ptr;
 
-      destruct Hstep_pre as (_ & _ & Haccu_range);
+      destruct Hstep_pre as (_ & _ & Haccu_range & Hint_tagged);
 
       pose proof (sptr_ofs_representable ard) as Hso_bound; fold so in Hso_bound;
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _];
 
+      pose proof Haccu_repr as Haccu_repr';
       rewrite Haccu_eq in Haccu_repr;
 
       destruct interp_state_co_pc_accu as [co_is [Hco [Hpc_offset Haccu_offset]]];
@@ -659,6 +670,9 @@ Proof.
 
       (* Now subst accu_v -- concrete Vlong value propagates into le1, le' *)
       inversion Haccu_repr; subst accu_v;
+      [| exfalso; rewrite Haccu_eq in Haccu_repr';
+         destruct (Hint_tagged _ eq_refl _ Haccu_repr') as [z Hz];
+         discriminate Hz];
 
       exists le'; exists m';
       exists (Out_return (Some (Vint (Int.repr 0), tint)));
@@ -807,13 +821,14 @@ Proof.
 
         | eexists; split;
           [ exact Haccu_load'
-          | simpl; simpl in Haccu_repr; rewrite Haccu_eq; exact Haccu_repr ]
+          | simpl; simpl in Haccu_repr; rewrite Haccu_eq; eapply val_repr_co_shift; exact Haccu_repr ]
 
         | exists (Vptr sp_b sp_ofs), sp_b, sp_ofs;
           (split; [ exact Hsp_load'
           | split; [ reflexivity
           | split; [ simpl;
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_v
+            eapply stack_repr_co_shift;
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb uso new_pc_v
                      Hstack_repr Hstore);
             intro Heq; exact (Hblock_sep (eq_sym Heq))
           | split; [ exact Hblock_sep
@@ -828,7 +843,7 @@ Proof.
 
         | exists env_v; split;
           [ exact Henv_load'
-          | simpl; exact Henv_repr ]
+          | simpl; eapply val_repr_co_shift; exact Henv_repr ]
 
         | simpl; exact Hextra_load'
 
@@ -836,7 +851,8 @@ Proof.
           [ exact Hgd_load'
           | simpl; exact Hgd_eq
           | simpl;
-            apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_v
+            eapply global_repr_co_shift;
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb uso new_pc_v
                      Hglobal_repr Hstore);
             intro Heq2; exact (Hgb_ne (eq_sym Heq2))
           | exact Hgb_ne ]
@@ -1038,13 +1054,14 @@ Proof.
         { exists new_pc_v. split. exact Hpc_load'. simpl. apply pc_rel_shift_by_4. }
 
         { exists (Vlong (Int64.repr (Z.of_nat addr * 1024))). split.
-          exact Haccu_load'. simpl. rewrite Haccu_eq. exact (vr_block_atom _ addr). }
+          exact Haccu_load'. simpl. rewrite Haccu_eq. exact (vr_block_atom _ _ _ addr). }
 
         { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
           (split; [ exact Hsp_load'
           | split; [ reflexivity
           | split; [ simpl;
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb uso new_pc_v
+            eapply stack_repr_co_shift;
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb uso new_pc_v
                      Hstack_repr Hstore);
             intro Heq; exact (Hblock_sep (eq_sym Heq))
           | split; [ exact Hblock_sep
@@ -1057,13 +1074,14 @@ Proof.
             apply Hsp_writable; exact Hofs'
           | exact Hsp_align ]]]]]]]]]).  }
 
-        { exists env_v. split. exact Henv_load'. simpl. exact Henv_repr. }
+        { exists env_v. split. exact Henv_load'. simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
         { simpl. exact Hextra_load'. }
 
         { exists gd_ptr. split; [| split; [| split]].
           exact Hgd_load'. simpl. exact Hgd_eq. simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb uso new_pc_v
+          eapply global_repr_co_shift.
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb uso new_pc_v
                    Hglobal_repr Hstore).
           intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           exact Hgb_ne. }
@@ -1094,7 +1112,7 @@ Proof.
   (* ================================================================ *)
   {
     intros ard _ Hstep_pre.
-    destruct Hstep_pre as (_ & _ & Haccu_absurd).
+    destruct Hstep_pre as (_ & _ & Haccu_absurd & _).
     simpl in Haccu_absurd. destruct Haccu_absurd.
   }
 
@@ -1104,7 +1122,7 @@ Proof.
   (* ================================================================ *)
   {
     intros ard _ Hstep_pre.
-    destruct Hstep_pre as (_ & _ & Haccu_absurd).
+    destruct Hstep_pre as (_ & _ & Haccu_absurd & _).
     simpl in Haccu_absurd. destruct Haccu_absurd.
   }
 Qed.

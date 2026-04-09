@@ -178,13 +178,13 @@ Qed.
 (* for the byte store to a different block.                            *)
 (* ================================================================== *)
 
-Local Lemma stack_repr_byte_store_other_block : forall hm m m' stk sp_b sp_ofs hb ofs v,
-  stack_repr hm m stk sp_b sp_ofs ->
+Local Lemma stack_repr_byte_store_other_block : forall hm cb co m m' stk sp_b sp_ofs hb ofs v,
+  stack_repr hm cb co m stk sp_b sp_ofs ->
   Mem.store Mint8unsigned m hb ofs v = Some m' ->
   hb <> sp_b ->
-  stack_repr hm m' stk sp_b sp_ofs.
+  stack_repr hm cb co m' stk sp_b sp_ofs.
 Proof.
-  intros hm m m' stk. revert m m'.
+  intros hm cb co m m' stk. revert m m'.
   induction stk as [| hd tl IH]; intros m m' sp_b sp_ofs hb ofs v Hsr Hstore Hne.
   - constructor.
   - inversion Hsr; subst. econstructor.
@@ -193,13 +193,13 @@ Proof.
     + eapply IH; eauto.
 Qed.
 
-Local Lemma global_repr_byte_store_other_block : forall hm m m' gs gb gofs hb ofs v,
-  global_repr hm m gs gb gofs ->
+Local Lemma global_repr_byte_store_other_block : forall hm cb co m m' gs gb gofs hb ofs v,
+  global_repr hm cb co m gs gb gofs ->
   Mem.store Mint8unsigned m hb ofs v = Some m' ->
   hb <> gb ->
-  global_repr hm m' gs gb gofs.
+  global_repr hm cb co m' gs gb gofs.
 Proof.
-  intros hm m m' gs. revert m m'.
+  intros hm cb co m m' gs. revert m m'.
   induction gs as [| hd tl IH]; intros m m' gb gofs hb ofs v Hgr Hstore Hne.
   - constructor.
   - inversion Hgr; subst. econstructor.
@@ -218,6 +218,8 @@ Qed.
 Definition setbyteschar_heap_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
   let gb := ar_global_block ard in
   forall idx newchar rest,
@@ -226,7 +228,7 @@ Definition setbyteschar_heap_pre
     idx * 2 + 1 <= Int64.max_signed ->
     0 <= newchar <= 255 ->
     forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
+      val_repr hm cb co s.(Machine.accu) accu_v ->
     forall sp_b sp_ofs,
       Mem.load Mint64 m sb
         (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
@@ -258,6 +260,7 @@ Definition setbyteschar_heap_pre
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+#[warnings="-not-a-closed-proof"]
 Theorem verify_SETBYTESCHAR_correct :
     handler_correct handle_SETBYTESCHAR f_instr_SETBYTESCHAR
       (fun _ m s ard =>
@@ -265,7 +268,9 @@ Theorem verify_SETBYTESCHAR_correct :
          match s.(Machine.stack) with
          | Val_int idx :: Val_int newchar :: _ =>
              0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
-             0 <= newchar <= 255
+             0 <= newchar <= 255 /\
+             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv -> exists z, cv = Vlong z) /\
+             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int newchar) cv -> exists z, cv = Vlong z)
          | _ => True
          end)
       (fun _ s =>
@@ -317,7 +322,7 @@ Proof.
   {
     intros ard Hpre [Hhpre Hidx_bounds].
 
-    destruct Hidx_bounds as [Hidx_ge [Hidx_lt Hnc_range]].
+    destruct Hidx_bounds as [Hidx_ge [Hidx_lt [Hnc_range [Hidx_tagged Hnc_tagged]]]].
 
     (* Unpack abs_rel_with_ard *)
     destruct Hpre as (Hle_s &
@@ -333,6 +338,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     (* Structural invariants *)
     pose proof (sptr_ofs_representable ard) as Hso_bound.
@@ -364,8 +371,14 @@ Proof.
     intros Hgd_load Hgd_eq Hglobal_repr Hgb_ne_sb.
 
     (* Stack heads: Val_int idx -> Vlong, Val_int newchar -> Vlong *)
-    inversion Hval_repr_idx; subst cv_idx. rename H0 into Hidx_is_int.
-    inversion Hval_repr_nc; subst cv_nc. rename H0 into Hnc_is_int.
+    pose proof Hval_repr_idx as Hval_repr_idx'.
+    inversion Hval_repr_idx; subst cv_idx.
+    2: { exfalso. destruct (Hidx_tagged _ Hval_repr_idx') as [z1 Hz1]. discriminate Hz1. }
+    rename H0 into Hidx_is_int.
+    pose proof Hval_repr_nc as Hval_repr_nc'.
+    inversion Hval_repr_nc; subst cv_nc.
+    2: { exfalso. destruct (Hnc_tagged _ Hval_repr_nc') as [z2 Hz2]. discriminate Hz2. }
+    rename H0 into Hnc_is_int.
 
     (* Unify Ptrofs.add (Ptrofs.add sp_ofs 8) 8 with Ptrofs.add sp_ofs 16 *)
     rewrite (ptrofs_add_8_8 sp_ofs Hsp_mod_orig) in Hstack_repr_rest.
@@ -671,7 +684,7 @@ Proof.
       (* 3. accu field -- updated to val_unit = Val_int 0 *)
       { exists unit_v. split.
         - exact Haccu_load'.
-        - simpl. subst unit_v. exact (vr_int _ 0). }
+        - simpl. subst unit_v. exact (vr_int _ _ _ 0). }
 
       (* 4. sp field -- updated to sp + 16 (pop 2) *)
       { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 16)).
@@ -683,11 +696,11 @@ Proof.
              m -> m_byte (byte store, hb <> sp_b),
              m_byte -> m1 (sb store, sb <> sp_b),
              m1 -> m' (sb store, sb <> sp_b) *)
-          eapply (stack_repr_store_other_block hm m1 m' _ sp_b
+          eapply (stack_repr_store_other_block hm cb co m1 m' _ sp_b
                    (Ptrofs.add sp_ofs (Ptrofs.repr 16)) sb (uso + 8) unit_v).
-          + eapply (stack_repr_store_other_block hm m_byte m1 _ sp_b
+          + eapply (stack_repr_store_other_block hm cb co m_byte m1 _ sp_b
                      (Ptrofs.add sp_ofs (Ptrofs.repr 16)) sb (uso + 16) new_sp_v).
-            * eapply (stack_repr_byte_store_other_block hm m m_byte _ sp_b
+            * eapply (stack_repr_byte_store_other_block hm cb co m m_byte _ sp_b
                        (Ptrofs.add sp_ofs (Ptrofs.repr 16)) hb
                        (Ptrofs.unsigned (Ptrofs.add hofs (Ptrofs.repr idx)))
                        byte_cv).
@@ -730,9 +743,9 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) unit_v).
-          + eapply (global_repr_store_other_block hm m_byte m1 _ _ _ sb (uso + 16) new_sp_v).
-            * eapply (global_repr_byte_store_other_block hm m m_byte _ _ _
+          eapply (global_repr_store_other_block hm cb co m1 m' _ _ _ sb (uso + 8) unit_v).
+          + eapply (global_repr_store_other_block hm cb co m_byte m1 _ _ _ sb (uso + 16) new_sp_v).
+            * eapply (global_repr_byte_store_other_block hm cb co m m_byte _ _ _
                        hb (Ptrofs.unsigned (Ptrofs.add hofs (Ptrofs.repr idx)))
                        byte_cv).
               -- exact Hglobal_repr.

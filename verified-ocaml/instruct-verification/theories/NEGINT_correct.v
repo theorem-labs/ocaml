@@ -128,12 +128,12 @@ Qed.
 (* ================================================================== *)
 (* Lemma: val_repr for the result of tagged negation                   *)
 (*                                                                      *)
-(* val_repr hm (Val_int (-n))                                          *)
+(* val_repr hm cb co (Val_int (-n))                                          *)
 (*   (Vlong (Int64.sub (Int64.repr 2) (Int64.repr (n*2+1))))          *)
 (* ================================================================== *)
 
-Lemma val_repr_negint_result : forall hm n,
-  val_repr hm (Val_int (- n))
+Lemma val_repr_negint_result : forall hm cb co n,
+  val_repr hm cb co (Val_int (- n))
     (Vlong (Int64.sub (Int64.repr 2) (Int64.repr (n * 2 + 1)))).
 Proof.
   intros. rewrite tagged_negint_arith. constructor.
@@ -155,7 +155,7 @@ Qed.
 
 Theorem verify_NEGINT_compl_comp :
     handler_correct handle_NEGINT f_instr_NEGINT
-      (fun _ _ _ _ => True)
+      accu_is_long
       (fun _ s => forall n, s.(Machine.accu) <> Val_int n)
       (fun _ => False)
       (fun _ _ _ => False).
@@ -171,10 +171,13 @@ Proof.
   (* The Step case: accu = Val_int n                                   *)
   (* ================================================================ *)
   {
-    intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
+    intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
+    unfold accu_is_long in Hstep_pre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -194,7 +197,14 @@ Proof.
 
     (* Determine accu_v from val_repr + accu = Val_int n *)
     rewrite Haccu_eq in Haccu_repr.
+    (* Save the rewritten Haccu_repr for use in vr_code_ptr contradiction *)
+    pose proof Haccu_repr as Haccu_repr_rw.
     inversion Haccu_repr; subst accu_v.
+    2: { (* vr_code_ptr case: accu_v = Vptr cb ... but Hstep_pre says val_repr gives Vlong *)
+         exfalso.
+         rewrite Haccu_eq in Hstep_pre.
+         destruct (Hstep_pre _ Haccu_repr_rw) as [z Hz].
+         discriminate Hz. }
     set (cv_accu := Vlong (Int64.repr (n * 2 + 1))) in *.
 
     (* Composite environment facts *)
@@ -357,7 +367,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                    Hstack_repr Hstore).
                     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -381,7 +391,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv_result
                    Hglobal_repr Hstore).
                     intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }

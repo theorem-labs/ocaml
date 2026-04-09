@@ -80,6 +80,8 @@ Proof.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
@@ -193,7 +195,7 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gss; eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Haccu_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Haccu_repr); eval_cbn.
     fold new_sp_ofs.
     rewrite Hstore_accu; eval_cbn.
 
@@ -325,21 +327,21 @@ Proof.
     (* 3. accu field -- updated to Val_int 2 *)
     { exists (Vlong (Int64.repr 5)). split.
       - exact Haccu_load3.
-      - simpl. exact (vr_int _ 2). }
+      - simpl. exact (vr_int _ _ _ 2). }
 
     (* 4. sp field -- updated to new_sp_ofs; stack gets accu prepended *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
-      assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-      { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+      assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+      { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
                  (uso + 16) (Vptr sp_b new_sp_ofs)
                  Hstack_repr Hstore_sp).
         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
-      assert (Hstack_cons_m2 : stack_repr hm m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-      { exact (stack_repr_cons_after_store hm m1 m2
+      assert (Hstack_cons_m2 : stack_repr hm cb co m2 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+      { exact (stack_repr_cons_after_store hm cb co m1 m2
                  (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
                  Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 Hsp_rep). }
-      assert (Hstack_m3 : stack_repr hm m3 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
-      { apply (stack_repr_store_other_block hm m2 m3 _ sp_b new_sp_ofs sb
+      assert (Hstack_m3 : stack_repr hm cb co m3 (Machine.accu s :: Machine.stack s) sp_b new_sp_ofs).
+      { apply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b new_sp_ofs sb
                  (uso + 8) (Vlong (Int64.repr 5))
                  Hstack_cons_m2 Hstore_const).
         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
@@ -374,13 +376,13 @@ Proof.
       - exact Hgd_load3.
       - simpl. exact Hgd_eq.
       - simpl.
-        apply (global_repr_store_other_block hm m2 m3 _
+        apply (global_repr_store_other_block hm cb co m2 m3 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (uso + 8) (Vlong (Int64.repr 5))).
-        + apply (global_repr_store_other_block hm m1 m2 _
+        + apply (global_repr_store_other_block hm cb co m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sp_b (Ptrofs.unsigned new_sp_ofs) accu_v).
-          * apply (global_repr_store_other_block hm m m1 _
+          * apply (global_repr_store_other_block hm cb co m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 16) (Vptr sp_b new_sp_ofs)
                      Hglobal_repr Hstore_sp).

@@ -48,7 +48,7 @@ Local Ltac eval_cbn :=
 
 Theorem verify_ADDINT_compl_comp :
     handler_correct handle_ADDINT f_instr_ADDINT
-      (fun _ _ _ _ => True)
+      (pre_and accu_is_long stack_head_is_long)
       (fun _ s => forall a b rest,
          s.(Machine.accu) = Val_int a ->
          s.(Machine.stack) = Val_int b :: rest -> False)
@@ -70,10 +70,14 @@ Proof.
   (* Step case: accu = Val_int a, stack = Val_int b :: v_tl           *)
   (* ================================================================ *)
   {
-    intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
+    intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
+    unfold pre_and, accu_is_long, stack_head_is_long in Hstep_pre.
+    destruct Hstep_pre as [Haccu_long Hhead_long].
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -93,7 +97,11 @@ Proof.
 
     (* Accu is Val_int a *)
     rewrite Haccu_eq in Haccu_repr.
-    inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+    pose proof Haccu_repr as Haccu_repr_rw.
+    inversion Haccu_repr; subst accu_v.
+    2: { exfalso. rewrite Haccu_eq in Haccu_long.
+         destruct (Haccu_long _ Haccu_repr_rw) as [z Hz]. discriminate Hz. }
+    rename H0 into Haccu_is_int.
 
     (* Pre-compute modulus bounds for sp + 8 BEFORE inversion/subst *)
     assert (Hsp_mod_orig : Ptrofs.unsigned sp_ofs + 8 < Ptrofs.modulus).
@@ -115,7 +123,11 @@ Proof.
     intros Hgd_load Hgd_eq Hglobal_repr.
 
     (* Stack head is Val_int b *)
-    inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
+    pose proof Hval_repr0 as Hval_repr0_rw.
+    inversion Hval_repr0; subst cv0.
+    2: { exfalso. rewrite Hstk in Hhead_long.
+         destruct (Hhead_long _ Hval_repr0_rw) as [z Hz]. discriminate Hz. }
+    rename H0 into Hstk_is_int.
 
     (* Composite environment facts *)
     destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
@@ -337,7 +349,7 @@ Proof.
       { exists result_v. split.
         - exact Haccu_load'.
         - simpl.
-          (* Goal: val_repr hm (Val_int (a + b)) result_v *)
+          (* Goal: val_repr hm cb co (Val_int (a + b)) result_v *)
           unfold result_v.
           rewrite tagged_addint_arith.
           constructor. }
@@ -348,13 +360,13 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
-          (* Goal: stack_repr hm m' <tail> sp_b (sp_ofs + 8) *)
-          (* Hstack_repr_rest: stack_repr hm m <tail> sp_b (sp_ofs + 8) *)
+          (* Goal: stack_repr hm cb co m' <tail> sp_b (sp_ofs + 8) *)
+          (* Hstack_repr_rest: stack_repr hm cb co m <tail> sp_b (sp_ofs + 8) *)
           (* m -> m1 (store to sb at so+16) -> m' (store to sb at so+8) *)
           (* Both stores to sb, stack in sp_b. sb <> sp_b. *)
-          eapply (stack_repr_store_other_block hm m1 m' _ sp_b
+          eapply (stack_repr_store_other_block hm cb co m1 m' _ sp_b
                    (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-          + eapply (stack_repr_store_other_block hm m m1 _ sp_b
+          + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b
                      (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
             * exact Hstack_repr_rest.
             * exact Hstore1.
@@ -393,8 +405,8 @@ Proof.
         - simpl. exact Hgd_eq.
         - simpl.
           (* global_repr through two stores to sb *)
-          eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-          + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v).
+          eapply (global_repr_store_other_block hm cb co m1 m' _ _ _ sb (uso + 8) result_v).
+          + eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb (uso + 16) new_sp_v).
             * exact Hglobal_repr.
             * exact Hstore1.
             * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).

@@ -165,26 +165,29 @@ Qed.
 Definition getmethod_heap_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   forall obj rest class_tbl n method_fn,
     s.(Machine.stack) = obj :: rest ->
     field_or_heap s obj 0 = Some class_tbl ->
     s.(Machine.accu) = Val_int n ->
     field_or_heap s class_tbl (Z.to_nat n) = Some method_fn ->
     forall sp_v,
-      val_repr hm obj sp_v ->
+      val_repr hm cb co obj sp_v ->
       exists obj_b obj_ofs ct_v ct_b ct_ofs meth_v,
         sp_v = Vptr obj_b obj_ofs /\
         Mem.load Mint64 m obj_b (Ptrofs.unsigned obj_ofs) = Some ct_v /\
-        val_repr hm class_tbl ct_v /\
+        val_repr hm cb co class_tbl ct_v /\
         ct_v = Vptr ct_b ct_ofs /\
         Mem.load Mint64 m ct_b
           (Ptrofs.unsigned (Ptrofs.add ct_ofs (Ptrofs.repr (n * 8)))) = Some meth_v /\
-        val_repr hm method_fn meth_v.
+        val_repr hm cb co method_fn meth_v.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
+#[warnings="-not-a-closed-proof"]
 Theorem verify_GETMETHOD_correct :
     handler_correct handle_GETMETHOD f_instr_GETMETHOD
       (fun _ m s ard =>
@@ -192,7 +195,8 @@ Theorem verify_GETMETHOD_correct :
          match s.(Machine.accu) with
          | Val_int n => 0 <= n /\
                         n * 2 + 1 <= Int64.max_signed /\
-                        n < Ptrofs.half_modulus
+                        n < Ptrofs.half_modulus /\
+                        (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int n) cv -> exists z, cv = Vlong z)
          | _ => True
          end)
       (fun msg s =>
@@ -227,7 +231,7 @@ Proof.
   {
     intros ard Hpre [Hhfl Hidx_bounds].
 
-    destruct Hidx_bounds as [Hidx_ge [Hidx_signed Hidx_ptrofs]].
+    destruct Hidx_bounds as [Hidx_ge [Hidx_signed [Hidx_ptrofs Haccu_tagged]]].
 
     (* Unpack abs_rel_with_ard *)
     destruct Hpre as (Hle_s &
@@ -243,6 +247,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     (* Structural invariants *)
     pose proof (sptr_ofs_representable ard) as Hso_bound.
@@ -263,8 +269,12 @@ Proof.
     subst cv_obj ct_v.
 
     (* Accu representation *)
+    pose proof Haccu_repr as Haccu_repr'.
     rewrite Haccu_eq in Haccu_repr.
-    inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+    inversion Haccu_repr; subst accu_v.
+    2: { exfalso. rewrite Haccu_eq in Haccu_repr'.
+         destruct (Haccu_tagged _ Haccu_repr') as [z Hz]. discriminate Hz. }
+    rename H0 into Haccu_is_int.
 
     (* Composite environment facts *)
     destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
@@ -349,7 +359,7 @@ Proof.
       rewrite Hle_s; eval_cbn.
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hmeth_repr); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hmeth_repr); eval_cbn.
       rewrite Hstore; eval_cbn.
 
       (* S7: Sreturn 0 *)
@@ -390,7 +400,7 @@ Proof.
 
       assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some meth_v).
       { pose proof (load_after_store_same m m' sb (uso + 8) meth_v Hstore) as Htmp.
-        rewrite (val_repr_load_result hm method_fn meth_v Hmeth_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co method_fn meth_v Hmeth_repr) in Htmp.
         exact Htmp. }
 
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -420,7 +430,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl. rewrite Hstk.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) meth_v
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) meth_v
                    Hstack_repr Hstore).
           intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -444,7 +454,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) meth_v
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) meth_v
                    Hglobal_repr Hstore).
           intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }

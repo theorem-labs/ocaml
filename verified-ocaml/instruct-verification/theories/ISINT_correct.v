@@ -233,27 +233,15 @@ Definition isint_accu_vlong (s : Machine.state) : Prop :=
   | _ => False
   end.
 
-(* ================================================================== *)
-(* Helper: accu case analysis under val_repr + isint_accu_vlong gives  *)
-(* us a Vlong witness.                                                 *)
-(* ================================================================== *)
-
-Lemma val_repr_vlong_cases : forall hm v cv,
-  val_repr hm v cv ->
-  match v with
-  | Val_int _ => True
-  | Val_block _ nil => True
-  | _ => False
-  end ->
-  exists z, cv = Vlong z.
-Proof.
-  intros hm v cv Hvr Hok.
-  inversion Hvr; subst.
-  - (* vr_int *) eexists. reflexivity.
-  - (* vr_ptr: Val_ptr *) simpl in Hok. contradiction.
-  - (* vr_closure: Val_closure *) simpl in Hok. contradiction.
-  - (* vr_block_atom: Val_block tag nil *) eexists. reflexivity.
-Qed.
+(* Stronger precondition: also requires Vlong representation for Val_int.
+   This excludes the vr_code_ptr case where Val_int is represented as Vptr,
+   which cannot be handled by CompCert's sem_and (undefined on Vptr). *)
+Definition isint_accu_vlong_strong (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  isint_accu_vlong s /\
+  match Machine.accu s with
+  | Val_int n => int_vlong ard n
+  | _ => True
+  end.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -267,8 +255,9 @@ Theorem verify_ISINT_correct :
   forall e le m s,
     match handle_ISINT s.(pc) s with
     | Step s' =>
-        isint_accu_vlong s ->
-        abs_rel e le m s ->
+        forall ard,
+        isint_accu_vlong_strong s ard ->
+        abs_rel_with_ard e le m s ard ->
         exists le' m' out,
           exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_ISINT) E0 le' m' out /\
           abs_rel e le' m' s'
@@ -290,12 +279,14 @@ Proof.
   {
     simpl is_int.
 
-    intros _Hok Hpre.
+    intros ard [_Hvlong_ok Hint_vlong] Hpre.
 
-    destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
+    unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -312,8 +303,15 @@ Proof.
     pose proof (global_block_ne_sptr ard) as Hgb_ne.
     fold sb in Hgb_ne.
 
+    (* Use int_vlong to get that accu_v is Vlong, excluding vr_code_ptr *)
+    rewrite Haccu_eq in Hint_vlong.
+    simpl in Hint_vlong. unfold int_vlong in Hint_vlong.
     rewrite Haccu_eq in Haccu_repr.
     inversion Haccu_repr; subst accu_v.
+    2: { (* vr_code_ptr: Vptr, contradicts int_vlong *)
+         exfalso.
+         destruct (Hint_vlong _ Haccu_repr) as [z Hz].
+         discriminate Hz. }
     set (cv_accu := Vlong (Int64.repr (n * 2 + 1))) in *.
 
     destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
@@ -432,7 +430,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                    Hstack_repr Hstore).
                     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -453,7 +451,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv_result
                    Hglobal_repr Hstore).
                     intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }
@@ -474,15 +472,17 @@ Proof.
     simpl is_int.
 
     (* The precondition isint_accu_vlong requires fields = nil *)
-    intros Hok Hpre.
+    intros ard [Hok _Hint_vlong2] Hpre.
     unfold isint_accu_vlong in Hok. rewrite Haccu_eq in Hok. simpl in Hok.
     destruct fields as [|fhd ftl].
     2: { contradiction. }
 
-    destruct Hpre as [ard Hpre]. unfold abs_rel_with_ard in Hpre.
+    unfold abs_rel_with_ard in Hpre.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -610,7 +610,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv_result
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv_result
                    Hstack_repr Hstore).
                     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -631,7 +631,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv_result
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv_result
                    Hglobal_repr Hstore).
                     intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }
@@ -649,7 +649,7 @@ Proof.
   (* Case 3: accu = Val_ptr addr => excluded by isint_accu_vlong      *)
   (* ================================================================ *)
   {
-    intros Hok _Hpre.
+    intros ard [Hok _] _Hpre.
     unfold isint_accu_vlong in Hok. rewrite Haccu_eq in Hok. simpl in Hok. contradiction.
   }
 
@@ -657,7 +657,7 @@ Proof.
   (* Case 4: accu = Val_closure addr off => excluded by precondition  *)
   (* ================================================================ *)
   {
-    intros Hok _Hpre.
+    intros ard [Hok _] _Hpre.
     unfold isint_accu_vlong in Hok. rewrite Haccu_eq in Hok. simpl in Hok. contradiction.
   }
 Qed.
@@ -665,13 +665,20 @@ Qed.
 (* Wrapper: convert to handler_correct form for the Module Type. *)
 Theorem verify_ISINT_handler_correct :
     handler_correct handle_ISINT f_instr_ISINT
-      (fun _ _ s _ => isint_accu_vlong s)
+      accu_is_immediate
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
   pose proof (verify_ISINT_correct e le m s) as H.
   destruct (handle_ISINT (Machine.pc s) s) eqn:Hmatch.
-  - intros ard Hrel Hpre. apply H; auto. exists ard. exact Hrel.
+  - intros ard Hrel Hpre.
+    apply (H ard).
+    + (* isint_accu_vlong_strong from accu_is_immediate *)
+      unfold isint_accu_vlong_strong, isint_accu_vlong, accu_is_immediate in *.
+      destruct (Machine.accu s) eqn:Heq; try contradiction.
+      * split; [exact I | exact Hpre].
+      * destruct l; [split; [exact I | exact I] | contradiction].
+    + exact Hrel.
   - exact H.
   - exact H.
   - exact H.

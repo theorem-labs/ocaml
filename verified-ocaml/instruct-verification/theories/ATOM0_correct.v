@@ -103,6 +103,8 @@ Proof.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
 
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
@@ -228,7 +230,7 @@ Proof.
       - simpl. subst atom_v.
         (* Val_block 0 nil <-> Vlong (Int64.repr (Z.of_nat 0 * 1024)) *)
         (* Z.of_nat 0 * 1024 = 0, so this is Vlong (Int64.repr 0) *)
-        exact (vr_block_atom _ 0). }
+        exact (vr_block_atom _ _ _ 0). }
 
     (* 4. sp field -- unchanged *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -236,7 +238,7 @@ Proof.
       - exact Hsp_load'.
       - reflexivity.
       - simpl.
-        apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) atom_v
+        apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) atom_v
                  Hstack_repr Hstore).
         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
       - exact Hsp_ne_sb.
@@ -260,7 +262,7 @@ Proof.
       - exact Hgd_load'.
       - simpl. exact Hgd_eq.
       - simpl.
-        apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) atom_v
+        apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) atom_v
                  Hglobal_repr Hstore).
         intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
       - exact Hgb_ne_sb. }

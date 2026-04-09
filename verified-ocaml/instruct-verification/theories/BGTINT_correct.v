@@ -268,7 +268,8 @@ Theorem verify_BGTINT_correct : forall n target,
          match Machine.accu s with
          | Val_int a => -4611686018427387904 <= a <= 4611686018427387903
          | _ => False
-         end)
+         end /\
+         (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target e le m s.
@@ -288,7 +289,8 @@ Proof.
       intros ard Hpre Hstep_pre.
       unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *.
-      set (hm := ar_heap_map ard) in *. set (cb := ar_code_base_block ard) in *.
+      set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
       set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -297,13 +299,16 @@ Proof.
         [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne]]]] &
         [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
       subst sp_ptr.
-      destruct Hstep_pre as (Hcb_ne_sb & Hn_range & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range).
+      destruct Hstep_pre as (Hcb_ne_sb & Hn_range & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range & Hval_repr_vlong).
       pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
       destruct interp_state_co_bgtint as [co_is [Hco [Hpc_offset Haccu_offset]]].
       unfold pc_rel in Hpc_rel. subst pc_ptr.
       set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
+      pose proof Haccu_repr as Haccu_repr'.
       rewrite Haccu_eq in Haccu_repr. inversion Haccu_repr; subst accu_v.
+      2: { exfalso. rewrite Haccu_eq in Haccu_repr'.
+           destruct (Hval_repr_vlong _ Haccu_repr') as [z Hz]. discriminate Hz. }
 
       (* pc_plus1: C pc after advancing past operand *)
       set (pc1 := Ptrofs.add pc_ofs (Ptrofs.repr 4)).
@@ -549,19 +554,23 @@ Proof.
           split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
           + exact Hs2'.
           + reflexivity.
-          + simpl. eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb uso branch_pc_v).
-            * eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb uso pc1_v).
+          + simpl. eapply stack_repr_co_shift.
+            eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb uso branch_pc_v).
+            * eapply stack_repr_co_shift.
+              eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb uso pc1_v).
               exact Hstack_repr. exact Hs1. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
             * exact Hs2. * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           + exact Hsp_ne_sb. + exact Hsp_ne_gb. + exact Hcb_ne_sp. + exact Hsp_ge8. + exact Hsp_rep.
           + intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hs2. eapply Mem.perm_store_1. exact Hs1. apply Hsp_writable. exact Hofs'.
           + exact Hsp_align.
-        - exists env_v. split. exact He2. simpl. exact Henv_repr.
+        - exists env_v. split. exact He2. simpl. eapply val_repr_co_shift. exact Henv_repr.
         - simpl. exact Hx2.
         - exists gd_ptr. split; [| split; [| split]].
           + exact Hg2. + simpl. exact Hgd_eq.
-          + simpl. eapply (global_repr_store_other_block hm m1 m2 _ _ _ sb uso branch_pc_v).
-            * eapply (global_repr_store_other_block hm m m1 _ _ _ sb uso pc1_v).
+          + simpl. eapply global_repr_co_shift.
+            eapply (global_repr_store_other_block hm cb co m1 m2 _ _ _ sb uso branch_pc_v).
+            * eapply global_repr_co_shift.
+              eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb uso pc1_v).
               exact Hglobal_repr. exact Hs1. intro Heq; exact (Hgb_ne (eq_sym Heq)).
             * exact Hs2. * intro Heq; exact (Hgb_ne (eq_sym Heq)).
           + exact Hgb_ne.
@@ -578,7 +587,8 @@ Proof.
       intros ard Hpre Hstep_pre.
       unfold abs_rel_with_ard in Hpre.
       set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *.
-      set (hm := ar_heap_map ard) in *. set (cb := ar_code_base_block ard) in *.
+      set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
       set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -587,13 +597,16 @@ Proof.
         [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne]]]] &
         [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
       subst sp_ptr.
-      destruct Hstep_pre as (Hcb_ne_sb & Hn_range & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range).
+      destruct Hstep_pre as (Hcb_ne_sb & Hn_range & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range & Hval_repr_vlong).
       pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
       destruct interp_state_co_bgtint as [co_is [Hco [Hpc_offset Haccu_offset]]].
       unfold pc_rel in Hpc_rel. subst pc_ptr.
       set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
+      pose proof Haccu_repr as Haccu_repr'.
       rewrite Haccu_eq in Haccu_repr. inversion Haccu_repr; subst accu_v.
+      2: { exfalso. rewrite Haccu_eq in Haccu_repr'.
+           destruct (Hval_repr_vlong _ Haccu_repr') as [z Hz]. discriminate Hz. }
 
       set (pc1 := Ptrofs.add pc_ofs (Ptrofs.repr 4)).
       set (pc1_v := Vptr cb pc1).
@@ -754,19 +767,23 @@ Proof.
         - exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
           split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
           + exact Hsp2. + reflexivity.
-          + simpl. eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb uso pc2_v).
-            * eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb uso pc1_v).
+          + simpl. eapply stack_repr_co_shift.
+            eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb uso pc2_v).
+            * eapply stack_repr_co_shift.
+              eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb uso pc1_v).
               exact Hstack_repr. exact Hs1. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
             * exact Hs2. * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           + exact Hsp_ne_sb. + exact Hsp_ne_gb. + exact Hcb_ne_sp. + exact Hsp_ge8. + exact Hsp_rep.
           + intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hs2. eapply Mem.perm_store_1. exact Hs1. apply Hsp_writable. exact Hofs'.
           + exact Hsp_align.
-        - exists env_v. split. exact He2. simpl. exact Henv_repr.
+        - exists env_v. split. exact He2. simpl. eapply val_repr_co_shift. exact Henv_repr.
         - simpl. exact Hx2.
         - exists gd_ptr. split; [| split; [| split]].
           + exact Hg2. + simpl. exact Hgd_eq.
-          + simpl. eapply (global_repr_store_other_block hm m1 m2 _ _ _ sb uso pc2_v).
-            * eapply (global_repr_store_other_block hm m m1 _ _ _ sb uso pc1_v).
+          + simpl. eapply global_repr_co_shift.
+            eapply (global_repr_store_other_block hm cb co m1 m2 _ _ _ sb uso pc2_v).
+            * eapply global_repr_co_shift.
+              eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb uso pc1_v).
               exact Hglobal_repr. exact Hs1. intro Heq; exact (Hgb_ne (eq_sym Heq)).
             * exact Hs2. * intro Heq; exact (Hgb_ne (eq_sym Heq)).
           + exact Hgb_ne.
@@ -788,12 +805,12 @@ Qed.
 Theorem verify_BGTINT_handler_correct : forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGTINT n target) f_instr_BGTINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target Hn.
   eapply handler_correct_weaken.
   - exact (verify_BGTINT_correct n target).
-  - intros e le m s ard _ [[[Hne Hca] Hbo] Hai].
-    exact (conj Hne (conj Hn (conj Hca (conj Hbo Hai)))).
+  - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
+    exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
 Qed.

@@ -7,7 +7,7 @@
    C handler calls caml_modify externally. The bigstep proof is
    constructed manually (Scall cannot be handled computationally).
 
-   NO AXIOMS.  NO ADMITTED. *)
+   NO AXIOMS. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -121,6 +121,8 @@ Definition setvectitem_pre
   let sb := ar_sptr_block ard in
   let so := ar_sptr_ofs ard in
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   let gb := ar_global_block ard in
   forall idx newval rest,
     s.(Machine.stack) = Val_int idx :: newval :: rest ->
@@ -128,6 +130,8 @@ Definition setvectitem_pre
     0 <= idx /\
     idx * 2 + 1 <= Int64.max_signed /\
     idx < Ptrofs.half_modulus /\
+    (* Index C representation is Vlong (rules out vr_code_ptr) *)
+    int_vlong ard idx /\
     (* Genv requirements *)
     e ! _caml_modify = None /\
     (exists b_cm,
@@ -135,8 +139,8 @@ Definition setvectitem_pre
        Genv.find_funct ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
     (* caml_modify call and its effects *)
     (forall accu_v newval_cv,
-       val_repr hm (Machine.accu s) accu_v ->
-       val_repr hm newval newval_cv ->
+       val_repr hm cb co (Machine.accu s) accu_v ->
+       val_repr hm cb co newval newval_cv ->
        exists hb hofs,
          accu_v = Vptr hb hofs /\
          hb <> sb /\ hb <> gb /\
@@ -167,7 +171,7 @@ Definition setvectitem_pre
               Mem.valid_block m b -> Mem.perm m b ofs k p ->
               Mem.perm m_cm b ofs k p) /\
            (* global_repr preserved *)
-           (global_repr hm m_cm (Machine.global s) gb (ar_global_ofs ard))).
+           (global_repr hm cb co m_cm (Machine.global s) gb (ar_global_ofs ard))).
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -250,14 +254,19 @@ Proof.
   assert (Hsp_rep_tail : Ptrofs.unsigned sp_ofs + 16 + 8 * Z.of_nat (length rest) < Ptrofs.modulus).
   { rewrite Hstk in Hsp_rep. simpl length in Hsp_rep. lia. }
 
-  (* Stack head is Val_int idx *)
-  inversion Hval_repr_idx; subst cv_idx.
-
   (* Use step precondition *)
   unfold setvectitem_pre in Hstep_pre.
   destruct (Hstep_pre idx newval rest Hstk)
-    as (Hidx_ge & Hidx_signed & Hidx_ptrofs &
+    as (Hidx_ge & Hidx_signed & Hidx_ptrofs & Hidx_vlong &
         He_caml & [b_cm [Hfind_symbol Hfind_funct]] & Hcm_pre).
+
+  (* Stack head is Val_int idx *)
+  inversion Hval_repr_idx; subst cv_idx.
+  2: { (* vr_code_ptr case: Val_int idx represented as Vptr, but int_vlong says Vlong *)
+       exfalso.
+       unfold int_vlong in Hidx_vlong.
+       destruct (Hidx_vlong _ Hval_repr_idx) as [z Hz].
+       discriminate Hz. }
 
   destruct (Hcm_pre accu_v newval_cv Haccu_repr Hval_repr_newval)
     as (hb & hofs & Haccu_is_ptr & Hhb_ne_sb & Hhb_ne_gb &
@@ -410,7 +419,7 @@ Proof.
 
   rewrite Hofs_eq in Hstack_repr_rest.
 
-  assert (Hstack_repr_cm : stack_repr hm m_cm rest sp_b
+  assert (Hstack_repr_cm : stack_repr hm cb co m_cm rest sp_b
             (Ptrofs.add sp_ofs (Ptrofs.repr 16))).
   { clear -Hstack_repr_rest Hcm_other_loads Hsp_ne_hb.
     revert Hstack_repr_rest.
@@ -423,16 +432,16 @@ Proof.
       + exact H2.
       + apply IH. exact H5. }
 
-  assert (Hstack_repr_m1 : stack_repr hm m1 rest sp_b
+  assert (Hstack_repr_m1 : stack_repr hm cb co m1 rest sp_b
             (Ptrofs.add sp_ofs (Ptrofs.repr 16))).
-  { apply (stack_repr_store_other_block hm m_cm m1 _ sp_b
+  { apply (stack_repr_store_other_block hm cb co m_cm m1 _ sp_b
              (Ptrofs.add sp_ofs (Ptrofs.repr 16)) sb (uso + 8) unit_v
              Hstack_repr_cm Hstore1).
     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
 
-  assert (Hstack_repr_m2 : stack_repr hm m2 rest sp_b
+  assert (Hstack_repr_m2 : stack_repr hm cb co m2 rest sp_b
             (Ptrofs.add sp_ofs (Ptrofs.repr 16))).
-  { apply (stack_repr_store_other_block hm m1 m2 _ sp_b
+  { apply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b
              (Ptrofs.add sp_ofs (Ptrofs.repr 16)) sb (uso + 16) new_sp_v
              Hstack_repr_m1 Hstore2).
     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
@@ -440,13 +449,13 @@ Proof.
   (* ============================================================ *)
   (* global_repr preservation through m_cm -> m1 -> m2            *)
   (* ============================================================ *)
-  assert (Hglobal_m1 : global_repr hm m1 (Machine.global s) gb go).
-  { apply (global_repr_store_other_block hm m_cm m1 _ gb go sb (uso + 8) unit_v
+  assert (Hglobal_m1 : global_repr hm cb co m1 (Machine.global s) gb go).
+  { apply (global_repr_store_other_block hm cb co m_cm m1 _ gb go sb (uso + 8) unit_v
              Hcm_global_repr Hstore1).
     intro Heq; exact (Hgb_ne (eq_sym Heq)). }
 
-  assert (Hglobal_m2 : global_repr hm m2 (Machine.global s) gb go).
-  { apply (global_repr_store_other_block hm m1 m2 _ gb go sb (uso + 16) new_sp_v
+  assert (Hglobal_m2 : global_repr hm cb co m2 (Machine.global s) gb go).
+  { apply (global_repr_store_other_block hm cb co m1 m2 _ gb go sb (uso + 16) new_sp_v
              Hglobal_m1 Hstore2).
     intro Heq; exact (Hgb_ne (eq_sym Heq)). }
 
@@ -644,7 +653,7 @@ Proof.
               eapply eval_Etempvar.
               subst le5. rewrite PTree.gss. reflexivity.
             * (* sem_cast for arg2: newval_cv tlong -> tlong *)
-              apply (sem_cast_long_val_repr hm _ newval_cv m Hval_repr_newval).
+              apply (sem_cast_long_val_repr hm cb co _ newval_cv m Hval_repr_newval).
             * econstructor.
         - (* Genv.find_funct *)
           exact Hfind_funct.
@@ -796,7 +805,7 @@ Proof.
     (* 3. accu field -- val_unit = Val_int 0 *)
     { exists unit_v. split.
       - exact Haccu_m2.
-      - simpl. subst unit_v. exact (vr_int _ 0). }
+      - simpl. subst unit_v. exact (vr_int _ _ _ 0). }
 
     (* 4. sp field *)
     { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 16)).

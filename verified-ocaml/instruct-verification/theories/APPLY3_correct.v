@@ -34,7 +34,7 @@
                   _global_data@40, _trap_sp@48.
 
    The step_pre requires val_repr witnesses for all pushed values.
-   In particular, val_repr hm (Val_int pc') pc_cv is required
+   In particular, val_repr hm cb co (Val_int pc') pc_cv is required
    as an assumption; with the current val_repr definition this forces
    pc_cv = Vlong but the C code stores Vptr. The assumption is not
    satisfiable with the current val_repr but correctly identifies the
@@ -238,12 +238,14 @@ Definition apply3_closure_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data)
     (sp_b : block) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
   let cb := ar_code_base_block ard in
   forall target_pc,
     get_code_ptr_s s s.(Machine.accu) = Some target_pc ->
     forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
+      val_repr hm cb co s.(Machine.accu) accu_v ->
       exists accu_b accu_ofs code_b code_ofs,
         accu_v = Vptr accu_b accu_ofs /\
         Mem.load Mptr m accu_b (Ptrofs.unsigned accu_ofs) = Some (Vptr code_b code_ofs) /\
@@ -271,18 +273,20 @@ Definition apply3_closure_pre
 Definition apply3_step_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   let sb := ar_sptr_block ard in
   let so := ar_sptr_ofs ard in
   let cb := ar_code_base_block ard in
   (* val_repr witnesses for return frame values *)
   (exists pc_cv,
-     val_repr hm (Val_int (Machine.pc s)) pc_cv /\
+     val_repr hm cb co (Val_int (Machine.pc s)) pc_cv /\
      (* pc_cv must be what the C code stores at sp[3]: (long)(s->pc) *)
      forall pc_ptr,
        Mem.load Mint64 m sb (Ptrofs.unsigned so + 0) = Some pc_ptr ->
        sem_cast pc_ptr (tptr tint) tlong m = Some pc_cv) /\
   (exists ea_cv,
-     val_repr hm (Val_int (Z.of_nat (Machine.extra_args s))) ea_cv /\
+     val_repr hm cb co (Val_int (Z.of_nat (Machine.extra_args s))) ea_cv /\
      (* ea_cv must be what the C code stores at sp[5]: (ea << 1) + 1 *)
      forall ea_long,
        Mem.load Mint64 m sb (Ptrofs.unsigned so + 32) =
@@ -307,6 +311,9 @@ Definition apply3_step_pre
 (* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
+
+(* val_repr_co_shift, stack_repr_co_shift, global_repr_co_shift
+   are imported from HandlerLemmas. *)
 
 Theorem verify_APPLY3_correct :
     handler_correct (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
@@ -927,7 +934,7 @@ Proof.
     rewrite sem_add_sp_0; eval_cbn.
     repeat (rewrite PTree.gso by (cbv; congruence)).
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Hvr_arg1); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hvr_arg1); eval_cbn.
     rewrite Hstore2; eval_cbn.
 
     (* S11: Sset _t'11 (s->sp) -- read sp in m2 *)
@@ -942,7 +949,7 @@ Proof.
     rewrite sem_add_sp_1; eval_cbn.
     repeat (rewrite PTree.gso by (cbv; congruence)).
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Hvr_arg2); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hvr_arg2); eval_cbn.
     assert (Hstore3' : Mem.store Mint64 m2 sp_b
               (Ptrofs.unsigned (Ptrofs.add new_sp_ofs (Ptrofs.repr 8))) cv_arg2 = Some m3).
     { rewrite (ptrofs_add_unsigned new_sp_ofs 8).
@@ -963,7 +970,7 @@ Proof.
     rewrite sem_add_sp_2; eval_cbn.
     repeat (rewrite PTree.gso by (cbv; congruence)).
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Hvr_arg3); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hvr_arg3); eval_cbn.
     assert (Hstore4' : Mem.store Mint64 m3 sp_b
               (Ptrofs.unsigned (Ptrofs.add new_sp_ofs (Ptrofs.repr 16))) cv_arg3 = Some m4).
     { rewrite (ptrofs_add_unsigned new_sp_ofs 16).
@@ -1038,7 +1045,7 @@ Proof.
     rewrite PTree.gso by (cbv; congruence).
     rewrite PTree.gss; eval_cbn.
     rewrite sem_add_sp_4; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Henv_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Henv_repr); eval_cbn.
     assert (Hstore6' : Mem.store Mint64 m5 sp_b
               (Ptrofs.unsigned (Ptrofs.add new_sp_ofs (Ptrofs.repr 32))) env_v = Some m6).
     { rewrite (ptrofs_add_unsigned new_sp_ofs 32).
@@ -1310,23 +1317,25 @@ Proof.
       { rewrite ptrofs_add_unsigned; lia. }
       rewrite ptrofs_add_unsigned; lia. }
 
-    assert (Hrest_repr_m10 : stack_repr hm m10 rest sp_b rest_ofs).
+    assert (Hrest_repr_m10 : stack_repr hm cb co m10 rest sp_b rest_ofs).
     {
       (* Stores 2-7 are to sp_b at offsets in [new_sp_ofs, new_sp_ofs+48).
          The rest starts at sp_ofs + 24 = new_sp_ofs + 48.
          So stores 2-7 are at LOWER offsets than the rest. *)
       (* Use stack_repr_store_same_block_lower through stores 2-7,
          then stack_repr_store_other_block through stores 1,8,9,10 *)
-      apply (stack_repr_store_other_block hm m9 m10 rest sp_b _ sb (Ptrofs.unsigned so + 32) new_ea_v).
-      { apply (stack_repr_store_other_block hm m8 m9 rest sp_b _ sb (Ptrofs.unsigned so + 24) new_env_v).
-        { apply (stack_repr_store_other_block hm m7 m8 rest sp_b _ sb (Ptrofs.unsigned so + 0) new_pc_v).
-          { apply (stack_repr_store_same_block_lower hm m6 m7 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 40) ea_tagged).
-            { apply (stack_repr_store_same_block_lower hm m5 m6 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 32) env_v).
-              { apply (stack_repr_store_same_block_lower hm m4 m5 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 24) (Vptr cb pc_ofs)).
-                { apply (stack_repr_store_same_block_lower hm m3 m4 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 16) cv_arg3).
-                  { apply (stack_repr_store_same_block_lower hm m2 m3 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 8) cv_arg2).
-                    { apply (stack_repr_store_same_block_lower hm m1 m2 rest sp_b _ (Ptrofs.unsigned new_sp_ofs) cv_arg1).
-                      { apply (stack_repr_store_other_block hm m m1 rest sp_b _ sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)).
+      eapply stack_repr_co_shift.
+      apply (stack_repr_store_other_block hm cb co m9 m10 rest sp_b _ sb (Ptrofs.unsigned so + 32) new_ea_v).
+      { apply (stack_repr_store_other_block hm cb co m8 m9 rest sp_b _ sb (Ptrofs.unsigned so + 24) new_env_v).
+        { apply (stack_repr_store_other_block hm cb co m7 m8 rest sp_b _ sb (Ptrofs.unsigned so + 0) new_pc_v).
+          { apply (stack_repr_store_same_block_lower hm cb co m6 m7 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 40) ea_tagged).
+            { apply (stack_repr_store_same_block_lower hm cb co m5 m6 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 32) env_v).
+              { apply (stack_repr_store_same_block_lower hm cb co m4 m5 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 24) (Vptr cb pc_ofs)).
+                { apply (stack_repr_store_same_block_lower hm cb co m3 m4 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 16) cv_arg3).
+                  { apply (stack_repr_store_same_block_lower hm cb co m2 m3 rest sp_b _ (Ptrofs.unsigned new_sp_ofs + 8) cv_arg2).
+                    { apply (stack_repr_store_same_block_lower hm cb co m1 m2 rest sp_b _ (Ptrofs.unsigned new_sp_ofs) cv_arg1).
+                      { eapply stack_repr_co_shift.
+                      apply (stack_repr_store_other_block hm cb co m m1 rest sp_b _ sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)).
                         exact Hstk_rest. exact Hstore1.
                         intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
                       exact Hstore2.
@@ -1379,7 +1388,7 @@ Proof.
       rewrite Hnew_sp_unsigned.
       destruct (Coqlib.zeq _ _); [reflexivity | lia]. }
 
-    assert (Hea_sr : stack_repr hm m10
+    assert (Hea_sr : stack_repr hm cb co m10
               (Val_int (Z.of_nat (Machine.extra_args s)) :: rest)
               sp_b (Ptrofs.repr (Ptrofs.unsigned new_sp_ofs + 40))).
     { econstructor.
@@ -1410,7 +1419,7 @@ Proof.
     { (* Written in store6, survived stores 7-10 *)
       assert (Henv_m6 : Mem.load Mint64 m6 sp_b (Ptrofs.unsigned new_sp_ofs + 32) = Some env_v).
       { pose proof (Mem.load_store_same _ _ _ _ _ _ Hstore6) as Htmp.
-        rewrite (val_repr_load_result hm _ _ Henv_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co _ _ Henv_repr) in Htmp.
         exact Htmp. }
       assert (Henv_m7 : Mem.load Mint64 m7 sp_b (Ptrofs.unsigned new_sp_ofs + 32) = Some env_v).
       { erewrite Mem.load_store_other. exact Henv_m6. exact Hstore7.
@@ -1424,14 +1433,14 @@ Proof.
       erewrite Mem.load_store_other. exact Henv_m9. exact Hstore10.
       left. intro Heq; exact (Hsp_ne_sb Heq). }
 
-    assert (Henv_sr : stack_repr hm m10
+    assert (Henv_sr : stack_repr hm cb co m10
               (Machine.env s :: Val_int (Z.of_nat (Machine.extra_args s)) :: rest)
               sp_b (Ptrofs.repr (Ptrofs.unsigned new_sp_ofs + 32))).
     { econstructor.
       - rewrite Ptrofs.unsigned_repr.
         + exact Henv_stack_load_m10.
         + unfold Ptrofs.max_unsigned. rewrite Hnew_sp_unsigned. lia.
-      - exact Henv_repr.
+      - eapply val_repr_co_shift; exact Henv_repr.
       - replace (Ptrofs.add (Ptrofs.repr (Ptrofs.unsigned new_sp_ofs + 32)) (Ptrofs.repr 8))
           with (Ptrofs.repr (Ptrofs.unsigned new_sp_ofs + 40)).
         + exact Hea_sr.
@@ -1470,7 +1479,7 @@ Proof.
       erewrite Mem.load_store_other. exact Hpc_m9. exact Hstore10.
       left. intro Heq; exact (Hsp_ne_sb Heq). }
 
-    assert (Hpc_sr : stack_repr hm m10
+    assert (Hpc_sr : stack_repr hm cb co m10
               (Val_int (Machine.pc s) :: Machine.env s :: Val_int (Z.of_nat (Machine.extra_args s)) :: rest)
               sp_b (Ptrofs.repr (Ptrofs.unsigned new_sp_ofs + 24))).
     { econstructor.
@@ -1498,7 +1507,7 @@ Proof.
     { (* Written in store4, survived stores 5-10 *)
       assert (Harg3_m4 : Mem.load Mint64 m4 sp_b (Ptrofs.unsigned new_sp_ofs + 16) = Some cv_arg3).
       { pose proof (Mem.load_store_same _ _ _ _ _ _ Hstore4) as Htmp.
-        rewrite (val_repr_load_result hm _ _ Hvr_arg3) in Htmp.
+        rewrite (val_repr_load_result hm cb co _ _ Hvr_arg3) in Htmp.
         exact Htmp. }
       assert (Harg3_m5 : Mem.load Mint64 m5 sp_b (Ptrofs.unsigned new_sp_ofs + 16) = Some cv_arg3).
       { erewrite Mem.load_store_other. exact Harg3_m4. exact Hstore5.
@@ -1518,7 +1527,7 @@ Proof.
       erewrite Mem.load_store_other. exact Harg3_m9. exact Hstore10.
       left. intro Heq; exact (Hsp_ne_sb Heq). }
 
-    assert (Harg3_sr : stack_repr hm m10
+    assert (Harg3_sr : stack_repr hm cb co m10
               (arg3 :: Val_int (Machine.pc s) :: Machine.env s :: Val_int (Z.of_nat (Machine.extra_args s)) :: rest)
               sp_b (Ptrofs.repr (Ptrofs.unsigned new_sp_ofs + 16))).
     { econstructor.
@@ -1546,7 +1555,7 @@ Proof.
     { (* Written in store3, survived stores 4-10 *)
       assert (Harg2_m3 : Mem.load Mint64 m3 sp_b (Ptrofs.unsigned new_sp_ofs + 8) = Some cv_arg2).
       { pose proof (Mem.load_store_same _ _ _ _ _ _ Hstore3) as Htmp.
-        rewrite (val_repr_load_result hm _ _ Hvr_arg2) in Htmp.
+        rewrite (val_repr_load_result hm cb co _ _ Hvr_arg2) in Htmp.
         exact Htmp. }
       assert (Harg2_m4 : Mem.load Mint64 m4 sp_b (Ptrofs.unsigned new_sp_ofs + 8) = Some cv_arg2).
       { erewrite Mem.load_store_other. exact Harg2_m3. exact Hstore4.
@@ -1569,7 +1578,7 @@ Proof.
       erewrite Mem.load_store_other. exact Harg2_m9. exact Hstore10.
       left. intro Heq; exact (Hsp_ne_sb Heq). }
 
-    assert (Harg2_sr : stack_repr hm m10
+    assert (Harg2_sr : stack_repr hm cb co m10
               (arg2 :: arg3 :: Val_int (Machine.pc s) :: Machine.env s :: Val_int (Z.of_nat (Machine.extra_args s)) :: rest)
               sp_b (Ptrofs.repr (Ptrofs.unsigned new_sp_ofs + 8))).
     { econstructor.
@@ -1597,7 +1606,7 @@ Proof.
     { (* Written in store2, survived stores 3-10 *)
       assert (Harg1_m2 : Mem.load Mint64 m2 sp_b (Ptrofs.unsigned new_sp_ofs) = Some cv_arg1).
       { pose proof (Mem.load_store_same _ _ _ _ _ _ Hstore2) as Htmp.
-        rewrite (val_repr_load_result hm _ _ Hvr_arg1) in Htmp.
+        rewrite (val_repr_load_result hm cb co _ _ Hvr_arg1) in Htmp.
         exact Htmp. }
       assert (Harg1_m3 : Mem.load Mint64 m3 sp_b (Ptrofs.unsigned new_sp_ofs) = Some cv_arg1).
       { erewrite Mem.load_store_other. exact Harg1_m2. exact Hstore3.
@@ -1623,7 +1632,7 @@ Proof.
       erewrite Mem.load_store_other. exact Harg1_m9. exact Hstore10.
       left. intro Heq; exact (Hsp_ne_sb Heq). }
 
-    assert (Hfull_sr : stack_repr hm m10
+    assert (Hfull_sr : stack_repr hm cb co m10
               (arg1 :: arg2 :: arg3 :: Val_int (Machine.pc s) :: Machine.env s :: Val_int (Z.of_nat (Machine.extra_args s)) :: rest)
               sp_b new_sp_ofs).
     { econstructor.
@@ -1653,14 +1662,14 @@ Proof.
     (* 3. accu field -- unchanged *)
     { exists (Vptr accu_b accu_ofs). split.
       - exact Haccu_load10.
-      - simpl. exact Haccu_repr. }
+      - simpl. eapply val_repr_co_shift; exact Haccu_repr. }
 
     (* 4. sp field -- updated to new_sp_ofs, new stack *)
     { exists (Vptr sp_b new_sp_ofs), sp_b, new_sp_ofs.
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load10.
       - reflexivity.
-      - simpl. exact Hfull_sr.
+      - simpl. eapply stack_repr_co_shift. exact Hfull_sr.
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp.
@@ -1684,7 +1693,7 @@ Proof.
     (* 5. env field -- updated to accu *)
     { exists new_env_v. split.
       - exact Henv_load10.
-      - simpl. exact Haccu_repr. }
+      - simpl. eapply val_repr_co_shift; exact Haccu_repr. }
 
     (* 6. extra_args field -- updated to 2 *)
     { simpl. exact Hextra_load10. }
@@ -1694,34 +1703,44 @@ Proof.
       - exact Hgd_load10.
       - simpl. reflexivity.
       - simpl.
-        apply (global_repr_store_other_block hm m9 m10 _
+        eapply global_repr_co_shift.
+        apply (global_repr_store_other_block hm cb co m9 m10 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (Ptrofs.unsigned so + 32) new_ea_v).
-        + apply (global_repr_store_other_block hm m8 m9 _
+        + eapply global_repr_co_shift.
+        apply (global_repr_store_other_block hm cb co m8 m9 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (Ptrofs.unsigned so + 24) new_env_v).
-          * apply (global_repr_store_other_block hm m7 m8 _
+          * eapply global_repr_co_shift.
+          apply (global_repr_store_other_block hm cb co m7 m8 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (Ptrofs.unsigned so + 0) new_pc_v).
-            { apply (global_repr_store_other_block hm m6 m7 _
+            { eapply global_repr_co_shift.
+            apply (global_repr_store_other_block hm cb co m6 m7 _
                        (ar_global_block ard) (ar_global_ofs ard)
                        sp_b (Ptrofs.unsigned new_sp_ofs + 40) ea_tagged).
-              { apply (global_repr_store_other_block hm m5 m6 _
+              { eapply global_repr_co_shift.
+              apply (global_repr_store_other_block hm cb co m5 m6 _
                          (ar_global_block ard) (ar_global_ofs ard)
                          sp_b (Ptrofs.unsigned new_sp_ofs + 32) env_v).
-                { apply (global_repr_store_other_block hm m4 m5 _
+                { eapply global_repr_co_shift.
+                apply (global_repr_store_other_block hm cb co m4 m5 _
                            (ar_global_block ard) (ar_global_ofs ard)
                            sp_b (Ptrofs.unsigned new_sp_ofs + 24) (Vptr cb pc_ofs)).
-                  { apply (global_repr_store_other_block hm m3 m4 _
+                  { eapply global_repr_co_shift.
+                  apply (global_repr_store_other_block hm cb co m3 m4 _
                              (ar_global_block ard) (ar_global_ofs ard)
                              sp_b (Ptrofs.unsigned new_sp_ofs + 16) cv_arg3).
-                    { apply (global_repr_store_other_block hm m2 m3 _
+                    { eapply global_repr_co_shift.
+                    apply (global_repr_store_other_block hm cb co m2 m3 _
                                (ar_global_block ard) (ar_global_ofs ard)
                                sp_b (Ptrofs.unsigned new_sp_ofs + 8) cv_arg2).
-                      { apply (global_repr_store_other_block hm m1 m2 _
+                      { eapply global_repr_co_shift.
+                      apply (global_repr_store_other_block hm cb co m1 m2 _
                                  (ar_global_block ard) (ar_global_ofs ard)
                                  sp_b (Ptrofs.unsigned new_sp_ofs) cv_arg1).
-                        { apply (global_repr_store_other_block hm m m1 _
+                        { eapply global_repr_co_shift.
+                        apply (global_repr_store_other_block hm cb co m m1 _
                                    (ar_global_block ard) (ar_global_ofs ard)
                                    sb (Ptrofs.unsigned so + 16) (Vptr sp_b new_sp_ofs)).
                           exact Hglobal_repr. exact Hstore1.

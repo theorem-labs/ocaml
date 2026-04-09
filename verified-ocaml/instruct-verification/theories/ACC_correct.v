@@ -153,15 +153,15 @@ Proof.
     apply Ptrofs.eqm_unsigned_repr.
 Qed.
 
-Lemma stack_repr_nth : forall n hm m stk sp_b sp_ofs v,
-  stack_repr hm m stk sp_b sp_ofs ->
+Lemma stack_repr_nth : forall n hm cb co m stk sp_b sp_ofs v,
+  stack_repr hm cb co m stk sp_b sp_ofs ->
   nth_error stk n = Some v ->
   exists cv,
     Mem.load Mint64 m sp_b
       (Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat n * 8)))) = Some cv /\
-    val_repr hm v cv.
+    val_repr hm cb co v cv.
 Proof.
-  induction n as [| n' IH]; intros hm m stk sp_b sp_ofs v Hsr Hnth.
+  induction n as [| n' IH]; intros hm cb co m stk sp_b sp_ofs v Hsr Hnth.
   - (* n = 0 *)
     destruct stk as [| v0 rest].
     + discriminate.
@@ -179,7 +179,7 @@ Proof.
     + simpl in Hnth.
       inversion Hsr as [| xv xvs xb xofs xcv Hload Hvr Hrest].
       subst xv xvs xb xofs.
-      specialize (IH hm m rest sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) v Hrest Hnth).
+      specialize (IH hm cb co m rest sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8)) v Hrest Hnth).
       destruct IH as [cv' [Hload' Hvr']].
       exists cv'. split.
       * (* Rewrite offset: (sp + 8) + n'*8 = sp + (S n')*8 *)
@@ -289,7 +289,7 @@ Proof.
     { apply (Hsp_fits sp_b sp_ofs). exact Hsp_load. }
 
     (* nth_error yields a val_repr via stack_repr_nth *)
-    destruct (stack_repr_nth n hm m (Machine.stack s) sp_b sp_ofs v
+    destruct (stack_repr_nth n hm cb co m (Machine.stack s) sp_b sp_ofs v
                 Hstack_repr Hnth) as [cv [Hload_cv Hval_repr_cv]].
 
     (* The ptrofs mul simplification *)
@@ -409,7 +409,7 @@ Proof.
       rewrite Hle_s; eval_cbn.
       rewrite Haccu_offset; eval_cbn.
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hval_repr_cv); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hval_repr_cv); eval_cbn.
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
       rewrite Hstore_accu; eval_cbn.
 
@@ -444,7 +444,7 @@ Proof.
       (* accu field at uso+8: written by store2 *)
       assert (Haccu_load2 : Mem.load Mint64 m2 sb (uso + 8) = Some cv).
       { pose proof (load_after_store_same m1 m2 sb (uso + 8) cv Hstore_accu) as Htmp.
-        rewrite (val_repr_load_result hm v cv Hval_repr_cv) in Htmp.
+        rewrite (val_repr_load_result hm cb co v cv Hval_repr_cv) in Htmp.
         exact Htmp. }
 
       (* sp field at uso+16: unaffected by both stores *)
@@ -513,16 +513,16 @@ Proof.
       (* 3. accu field -- updated to stack[n] *)
       { exists cv. split.
         - exact Haccu_load2.
-        - simpl. exact Hval_repr_cv. }
+        - simpl. eapply val_repr_co_shift. exact Hval_repr_cv. }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load2.
         - reflexivity.
-        - simpl.
-          eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 8) cv).
-          + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
+        - simpl. eapply stack_repr_co_shift.
+          eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (uso + 8) cv).
+          + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
             * exact Hstack_repr.
             * exact Hstore_pc.
             * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -540,7 +540,7 @@ Proof.
       (* 5. env field -- unchanged *)
       { exists env_v. split.
         - exact Henv_load2.
-        - simpl. exact Henv_repr. }
+        - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
       (* 6. extra_args field -- unchanged *)
       { simpl. exact Hextra_load2. }
@@ -549,11 +549,11 @@ Proof.
       { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load2.
         - simpl. exact Hgd_eq.
-        - simpl.
-          apply (global_repr_store_other_block hm m1 m2 _
+        - simpl. eapply global_repr_co_shift.
+          apply (global_repr_store_other_block hm cb co m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 8) cv).
-          + apply (global_repr_store_other_block hm m m1 _
+          + apply (global_repr_store_other_block hm cb co m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 0) new_pc_v
                      Hglobal_repr Hstore_pc).

@@ -68,16 +68,21 @@ Proof. exact sem_add_sp_1. Qed.
 (* ================================================================== *)
 
 Definition env_field_loadable_1
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let sb := ar_sptr_block ard in
   forall v,
     field_or_heap s s.(Machine.env) 1 = Some v ->
     forall env_v,
-      val_repr hm s.(Machine.env) env_v ->
+      val_repr hm cb co s.(Machine.env) env_v ->
       exists b ofs cv,
         env_v = Vptr b ofs /\
-        Mem.load Mint64 m b (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr 8))) = Some cv /\
-        val_repr hm v cv.
+        b <> sb /\
+        Mem.load Mint64 m b
+          (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr (Z.of_nat 1 * 8)))) = Some cv /\
+        val_repr hm cb co v cv.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -85,7 +90,7 @@ Definition env_field_loadable_1
 
 Theorem verify_ENVACC1_with_pre :
     handler_correct (handle_ENVACC 1) f_instr_ENVACC1
-      (fun _ => env_field_loadable_1)
+      env_field_loadable_1
       (fun _ s => field_or_heap s s.(Machine.env) 1 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -114,6 +119,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     (* Structural invariants *)
     pose proof (sptr_ofs_representable ard) as Hso_bound.
@@ -123,7 +130,8 @@ Proof.
     (* Use heap precondition to get the field value in C memory *)
     unfold env_field_loadable_1 in Hefl.
     destruct (Hefl v Hfoh env_v Henv_repr)
-      as [b [ofs [cv [Henv_is_ptr [Hfield_load Hfield_repr]]]]].
+      as [b [ofs [cv [Henv_is_ptr [Hb_ne_sb [Hfield_load Hfield_repr]]]]]].
+    change (Z.of_nat 1 * 8) with 8 in Hfield_load.
     subst env_v.
 
     (* Composite environment facts *)
@@ -172,7 +180,7 @@ Proof.
 
       (* === Sassign rvalue + sem_cast + store === *)
       rewrite PTree.gss; eval_cbn.                                   (* le2 ! _t'2 *)
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hfield_repr); eval_cbn. (* sem_cast *)
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hfield_repr); eval_cbn. (* sem_cast *)
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).      (* accu ptrofs *)
       rewrite Hstore; eval_cbn.                                      (* accu store *)
 
@@ -214,7 +222,7 @@ Proof.
 
       assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some cv).
       { pose proof (load_after_store_same m m' sb (uso + 8) cv Hstore) as Htmp.
-        rewrite (val_repr_load_result hm v cv Hfield_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co v cv Hfield_repr) in Htmp.
         exact Htmp. }
 
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -241,7 +249,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv
                    Hstack_repr Hstore).
           intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -265,7 +273,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv
                    Hglobal_repr Hstore).
           intro Heq2; exact (global_block_ne_sptr ard (eq_sym Heq2)).
         - exact Hgb_ne_sb. }

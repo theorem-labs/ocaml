@@ -159,6 +159,8 @@ Definition offsetclosure_pre (n : Z)
   let sb := ar_sptr_block ard in
   let so := ar_sptr_ofs ard in
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   (* Code buffer contains Int.repr n at the current PC position *)
   Mem.load Mint32 m (ar_code_base_block ard)
     (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -172,12 +174,12 @@ Definition offsetclosure_pre (n : Z)
     (* The result of the C arithmetic gives valid val_repr *)
     match s.(Machine.env) with
     | Val_closure addr base_ofs =>
-        val_repr hm
+        val_repr hm cb co
           (Val_closure addr (Z.to_nat (Z.of_nat base_ofs + n)))
           (Vlong (Int64.add env_long
             (Int64.mul (Int64.repr (Int.signed (Int.repr n))) (Int64.repr 8))))
     | Val_block t l =>
-        val_repr hm (Val_block t l)
+        val_repr hm cb co (Val_block t l)
           (Vlong (Int64.add env_long
             (Int64.mul (Int64.repr (Int.signed (Int.repr n))) (Int64.repr 8))))
     | _ => True
@@ -430,20 +432,18 @@ Proof.
 
         { exists result_v. split.
           - exact Haccu_load2.
-          - simpl. exact Hresult_repr. }
+          - simpl. simpl ar_heap_map. fold hm.
+            eapply val_repr_co_shift. exact Hresult_repr. }
 
         { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
           split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
           - exact Hsp_load2.
           - reflexivity.
-          - simpl.
-            eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 8) result_v).
-            + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-              * exact Hstack_repr.
-              * exact Hstore1.
-              * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
-            + exact Hstore2.
-            + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+          - eapply stack_repr_store_other_block.
+            eapply stack_repr_store_other_block.
+            eapply stack_repr_co_shift. exact Hstack_repr.
+            exact Hstore1. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+            exact Hstore2. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           - exact Hsp_ne_sb.
           - exact Hsp_ne_gb.
           - exact Hcb_ne_sp.
@@ -455,22 +455,19 @@ Proof.
 
         { exists (Vlong env_long). split.
           - exact Henv_load2.
-          - simpl. rewrite Henv_eq. rewrite Henv_eq in Henv_repr. exact Henv_repr. }
+          - simpl. simpl ar_heap_map. fold hm.
+            eapply val_repr_co_shift. exact Henv_repr. }
 
         { simpl. exact Hextra_load2. }
 
         { exists gd_ptr. split; [| split; [| split]].
           - exact Hgd_load2.
-          - simpl. exact Hgd_eq.
-          - simpl.
-            eapply (global_repr_store_other_block hm m1 m2 _
-                     (ar_global_block ard) (ar_global_ofs ard) sb (uso + 8) result_v).
-            + eapply (global_repr_store_other_block hm m m1 _
-                       (ar_global_block ard) (ar_global_ofs ard) sb (uso + 0) new_pc_v
-                       Hglobal_repr Hstore1).
-              intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
-            + exact Hstore2.
-            + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+          - exact Hgd_eq.
+          - eapply global_repr_store_other_block.
+            eapply global_repr_store_other_block.
+            eapply global_repr_co_shift. exact Hglobal_repr.
+            exact Hstore1. intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
+            exact Hstore2. intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
           - exact Hgb_ne_sb. }
 
         { exists ts_ptr. split.
@@ -711,20 +708,18 @@ Proof.
 
       { exists result_v. split.
         - exact Haccu_load2.
-        - simpl. exact Hresult_repr. }
+        - simpl. simpl ar_heap_map. fold hm.
+          eapply val_repr_co_shift. exact Hresult_repr. }
 
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
         - exact Hsp_load2.
         - reflexivity.
-        - simpl.
-          eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 8) result_v).
-          + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-            * exact Hstack_repr.
-            * exact Hstore1.
-            * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
-          + exact Hstore2.
-          + intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+        - eapply stack_repr_store_other_block.
+          eapply stack_repr_store_other_block.
+          eapply stack_repr_co_shift. exact Hstack_repr.
+          exact Hstore1. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
+          exact Hstore2. intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
         - exact Hsp_ne_gb.
         - exact Hcb_ne_sp.
@@ -736,22 +731,19 @@ Proof.
 
       { exists (Vlong env_long). split.
         - exact Henv_load2.
-        - simpl. rewrite Henv_eq. rewrite Henv_eq in Henv_repr. exact Henv_repr. }
+        - simpl. simpl ar_heap_map. fold hm.
+          eapply val_repr_co_shift. exact Henv_repr. }
 
       { simpl. exact Hextra_load2. }
 
       { exists gd_ptr. split; [| split; [| split]].
         - exact Hgd_load2.
-        - simpl. exact Hgd_eq.
-        - simpl.
-          eapply (global_repr_store_other_block hm m1 m2 _
-                   (ar_global_block ard) (ar_global_ofs ard) sb (uso + 8) result_v).
-          + eapply (global_repr_store_other_block hm m m1 _
-                     (ar_global_block ard) (ar_global_ofs ard) sb (uso + 0) new_pc_v
-                     Hglobal_repr Hstore1).
-            intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
-          + exact Hstore2.
-          + intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
+        - exact Hgd_eq.
+        - eapply global_repr_store_other_block.
+          eapply global_repr_store_other_block.
+          eapply global_repr_co_shift. exact Hglobal_repr.
+          exact Hstore1. intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
+          exact Hstore2. intro Heq; exact (Hgb_ne_sb (eq_sym Heq)).
         - exact Hgb_ne_sb. }
 
       { exists ts_ptr. split.

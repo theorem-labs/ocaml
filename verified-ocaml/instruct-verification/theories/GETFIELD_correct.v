@@ -142,24 +142,38 @@ Qed.
 (* Heap field precondition (parameterized over n)                      *)
 (* ================================================================== *)
 
-(* The precondition for the Step case: when field_or_heap succeeds at
-   index n, the C memory must contain the corresponding value at the
-   pointer location offset by n * 8 bytes, and the accu must be
-   representable as a Vptr.  The offset in the Mem.load uses the
-   same ptrofs arithmetic as the C pointer dereference. *)
-Definition heap_field_loadable_n (n : nat)
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+(* Local copy matching the generic heap_field_loadable n from InstructSpec. *)
+Local Definition heap_field_loadable_n (n : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   forall v,
     field_or_heap s s.(Machine.accu) n = Some v ->
     forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
+      val_repr hm cb co s.(Machine.accu) accu_v ->
       exists b ofs cv,
         accu_v = Vptr b ofs /\
         Mem.load Mint64 m b
           (Ptrofs.unsigned (Ptrofs.add ofs
-             (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed (Int.repr (Z.of_nat n)))))) = Some cv /\
-        val_repr hm v cv.
+             (Ptrofs.repr (Z.of_nat n * 8)))) = Some cv /\
+        val_repr hm cb co v cv.
+
+(* Bridge: the C pointer arithmetic produces Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int ...),
+   which equals Ptrofs.repr (Z.of_nat n * 8) propositionally, when n is
+   in the signed int32 range (so Int.signed (Int.repr (Z.of_nat n)) = Z.of_nat n). *)
+Local Lemma ptrofs_mul_8_eq : forall n,
+  Int.min_signed <= Z.of_nat n <= Int.max_signed ->
+  Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed (Int.repr (Z.of_nat n))) =
+  Ptrofs.repr (Z.of_nat n * 8).
+Proof.
+  intros n Hn_range.
+  unfold Ptrofs.mul, ptrofs_of_int, Ptrofs.of_ints.
+  rewrite Int.signed_repr by exact Hn_range.
+  apply Ptrofs.eqm_samerepr.
+  rewrite Z.mul_comm.
+  apply Ptrofs.eqm_mult; apply Ptrofs.eqm_sym; apply Ptrofs.eqm_unsigned_repr.
+Qed.
 
 (* ================================================================== *)
 (* Main theorem: GETFIELD with heap + code buffer preconditions        *)
@@ -167,8 +181,8 @@ Definition heap_field_loadable_n (n : nat)
 
 Theorem verify_GETFIELD_correct : forall n,
     handler_correct (handle_GETFIELD n) f_instr_GETFIELD
-      (fun _ m s ard =>
-         heap_field_loadable_n n m s ard /\
+      (fun e m s ard =>
+         heap_field_loadable n e m s ard /\
          (* The code buffer contains Int.repr n at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -219,9 +233,11 @@ Proof.
     pose proof (ar_code_ne_sptr ard) as Hcb_ne. fold sb cb in Hcb_ne.
 
     (* Use heap precondition to get the field value in C memory *)
-    unfold heap_field_loadable_n in Hhfl.
+    unfold heap_field_loadable in Hhfl.
     destruct (Hhfl v Hfoh accu_v Haccu_repr)
       as [b [ofs [cv [Haccu_is_ptr [Hfield_load Hfield_repr]]]]].
+    (* Bridge: Ptrofs.repr (Z.of_nat n * 8) -> Ptrofs.mul form used by C *)
+    rewrite <- (ptrofs_mul_8_eq n Hn_range) in Hfield_load.
     subst accu_v.
 
     (* Composite environment facts *)
@@ -330,7 +346,7 @@ Proof.
 
       (* Rvalue: _t'5 *)
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hfield_repr); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hfield_repr); eval_cbn.
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
       rewrite Hstore1; eval_cbn.
 
@@ -390,7 +406,7 @@ Proof.
       assert (Haccu_load2 : Mem.load Mint64 m2 sb (uso + 8) = Some cv).
       { assert (Haccu_m1 : Mem.load Mint64 m1 sb (uso + 8) = Some cv).
         { pose proof (load_after_store_same m m1 sb (uso + 8) cv Hstore1) as Htmp.
-          rewrite (val_repr_load_result hm v cv Hfield_repr) in Htmp.
+          rewrite (val_repr_load_result hm cb co v cv Hfield_repr) in Htmp.
           exact Htmp. }
         apply (load_after_store_other m1 m2 sb (uso + 0) (uso + 8)
                  new_pc_v cv Hstore2 Haccu_m1). right. lia. }
@@ -457,7 +473,7 @@ Proof.
       (* 3. accu field -- updated to field value *)
       { exists cv. split.
         - exact Haccu_load2.
-        - simpl. exact Hfield_repr. }
+        - simpl. eapply val_repr_co_shift. exact Hfield_repr. }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -465,8 +481,9 @@ Proof.
         - exact Hsp_load2.
         - reflexivity.
         - simpl.
-          eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-          + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 8) cv).
+          eapply stack_repr_co_shift.
+          eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
+          + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (uso + 8) cv).
             * exact Hstack_repr.
             * exact Hstore1.
             * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -485,7 +502,7 @@ Proof.
       (* 5. env field -- unchanged *)
       { exists env_v. split.
         - exact Henv_load2.
-        - simpl. exact Henv_repr. }
+        - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
       (* 6. extra_args field -- unchanged *)
       { simpl. exact Hextra_load2. }
@@ -495,10 +512,11 @@ Proof.
         - exact Hgd_load2.
         - simpl. exact Hgd_eq.
         - simpl.
-          eapply (global_repr_store_other_block hm m1 m2 _
+          eapply global_repr_co_shift.
+          eapply (global_repr_store_other_block hm cb co m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 0) new_pc_v).
-          + eapply (global_repr_store_other_block hm m m1 _
+          + eapply (global_repr_store_other_block hm cb co m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 8) cv).
             * exact Hglobal_repr.

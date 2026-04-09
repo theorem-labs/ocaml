@@ -168,33 +168,12 @@ Proof.
 Qed.
 
 (* ================================================================== *)
-(* Heap field precondition for env field n (generalized)               *)
-(* Requires env block is distinct from struct block (sb), which is     *)
-(* needed for memory store separation.                                 *)
-(* ================================================================== *)
-
-Definition env_field_loadable_n (n : nat)
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let hm := ar_heap_map ard in
-  let sb := ar_sptr_block ard in
-  forall v,
-    field_or_heap s s.(Machine.env) n = Some v ->
-    forall env_v,
-      val_repr hm s.(Machine.env) env_v ->
-      exists b ofs cv,
-        env_v = Vptr b ofs /\
-        b <> sb /\
-        Mem.load Mint64 m b
-          (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr (Z.of_nat n * 8)))) = Some cv /\
-        val_repr hm v cv.
-
-(* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
 Theorem verify_ENVACC_correct : forall n,
     handler_correct (handle_ENVACC n) f_instr_ENVACC
-      (fun _ m s ard =>
+      (fun e m s ard =>
          (* The code buffer contains Int.repr (Z.of_nat n) at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -203,7 +182,7 @@ Theorem verify_ENVACC_correct : forall n,
          (* n fits in the signed int32 range *)
          Z.of_nat n < Int.half_modulus /\
          (* env field n is loadable in C memory *)
-         env_field_loadable_n n m s ard)
+         env_field_loadable n e m s ard)
       (fun _ s => field_or_heap s s.(Machine.env) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -258,7 +237,7 @@ Proof.
     set (pc_ofs := Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))) in *.
 
     (* Use heap precondition to get the field value in C memory *)
-    unfold env_field_loadable_n in Hefl.
+    unfold env_field_loadable in Hefl.
     destruct (Hefl v Hfoh env_v Henv_repr)
       as [env_b [env_ofs [cv [Henv_is_ptr [Henv_b_ne_sb [Hfield_load Hfield_repr]]]]]].
     subst env_v.
@@ -382,7 +361,7 @@ Proof.
       rewrite Hle_s; eval_cbn.
       rewrite Haccu_offset; eval_cbn.
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hfield_repr); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hfield_repr); eval_cbn.
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
       rewrite Hstore_accu; eval_cbn.
 
@@ -417,7 +396,7 @@ Proof.
       (* accu field at uso+8: written by store2 *)
       assert (Haccu_load2 : Mem.load Mint64 m2 sb (uso + 8) = Some cv).
       { pose proof (load_after_store_same m1 m2 sb (uso + 8) cv Hstore_accu) as Htmp.
-        rewrite (val_repr_load_result hm v cv Hfield_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co v cv Hfield_repr) in Htmp.
         exact Htmp. }
 
       (* sp field at uso+16: unaffected by both stores *)
@@ -486,7 +465,7 @@ Proof.
       (* 3. accu field -- updated to env field value *)
       { exists cv. split.
         - exact Haccu_load2.
-        - simpl. exact Hfield_repr. }
+        - simpl. eapply val_repr_co_shift. exact Hfield_repr. }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -494,8 +473,9 @@ Proof.
         - exact Hsp_load2.
         - reflexivity.
         - simpl.
-          eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 8) cv).
-          + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
+          eapply stack_repr_co_shift.
+          eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (uso + 8) cv).
+          + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
             * exact Hstack_repr.
             * exact Hstore_pc.
             * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -513,7 +493,7 @@ Proof.
       (* 5. env field -- unchanged *)
       { exists (Vptr env_b env_ofs). split.
         - exact Henv_load2.
-        - simpl. exact Henv_repr. }
+        - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
       (* 6. extra_args field -- unchanged *)
       { simpl. exact Hextra_load2. }
@@ -523,10 +503,11 @@ Proof.
         - exact Hgd_load2.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m1 m2 _
+          eapply global_repr_co_shift.
+          apply (global_repr_store_other_block hm cb co m1 m2 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 8) cv).
-          + apply (global_repr_store_other_block hm m m1 _
+          + apply (global_repr_store_other_block hm cb co m m1 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      sb (uso + 0) new_pc_v
                      Hglobal_repr Hstore_pc).

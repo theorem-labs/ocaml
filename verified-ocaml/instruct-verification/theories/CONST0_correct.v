@@ -61,6 +61,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -82,7 +84,7 @@ Proof.
     destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
     (* Accu store must succeed.
-       The new accu value is Vlong (Int64.repr 1) = val_repr hm (Val_int 0). *)
+       The new accu value is Vlong (Int64.repr 1) = val_repr hm cb co (Val_int 0). *)
     destruct (store_succeeds_sb m sb so 8 accu_v Hsb_writable Haccu_load ltac:(lia) ltac:(lia) (Vlong (Int64.repr 1)))
       as [m' Hstore].
 
@@ -183,7 +185,7 @@ Proof.
         - exact Haccu_load'.
         - simpl.
           (* Vlong (Int64.repr 1) = Vlong (Int64.repr (0*2+1)) *)
-          exact (vr_int _ 0). }
+          exact (vr_int _ _ _ 0). }
 
       (* 4. sp field -- unchanged *)
       { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs.
@@ -191,7 +193,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) (Vlong (Int64.repr 1))
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) (Vlong (Int64.repr 1))
                    Hstack_repr Hstore).
                     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -215,7 +217,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) (Vlong (Int64.repr 1))
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) (Vlong (Int64.repr 1))
                    Hglobal_repr Hstore).
                     intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }

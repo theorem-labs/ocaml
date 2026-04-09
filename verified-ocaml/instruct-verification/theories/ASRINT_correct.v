@@ -218,11 +218,12 @@ Qed.
 
 Theorem verify_ASRINT_correct :
     handler_correct handle_ASRINT f_instr_ASRINT
-      (fun _ _ s _ =>
+      (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
              0 <= b < 64 /\
-             Int64.min_signed <= a * 2 + 1 <= Int64.max_signed
+             Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
+             int_vlong ard a /\ int_vlong ard b
          | _, Val_int b :: _ => 0 <= b < 64
          | _, _ => True
          end)
@@ -239,10 +240,12 @@ Proof.
   unfold abs_rel_with_ard in Hpre.
   change (Machine.accu s) with (Val_int a) in Hstep_pre.
   change (Machine.stack s) with (Val_int b :: v_tl) in Hstep_pre.
-  simpl in Hstep_pre. destruct Hstep_pre as [Hb Ha_range].
+  simpl in Hstep_pre. destruct Hstep_pre as [Hb [Ha_range [Haccu_long Hhead_long]]].
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
@@ -255,7 +258,10 @@ Proof.
   pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
   pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
   rewrite Haccu_eq in Haccu_repr.
-  inversion Haccu_repr; subst accu_v. rename H0 into Haccu_is_int.
+  pose proof Haccu_repr as Haccu_repr_rw.
+  inversion Haccu_repr; subst accu_v.
+  2: { exfalso. destruct (Haccu_long _ Haccu_repr_rw) as [z Hz]. discriminate Hz. }
+  rename H0 into Haccu_is_int.
 
   (* Pre-compute modulus bounds for sp + 8 BEFORE inversion/subst *)
   assert (Hsp_mod_orig : Ptrofs.unsigned sp_ofs + 8 < Ptrofs.modulus).
@@ -272,7 +278,10 @@ Proof.
   inversion Hstack_repr0 as [| ? ? ? ? cv0 Hload_sp0 Hval_repr0 Hstack_repr_rest].
   revert Hgd_load Hgd_eq Hglobal_repr0 Hgb_ne. subst.
   intros Hgd_load Hgd_eq Hglobal_repr Hgb_ne.
-  inversion Hval_repr0; subst cv0. rename H0 into Hstk_is_int.
+  pose proof Hval_repr0 as Hval_repr0_rw.
+  inversion Hval_repr0; subst cv0.
+  2: { exfalso. destruct (Hhead_long _ Hval_repr0_rw) as [z Hz]. discriminate Hz. }
+  rename H0 into Hstk_is_int.
   destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
 
   pose proof (asr_shift_ltu_guard b Hb) as Hshift_guard.
@@ -417,9 +426,9 @@ Proof.
       - exact Hsp_load'.
       - reflexivity.
       - simpl.
-        eapply (stack_repr_store_other_block hm m1 m' _ sp_b
+        eapply (stack_repr_store_other_block hm cb co m1 m' _ sp_b
                  (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) result_v).
-        + eapply (stack_repr_store_other_block hm m m1 _ sp_b
+        + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b
                    (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
           * exact Hstack_repr_rest.
           * exact Hstore1.
@@ -452,8 +461,8 @@ Proof.
       - exact Hgd_load'.
       - simpl. exact Hgd_eq.
       - simpl.
-        eapply (global_repr_store_other_block hm m1 m' _ _ _ sb (uso + 8) result_v).
-        + eapply (global_repr_store_other_block hm m m1 _ _ _ sb (uso + 16) new_sp_v).
+        eapply (global_repr_store_other_block hm cb co m1 m' _ _ _ sb (uso + 8) result_v).
+        + eapply (global_repr_store_other_block hm cb co m m1 _ _ _ sb (uso + 16) new_sp_v).
           * exact Hglobal_repr.
           * exact Hstore1.
           * intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
@@ -476,11 +485,12 @@ Theorem verify_ASRINT_handler_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   apply handler_correct_weaken with
-    (sp := fun _ _ s _ =>
+    (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
            0 <= b < 64 /\
-           Int64.min_signed <= a * 2 + 1 <= Int64.max_signed
+           Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
+           int_vlong ard a /\ int_vlong ard b
        | _, Val_int b :: _ => 0 <= b < 64
        | _, _ => True
        end).

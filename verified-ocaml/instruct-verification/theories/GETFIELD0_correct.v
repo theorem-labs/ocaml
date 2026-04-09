@@ -37,7 +37,7 @@
        cv such that:
        (a) accu_v is Vptr b ofs (the accu is a pointer in C)
        (b) Mem.load Mint64 m b (Ptrofs.unsigned ofs) = Some cv
-       (c) val_repr hm v cv
+       (c) val_repr hm cb co v cv
      This is exactly the missing link between field_or_heap and Mem.load.
 
    TO UPGRADE to plain handler_correct (no precondition), add to abs_rel:
@@ -46,7 +46,7 @@
        heap_lookup (hp s) addr = Some (tag, fields) ->
        forall i v, nth_error fields i = Some v ->
        exists cv, Mem.load Mint64 m b (Ptrofs.unsigned ofs + Z.of_nat i * 8)
-                    = Some cv /\ val_repr hm v cv
+                    = Some cv /\ val_repr hm cb co v cv
    plus the constraint that val_repr values that are Vptr always have
    their first argument derivable from hm.  With this invariant in
    abs_rel, the heap_field_loadable precondition would be derivable
@@ -100,20 +100,22 @@ Proof. exact sem_add_sp_0. Qed.
 (* Heap field precondition                                             *)
 (* ================================================================== *)
 
-(* The precondition for the Step case: when field_or_heap succeeds,
-   the C memory must contain the corresponding value at the pointer
-   location, and the accu must be representable as a Vptr. *)
-Definition heap_field_loadable
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+(* Local copy matching the generic heap_field_loadable 0 from InstructSpec.
+   Uses Ptrofs.add ofs (Ptrofs.repr 0) instead of bare ofs, so the
+   theorem type is definitionally equal to the Module Type entry. *)
+Local Definition heap_field_loadable_0
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
   forall v,
     field_or_heap s s.(Machine.accu) 0 = Some v ->
     forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
+      val_repr hm cb co s.(Machine.accu) accu_v ->
       exists b ofs cv,
         accu_v = Vptr b ofs /\
-        Mem.load Mint64 m b (Ptrofs.unsigned ofs) = Some cv /\
-        val_repr hm v cv.
+        Mem.load Mint64 m b (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr (Z.of_nat 0 * 8)))) = Some cv /\
+        val_repr hm cb co v cv.
 
 (* ================================================================== *)
 (* Main theorem: GETFIELD0 with heap precondition                      *)
@@ -121,7 +123,7 @@ Definition heap_field_loadable
 
 Theorem verify_GETFIELD0_with_pre :
     handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
-      (fun _ => heap_field_loadable)
+      (heap_field_loadable 0)
       (fun _ s => field_or_heap s s.(Machine.accu) 0 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -152,6 +154,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     (* Structural invariants *)
     pose proof (sptr_ofs_representable ard) as Hso_bound.
@@ -162,6 +166,9 @@ Proof.
     unfold heap_field_loadable in Hhfl.
     destruct (Hhfl v Hfoh accu_v Haccu_repr)
       as [b [ofs [cv [Haccu_is_ptr [Hfield_load Hfield_repr]]]]].
+    (* Bridge: Ptrofs.add ofs (Ptrofs.repr 0) -> ofs
+       (Z.of_nat 0 * 8 reduces to 0 after unfold) *)
+    rewrite Ptrofs.add_zero in Hfield_load.
     subst accu_v.
 
     (* Composite environment facts *)
@@ -217,7 +224,7 @@ Proof.
 
       (* === Sassign rvalue + sem_cast + store === *)
       rewrite PTree.gss; eval_cbn.                                   (* le2 ! _t'2 *)
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hfield_repr); eval_cbn. (* sem_cast *)
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hfield_repr); eval_cbn. (* sem_cast *)
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).      (* accu ptrofs *)
       rewrite Hstore; eval_cbn.                                      (* accu store *)
 
@@ -259,7 +266,7 @@ Proof.
 
       assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some cv).
       { pose proof (load_after_store_same m m' sb (uso + 8) cv Hstore) as Htmp.
-        rewrite (val_repr_load_result hm v cv Hfield_repr) in Htmp.
+        rewrite (val_repr_load_result hm cb co v cv Hfield_repr) in Htmp.
         exact Htmp. }
 
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -286,7 +293,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv
                    Hstack_repr Hstore).
           intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -310,7 +317,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv
                    Hglobal_repr Hstore).
           intro Heq2; exact (global_block_ne_sptr ard (eq_sym Heq2)).
         - exact Hgb_ne_sb. }

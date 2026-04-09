@@ -91,40 +91,7 @@ Proof. intros. reflexivity. Qed.
 (* Heap-store precondition                                             *)
 (* ================================================================== *)
 
-(* When the Rocq handler takes the Step path, the C heap store must
-   succeed.  The precondition provides:
-   - accu is Vptr to a heap block (block hb at offset hofs)
-   - The heap block is separate from sb and sp_b and gb
-   - Storing the stack-top value at hb, hofs succeeds
-   - The heap block has the right contents after the store *)
-Definition setfield0_heap_pre
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let hm := ar_heap_map ard in
-  forall newval rest,
-    s.(Machine.stack) = newval :: rest ->
-    forall accu_v,
-      val_repr hm s.(Machine.accu) accu_v ->
-    forall sp_b sp_ofs,
-      Mem.load Mint64 (m) (ar_sptr_block ard)
-        (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-    forall stk_top_cv,
-      val_repr hm newval stk_top_cv ->
-    exists hb hofs,
-      accu_v = Vptr hb hofs /\
-      hb <> ar_sptr_block ard /\
-      hb <> sp_b /\
-      hb <> ar_global_block ard /\
-      (forall m_pre, (* after sp store *)
-        Mem.store Mint64 m_pre (ar_sptr_block ard)
-          (Ptrofs.unsigned (ar_sptr_ofs ard) + 16)
-          (Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))) = Some m_pre ->
-        True) /\
-      (* The heap store succeeds in any memory reachable from m via sb stores *)
-      (forall m1,
-        Mem.store Mint64 m (ar_sptr_block ard)
-          (Ptrofs.unsigned (ar_sptr_ofs ard) + 16)
-          (Vptr sp_b (Ptrofs.add sp_ofs (Ptrofs.repr 8))) = Some m1 ->
-        exists m2, Mem.store Mint64 m1 hb (Ptrofs.unsigned hofs) stk_top_cv = Some m2).
+(* Heap-store precondition for field 0: now uses generic setfield_heap_pre 0. *)
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -132,7 +99,7 @@ Definition setfield0_heap_pre
 
 Theorem verify_SETFIELD0_correct :
     handler_correct (handle_SETFIELD 0) f_instr_SETFIELD0
-      (fun _ => setfield0_heap_pre)
+      (setfield_heap_pre 0)
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
                     match s.(Machine.accu) with
@@ -178,6 +145,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
 
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
@@ -217,10 +186,14 @@ Proof.
       pose proof (Nat2Z.is_nonneg (length rest)). lia. }
 
     (* Use heap precondition *)
-    unfold setfield0_heap_pre in Hhpre.
+    unfold setfield_heap_pre in Hhpre.
     specialize (Hhpre newval rest Hstk accu_v Haccu_repr sp_b sp_ofs Hsp_load stk_top_cv Hval_repr_top).
-    destruct Hhpre as [hb [hofs [Haccu_is_ptr [Hhb_ne_sb [Hhb_ne_sp [Hhb_ne_gb [_ Hheap_store_ok]]]]]]].
+    destruct Hhpre as [hb [hofs [Haccu_is_ptr [Hhb_ne_sb [Hhb_ne_sp [Hhb_ne_gb Hheap_store_ok]]]]]].
     subst accu_v.
+
+    (* Simplify Ptrofs.add hofs (Ptrofs.repr 0) = hofs *)
+    assert (Hofs_eq : Ptrofs.add hofs (Ptrofs.repr 0) = hofs).
+    { change (Ptrofs.repr 0) with Ptrofs.zero. apply Ptrofs.add_zero. }
 
     (* ============================================================ *)
     (* Store 1: sp field (so+16) <- Vptr sp_b (sp_ofs + 8)          *)
@@ -248,6 +221,8 @@ Proof.
     (* ============================================================ *)
     (* Store 2: heap write at (hb, hofs) <- stk_top_cv              *)
     (* ============================================================ *)
+    change (Z.of_nat 0 * 8) with 0 in Hheap_store_ok.
+    rewrite Hofs_eq in Hheap_store_ok.
     destruct (Hheap_store_ok m1 Hstore1) as [m2 Hstore2].
 
     (* ============================================================ *)
@@ -327,7 +302,7 @@ Proof.
       rewrite sem_cast_long_to_ptr_vptr; eval_cbn.
       rewrite (sem_add_ptr_long_0 hb hofs m1); eval_cbn.
       rewrite PTree.gss; eval_cbn.
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hval_repr_top); eval_cbn.
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hval_repr_top); eval_cbn.
       rewrite Hstore2; eval_cbn.
 
       (* S6: Sassign (s->accu = ((0 << 1) + 1)) -- val_unit store *)
@@ -436,7 +411,7 @@ Proof.
       (* 3. accu field -- updated to val_unit = Val_int 0 *)
       { exists unit_v. split.
         - exact Haccu_load3.
-        - simpl. subst unit_v. exact (vr_int _ 0). }
+        - simpl. subst unit_v. exact (vr_int _ _ _ 0). }
 
       (* 4. sp field -- updated to sp + 8 (stack tail) *)
       { exists new_sp_v, sp_b, (Ptrofs.add sp_ofs (Ptrofs.repr 8)).
@@ -445,11 +420,11 @@ Proof.
         - reflexivity.
         - simpl.
           (* stack_repr through stores: m -> m1 (sb store), m1 -> m2 (hb store), m2 -> m3 (sb store) *)
-          eapply (stack_repr_store_other_block hm m2 m3 _ sp_b
+          eapply (stack_repr_store_other_block hm cb co m2 m3 _ sp_b
                    (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 8) unit_v).
-          + eapply (stack_repr_store_other_block hm m1 m2 _ sp_b
+          + eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b
                      (Ptrofs.add sp_ofs (Ptrofs.repr 8)) hb (Ptrofs.unsigned hofs) stk_top_cv).
-            * eapply (stack_repr_store_other_block hm m m1 _ sp_b
+            * eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b
                        (Ptrofs.add sp_ofs (Ptrofs.repr 8)) sb (uso + 16) new_sp_v).
               -- exact Hstack_repr_rest.
               -- exact Hstore1.
@@ -486,13 +461,13 @@ Proof.
         - exact Hgd_load3.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m2 m3 _
+          apply (global_repr_store_other_block hm cb co m2 m3 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 8) unit_v).
-          + apply (global_repr_store_other_block hm m1 m2 _
+          + apply (global_repr_store_other_block hm cb co m1 m2 _
                      (ar_global_block ard) (ar_global_ofs ard)
                      hb (Ptrofs.unsigned hofs) stk_top_cv).
-            * apply (global_repr_store_other_block hm m m1 _
+            * apply (global_repr_store_other_block hm cb co m m1 _
                        (ar_global_block ard) (ar_global_ofs ard)
                        sb (uso + 16) new_sp_v
                        Hglobal_repr Hstore1).

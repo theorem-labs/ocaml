@@ -431,14 +431,19 @@ Definition handle_SETGLOBAL (n : nat) (pc' : Z) (s : state) : step_result :=
                     | Some g => g | None => s.(global) end in
   Step (s <|pc := pc'|> <|accu := val_unit|> <|global := new_global|>).
 
+(* Atoms are empty blocks (tag, []) represented as tagged integers —
+   no heap allocation needed. *)
+Definition handle_ATOM0 (pc' : Z) (s : state) : step_result :=
+  Step (s <|accu := Val_block 0 []|>).
+
 Definition handle_ATOM (t : nat) (pc' : Z) (s : state) : step_result :=
-  let '(s', ptr) := heap_alloc s t [] in
-  Step (s' <|pc := pc'|> <|accu := ptr|>).
+  Step (s <|pc := pc'|> <|accu := Val_block t []|>).
+
+Definition handle_PUSHATOM0 (pc' : Z) (s : state) : step_result :=
+  Step (s <|accu := Val_block 0 []|> <|stack := s.(accu) :: s.(stack)|>).
 
 Definition handle_PUSHATOM (t : nat) (pc' : Z) (s : state) : step_result :=
-  let new_stack := s.(accu) :: s.(stack) in
-  let '(s', ptr) := heap_alloc s t [] in
-  Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>).
+  Step (s <|pc := pc'|> <|accu := Val_block t []|> <|stack := s.(accu) :: s.(stack)|>).
 
 (* MAKEBLOCK tag size: accu=field0, pop (size-1) from stack. *)
 Definition handle_MAKEBLOCK (t size : nat) (pc' : Z) (s : state) : step_result :=
@@ -979,6 +984,19 @@ Definition handle_EVENT (pc' : Z) (s : state) : step_result :=
 Definition handle_BREAK (pc' : Z) (s : state) : step_result :=
   Step (s <|pc := pc'|>).
 
+(* Stub handlers for effect opcodes (OCaml 5 features, modelled as no-ops) *)
+Definition handle_PERFORM (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|>).
+
+Definition handle_RESUME (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc'|>).
+
+Definition handle_RESUMETERM (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc' + 1|>).
+
+Definition handle_REPERFORMTERM (pc' : Z) (s : state) : step_result :=
+  Step (s <|pc := pc' + 1|>).
+
 (* ------------------------------------------------------------------ *)
 (* Main step function: fetch + dispatch to per-instruction handlers    *)
 (* ------------------------------------------------------------------ *)
@@ -1083,10 +1101,10 @@ Definition step (code : array instruction) (s : state) : step_result :=
   | STOP => handle_STOP s
   | EVENT => handle_EVENT pc' s
   | BREAK => handle_BREAK pc' s
-  | PERFORM => Error "PERFORM: effects not supported"
-  | RESUME => Error "RESUME: effects not supported"
-  | RESUMETERM _ => Error "RESUMETERM: effects not supported"
-  | REPERFORMTERM _ => Error "REPERFORMTERM: effects not supported"
+  | PERFORM => handle_PERFORM pc' s
+  | RESUME => handle_RESUME pc' s
+  | RESUMETERM _ => handle_RESUMETERM pc' s
+  | REPERFORMTERM _ => handle_REPERFORMTERM pc' s
 
   end
   end.

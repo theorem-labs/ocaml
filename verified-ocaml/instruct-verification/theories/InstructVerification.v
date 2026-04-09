@@ -180,115 +180,63 @@ Module InstructVerification <: InstructVerificationSpec.
     := verify_ACC_handler_correct.
   Definition correct_ADDINT := verify_ADDINT_compl_comp.
   Definition correct_ANDINT := verify_ANDINT_correct.
-  Lemma correct_APPLY1 :
-    handler_correct (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
-      no_pre
-      (fun msg s => (msg = "APPLY1: accu is not a closure"%string /\ get_code_ptr_s s s.(Machine.accu) = None) \/ (msg = "APPLY1: stack underflow"%string)) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_APPLY2 :
-    handler_correct (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
-      no_pre
-      (fun msg s => (msg = "APPLY2: accu is not a closure"%string /\ get_code_ptr_s s s.(Machine.accu) = None) \/ (msg = "APPLY2: stack underflow"%string)) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_APPLY3 :
-    handler_correct (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
-      no_pre
-      (fun msg s => match s.(Machine.stack) with | _ :: _ :: _ :: _ => get_code_ptr_s s s.(Machine.accu) = None | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_APPLY :
-    forall n,
-    handler_correct (fun _ s => handle_APPLY n s) f_instr_APPLY
-      no_pre
-      (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_APPTERM1 :
-    forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
-      no_pre
-      (fun msg s => s.(Machine.stack) = nil \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_APPTERM2 :
-    forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM2 slotsize s) f_instr_APPTERM2
-      no_pre
-      (fun msg s => s.(Machine.stack) = nil \/ (exists a, s.(Machine.stack) = a :: nil) \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_APPTERM3 :
-    forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
-      no_pre
-      (fun msg s => match s.(Machine.stack) with | _ :: _ :: _ :: _ => False | _ => True end \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_APPTERM :
-    forall nargs slotsize,
-    handler_correct (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
-      no_pre
-      (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_APPLY1 := verify_APPLY1_correct.
+  Definition correct_APPLY2 := verify_APPLY2_correct.
+  Definition correct_APPLY3 := verify_APPLY3_correct.
+  Definition correct_APPLY := verify_APPLY_correct.
+  Definition correct_APPTERM1 := verify_APPTERM1_correct.
+  Definition correct_APPTERM2 := verify_APPTERM2_correct.
+  Definition correct_APPTERM3 := verify_APPTERM3_correct.
+  Definition correct_APPTERM := verify_APPTERM_correct.
   Definition correct_ASRINT := verify_ASRINT_handler_correct.
-  Lemma correct_ASSIGN :
-    forall n,
-    handler_correct (handle_ASSIGN n) f_instr_ASSIGN
-      no_pre
-      (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_ASSIGN := verify_ASSIGN_correct.
   Definition correct_ATOM0 := verify_ATOM0_correct.
   Definition correct_ATOM := verify_ATOM_correct.
   Definition correct_BEQ :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BEQ n target) f_instr_BEQ
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
     := verify_BEQ_handler_correct.
   Definition correct_BGEINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGEINT n target) f_instr_BGEINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
     := verify_BGEINT_handler_correct.
   Definition correct_BGTINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGTINT n target) f_instr_BGTINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
     := verify_BGTINT_handler_correct.
   Definition correct_BLEINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BLEINT n target) f_instr_BLEINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
     := verify_BLEINT_handler_correct.
   Definition correct_BLTINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BLTINT n target) f_instr_BLTINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun msg s => msg = "BLTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
     := verify_BLTINT_handler_correct.
   Definition correct_BNEQ :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BNEQ n target) f_instr_BNEQ
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_signed_int)
+      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
     := verify_BNEQ_handler_correct.
   Definition correct_BOOLNOT := verify_BOOLNOT_handler_correct.
-  Lemma correct_BRANCHIFNOT :
-    forall target,
-    handler_correct (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_BRANCHIF :
-    forall target,
-    handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_BRANCHIFNOT := verify_BRANCHIFNOT_correct.
+  Definition correct_BRANCHIF := verify_BRANCHIF_correct.
   Definition correct_BRANCH :
     forall target,
     handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
@@ -300,29 +248,19 @@ Module InstructVerification <: InstructVerificationSpec.
     forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int)
+      (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
     := verify_BUGEINT_handler_correct.
   Definition correct_BULTINT :
     forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BULTINT n target) f_instr_BULTINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int)
+      (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
       (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
     := verify_BULTINT_handler_correct.
   Definition correct_CHECK_SIGNALS := verify_CHECK_SIGNALS_correct.
-  Lemma correct_CLOSUREREC :
-    forall code_ofs,
-    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
-      no_pre
-      (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_CLOSURE :
-    forall code_ofs,
-    handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_CLOSUREREC := verify_CLOSUREREC_correct.
+  Definition correct_CLOSURE := verify_CLOSURE_correct.
   Definition correct_CONST0 := verify_CONST0_compl_comp.
   Definition correct_CONST1 := verify_CONST1_correct.
   Definition correct_CONST2 := verify_CONST2_correct.
@@ -335,83 +273,23 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_C_CALL5 prim_idx := verify_C_CALL5_correct prim_idx.
   Definition correct_C_CALLN nargs prim_idx := verify_C_CALLN_correct nargs prim_idx.
   Definition correct_DIVINT := verify_DIVINT_handler_correct.
-  Lemma correct_ENVACC1 :
-    handler_correct (handle_ENVACC 1) f_instr_ENVACC1
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 1 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_ENVACC2 :
-    handler_correct (handle_ENVACC 2) f_instr_ENVACC2
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 2 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_ENVACC3 :
-    handler_correct (handle_ENVACC 3) f_instr_ENVACC3
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 3 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_ENVACC4 :
-    handler_correct (handle_ENVACC 4) f_instr_ENVACC4
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 4 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_ENVACC :
-    forall n,
-    handler_correct (handle_ENVACC n) f_instr_ENVACC
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) n = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_ENVACC1 := verify_ENVACC1_with_pre.
+  Definition correct_ENVACC2 := verify_ENVACC2_with_pre.
+  Definition correct_ENVACC3 := verify_ENVACC3_with_pre.
+  Definition correct_ENVACC4 := verify_ENVACC4_with_pre.
+  Definition correct_ENVACC := verify_ENVACC_correct.
   Definition correct_EQ := verify_EQ_handler_correct.
   Definition correct_EVENT := verify_EVENT_correct.
   Definition correct_GEINT := verify_GEINT_handler_correct.
-  Lemma correct_GETBYTESCHAR :
-    handler_correct handle_GETSTRINGCHAR f_instr_GETBYTESCHAR
-      no_pre
-      (fun msg s => match s.(Machine.stack) with | Val_int idx :: _ => match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with | Some (Val_int _) => False | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETDYNMET :
-    handler_correct handle_GETDYNMET f_instr_GETDYNMET
-      no_pre
-      (fun msg s => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETFIELD0 :
-    handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.accu) 0 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETFIELD1 :
-    handler_correct (handle_GETFIELD 1) f_instr_GETFIELD1
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.accu) 1 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETFIELD2 :
-    handler_correct (handle_GETFIELD 2) f_instr_GETFIELD2
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.accu) 2 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETFIELD3 :
-    handler_correct (handle_GETFIELD 3) f_instr_GETFIELD3
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.accu) 3 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETFIELD :
-    forall n,
-    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.accu) n = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETFLOATFIELD :
-    forall n,
-    handler_correct (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.accu) n = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETGLOBALFIELD :
-    forall n p,
-    handler_correct (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
-      no_pre
-      (fun msg s => (nth_error s.(Machine.global) n = None /\ msg = "GETGLOBALFIELD: index out of bounds"%string) \/ (exists glob, nth_error s.(Machine.global) n = Some glob /\ field_or_heap s glob p = None /\ msg = "GETGLOBALFIELD: field access failed"%string)) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_GETBYTESCHAR := verify_GETBYTESCHAR_correct.
+  Definition correct_GETDYNMET := verify_GETDYNMET_correct.
+  Definition correct_GETFIELD0 := verify_GETFIELD0_with_pre.
+  Definition correct_GETFIELD1 := verify_GETFIELD1_with_pre.
+  Definition correct_GETFIELD2 := verify_GETFIELD2_with_pre.
+  Definition correct_GETFIELD3 := verify_GETFIELD3_with_pre.
+  Definition correct_GETFIELD := verify_GETFIELD_correct.
+  Definition correct_GETFLOATFIELD := verify_GETFLOATFIELD_correct.
+  Definition correct_GETGLOBALFIELD := verify_GETGLOBALFIELD_correct.
   Definition correct_GETGLOBAL :
     forall n,
     0 <= Z.of_nat n <= Int.max_signed ->
@@ -419,104 +297,35 @@ Module InstructVerification <: InstructVerificationSpec.
       (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n))
       (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False)
     := verify_GETGLOBAL_handler_correct.
-  Lemma correct_GETMETHOD :
-    handler_correct handle_GETMETHOD f_instr_GETMETHOD
-      no_pre
-      (fun msg s => match msg with | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETPUBMET :
-    forall tag,
-    handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
-      no_pre
-      (fun msg s => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETSTRINGCHAR :
-    handler_correct handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
-      no_pre
-      (fun msg s => match s.(Machine.stack) with | Val_int idx :: _ => match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with | Some (Val_int _) => False | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GETVECTITEM :
-    handler_correct handle_GETVECTITEM f_instr_GETVECTITEM
-      no_pre
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | _, Val_int idx :: _ => field_or_heap s s.(Machine.accu) (Z.to_nat idx) = None | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_GRAB :
-    forall required,
-    handler_correct (handle_GRAB required) f_instr_GRAB
-      no_pre
-      (fun msg s => msg = "GRAB: malformed return frame"%string /\ Nat.leb required (extra_args s) = false /\ match skipn (S (extra_args s)) (Machine.stack s) with | Val_int _ :: _ :: Val_int _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_GETMETHOD := verify_GETMETHOD_correct.
+  Definition correct_GETPUBMET := verify_GETPUBMET_correct.
+  Definition correct_GETSTRINGCHAR := verify_GETSTRINGCHAR_correct.
+  Definition correct_GETVECTITEM := verify_GETVECTITEM_correct.
+  Definition correct_GRAB := verify_GRAB_correct.
   Definition correct_GTINT := verify_GTINT_handler_correct.
   Definition correct_ISINT := verify_ISINT_handler_correct.
   Definition correct_LEINT := verify_LEINT_handler_correct.
   Definition correct_LSLINT := verify_LSLINT_handler_correct.
   Definition correct_LSRINT := verify_LSRINT_handler_correct.
   Definition correct_LTINT := verify_LTINT_handler_correct.
-  Lemma correct_MAKEBLOCK1 :
-    forall t,
-    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_MAKEBLOCK2 :
-    forall t,
-    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
-      no_pre
-      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_MAKEBLOCK3 :
-    forall t,
-    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
-      no_pre
-      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_MAKEBLOCK :
-    forall (t size : nat), (size >= 1)%nat ->
-    handler_correct (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_MAKEFLOATBLOCK :
-    forall (n : nat), (n >= 1)%nat ->
-    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_MAKEBLOCK1 := verify_MAKEBLOCK1_correct.
+  Definition correct_MAKEBLOCK2 := verify_MAKEBLOCK2_correct.
+  Definition correct_MAKEBLOCK3 := verify_MAKEBLOCK3_correct.
+  Definition correct_MAKEBLOCK := verify_MAKEBLOCK_correct.
+  Definition correct_MAKEFLOATBLOCK := verify_MAKEFLOATBLOCK_correct.
   Definition correct_MODINT := verify_MODINT_handler_correct.
   Definition correct_MULINT := verify_MULINT_correct.
   Definition correct_NEGINT := verify_NEGINT_compl_comp.
   Definition correct_NEQ := verify_NEQ_handler_correct.
   Definition correct_OFFSETCLOSURE0 := verify_OFFSETCLOSURE0_compl_comp.
-  Lemma correct_OFFSETCLOSURE2 :
-    handler_correct (handle_OFFSETCLOSURE 2) f_instr_OFFSETCLOSURE2
-      no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_OFFSETCLOSUREM2 :
-    handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM2
-      no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_OFFSETCLOSURE :
-    forall n,
-    handler_correct (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
-      no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_OFFSETCLOSURE2 := verify_OFFSETCLOSURE2_compl_comp.
+  Definition correct_OFFSETCLOSUREM2 := verify_OFFSETCLOSUREM2_compl_comp.
+  Definition correct_OFFSETCLOSURE := verify_OFFSETCLOSURE_correct.
   Definition correct_OFFSETINT := verify_OFFSETINT_handler_correct.
-  Lemma correct_OFFSETREF :
-    forall n,
-    handler_correct (handle_OFFSETREF n) f_instr_OFFSETREF
-      no_pre
-      (fun _ s => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, Val_int _ :: _) => False | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_OFFSETREF := verify_OFFSETREF_correct.
   Definition correct_ORINT := verify_ORINT_correct.
   Definition correct_PERFORM := verify_PERFORM_correct.
-  Lemma correct_POPTRAP :
-    handler_correct (handle_POPTRAP) f_instr_POPTRAP
-      no_pre
-      (fun msg _ => msg = "POPTRAP: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_POPTRAP := verify_POPTRAP_correct.
   Definition correct_POP :
     forall n,
     Z.of_nat n < Int.half_modulus ->
@@ -542,44 +351,13 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_PUSHCONST1 := verify_PUSHCONST1_correct.
   Definition correct_PUSHCONST2 := verify_PUSHCONST2_correct.
   Definition correct_PUSHCONST3 := verify_PUSHCONST3_correct.
-  Lemma correct_PUSHCONSTINT :
-    forall n,
-    handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHENVACC1 :
-    handler_correct (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 1 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHENVACC2 :
-    handler_correct (handle_PUSHENVACC 2) f_instr_PUSHENVACC2
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 2 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHENVACC3 :
-    handler_correct (handle_PUSHENVACC 3) f_instr_PUSHENVACC3
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 3 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHENVACC4 :
-    handler_correct (handle_PUSHENVACC 4) f_instr_PUSHENVACC4
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) 4 = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHENVACC :
-    forall n,
-    handler_correct (handle_PUSHENVACC n) f_instr_PUSHENVACC
-      no_pre
-      (fun _ s => field_or_heap s s.(Machine.env) n = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHGETGLOBALFIELD :
-    forall n p,
-    handler_correct (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
-      no_pre
-      (fun msg s => nth_error s.(Machine.global) n = None \/ (exists glob, nth_error s.(Machine.global) n = Some glob /\ field_or_heap s glob p = None)) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_PUSHCONSTINT := verify_PUSHCONSTINT_correct.
+  Definition correct_PUSHENVACC1 := verify_PUSHENVACC1_correct.
+  Definition correct_PUSHENVACC2 := verify_PUSHENVACC2_correct.
+  Definition correct_PUSHENVACC3 := verify_PUSHENVACC3_correct.
+  Definition correct_PUSHENVACC4 := verify_PUSHENVACC4_correct.
+  Definition correct_PUSHENVACC := verify_PUSHENVACC_correct.
+  Definition correct_PUSHGETGLOBALFIELD := verify_PUSHGETGLOBALFIELD_correct.
   Definition correct_PUSHGETGLOBAL :
     forall n,
     0 <= Z.of_nat n <= Int.max_signed ->
@@ -588,126 +366,34 @@ Module InstructVerification <: InstructVerificationSpec.
       (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False)
     := verify_PUSHGETGLOBAL_handler_correct.
   Definition correct_PUSHOFFSETCLOSURE0 := verify_PUSHOFFSETCLOSURE0_correct.
-  Lemma correct_PUSHOFFSETCLOSURE2 :
-    handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE2
-      no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHOFFSETCLOSUREM2 :
-    handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM2
-      no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHOFFSETCLOSURE :
-    forall ofs,
-    handler_correct (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
-      no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSHTRAP :
-    forall handler_pc,
-    handler_correct (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_PUSH_RETADDR :
-    forall ret_addr,
-    handler_correct (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_PUSHOFFSETCLOSURE2 := verify_PUSHOFFSETCLOSURE2_correct.
+  Definition correct_PUSHOFFSETCLOSUREM2 := verify_PUSHOFFSETCLOSUREM2_correct.
+  Definition correct_PUSHOFFSETCLOSURE := verify_PUSHOFFSETCLOSURE_correct.
+  Definition correct_PUSHTRAP := verify_PUSHTRAP_correct.
+  Definition correct_PUSH_RETADDR := verify_PUSH_RETADDR_correct.
   Definition correct_PUSH := verify_PUSH_correct.
-  Lemma correct_RAISE_NOTRACE :
-    handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
-      no_pre
-      (fun msg _ => msg = "unhandled exception"%string \/ msg = "RAISE: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_RAISE :
-    handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RAISE
-      no_pre
-      (fun msg _ => msg = "unhandled exception"%string \/ msg = "RAISE: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_RAISE_NOTRACE := verify_RAISE_NOTRACE_correct.
+  Definition correct_RAISE := verify_RAISE_correct.
   Definition correct_REPERFORMTERM := verify_REPERFORMTERM_correct.
-  Lemma correct_RERAISE :
-    handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RERAISE
-      no_pre
-      (fun msg _ => msg = "unhandled exception"%string \/ msg = "RAISE: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_RESTART :
-    handler_correct handle_RESTART f_instr_RESTART
-      no_pre
-      (fun msg s => (msg = "RESTART: env is not a block"%string /\ match Machine.env s with | Val_int _ | Val_ptr _ => True | _ => False end) \/ (msg = "RESTART: dangling pointer"%string /\ exists addr ofs, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = None) \/ (msg = "RESTART: env is not a closure"%string /\ ((exists addr ofs t fs, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = Some (t, fs) /\ Nat.eqb t Closure_tag = false) \/ (exists t fs, Machine.env s = Val_block t fs /\ Nat.eqb t Closure_tag = false))) \/ (msg = "RESTART: malformed closure"%string /\ ((exists addr ofs t all_fields, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = Some (t, all_fields) /\ Nat.eqb t Closure_tag = true /\ nth_error (skipn ofs all_fields) 2 = None) \/ (exists t fs, Machine.env s = Val_block t fs /\ Nat.eqb t Closure_tag = true /\ nth_error fs 2 = None)))) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_RERAISE := verify_RERAISE_correct.
+  Definition correct_RESTART := verify_RESTART_correct.
   Definition correct_RESUMETERM := verify_RESUMETERM_correct.
   Definition correct_RESUME := verify_RESUME_correct.
-  Lemma correct_RETURN :
-    forall stacksize,
-    handler_correct (fun _ => handle_RETURN stacksize) f_instr_RETURN
-      no_pre
-      (fun msg _ => msg = "RETURN: accu is not a closure"%string \/ msg = "RETURN: malformed return frame"%string) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETBYTESCHAR :
-    handler_correct handle_SETBYTESCHAR f_instr_SETBYTESCHAR
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | Val_int idx :: Val_int newchar :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields (Z.to_nat idx) (Val_int newchar) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETFIELD0 :
-    handler_correct (handle_SETFIELD 0) f_instr_SETFIELD0
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 0 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETFIELD1 :
-    handler_correct (handle_SETFIELD 1) f_instr_SETFIELD1
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 1 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETFIELD2 :
-    handler_correct (handle_SETFIELD 2) f_instr_SETFIELD2
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 2 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETFIELD3 :
-    handler_correct (handle_SETFIELD 3) f_instr_SETFIELD3
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 3 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETFIELD :
-    forall n,
-    handler_correct (handle_SETFIELD n) f_instr_SETFIELD
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | newval :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields n newval = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETFLOATFIELD :
-    forall n,
-    handler_correct (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields n (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETGLOBAL :
-    forall n,
-    handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
-  Lemma correct_SETVECTITEM :
-    handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
-      no_pre
-      (fun _ s => match s.(Machine.stack) with | Val_int idx :: newval :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields (Z.to_nat idx) newval = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_RETURN := verify_RETURN_correct.
+  Definition correct_SETBYTESCHAR := verify_SETBYTESCHAR_correct.
+  Definition correct_SETFIELD0 := verify_SETFIELD0_correct.
+  Definition correct_SETFIELD1 := verify_SETFIELD1_correct.
+  Definition correct_SETFIELD2 := verify_SETFIELD2_correct.
+  Definition correct_SETFIELD3 := verify_SETFIELD3_correct.
+  Definition correct_SETFIELD := verify_SETFIELD_correct.
+  Definition correct_SETFLOATFIELD := verify_SETFLOATFIELD_correct.
+  Definition correct_SETGLOBAL := verify_SETGLOBAL_correct.
+  Definition correct_SETVECTITEM := verify_SETVECTITEM_correct.
   Definition correct_STOP := verify_STOP_correct.
   Definition correct_SUBINT := verify_SUBINT_correct.
-  Lemma correct_SWITCH :
-    forall (_nc _nb : nat) (const_targets block_targets : list Z),
-    handler_correct (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s) f_instr_SWITCH
-      no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_SWITCH := verify_SWITCH_handler_correct.
   Definition correct_UGEINT := verify_UGEINT_handler_correct.
   Definition correct_ULTINT := verify_ULTINT_handler_correct.
-  Lemma correct_VECTLENGTH :
-    handler_correct handle_VECTLENGTH f_instr_VECTLENGTH
-      no_pre
-      (fun _ s => size_or_heap s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Admitted.
+  Definition correct_VECTLENGTH := verify_VECTLENGTH_correct.
   Definition correct_XORINT := verify_XORINT_correct.
 End InstructVerification.

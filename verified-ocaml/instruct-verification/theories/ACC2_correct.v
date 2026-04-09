@@ -86,6 +86,8 @@ Proof.
     set (sb := ar_sptr_block ard) in *.
     set (so := ar_sptr_ofs ard) in *.
     set (hm := ar_heap_map ard) in *.
+    set (cb := ar_code_base_block ard) in *.
+    set (co := ar_code_base_ofs ard) in *.
     destruct Hpre as (Hle_s &
       [pc_ptr [Hpc_load Hpc_rel]] &
       [accu_v [Haccu_load Haccu_repr]] &
@@ -166,7 +168,7 @@ Proof.
 
       (* === Sassign rvalue + sem_cast + store === *)
       rewrite PTree.gss; eval_cbn.                                   (* le2 ! _t'2 *)
-      rewrite (sem_cast_long_val_repr _ _ _ _ Hval_repr2); eval_cbn. (* sem_cast *)
+      rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hval_repr2); eval_cbn. (* sem_cast *)
       rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).      (* accu ptrofs *)
       rewrite Hstore; eval_cbn.                                      (* accu store *)
 
@@ -208,7 +210,7 @@ Proof.
 
       assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some cv2).
       { pose proof (load_after_store_same m m' sb (uso + 8) cv2 Hstore) as Htmp.
-        rewrite (val_repr_load_result hm v2 cv2 Hval_repr2) in Htmp.
+        rewrite (val_repr_load_result hm cb co v2 cv2 Hval_repr2) in Htmp.
         exact Htmp. }
 
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -235,7 +237,7 @@ Proof.
         - exact Hsp_load'.
         - reflexivity.
         - simpl. rewrite Hstk.
-          apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) cv2
+          apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) cv2
                    Hstack_repr Hstore).
                     intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
         - exact Hsp_ne_sb.
@@ -259,7 +261,7 @@ Proof.
         - exact Hgd_load'.
         - simpl. exact Hgd_eq.
         - simpl.
-          apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) cv2
+          apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) cv2
                    Hglobal_repr Hstore).
                     intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
         - exact Hgb_ne_sb. }

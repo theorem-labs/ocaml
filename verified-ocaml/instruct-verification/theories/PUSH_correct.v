@@ -42,6 +42,8 @@ Proof.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
+  set (cb := ar_code_base_block ard) in *.
+  set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s &
     [pc_ptr [Hpc_load Hpc_rel]] &
     [accu_v [Haccu_load Haccu_repr]] &
@@ -137,7 +139,7 @@ Proof.
     rewrite PTree.gso by (compute; congruence).
     rewrite PTree.gss; eval_cbn.
     rewrite PTree.gss; eval_cbn.
-    rewrite (sem_cast_long_val_repr _ _ _ _ Haccu_repr); eval_cbn.
+    rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Haccu_repr); eval_cbn.
     fold new_sp_ofs.
     rewrite Hstore_accu; eval_cbn.
 
@@ -242,13 +244,13 @@ Proof.
       - reflexivity.
       - simpl.
         (* First establish stack_repr in m1 (after sp store, before accu store) *)
-        assert (Hstack_m1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-        { apply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb
+        assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+        { apply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb
                    (uso + 16) (Vptr sp_b new_sp_ofs)
                    Hstack_repr Hstore_sp).
           intro Heq; exact (Hsp_ne_sb (eq_sym Heq)). }
         (* Now apply stack_repr_cons_after_store *)
-        exact (stack_repr_cons_after_store hm m1 m2
+        exact (stack_repr_cons_after_store hm cb co m1 m2
                  (Machine.stack s) sp_b sp_ofs (Machine.accu s) accu_v
                                   Hstack_m1 Haccu_repr Hstore_accu Hsp_ge8 Hsp_rep).
       - exact Hsp_ne_sb.
@@ -287,10 +289,10 @@ Proof.
       - simpl.
         (* global_repr must survive both stores. Store 1 is on sb, store 2 on sp_b.
            gb is different from both. *)
-        apply (global_repr_store_other_block hm m1 m2 _
+        apply (global_repr_store_other_block hm cb co m1 m2 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sp_b (Ptrofs.unsigned new_sp_ofs) accu_v).
-        + apply (global_repr_store_other_block hm m m1 _
+        + apply (global_repr_store_other_block hm cb co m m1 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 16) (Vptr sp_b new_sp_ofs)
                    Hglobal_repr Hstore_sp).

@@ -457,15 +457,16 @@ Proof.
     { exists tagged_v. split.
       - exact Haccu_load2.
       - simpl. subst tagged_v tagged_n.
-        exact (vr_int _ n). }
+        exact (vr_int _ _ _ n). }
 
     (* 4. sp field -- unchanged *)
     { exists (Vptr sp_b sp_ofs), sp_b, sp_ofs. split; [| split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]]].
       - exact Hsp_load2.
       - reflexivity.
       - simpl.
-        eapply (stack_repr_store_other_block hm m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
-        + eapply (stack_repr_store_other_block hm m m1 _ sp_b sp_ofs sb (uso + 8) tagged_v).
+        eapply stack_repr_co_shift.
+        eapply (stack_repr_store_other_block hm cb co m1 m2 _ sp_b sp_ofs sb (uso + 0) new_pc_v).
+        + eapply (stack_repr_store_other_block hm cb co m m1 _ sp_b sp_ofs sb (uso + 8) tagged_v).
           * exact Hstack_repr.
           * exact Hstore1.
           * intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
@@ -476,13 +477,13 @@ Proof.
       - exact Hcb_ne_sp.
         - exact Hsp_ge8.
         - exact Hsp_rep.
-        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. exact Hofs'. 
+        - intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsp_writable. exact Hofs'.
         - exact Hsp_align. }
 
     (* 5. env field -- unchanged *)
     { exists env_v. split.
       - exact Henv_load2.
-      - simpl. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. exact Henv_repr. }
 
     (* 6. extra_args field -- unchanged *)
     { simpl. exact Hextra_load2. }
@@ -492,10 +493,11 @@ Proof.
       - exact Hgd_load2.
       - simpl. exact Hgd_eq.
       - simpl.
-        eapply (global_repr_store_other_block hm m1 m2 _
+        eapply global_repr_co_shift.
+        eapply (global_repr_store_other_block hm cb co m1 m2 _
                  (ar_global_block ard) (ar_global_ofs ard)
                  sb (uso + 0) new_pc_v).
-        + eapply (global_repr_store_other_block hm m m1 _
+        + eapply (global_repr_store_other_block hm cb co m m1 _
                    (ar_global_block ard) (ar_global_ofs ard)
                    sb (uso + 8) tagged_v).
           * exact Hglobal_repr.

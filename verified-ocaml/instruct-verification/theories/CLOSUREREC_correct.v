@@ -988,7 +988,7 @@ Proof.
   set (addr := next_addr s).
   set (hm' := fun n => if Nat.eqb n addr then Some (new_b, new_ofs) else hm n).
 
-  assert (Hval_repr_ext : forall v cv, val_repr hm v cv -> val_repr hm' v cv).
+  assert (Hval_repr_ext : forall v cv, val_repr hm cb co v cv -> val_repr hm' cb co v cv).
   { intros v cv Hvr.
     inversion Hvr; subst.
     - constructor.
@@ -1003,9 +1003,10 @@ Proof.
           exfalso. unfold addr in H. rewrite Hhm_fresh in H. discriminate.
         * exact H.
       + reflexivity.
+    - constructor.
     - constructor. }
 
-  assert (Hval_repr_new : val_repr hm' (Val_closure addr 0) block_v).
+  assert (Hval_repr_new : val_repr hm' cb co (Val_closure addr 0) block_v).
   { unfold block_v. change (Z.of_nat 0 * 8)%Z with 0%Z.
     rewrite <- (Ptrofs.add_zero new_ofs) at 1.
     apply vr_closure with (b := new_b) (ofs := new_ofs).
@@ -1013,14 +1014,14 @@ Proof.
     - reflexivity. }
 
   assert (Hstack_repr_ext : forall stk m0 sp_b0 sp_ofs0,
-    stack_repr hm m0 stk sp_b0 sp_ofs0 -> stack_repr hm' m0 stk sp_b0 sp_ofs0).
+    stack_repr hm cb co m0 stk sp_b0 sp_ofs0 -> stack_repr hm' cb co m0 stk sp_b0 sp_ofs0).
   { intros stk0 m0 sp_b0 sp_ofs0 Hsr.
     induction Hsr.
     - constructor.
     - econstructor; eauto. }
 
   assert (Hglobal_repr_ext : forall gs m0 gb0 gofs0,
-    global_repr hm m0 gs gb0 gofs0 -> global_repr hm' m0 gs gb0 gofs0).
+    global_repr hm cb co m0 gs gb0 gofs0 -> global_repr hm' cb co m0 gs gb0 gofs0).
   { intros gs0 m0 gb0 gofs0 Hgr.
     induction Hgr.
     - constructor.
@@ -1939,13 +1940,13 @@ Proof.
       - left. exact Hsp_ne_sb. }
 
     (* Old stack preserved in m_final *)
-    assert (Hstack_final : stack_repr hm m_final (Machine.stack s) sp_b sp_ofs).
+    assert (Hstack_final : stack_repr hm cb co m_final (Machine.stack s) sp_b sp_ofs).
     { (* Thread stack through all stores *)
-      assert (Hs1 : stack_repr hm m1 (Machine.stack s) sp_b sp_ofs).
-      { eapply stack_repr_store_other_block; eauto. }
-      assert (Hs2 : stack_repr hm m2 (Machine.stack s) sp_b sp_ofs).
-      { eapply stack_repr_store_other_block; eauto. }
-      assert (Hs_alloc : stack_repr hm m_alloc (Machine.stack s) sp_b sp_ofs).
+      assert (Hs1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
+      assert (Hs2 : stack_repr hm cb co m2 (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
+      assert (Hs_alloc : stack_repr hm cb co m_alloc (Machine.stack s) sp_b sp_ofs).
       { clear -Hs2 Halloc_load_pres Hsp_ne_new.
         induction Hs2 as [| v vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -1953,20 +1954,20 @@ Proof.
           + apply Halloc_load_pres. exact Hld. exact Hsp_ne_new.
           + exact Hvr.
           + apply IH. exact Hsp_ne_new. }
-      assert (Hs_spadj : stack_repr hm m_sp_adj (Machine.stack s) sp_b sp_ofs).
-      { eapply stack_repr_store_other_block; eauto. }
-      assert (Hs_spdec : stack_repr hm m_sp_dec (Machine.stack s) sp_b sp_ofs).
-      { eapply stack_repr_store_other_block; eauto. }
+      assert (Hs_spadj : stack_repr hm cb co m_sp_adj (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
+      assert (Hs_spdec : stack_repr hm cb co m_sp_dec (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
       (* m_sp_dec -> m_push: store at sp_b[sp_push_ofs] which is BELOW sp_ofs *)
-      assert (Hs_push : stack_repr hm m_push (Machine.stack s) sp_b sp_ofs).
+      assert (Hs_push : stack_repr hm cb co m_push (Machine.stack s) sp_b sp_ofs).
       { eapply stack_repr_store_same_block_lower.
         - exact Hs_spdec.
         - exact Hstore_push.
         - rewrite Hsp_push_unsigned. lia.
         - exact Hsp_rep. }
-      assert (Hs_accu : stack_repr hm m_accu (Machine.stack s) sp_b sp_ofs).
-      { eapply stack_repr_store_other_block; eauto. }
-      assert (Hs_f0 : stack_repr hm m_f0 (Machine.stack s) sp_b sp_ofs).
+      assert (Hs_accu : stack_repr hm cb co m_accu (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
+      assert (Hs_f0 : stack_repr hm cb co m_f0 (Machine.stack s) sp_b sp_ofs).
       { clear -Hs_accu Hstore_f0' Hsp_ne_new.
         induction Hs_accu as [| v vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -1977,7 +1978,7 @@ Proof.
             * left. exact Hsp_ne_new.
           + exact Hvr.
           + apply IH. exact Hsp_ne_new. }
-      assert (Hs_f1 : stack_repr hm m_f1 (Machine.stack s) sp_b sp_ofs).
+      assert (Hs_f1 : stack_repr hm cb co m_f1 (Machine.stack s) sp_b sp_ofs).
       { clear -Hs_f0 Hstore_f1' Hsp_ne_new.
         induction Hs_f0 as [| v vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -1988,7 +1989,7 @@ Proof.
             * left. exact Hsp_ne_new.
           + exact Hvr.
           + apply IH. exact Hsp_ne_new. }
-      eapply stack_repr_store_other_block; eauto. }
+      eapply (stack_repr_store_other_block hm cb co); eauto. }
 
     (* New stack: Val_closure addr 0 :: stack s at sp_push_ofs *)
     assert (Hsp_push_ofs_step : Ptrofs.add sp_push_ofs (Ptrofs.repr 8) = sp_ofs).
@@ -1999,7 +2000,7 @@ Proof.
       rewrite Ptrofs.add_neg_zero.
       rewrite Ptrofs.add_zero. reflexivity. }
 
-    assert (Hnew_stack_repr : stack_repr hm' m_final
+    assert (Hnew_stack_repr : stack_repr hm' cb co m_final
       (Val_closure addr 0 :: Machine.stack s) sp_b sp_push_ofs).
     { econstructor.
       - exact Hblock_load_final.
@@ -2008,13 +2009,13 @@ Proof.
         apply Hstack_repr_ext. exact Hstack_final. }
 
     (* Global repr in m_final *)
-    assert (Hglobal_final : global_repr hm m_final (Machine.global s) gb go0).
+    assert (Hglobal_final : global_repr hm cb co m_final (Machine.global s) gb go0).
     { (* Thread through all stores *)
-      assert (Hg1 : global_repr hm m1 (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto. }
-      assert (Hg2 : global_repr hm m2 (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto. }
-      assert (Hg_alloc : global_repr hm m_alloc (Machine.global s) gb go0).
+      assert (Hg1 : global_repr hm cb co m1 (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
+      assert (Hg2 : global_repr hm cb co m2 (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
+      assert (Hg_alloc : global_repr hm cb co m_alloc (Machine.global s) gb go0).
       { clear -Hg2 Halloc_load_pres Hgb_ne_new.
         induction Hg2 as [| v vs gb0 gofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -2022,11 +2023,11 @@ Proof.
           + apply Halloc_load_pres. exact Hld. exact Hgb_ne_new.
           + exact Hvr.
           + apply IH. exact Hgb_ne_new. }
-      assert (Hg_spadj : global_repr hm m_sp_adj (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto. }
-      assert (Hg_spdec : global_repr hm m_sp_dec (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto. }
-      assert (Hg_push : global_repr hm m_push (Machine.global s) gb go0).
+      assert (Hg_spadj : global_repr hm cb co m_sp_adj (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
+      assert (Hg_spdec : global_repr hm cb co m_sp_dec (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
+      assert (Hg_push : global_repr hm cb co m_push (Machine.global s) gb go0).
       { assert (Hne_sp_gb: gb <> sp_b).
         { intro Heq. apply Hsp_ne_gb. symmetry. exact Heq. }
         clear -Hg_spdec Hstore_push Hne_sp_gb.
@@ -2039,9 +2040,9 @@ Proof.
             * left. exact Hne_sp_gb.
           + exact Hvr.
           + apply IH. exact Hne_sp_gb. }
-      assert (Hg_accu : global_repr hm m_accu (Machine.global s) gb go0).
-      { eapply global_repr_store_other_block; eauto. }
-      assert (Hg_f0 : global_repr hm m_f0 (Machine.global s) gb go0).
+      assert (Hg_accu : global_repr hm cb co m_accu (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
+      assert (Hg_f0 : global_repr hm cb co m_f0 (Machine.global s) gb go0).
       { clear -Hg_accu Hstore_f0' Hgb_ne_new.
         induction Hg_accu as [| v vs gb0 gofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -2052,7 +2053,7 @@ Proof.
             * left. exact Hgb_ne_new.
           + exact Hvr.
           + apply IH. exact Hgb_ne_new. }
-      assert (Hg_f1 : global_repr hm m_f1 (Machine.global s) gb go0).
+      assert (Hg_f1 : global_repr hm cb co m_f1 (Machine.global s) gb go0).
       { clear -Hg_f0 Hstore_f1' Hgb_ne_new.
         induction Hg_f0 as [| v vs gb0 gofs0 cv Hld Hvr Htl IH].
         - constructor.
@@ -2063,7 +2064,7 @@ Proof.
             * left. exact Hgb_ne_new.
           + exact Hvr.
           + apply IH. exact Hgb_ne_new. }
-      eapply global_repr_store_other_block; eauto. }
+      eapply (global_repr_store_other_block hm cb co); eauto. }
 
     (* Now build abs_rel *)
     split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -2101,14 +2102,14 @@ Proof.
     (* 3. accu field -- Val_closure addr 0 *)
     { exists block_v. split.
       - exact Haccu_load_final.
-      - simpl. exact Hval_repr_new. }
+      - simpl. eapply val_repr_co_shift. exact Hval_repr_new. }
 
     (* 4. sp field -- sp_push_ofs, new stack *)
     { exists (Vptr sp_b sp_push_ofs), sp_b, sp_push_ofs.
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
       - exact Hsp_load_final.
       - reflexivity.
-      - simpl. exact Hnew_stack_repr.
+      - simpl. eapply stack_repr_co_shift. exact Hnew_stack_repr.
       - exact Hsp_ne_sb.
       - exact Hsp_ne_gb.
       - exact Hcb_ne_sp.
@@ -2137,7 +2138,7 @@ Proof.
     (* 5. env field -- unchanged *)
     { exists env_v. split.
       - exact Henv_load_final.
-      - simpl. apply Hval_repr_ext. exact Henv_repr. }
+      - simpl. eapply val_repr_co_shift. apply Hval_repr_ext. exact Henv_repr. }
 
     (* 6. extra_args field -- unchanged *)
     { simpl. exact Hextra_load_final. }
@@ -2146,7 +2147,7 @@ Proof.
     { exists (Vptr gb go0). split; [| split; [| split]].
       - exact Hgd_load_final.
       - simpl. reflexivity.
-      - simpl. apply Hglobal_repr_ext. exact Hglobal_final.
+      - simpl. eapply global_repr_co_shift. apply Hglobal_repr_ext. exact Hglobal_final.
       - exact Hgb_ne_sb. }
 
     (* 8. trap_sp field -- unchanged *)

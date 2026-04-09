@@ -76,6 +76,8 @@ Proof.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
+      set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -139,7 +141,7 @@ Proof.
         (* === Sassign rvalue + sem_cast + store === *)
         rewrite PTree.gss; eval_cbn.                                   (* le1 ! _t'1 *)
         rewrite Henv_eq in Henv_repr.
-        rewrite (sem_cast_long_val_repr _ _ _ _ Henv_repr); eval_cbn.  (* sem_cast *)
+        rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Henv_repr); eval_cbn.  (* sem_cast *)
         rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).      (* accu ptrofs *)
         rewrite Hstore; eval_cbn.                                      (* accu store *)
 
@@ -184,7 +186,7 @@ Proof.
 
         assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some env_v).
         { pose proof (load_after_store_same m m' sb (uso + 8) env_v Hstore) as Htmp.
-          rewrite (val_repr_load_result hm _ env_v Henv_repr) in Htmp.
+          rewrite (val_repr_load_result hm cb co _ env_v Henv_repr) in Htmp.
           exact Htmp. }
 
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -210,7 +212,7 @@ Proof.
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) env_v
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) env_v
                      Hstack_repr Hstore).
                       intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           - exact Hsp_ne_sb.
@@ -234,7 +236,7 @@ Proof.
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
-            apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) env_v
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) env_v
                      Hglobal_repr Hstore).
                       intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           - exact Hgb_ne_sb. }
@@ -264,6 +266,8 @@ Proof.
       set (sb := ar_sptr_block ard) in *.
       set (so := ar_sptr_ofs ard) in *.
       set (hm := ar_heap_map ard) in *.
+      set (cb := ar_code_base_block ard) in *.
+      set (co := ar_code_base_ofs ard) in *.
       destruct Hpre as (Hle_s &
         [pc_ptr [Hpc_load Hpc_rel]] &
         [accu_v [Haccu_load Haccu_repr]] &
@@ -327,7 +331,7 @@ Proof.
 
         (* === Sassign rvalue + sem_cast + store === *)
         rewrite PTree.gss; eval_cbn.                                   (* le1 ! _t'1 *)
-        rewrite (sem_cast_long_val_repr _ _ _ _ Henv_repr); eval_cbn.  (* sem_cast *)
+        rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Henv_repr); eval_cbn.  (* sem_cast *)
         rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).      (* accu ptrofs *)
         rewrite Hstore; eval_cbn.                                      (* accu store *)
 
@@ -369,7 +373,7 @@ Proof.
 
         assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some env_v).
         { pose proof (load_after_store_same m m' sb (uso + 8) env_v Hstore) as Htmp.
-          rewrite (val_repr_load_result hm _ env_v Henv_repr) in Htmp.
+          rewrite (val_repr_load_result hm cb co _ env_v Henv_repr) in Htmp.
           exact Htmp. }
 
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
@@ -395,7 +399,7 @@ Proof.
           - exact Hsp_load'.
           - reflexivity.
           - simpl.
-            apply (stack_repr_store_other_block hm m m' _ sp_b sp_ofs sb (uso + 8) env_v
+            apply (stack_repr_store_other_block hm cb co m m' _ sp_b sp_ofs sb (uso + 8) env_v
                      Hstack_repr Hstore).
                       intro Heq; exact (Hsp_ne_sb (eq_sym Heq)).
           - exact Hsp_ne_sb.
@@ -419,7 +423,7 @@ Proof.
           - exact Hgd_load'.
           - simpl. exact Hgd_eq.
           - simpl.
-            apply (global_repr_store_other_block hm m m' _ _ _ sb (uso + 8) env_v
+            apply (global_repr_store_other_block hm cb co m m' _ _ _ sb (uso + 8) env_v
                      Hglobal_repr Hstore).
                       intro Heq2; exact (Hgb_ne (eq_sym Heq2)).
           - exact Hgb_ne_sb. }

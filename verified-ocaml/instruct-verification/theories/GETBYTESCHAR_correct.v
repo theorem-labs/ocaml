@@ -36,7 +36,9 @@ Theorem verify_GETBYTESCHAR_correct :
              match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
              | Some (Val_int c) => 0 <= c <= 255
              | _ => True
-             end
+             end /\
+             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
+              exists z, cv = Vlong z)
          | _ => True
          end)
       (fun msg s =>
