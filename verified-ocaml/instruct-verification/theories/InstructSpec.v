@@ -1292,6 +1292,21 @@ Definition pushenvacc_env_field_loadable (n : nat)
           Mem.load Mint64 m sb (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
           b <> sp_b.
 
+(* Generic PUSHENVACC precondition: SP has room, code encodes n, n fits, env field loadable. *)
+Definition pushenvacc_generic_step_pre (n : nat)
+    (_ : Clight.env) (m : mem) (s : Machine.state)
+    (ard : abs_rel_data) : Prop :=
+  (exists sp_b sp_ofs,
+    Mem.load Mint64 m (ar_sptr_block ard)
+      (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) /\
+    Ptrofs.unsigned sp_ofs >= 16) /\
+  Mem.load Mint32 m (ar_code_base_block ard)
+    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat n))) /\
+  Z.of_nat n < Int.half_modulus /\
+  pushenvacc_env_field_loadable n m s ard.
+
 Definition heap_field_loadable_pushgetglobalfield
     (p : nat) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
@@ -1852,13 +1867,6 @@ Definition push_retaddr_step_pre (ret_addr : Z)
      Ptrofs.unsigned sp_ofs >= 32) /\
   (* extra_args fits for shl encoding *)
   Z.of_nat (Machine.extra_args s) < Int64.half_modulus.
-
-(* ================================================================== *)
-(* Named step_pre definitions for Module Type readability              *)
-(*                                                                      *)
-(* Each definition is definitionally equal to the corresponding        *)
-(* inline lambda, so no downstream files need changes.                 *)
-(* ================================================================== *)
 
 Definition apply_n_step_pre (n : nat)
     (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
@@ -3339,17 +3347,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_PUSHENVACC :
     forall n,
     handler_correct (handle_PUSHENVACC n) f_instr_PUSHENVACC
-      (fun _ m s ard =>
-         (exists sp_b sp_ofs,
-           Mem.load Mint64 m (ar_sptr_block ard)
-             (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16) /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Z.of_nat n < Int.half_modulus /\
-         pushenvacc_env_field_loadable n m s ard)
+      (pushenvacc_generic_step_pre n)
       (fun _ s => field_or_heap s s.(Machine.env) n = None)
       (fun _ => False) (fun _ _ _ => False).
 

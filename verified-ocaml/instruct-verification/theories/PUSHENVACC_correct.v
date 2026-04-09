@@ -168,46 +168,12 @@ Proof.
 Qed.
 
 (* ================================================================== *)
-(* Env field precondition (generalized, with block separation)         *)
-(* ================================================================== *)
-
-Definition pushenvacc_env_field_loadable (n : nat)
-    (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let hm := ar_heap_map ard in
-  let cb := ar_code_base_block ard in
-  let co := ar_code_base_ofs ard in
-  let sb := ar_sptr_block ard in
-  forall v,
-    field_or_heap s s.(Machine.env) n = Some v ->
-    forall env_v,
-      val_repr hm cb co s.(Machine.env) env_v ->
-      exists b ofs cv,
-        env_v = Vptr b ofs /\
-        b <> sb /\
-        Mem.load Mint64 m b
-          (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr (Z.of_nat n * 8)))) = Some cv /\
-        val_repr hm cb co v cv /\
-        forall sp_b sp_ofs,
-          Mem.load Mint64 m sb (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-          b <> sp_b.
-
-(* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
 Theorem verify_PUSHENVACC_correct : forall n,
     handler_correct (handle_PUSHENVACC n) f_instr_PUSHENVACC
-      (fun _ m s ard =>
-         (exists sp_b sp_ofs,
-           Mem.load Mint64 m (ar_sptr_block ard)
-             (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16) /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         Z.of_nat n < Int.half_modulus /\
-         pushenvacc_env_field_loadable n m s ard)
+      (pushenvacc_generic_step_pre n)
       (fun _ s => field_or_heap s s.(Machine.env) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -238,6 +204,7 @@ Proof.
     set (co := ar_code_base_ofs ard) in *.
     set (uso := Ptrofs.unsigned so) in *.
 
+    unfold pushenvacc_generic_step_pre in Hstep_pre.
     destruct Hstep_pre as [[sp_b' [sp_ofs' [Hsp_load' Hsp_ge16]]] [Hcode_load [Hn_bound Hefl]]].
     assert (sp_b' = sp_b /\ sp_ofs' = sp_ofs) as [-> ->]
       by (rewrite Hsp_load in Hsp_load'; injection Hsp_load'; auto).
