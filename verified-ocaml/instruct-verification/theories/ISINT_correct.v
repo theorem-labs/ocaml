@@ -261,7 +261,7 @@ Theorem verify_ISINT_correct :
         exists le' m' out,
           exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_ISINT) E0 le' m' out /\
           abs_rel e le' m' s'
-    | Error msg => True
+    | Error msg => False
     | Halt v => False
     | CCall_request _ _ _ => False
     end.
@@ -666,7 +666,7 @@ Qed.
 Theorem verify_ISINT_handler_correct :
     handler_correct handle_ISINT f_instr_ISINT
       accu_is_immediate
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
   pose proof (verify_ISINT_correct e le m s) as H.

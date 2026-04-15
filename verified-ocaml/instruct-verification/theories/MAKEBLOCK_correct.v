@@ -202,46 +202,7 @@ Local Lemma load_result_vptr_mb : forall b ofs,
   Val.load_result Mint64 (Vptr b ofs) = Vptr b ofs.
 Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
-(* ================================================================== *)
-(* The loop statement extracted from f_instr_MAKEBLOCK                *)
-(* ================================================================== *)
-
-Definition makeblock_loop_body : statement :=
-  (Ssequence
-    (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
-                   (Etempvar _wosize tulong) tint)
-      Sskip
-      Sbreak)
-    (Ssequence
-      (Ssequence
-        (Sset _t'4
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sassign
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong))
-          (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-            (Econst_int (Int.repr 1) tint) (tptr tlong))))
-      (Ssequence
-        (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
-        (Sassign
-          (Ederef
-            (Ebinop Oadd
-              (Ecast (Etempvar _block tlong) (tptr tlong))
-              (Etempvar _i tulong) (tptr tlong)) tlong)
-          (Etempvar _t'5 tlong))))).
-
-Definition makeblock_loop_incr : statement :=
-  (Sset _i
-    (Ebinop Oadd (Etempvar _i tulong)
-      (Econst_int (Int.repr 1) tint) tulong)).
-
-Definition makeblock_loop : statement :=
-  Sloop makeblock_loop_body makeblock_loop_incr.
+(* makeblock_loop_body, makeblock_loop_incr, makeblock_loop are now in instruct_handlers.v *)
 
 (* ================================================================== *)
 (* Main theorem                                                        *)

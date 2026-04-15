@@ -277,59 +277,315 @@ Qed.
 (* Precondition                                                        *)
 (* ================================================================== *)
 
-Definition getpubmet_pre
-    (tag : Z) (e : Clight.env) (m : mem)
-    (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let hm := ar_heap_map ard in
-  let sb := ar_sptr_block ard in
-  let so := ar_sptr_ofs ard in
-  let cb := ar_code_base_block ard in
-  let co := ar_code_base_ofs ard in
-  Mem.load Mint32 m cb
-    (Ptrofs.unsigned (Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-    = Some (Vint (Int.repr tag)) /\
-  Int.min_signed <= tag <= Int.max_signed /\
-  (exists sp_b sp_ofs,
-    Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-    Ptrofs.unsigned sp_ofs >= 16) /\
-  (forall method_fn,
-    handle_GETPUBMET tag (Machine.pc s) s =
-      Step (mk_state (Machine.pc s) method_fn
-              (s.(Machine.accu) :: s.(Machine.stack))
-              (Machine.env s) (Machine.extra_args s) (Machine.global s)
-              (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s)) ->
-    forall accu_cv,
-      val_repr hm cb co s.(Machine.accu) accu_cv ->
-      exists accu_b accu_ofs meths_b meths_ofs hi_v
-             final_li meth_cv,
-        accu_cv = Vptr accu_b accu_ofs /\
-        Mem.load Mint64 m accu_b (Ptrofs.unsigned accu_ofs) = Some (Vptr meths_b meths_ofs) /\
-        Mem.load Mint64 m meths_b (Ptrofs.unsigned meths_ofs) = Some (Vlong hi_v) /\
-        meths_b <> sb /\
-        (forall sp_b0 sp_ofs0,
-          Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b0 sp_ofs0) ->
-          meths_b <> sp_b0) /\
-        (forall le_pre m_loop,
-          le_pre ! _s = Some (Vptr sb so) ->
-          le_pre ! _meths = Some (Vptr meths_b meths_ofs) ->
-          le_pre ! _li = Some (Vint (Int.repr 3)) ->
-          le_pre ! _hi = Some (Vint (Int.repr (Int64.unsigned hi_v))) ->
-          Mem.load Mint64 m_loop sb (Ptrofs.unsigned so + 8) =
-            Some (Vlong (Int64.repr (tag * 2 + 1))) ->
-          (forall idx_ofs v, Mem.load Mint64 m meths_b idx_ofs = Some v ->
-            Mem.load Mint64 m_loop meths_b idx_ofs = Some v) ->
-          exists le_post,
-            exec e le_pre m_loop getpubmet_while
-              E0 le_post m_loop Out_normal /\
-            le_post ! _li = Some (Vint final_li) /\
-            le_post ! _meths = Some (Vptr meths_b meths_ofs) /\
-            le_post ! _s = Some (Vptr sb so)) /\
-        Mem.load Mint64 m meths_b
-          (Ptrofs.unsigned (Ptrofs.add meths_ofs
-            (Ptrofs.mul (Ptrofs.repr 8)
-              (ptrofs_of_int Signed (Int.sub final_li (Int.repr 1))))))
-          = Some meth_cv /\
-        val_repr hm cb co method_fn meth_cv).
+(* getpubmet_pre is imported from InstructSpec.v (purely logical, no exec_stmt). *)
+
+(* ================================================================== *)
+(* Binary search loop arithmetic helpers                               *)
+(* ================================================================== *)
+
+Local Lemma sem_add_int_int : forall a b m,
+  sem_binary_operation (genv_cenv clight_ge) Oadd
+    (Vint a) tint (Vint b) tint m = Some (Vint (Int.add a b)).
+Proof.
+  intros. unfold sem_binary_operation, sem_add.
+  change (classify_add tint tint) with add_default.
+  unfold sem_binarith. change (classify_binarith tint tint) with (bin_case_i Signed).
+  simpl. reflexivity.
+Qed.
+
+Local Lemma sem_or_int_int : forall a b m,
+  sem_binary_operation (genv_cenv clight_ge) Oor
+    (Vint a) tint (Vint b) tint m = Some (Vint (Int.or a b)).
+Proof.
+  intros. unfold sem_binary_operation, sem_or, sem_binarith.
+  change (classify_binarith tint tint) with (bin_case_i Signed).
+  simpl. reflexivity.
+Qed.
+
+Local Lemma sem_shr_int_1 : forall a m,
+  sem_binary_operation (genv_cenv clight_ge) Oshr
+    (Vint a) tint (Vint (Int.repr 1)) tint m
+    = Some (Vint (Int.shr a (Int.repr 1))).
+Proof.
+  intros. unfold sem_binary_operation, sem_shr, sem_shift.
+  change (classify_shift tint tint) with (shift_case_ii Signed).
+  simpl. change (Int.ltu (Int.repr 1) Int.iwordsize) with true.
+  simpl. reflexivity.
+Qed.
+
+Local Lemma sem_olt_int_int : forall a b m,
+  sem_binary_operation (genv_cenv clight_ge) Olt
+    (Vint a) tint (Vint b) tint m = Some (Val.of_bool (Int.lt a b)).
+Proof.
+  intros. unfold sem_binary_operation, sem_cmp, sem_binarith.
+  change (classify_cmp tint tint) with cmp_default.
+  change (classify_binarith tint tint) with (bin_case_i Signed).
+  simpl. reflexivity.
+Qed.
+
+Local Lemma sem_olt_long_cmpl : forall v1 v2 b m,
+  Val.cmpl Clt v1 v2 = Some (Val.of_bool b) ->
+  sem_binary_operation (genv_cenv clight_ge) Olt v1 tlong v2 tlong m
+    = Some (Val.of_bool b).
+Proof.
+  intros. destruct v1; try discriminate; destruct v2; try discriminate.
+  unfold sem_binary_operation, sem_cmp, sem_binarith.
+  change (classify_cmp tlong tlong) with cmp_default.
+  change (classify_binarith tlong tlong) with (bin_case_l Signed).
+  simpl. unfold Val.cmpl in H. exact H.
+Qed.
+
+Local Lemma sem_sub_int_int : forall a b m,
+  sem_binary_operation (genv_cenv clight_ge) Osub
+    (Vint a) tint (Vint b) tint m =
+    Some (Vint (Int.sub a b)).
+Proof.
+  intros. unfold sem_binary_operation, sem_sub.
+  change (classify_sub tint tint) with sub_default.
+  unfold sem_binarith.
+  change (classify_binarith tint tint) with (bin_case_i Signed).
+  simpl. reflexivity.
+Qed.
+
+Local Lemma bool_val_of_bool_int : forall b m,
+  bool_val (Val.of_bool b) tint m = Some b.
+Proof. destruct b; reflexivity. Qed.
+
+Local Ltac ptree_lookup :=
+  repeat (rewrite PTree.gss || rewrite PTree.gso by (compute; congruence));
+  try reflexivity; try eassumption; try assumption.
+
+(* ================================================================== *)
+(* Memory extension for method_search_trace                            *)
+(* ================================================================== *)
+
+Lemma method_search_trace_mem_ext :
+  forall m m' accu_v meths_b meths_ofs li hi final,
+  (forall ofs v, Mem.load Mint64 m meths_b ofs = Some v ->
+                 Mem.load Mint64 m' meths_b ofs = Some v) ->
+  method_search_trace m accu_v meths_b meths_ofs li hi final ->
+  method_search_trace m' accu_v meths_b meths_ofs li hi final.
+Proof.
+  intros m m' accu_v meths_b meths_ofs li hi final Hext Htrace.
+  induction Htrace as [
+    li0 hi0 Hlt_false
+  | li0 hi0 tag_v final0 ? Hlt_true Htag_load Hcmp Htrace' IH
+  | li0 hi0 tag_v final0 ? Hlt_true Htag_load Hcmp Htrace' IH
+  ].
+  - apply mst_done. exact Hlt_false.
+  - eapply mst_lt; eauto.
+  - eapply mst_ge; eauto.
+Qed.
+
+(* ================================================================== *)
+(* Binary search loop correctness                                      *)
+(*                                                                      *)
+(* Proves by induction on the method_search_trace derivation that the  *)
+(* binary search while loop executes correctly, with memory unchanged.  *)
+(* ================================================================== *)
+
+Lemma getpubmet_while_exec :
+  forall e le m meths_b meths_ofs sb so accu_v li_init hi_init final_li,
+    method_search_trace m accu_v meths_b meths_ofs li_init hi_init final_li ->
+    le ! _li = Some (Vint li_init) ->
+    le ! _hi = Some (Vint hi_init) ->
+    le ! _meths = Some (Vptr meths_b meths_ofs) ->
+    le ! _s = Some (Vptr sb so) ->
+    Mem.load Mint64 m sb (Ptrofs.unsigned so + 8) = Some accu_v ->
+    Ptrofs.unsigned so + 8 < Ptrofs.modulus ->
+    exists le_post,
+      exec e le m getpubmet_while E0 le_post m Out_normal /\
+      le_post ! _li = Some (Vint final_li) /\
+      le_post ! _meths = Some (Vptr meths_b meths_ofs) /\
+      le_post ! _s = Some (Vptr sb so).
+Proof.
+  intros e le m meths_b meths_ofs sb so accu_v li_init hi_init final_li
+    Htrace Hle_li Hle_hi Hle_meths Hle_s Haccu_load Hso8.
+  destruct interp_state_co as [co_is [Hco [Hsp_offset Haccu_offset]]].
+  revert le Hle_li Hle_hi Hle_meths Hle_s.
+  induction Htrace as [
+    li hi Hlt_false
+  | li hi tag_v final mi_val Hlt_true Htag_load Hcmp Htrace' IH
+  | li hi tag_v final mi_val Hlt_true Htag_load Hcmp Htrace' IH
+  ]; intros le Hle_li Hle_hi Hle_meths Hle_s.
+
+  - (* mst_done: loop exits (li >= hi) *)
+    exists le. split; [| split; [| split]];
+      [| exact Hle_li | exact Hle_meths | exact Hle_s].
+    unfold getpubmet_while, Swhile.
+    eapply exec_Sloop_stop1.
+    + eapply exec_Sseq_2.
+      * eapply exec_Sifthenelse with (b := false).
+        { eapply eval_Ebinop.
+          - eapply eval_Etempvar. exact Hle_li.
+          - eapply eval_Etempvar. exact Hle_hi.
+          - rewrite sem_olt_int_int. rewrite Hlt_false. reflexivity. }
+        { apply bool_val_of_bool_int. }
+        { apply exec_Sbreak. }
+      * discriminate.
+    + constructor.
+
+  - (* mst_lt: compare < 0, set hi := mi - 2, recurse *)
+    rename mi_val into mi.
+    set (le_body :=
+      PTree.set _hi (Vint (Int.sub mi (Int.repr 2)))
+        (PTree.set _t'5 tag_v
+          (PTree.set _t'4 accu_v
+            (PTree.set _mi (Vint mi) le)))).
+    destruct (IH le_body) as [le_post [Hloop [Hpost_li [Hpost_meths Hpost_s]]]].
+    { subst le_body. ptree_lookup. }
+    { subst le_body. rewrite PTree.gss. reflexivity. }
+    { subst le_body. ptree_lookup. }
+    { subst le_body. ptree_lookup. }
+    exists le_post.
+    split; [| exact (conj Hpost_li (conj Hpost_meths Hpost_s))].
+    unfold getpubmet_while, Swhile.
+    replace E0 with (E0 ** E0 ** E0) by reflexivity.
+    eapply exec_Sloop_loop.
+    + (* s1: condition true + body *)
+      replace E0 with (E0 ** E0) by reflexivity.
+      eapply exec_Sseq_1.
+      * eapply exec_Sifthenelse with (b := true).
+        { eapply eval_Ebinop.
+          - eapply eval_Etempvar. exact Hle_li.
+          - eapply eval_Etempvar. exact Hle_hi.
+          - rewrite sem_olt_int_int. rewrite Hlt_true. reflexivity. }
+        { apply bool_val_of_bool_int. }
+        { apply exec_Sskip. }
+      * (* body: mi; t'4; t'5; if *)
+        replace E0 with (E0 ** E0) by reflexivity.
+        eapply exec_Sseq_1.
+        { apply exec_Sset.
+          eapply eval_Ebinop.
+          - eapply eval_Ebinop.
+            + eapply eval_Ebinop.
+              * eapply eval_Etempvar. exact Hle_li.
+              * eapply eval_Etempvar. exact Hle_hi.
+              * apply sem_add_int_int.
+            + eapply eval_Econst_int.
+            + apply sem_shr_int_1.
+          - eapply eval_Econst_int.
+          - apply sem_or_int_int. }
+        { replace E0 with (E0 ** E0) by reflexivity.
+          eapply exec_Sseq_1.
+          { apply exec_Sset.
+            eapply eval_Elvalue.
+            - eapply eval_Efield_struct.
+              + eapply eval_Elvalue.
+                * eapply eval_Ederef. eapply eval_Etempvar. ptree_lookup.
+                * apply deref_loc_copy. reflexivity.
+              + reflexivity.
+              + exact Hco.
+              + exact Haccu_offset.
+            - apply deref_loc_value with (chunk := Mint64).
+              + reflexivity.
+              + simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+                exact Haccu_load. }
+          { replace E0 with (E0 ** E0) by reflexivity.
+            eapply exec_Sseq_1.
+            { apply exec_Sset.
+              eapply eval_Elvalue.
+              - eapply eval_Ederef. eapply eval_Ebinop.
+                + eapply eval_Ecast.
+                  * eapply eval_Etempvar. ptree_lookup.
+                  * apply sem_cast_long_to_ptr_vptr.
+                + eapply eval_Etempvar. ptree_lookup.
+                + apply sem_add_ptr_int_idx.
+              - apply deref_loc_value with (chunk := Mint64).
+                + reflexivity.
+                + simpl. exact Htag_load. }
+            { eapply exec_Sifthenelse with (b := true).
+              - eapply eval_Ebinop.
+                + eapply eval_Etempvar. ptree_lookup.
+                + eapply eval_Etempvar. rewrite PTree.gss. reflexivity.
+                + apply sem_olt_long_cmpl. exact Hcmp.
+              - apply bool_val_of_bool_int.
+              - apply exec_Sset. eapply eval_Ebinop.
+                + eapply eval_Etempvar. ptree_lookup.
+                + eapply eval_Econst_int.
+                + apply sem_sub_int_int. } } }
+    + constructor.
+    + apply exec_Sskip.
+    + exact Hloop.
+
+  - (* mst_ge: compare >= 0, set li := mi, recurse *)
+    rename mi_val into mi.
+    set (le_body :=
+      PTree.set _li (Vint mi)
+        (PTree.set _t'5 tag_v
+          (PTree.set _t'4 accu_v
+            (PTree.set _mi (Vint mi) le)))).
+    destruct (IH le_body) as [le_post [Hloop [Hpost_li [Hpost_meths Hpost_s]]]].
+    { subst le_body. rewrite PTree.gss. reflexivity. }
+    { subst le_body. ptree_lookup. }
+    { subst le_body. ptree_lookup. }
+    { subst le_body. ptree_lookup. }
+    exists le_post.
+    split; [| exact (conj Hpost_li (conj Hpost_meths Hpost_s))].
+    unfold getpubmet_while, Swhile.
+    replace E0 with (E0 ** E0 ** E0) by reflexivity.
+    eapply exec_Sloop_loop.
+    + replace E0 with (E0 ** E0) by reflexivity.
+      eapply exec_Sseq_1.
+      * eapply exec_Sifthenelse with (b := true).
+        { eapply eval_Ebinop.
+          - eapply eval_Etempvar. exact Hle_li.
+          - eapply eval_Etempvar. exact Hle_hi.
+          - rewrite sem_olt_int_int. rewrite Hlt_true. reflexivity. }
+        { apply bool_val_of_bool_int. }
+        { apply exec_Sskip. }
+      * replace E0 with (E0 ** E0) by reflexivity.
+        eapply exec_Sseq_1.
+        { apply exec_Sset.
+          eapply eval_Ebinop.
+          - eapply eval_Ebinop.
+            + eapply eval_Ebinop.
+              * eapply eval_Etempvar. exact Hle_li.
+              * eapply eval_Etempvar. exact Hle_hi.
+              * apply sem_add_int_int.
+            + eapply eval_Econst_int.
+            + apply sem_shr_int_1.
+          - eapply eval_Econst_int.
+          - apply sem_or_int_int. }
+        { replace E0 with (E0 ** E0) by reflexivity.
+          eapply exec_Sseq_1.
+          { apply exec_Sset.
+            eapply eval_Elvalue.
+            - eapply eval_Efield_struct.
+              + eapply eval_Elvalue.
+                * eapply eval_Ederef. eapply eval_Etempvar. ptree_lookup.
+                * apply deref_loc_copy. reflexivity.
+              + reflexivity.
+              + exact Hco.
+              + exact Haccu_offset.
+            - apply deref_loc_value with (chunk := Mint64).
+              + reflexivity.
+              + simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+                exact Haccu_load. }
+          { replace E0 with (E0 ** E0) by reflexivity.
+            eapply exec_Sseq_1.
+            { apply exec_Sset.
+              eapply eval_Elvalue.
+              - eapply eval_Ederef. eapply eval_Ebinop.
+                + eapply eval_Ecast.
+                  * eapply eval_Etempvar. ptree_lookup.
+                  * apply sem_cast_long_to_ptr_vptr.
+                + eapply eval_Etempvar. ptree_lookup.
+                + apply sem_add_ptr_int_idx.
+              - apply deref_loc_value with (chunk := Mint64).
+                + reflexivity.
+                + simpl. exact Htag_load. }
+            { eapply exec_Sifthenelse with (b := false).
+              - eapply eval_Ebinop.
+                + eapply eval_Etempvar. ptree_lookup.
+                + eapply eval_Etempvar. rewrite PTree.gss. reflexivity.
+                + apply sem_olt_long_cmpl. exact Hcmp.
+              - apply bool_val_of_bool_int.
+              - apply exec_Sset. eapply eval_Etempvar. ptree_lookup. } } }
+    + constructor.
+    + apply exec_Sskip.
+    + exact Hloop.
+Qed.
 
 (* ================================================================== *)
 (* Main theorem                                                        *)
@@ -337,8 +593,9 @@ Definition getpubmet_pre
 
 Theorem verify_GETPUBMET_correct : forall tag,
     handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
-      (fun e m s ard => getpubmet_pre tag e m s ard)
-      (fun msg s => True)
+      (getpubmet_pre tag)
+      (fun msg _ => msg = "GETPUBMET: no class table"%string \/
+        msg = "GETPUBMET: method not found"%string)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro tag.
@@ -358,7 +615,7 @@ Proof.
     end).
 
   destruct (field_or_heap s (Machine.accu s) 0) as [class_tbl|] eqn:Hclass.
-  2: { (* field_or_heap = None => Error *) trivial. }
+  2: { (* field_or_heap = None => Error *) left; reflexivity. }
 
   set (actual_fields :=
     match class_tbl with
@@ -449,7 +706,7 @@ Proof.
       as (accu_b & accu_ofs & meths_b & meths_ofs & hi_v &
           final_li & meth_cv &
           Haccu_is_ptr & Hobj_load & Hhi_load &
-          Hmeths_ne_sb & Hmeths_ne_sp_fn & Hloop_exec & Hmeth_load & Hmeth_repr).
+          Hmeths_ne_sb & Hmeths_ne_sp_fn & Hmeth_load & Hmeth_repr & Hmst).
     subst accu_v.
 
     (* meths_b <> sp_b *)
@@ -702,9 +959,23 @@ Proof.
     assert (Hsetup_hi : le_setup ! _hi = Some (Vint (Int.repr (Int64.unsigned hi_v)))).
     { subst le_setup. rewrite PTree.gss. reflexivity. }
 
-    (* Get loop execution from precondition *)
-    destruct (Hloop_exec le_setup m5 Hsetup_s Hsetup_meths Hsetup_li Hsetup_hi
-                Haccu_m5_tagged Hmeths_survive_m5)
+    assert (Hloop_exec_result :
+      exists le_post,
+        exec_stmt function_entry1 clight_ge e le_setup m5 getpubmet_while
+          E0 le_post m5 Out_normal /\
+        le_post ! _li = Some (Vint final_li) /\
+        le_post ! _meths = Some (Vptr meths_b meths_ofs) /\
+        le_post ! _s = Some (Vptr sb so)).
+    { apply (getpubmet_while_exec e le_setup m5 meths_b meths_ofs sb so
+              tagged_tag_v (Int.repr 3) (Int.repr (Int64.unsigned hi_v)) final_li).
+      - apply (method_search_trace_mem_ext m m5). exact Hmeths_survive_m5. exact Hmst.
+      - exact Hsetup_li.
+      - exact Hsetup_hi.
+      - exact Hsetup_meths.
+      - exact Hsetup_s.
+      - exact Haccu_m5_tagged.
+      - lia. }
+    destruct Hloop_exec_result
       as (le_post & Hloop & Hpost_li & Hpost_meths & Hpost_s).
 
     (* meths[final_li - 1] load in m5 *)
@@ -1351,9 +1622,16 @@ Proof.
   }
 
   (* ================================================================ *)
-  (* Error case *)
+  (* Error case from scan: msg = "method not found"                    *)
   (* ================================================================ *)
-  all: trivial.
+  2: { right.
+    clear - Hscan. subst scan.
+    set (rf := skipn 2 actual_fields) in Hscan. clearbody rf.
+    revert s0 Hscan. revert rf.
+    fix IHrf 1; intros [| ? [| ? ?]] m Hsc; simpl in Hsc;
+    [injection Hsc as <-; reflexivity
+    |injection Hsc as <-; reflexivity
+    |destruct (value_eqb _ (Val_int tag)); [discriminate|exact (IHrf _ _ Hsc)]]. }
 
   (* Halt and CCall_request: impossible from scan *)
   all: (exfalso;

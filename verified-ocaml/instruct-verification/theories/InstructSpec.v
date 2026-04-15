@@ -28,8 +28,6 @@ Definition clight_ge : Clight.genv :=
   {| genv_genv := Globalenvs.Genv.globalenv prog;
      genv_cenv := prog_comp_env prog |}.
 
-Local Notation exec := (exec_stmt function_entry1 clight_ge).
-
 (* The struct type for interp_state.  Using a named struct tag in the C
    source makes clightgen produce the stable identifier _interp_state. *)
 Definition t_interp_state := Tstruct _interp_state noattr.
@@ -1352,37 +1350,45 @@ Definition heap_field_loadable_pushgetglobalfield
         = Some cv /\
       val_repr hm cb co v cv.
 
-Definition getdynmet_while :=
-  Swhile
-    (Ebinop Olt (Etempvar _li tint) (Etempvar _hi tint) tint)
-    (Ssequence
-      (Sset _mi
-        (Ebinop Oor
-          (Ebinop Oshr
-            (Ebinop Oadd (Etempvar _li tint) (Etempvar _hi tint)
-              tint) (Econst_int (Int.repr 1) tint) tint)
-          (Econst_int (Int.repr 1) tint) tint))
-      (Ssequence
-        (Sset _t'2
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _accu tlong))
-        (Ssequence
-          (Sset _t'3
-            (Ederef
-              (Ebinop Oadd
-                (Ecast (Etempvar _meths tlong) (tptr tlong))
-                (Etempvar _mi tint) (tptr tlong)) tlong))
-          (Sifthenelse (Ebinop Olt (Etempvar _t'2 tlong)
-                         (Etempvar _t'3 tlong) tint)
-            (Sset _hi
-              (Ebinop Osub (Etempvar _mi tint)
-                (Econst_int (Int.repr 2) tint) tint))
-            (Sset _li (Etempvar _mi tint)))))).
+(* Binary search midpoint computation: mi = ((li + hi) >> 1) | 1 *)
+Definition search_midpoint (li hi : int) : int :=
+  Int.or (Int.shr (Int.add li hi) (Int.repr 1)) (Int.repr 1).
+
+(* Binary search trace for method table lookup.
+   Records the sequence of comparisons the C binary search loop performs.
+   - m: memory state (unchanged by the read-only loop)
+   - accu_v: the value being searched for (loaded from s->accu)
+   - meths_b, meths_ofs: method table location
+   - li, hi: current search bounds (int)
+   - final: the li value when the loop terminates *)
+Inductive method_search_trace (m : mem) (accu_v : val)
+    (meths_b : block) (meths_ofs : ptrofs) : int -> int -> int -> Prop :=
+| mst_done : forall li hi,
+    Int.lt li hi = false ->
+    method_search_trace m accu_v meths_b meths_ofs li hi li
+| mst_lt : forall li hi tag_v final,
+    let mi := search_midpoint li hi in
+    Int.lt li hi = true ->
+    Mem.load Mint64 m meths_b
+      (Ptrofs.unsigned (Ptrofs.add meths_ofs
+         (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed mi)))) = Some tag_v ->
+    Val.cmpl Clt accu_v tag_v = Some (Val.of_bool true) ->
+    method_search_trace m accu_v meths_b meths_ofs
+      li (Int.sub mi (Int.repr 2)) final ->
+    method_search_trace m accu_v meths_b meths_ofs li hi final
+| mst_ge : forall li hi tag_v final,
+    let mi := search_midpoint li hi in
+    Int.lt li hi = true ->
+    Mem.load Mint64 m meths_b
+      (Ptrofs.unsigned (Ptrofs.add meths_ofs
+         (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed mi)))) = Some tag_v ->
+    Val.cmpl Clt accu_v tag_v = Some (Val.of_bool false) ->
+    method_search_trace m accu_v meths_b meths_ofs
+      mi hi final ->
+    method_search_trace m accu_v meths_b meths_ofs li hi final.
 
 Definition getdynmet_pre
-    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let cb := ar_code_base_block ard in
   let co := ar_code_base_ofs ard in
@@ -1403,48 +1409,22 @@ Definition getdynmet_pre
         Mem.load Mint64 m obj_b (Ptrofs.unsigned obj_ofs) = Some meths_v /\
         meths_v = Vptr meths_b meths_ofs /\
         Mem.load Mint64 m meths_b (Ptrofs.unsigned meths_ofs) = Some (Vlong hi_v) /\
-        (forall le_pre,
-          le_pre ! _s = Some (Vptr sb so) ->
-          le_pre ! _meths = Some (Vptr meths_b meths_ofs) ->
-          le_pre ! _li = Some (Vint (Int.repr 3)) ->
-          le_pre ! _hi = Some (Vint (Int.repr (Int64.unsigned hi_v))) ->
-          exists le_post,
-            exec e le_pre m getdynmet_while
-              E0 le_post m Out_normal /\
-            le_post ! _li = Some (Vint final_li) /\
-            le_post ! _meths = Some (Vptr meths_b meths_ofs) /\
-            le_post ! _s = Some (Vptr sb so)) /\
         Mem.load Mint64 m meths_b
           (Ptrofs.unsigned (Ptrofs.add meths_ofs
             (Ptrofs.mul (Ptrofs.repr 8)
               (ptrofs_of_int Signed (Int.sub final_li (Int.repr 1))))))
           = Some meth_cv /\
-        val_repr hm cb co method_fn meth_cv.
+        val_repr hm cb co method_fn meth_cv /\
+        (forall accu_cv,
+           Mem.load Mint64 m sb (Ptrofs.unsigned so + 8) = Some accu_cv ->
+           method_search_trace m accu_cv meths_b meths_ofs
+             (Int.repr 3)
+             (Int.repr (Int64.unsigned hi_v))
+             final_li).
 
-Definition getpubmet_while :=
-  Swhile
-    (Ebinop Olt (Etempvar _li tint) (Etempvar _hi tint) tint)
-    (Ssequence
-      (Sset _mi
-        (Ebinop Oor
-          (Ebinop Oshr
-            (Ebinop Oadd (Etempvar _li tint) (Etempvar _hi tint) tint)
-            (Econst_int (Int.repr 1) tint) tint)
-          (Econst_int (Int.repr 1) tint) tint))
-      (Ssequence
-        (Sset _t'4
-          (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _accu tlong))
-        (Ssequence
-          (Sset _t'5
-            (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-              (Etempvar _mi tint) (tptr tlong)) tlong))
-          (Sifthenelse (Ebinop Olt (Etempvar _t'4 tlong) (Etempvar _t'5 tlong) tint)
-            (Sset _hi (Ebinop Osub (Etempvar _mi tint) (Econst_int (Int.repr 2) tint) tint))
-            (Sset _li (Etempvar _mi tint)))))).
 
 Definition getpubmet_pre
-    (tag : Z) (e : Clight.env) (m : mem)
+    (tag : Z) (_ : Clight.env) (m : mem)
     (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
   let sb := ar_sptr_block ard in
@@ -1475,146 +1455,20 @@ Definition getpubmet_pre
         (forall sp_b0 sp_ofs0,
           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b0 sp_ofs0) ->
           meths_b <> sp_b0) /\
-        (forall le_pre m_loop,
-          le_pre ! _s = Some (Vptr sb so) ->
-          le_pre ! _meths = Some (Vptr meths_b meths_ofs) ->
-          le_pre ! _li = Some (Vint (Int.repr 3)) ->
-          le_pre ! _hi = Some (Vint (Int.repr (Int64.unsigned hi_v))) ->
-          Mem.load Mint64 m_loop sb (Ptrofs.unsigned so + 8) =
-            Some (Vlong (Int64.repr (tag * 2 + 1))) ->
-          (forall idx_ofs v, Mem.load Mint64 m meths_b idx_ofs = Some v ->
-            Mem.load Mint64 m_loop meths_b idx_ofs = Some v) ->
-          exists le_post,
-            exec e le_pre m_loop getpubmet_while
-              E0 le_post m_loop Out_normal /\
-            le_post ! _li = Some (Vint final_li) /\
-            le_post ! _meths = Some (Vptr meths_b meths_ofs) /\
-            le_post ! _s = Some (Vptr sb so)) /\
         Mem.load Mint64 m meths_b
           (Ptrofs.unsigned (Ptrofs.add meths_ofs
             (Ptrofs.mul (Ptrofs.repr 8)
               (ptrofs_of_int Signed (Int.sub final_li (Int.repr 1))))))
           = Some meth_cv /\
-        val_repr hm cb co method_fn meth_cv).
+        val_repr hm cb co method_fn meth_cv /\
+        method_search_trace m (Vlong (Int64.repr (tag * 2 + 1)))
+          meths_b meths_ofs
+          (Int.repr 3)
+          (Int.repr (Int64.unsigned hi_v))
+          final_li).
 
-Definition makeblock_loop_body : statement :=
-  (Ssequence
-    (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
-                   (Etempvar _wosize tulong) tint)
-      Sskip
-      Sbreak)
-    (Ssequence
-      (Ssequence
-        (Sset _t'4
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sassign
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong))
-          (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-            (Econst_int (Int.repr 1) tint) (tptr tlong))))
-      (Ssequence
-        (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
-        (Sassign
-          (Ederef
-            (Ebinop Oadd
-              (Ecast (Etempvar _block tlong) (tptr tlong))
-              (Etempvar _i tulong) (tptr tlong)) tlong)
-          (Etempvar _t'5 tlong))))).
 
-Definition makeblock_loop_incr : statement :=
-  (Sset _i
-    (Ebinop Oadd (Etempvar _i tulong)
-      (Econst_int (Int.repr 1) tint) tulong)).
 
-Definition makeblock_loop : statement :=
-  Sloop makeblock_loop_body makeblock_loop_incr.
-
-Definition makefloatblock_loop_body : statement :=
-  (Ssequence
-    (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
-                   (Etempvar _size tulong) tint)
-      Sskip
-      Sbreak)
-    (Ssequence
-      (Ssequence
-        (Sset _t'4
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Ssequence
-          (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
-          (Ssequence
-            (Sset _t'6
-              (Ederef
-                (Ecast (Etempvar _t'5 tlong) (tptr tdouble))
-                tdouble))
-            (Sassign
-              (Ederef
-                (Ecast
-                  (Ebinop Oadd
-                    (Ecast (Etempvar _block tlong) (tptr tlong))
-                    (Ebinop Omul (Etempvar _i tulong)
-                      (Ebinop Odiv (Esizeof tdouble tulong)
-                        (Esizeof tlong tulong) tulong) tulong)
-                    (tptr tlong)) (tptr tdouble)) tdouble)
-              (Etempvar _t'6 tdouble)))))
-      (Ssequence
-        (Sset _t'3
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sassign
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong))
-          (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
-            (Econst_int (Int.repr 1) tint) (tptr tlong)))))).
-
-Definition makefloatblock_loop_incr : statement :=
-  (Sset _i
-    (Ebinop Oadd (Etempvar _i tulong)
-      (Econst_int (Int.repr 1) tint) tulong)).
-
-Definition makefloatblock_loop : statement :=
-  Sloop makefloatblock_loop_body makefloatblock_loop_incr.
-
-Definition makefloatblock_body_after_setblock : statement :=
-  Ssequence
-    (Ssequence
-      (Sset _t'7
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _accu tlong))
-      (Ssequence
-        (Sset _t'8
-          (Ederef (Ecast (Etempvar _t'7 tlong) (tptr tdouble)) tdouble))
-        (Sassign
-          (Ederef
-            (Ecast
-              (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                (Ebinop Omul (Econst_int (Int.repr 0) tint)
-                  (Ebinop Odiv (Esizeof tdouble tulong)
-                    (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
-              (tptr tdouble)) tdouble) (Etempvar _t'8 tdouble))))
-    (Ssequence
-      (Ssequence
-        (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
-        (Sloop
-          makefloatblock_loop_body
-          makefloatblock_loop_incr))
-      (Sassign
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _accu tlong)
-        (Etempvar _block tlong))).
 
 Definition return_tailcall_pre
     (m : mem) (s : Machine.state) (ard : abs_rel_data) (sp_b : block) : Prop :=
@@ -1972,22 +1826,12 @@ Definition appterm3_step_pre (slotsize : nat)
   Z.of_nat (extra_args s) <= Int64.max_signed.
 
 Definition appterm_step_pre (nargs slotsize : nat)
-    (e0 : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   get_code_ptr_s s s.(Machine.accu) <> None /\
-  let s' := match get_code_ptr_s s s.(Machine.accu) with
-            | Some target_pc =>
-              s <|pc := target_pc|>
-                <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
-                <|env := s.(Machine.accu)|>
-                <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
-            | None => s
-            end in
-  forall le,
-    abs_rel_with_ard e0 le m s ard ->
-    exists le' m' out,
-      exec_stmt function_entry1 clight_ge e0 le m
-        (fn_body f_instr_APPTERM) E0 le' m' out /\
-      abs_rel e0 le' m' s'.
+  (3 <= slotsize)%nat /\
+  (slotsize <= Datatypes.length (Machine.stack s))%nat /\
+  Z.of_nat (extra_args s) <= Int64.max_unsigned /\
+  Z.of_nat (extra_args s) <= Int64.max_signed.
 
 Definition assign_step_pre (n : nat)
     (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
@@ -2111,6 +1955,97 @@ Definition closurerec_step_pre (code_ofs : Z)
      Ptrofs.unsigned sp_ofs >= 16 /\
      (align_chunk Mint64 | Ptrofs.unsigned sp_ofs - 8) /\
      Ptrofs.unsigned sp_ofs - 8 + 8 < Ptrofs.modulus).
+
+Definition closurerec_general_step_pre (nfuncs nvars : nat) (code_offsets : list Z)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let sp_b := ar_stack_block ard in
+  let hm := ar_heap_map ard in
+  let blksize := (3 * nfuncs - 1 + nvars)%nat in
+  (* e does not bind heap_alloc *)
+  e ! _heap_alloc = None /\
+  (* Code buffer: nfuncs at current PC *)
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat nfuncs))) /\
+  (* Code buffer: nvars at PC+1 *)
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat nvars))) /\
+  (* Code offsets match nfuncs in length *)
+  length code_offsets = nfuncs /\
+  (* Code buffer: code_offsets[i] at PC+2+i, each in signed int range *)
+  (forall i ofs, nth_error code_offsets i = Some ofs ->
+     Mem.load Mint32 m cb
+       (Ptrofs.unsigned (Ptrofs.add co
+          (Ptrofs.repr ((Machine.pc s + 2 + Z.of_nat i) * sizeof_code_t))))
+     = Some (Vint (Int.repr ofs)) /\
+     Int.min_signed <= ofs <= Int.max_signed) /\
+  (* nfuncs >= 1 *)
+  (nfuncs >= 1)%nat /\
+  (* blksize and nfuncs in int range *)
+  (0 <= Z.of_nat blksize <= Int.max_signed) /\
+  (0 <= Z.of_nat nfuncs <= Int.max_signed) /\
+  (0 <= Z.of_nat nvars <= Int.max_signed) /\
+  (* nvars bounded by stack length *)
+  (nvars <= S (length (Machine.stack s)))%nat /\
+  (* Heap map freshness *)
+  hm (next_addr s) = None /\
+  (* Global block valid *)
+  Mem.valid_block m gb /\
+  (* Genv lookup for heap_alloc *)
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (* heap_alloc spec: allocate blksize fields with tag 247 *)
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr (Z.of_nat blksize)) :: Vlong (Int64.repr 247) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (* Field 0 storable (code ptr) *)
+       (forall cv, exists m_s0,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
+          Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_s0 b ofs = Some v) /\
+          (* Field 1 storable after field 0 (closinfo) *)
+          (forall cv1, exists m_s1,
+             Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
+             Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+               Some (Val.load_result Mint64 cv1) /\
+             (* Load at field 0 preserved *)
+             (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
+                Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
+             (forall b ofs chunk v, b <> new_b ->
+                Mem.load chunk m_s0 b ofs = Some v ->
+                Mem.load chunk m_s1 b ofs = Some v) /\
+             (forall b ofs k p,
+                Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
+                Mem.perm m_s1 b ofs k p)))) /\
+  (* sp writable below current sp for pushes *)
+  (forall sp_b sp_ofs,
+     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
+     Ptrofs.unsigned sp_ofs >= 8 * Z.of_nat (nfuncs + 1) /\
+     (align_chunk Mint64 | Ptrofs.unsigned sp_ofs - 8) /\
+     Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)) < Ptrofs.modulus).
 
 Definition getfloatfield_step_pre (n : nat)
     (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
@@ -2291,13 +2226,13 @@ Definition makeblock_step_pre (t size : nat)
           (forall b ofs k p,
              Mem.perm m_alloc b ofs k p ->
              Mem.perm m_store b ofs k p))) /\
-  (forall le_pre m_field0 new_b new_ofs sp_b sp_ofs,
+  (forall le_pre m_field0 new_b new_ofs sp_b0 sp_ofs,
      le_pre ! _s = Some (Vptr sb so) ->
      le_pre ! _block = Some (Vptr new_b new_ofs) ->
      le_pre ! _wosize = Some (Vlong (Int64.repr (Z.of_nat size))) ->
-     new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
-     Mem.load Mint64 m_field0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-     stack_repr hm cb co m_field0 (Machine.stack s) sp_b sp_ofs ->
+     new_b <> sb -> new_b <> sp_b0 -> new_b <> gb -> new_b <> cb ->
+     Mem.load Mint64 m_field0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b0 sp_ofs) ->
+     stack_repr hm cb co m_field0 (Machine.stack s) sp_b0 sp_ofs ->
      Mem.range_perm m_field0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
        Cur Writable ->
      exists le_loop m_loop sp_ofs_loop,
@@ -2313,9 +2248,9 @@ Definition makeblock_step_pre (t size : nat)
           ofs <> Ptrofs.unsigned so + 16 ->
           Mem.load Mint64 m_loop sb ofs = Some v) /\
        Mem.load Mint64 m_loop sb (Ptrofs.unsigned so + 16) =
-         Some (Vptr sp_b sp_ofs_loop) /\
+         Some (Vptr sp_b0 sp_ofs_loop) /\
        stack_repr hm cb co m_loop (skipn (Nat.sub size 1) (Machine.stack s))
-         sp_b sp_ofs_loop /\
+         sp_b0 sp_ofs_loop /\
        Ptrofs.unsigned sp_ofs_loop >= 8 /\
        (align_chunk Mint64 | Ptrofs.unsigned sp_ofs_loop) /\
        Ptrofs.unsigned sp_ofs_loop + 8 * Z.of_nat (length (skipn (Nat.sub size 1) (Machine.stack s))) < Ptrofs.modulus /\
@@ -2325,7 +2260,7 @@ Definition makeblock_step_pre (t size : nat)
           Mem.perm m_field0 b ofs k p ->
           Mem.perm m_loop b ofs k p) /\
        (forall b ofs chunk v,
-          b <> sb -> b <> sp_b -> b <> new_b ->
+          b <> sb -> b <> sp_b0 -> b <> new_b ->
           Mem.load chunk m_field0 b ofs = Some v ->
           Mem.load chunk m_loop b ofs = Some v)).
 
@@ -2363,23 +2298,23 @@ Definition makefloatblock_step_pre (n : nat)
        (forall b ofs k p,
           Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
           Mem.perm m_alloc b ofs k p)) /\
-  (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs,
+  (forall le_pre m_alloc0 new_b new_ofs sp_b0 sp_ofs,
      le_pre ! _s = Some (Vptr sb so) ->
      le_pre ! _block = Some (Vptr new_b new_ofs) ->
      le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
-     new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
-     Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some (Vptr sp_b sp_ofs) ->
-     val_repr hm cb co (Machine.accu s) (Vptr sp_b sp_ofs) ->
+     new_b <> sb -> new_b <> sp_b0 -> new_b <> gb -> new_b <> cb ->
+     Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some (Vptr sp_b0 sp_ofs) ->
+     val_repr hm cb co (Machine.accu s) (Vptr sp_b0 sp_ofs) ->
      False) /\
-  (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs accu_v0,
+  (forall le_pre m_alloc0 new_b new_ofs sp_b0 sp_ofs accu_v0,
      le_pre ! _s = Some (Vptr sb so) ->
      le_pre ! _block = Some (Vptr new_b new_ofs) ->
      le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
-     new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
+     new_b <> sb -> new_b <> sp_b0 -> new_b <> gb -> new_b <> cb ->
      Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some accu_v0 ->
      val_repr hm cb co (Machine.accu s) accu_v0 ->
-     Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-     stack_repr hm cb co m_alloc0 (Machine.stack s) sp_b sp_ofs ->
+     Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b0 sp_ofs) ->
+     stack_repr hm cb co m_alloc0 (Machine.stack s) sp_b0 sp_ofs ->
      Mem.range_perm m_alloc0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
        Cur Writable ->
      (forall b ofs chunk v,
@@ -2397,9 +2332,9 @@ Definition makefloatblock_step_pre (n : nat)
        Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 8) =
          Some (Vptr new_b new_ofs) /\
        Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 16) =
-         Some (Vptr sp_b sp_ofs_out) /\
+         Some (Vptr sp_b0 sp_ofs_out) /\
        stack_repr hm cb co m_out (skipn (Nat.sub n 1) (Machine.stack s))
-         sp_b sp_ofs_out /\
+         sp_b0 sp_ofs_out /\
        Ptrofs.unsigned sp_ofs_out >= 8 /\
        (align_chunk Mint64 | Ptrofs.unsigned sp_ofs_out) /\
        Ptrofs.unsigned sp_ofs_out + 8 * Z.of_nat (length (skipn (Nat.sub n 1) (Machine.stack s))) < Ptrofs.modulus /\
@@ -2414,6 +2349,83 @@ Definition makefloatblock_step_pre (n : nat)
        (forall ofs v,
           Mem.load Mint64 m_alloc0 gb ofs = Some v ->
           Mem.load Mint64 m_out gb ofs = Some v)).
+
+(* CLOSURE general step_pre: for handle_CLOSURE nvars code_ofs with arbitrary nvars. *)
+Definition closure_general_step_pre (nvars : nat) (code_ofs : Z)
+    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let sb := ar_sptr_block ard in
+  let so := ar_sptr_ofs ard in
+  let cb := ar_code_base_block ard in
+  let co := ar_code_base_ofs ard in
+  let gb := ar_global_block ard in
+  let hm := ar_heap_map ard in
+  (* e does not bind heap_alloc *)
+  e ! _heap_alloc = None /\
+  (* Code buffer: nvars at current PC *)
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+  = Some (Vint (Int.repr (Z.of_nat nvars))) /\
+  (* Code buffer: code_ofs at PC+1 *)
+  Mem.load Mint32 m cb
+    (Ptrofs.unsigned (Ptrofs.add co
+       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
+  = Some (Vint (Int.repr code_ofs)) /\
+  (* code_ofs fits in signed int range *)
+  (Int.min_signed <= code_ofs <= Int.max_signed) /\
+  (* 2+nvars fits in signed int range (needed for (long)(2+nvars) cast) *)
+  (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) /\
+  (* nvars bounded by stack length: needed for skipn nvars (accu :: stack) to be valid *)
+  (nvars <= S (length (Machine.stack s)))%nat /\
+  (* Heap map freshness *)
+  hm (next_addr s) = None /\
+  (* Global block valid *)
+  Mem.valid_block m gb /\
+  (* Genv lookup for heap_alloc *)
+  (exists b_ha,
+     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
+     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
+       Some heap_alloc_fundef) /\
+  (* heap_alloc spec: allocate (2+nvars) fields with tag 247 *)
+  (forall m',
+     exists m_alloc new_b new_ofs,
+       external_call heap_alloc_ef
+         (Genv.to_senv (genv_genv clight_ge))
+         (Vptr sb so :: Vlong (Int64.repr (Z.of_nat (2 + nvars))) :: Vlong (Int64.repr 247) :: nil)
+         m' E0 (Vptr new_b new_ofs) m_alloc /\
+       (forall b, Mem.valid_block m' b -> new_b <> b) /\
+       (forall b ofs chunk v,
+          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
+          Mem.load chunk m_alloc b ofs = Some v) /\
+       (forall b ofs k p,
+          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
+          Mem.perm m_alloc b ofs k p) /\
+       (* Field 0 storable (code ptr) *)
+       (forall cv, exists m_s0,
+          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
+          Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
+            Some (Val.load_result Mint64 cv) /\
+          (forall b ofs chunk v, b <> new_b ->
+             Mem.load chunk m_alloc b ofs = Some v ->
+             Mem.load chunk m_s0 b ofs = Some v) /\
+          (* Field 1 storable after field 0 (closinfo) *)
+          (forall cv1, exists m_s1,
+             Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
+             Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
+               Some (Val.load_result Mint64 cv1) /\
+             (* Load at field 0 preserved *)
+             (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
+                Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
+             (forall b ofs chunk v, b <> new_b ->
+                Mem.load chunk m_s0 b ofs = Some v ->
+                Mem.load chunk m_s1 b ofs = Some v) /\
+             (forall b ofs k p,
+                Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
+                Mem.perm m_s1 b ofs k p))) /\
+       Mem.range_perm m_alloc new_b (Ptrofs.unsigned new_ofs)
+         (Ptrofs.unsigned new_ofs + 8 * Z.of_nat (2 + nvars)) Cur Writable /\
+       (align_chunk Mint64 | Ptrofs.unsigned new_ofs) /\
+       Ptrofs.unsigned new_ofs + 8 * Z.of_nat (2 + nvars) < Ptrofs.modulus).
 
 Definition poptrap_step_pre
     (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
@@ -2824,7 +2836,22 @@ Module Type InstructVerificationSpec.
   Parameter correct_APPTERM :
     forall nargs slotsize,
     handler_correct (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
-      (appterm_step_pre nargs slotsize)
+      (fun e0 m s ard =>
+         get_code_ptr_s s s.(Machine.accu) <> None /\
+         let s' := match get_code_ptr_s s s.(Machine.accu) with
+                   | Some target_pc =>
+                     s <|pc := target_pc|>
+                       <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
+                       <|env := s.(Machine.accu)|>
+                       <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
+                   | None => s
+                   end in
+         forall le,
+           abs_rel_with_ard e0 le m s ard ->
+           exists le' m' out,
+             exec_stmt function_entry1 clight_ge e0 le m
+               (fn_body f_instr_APPTERM) E0 le' m' out /\
+             abs_rel e0 le' m' s')
       (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_ASRINT :
@@ -2861,21 +2888,21 @@ Module Type InstructVerificationSpec.
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGEINT n target) f_instr_BGEINT
       (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BGTINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGTINT n target) f_instr_BGTINT
       (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BGTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BLEINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BLEINT n target) f_instr_BLEINT
       (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BLEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BLTINT :
     forall n target,
@@ -2894,7 +2921,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_BOOLNOT :
     handler_correct handle_BOOLNOT f_instr_BOOLNOT
       (accu_check ak_bool /\p accu_check ak_long)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BRANCHIFNOT :
     forall target,
@@ -2924,14 +2951,14 @@ Module Type InstructVerificationSpec.
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
       ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BUGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BULTINT :
     forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BULTINT n target) f_instr_BULTINT
       ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_CHECK_SIGNALS :
     handler_correct handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
@@ -2949,11 +2976,11 @@ Module Type InstructVerificationSpec.
       (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_CLOSURE :
-    forall code_ofs, Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
-      (heap_alloc_with_stores 2 247 alloc_store_2
-       /\p code_at (Int.repr 0)
-       /\p code_arg_at 1 (Int.repr code_ofs))
+    forall nvars code_ofs,
+    (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
+    Int.min_signed <= code_ofs <= Int.max_signed ->
+    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+      (closure_general_step_pre nvars code_ofs)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_CONST0 :
@@ -3072,7 +3099,10 @@ Module Type InstructVerificationSpec.
   Parameter correct_GETDYNMET :
     handler_correct handle_GETDYNMET f_instr_GETDYNMET
       getdynmet_pre
-      (fun msg s => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg _ => msg = "GETDYNMET: stack underflow"%string \/
+        msg = "GETDYNMET: no class table"%string \/
+        msg = "GETDYNMET: method not found"%string)
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETFIELD0 :
     handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
@@ -3122,17 +3152,19 @@ Module Type InstructVerificationSpec.
   Parameter correct_GETMETHOD :
     handler_correct handle_GETMETHOD f_instr_GETMETHOD
       getmethod_step_pre
-      (fun msg s =>
-         match msg with
-         | _ => True
-         end)
+      (fun msg _ => msg = "GETMETHOD: stack underflow"%string \/
+        msg = "GETMETHOD: no class table"%string \/
+        msg = "GETMETHOD: not an integer index"%string \/
+        msg = "GETMETHOD: method not found"%string)
       (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETPUBMET :
     forall tag,
     handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
       (getpubmet_pre tag)
-      (fun msg s => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg _ => msg = "GETPUBMET: no class table"%string \/
+        msg = "GETPUBMET: method not found"%string)
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GETSTRINGCHAR :
     handler_correct handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
@@ -3171,7 +3203,7 @@ Module Type InstructVerificationSpec.
   Parameter correct_ISINT :
     handler_correct handle_ISINT f_instr_ISINT
       (accu_check ak_immediate)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_LEINT :
     handler_correct handle_LEINT f_instr_LEINT
@@ -3249,23 +3281,40 @@ Module Type InstructVerificationSpec.
   Parameter correct_OFFSETCLOSURE0 :
     handler_correct (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
       no_pre
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "OFFSETCLOSURE: invalid env"%string /\
+        match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_OFFSETCLOSURE2 :
     handler_correct (handle_OFFSETCLOSURE 2) f_instr_OFFSETCLOSURE2
       (closure_offset_pre 2 24)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "OFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_OFFSETCLOSUREM2 :
     handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM2
       (closure_offset_pre (-2) (-24))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "OFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_OFFSETCLOSURE :
     forall n,
     handler_correct (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
       (offsetclosure_pre n)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "OFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_OFFSETINT :
     forall ofs, Int.min_signed <= ofs * 2 <= Int.max_signed ->
@@ -3428,23 +3477,40 @@ Module Type InstructVerificationSpec.
   Parameter correct_PUSHOFFSETCLOSURE0 :
     handler_correct (handle_PUSHOFFSETCLOSURE 0) f_instr_PUSHOFFSETCLOSURE0
       (sp_at_least 16)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
+        match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSHOFFSETCLOSURE2 :
     handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE2
       (sp_at_least 16 /\p closure_offset_pre 2 24)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSHOFFSETCLOSUREM2 :
     handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM2
       (sp_at_least 16 /\p closure_offset_pre (-2) (-24))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSHOFFSETCLOSURE :
     forall ofs,
     handler_correct (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
       (pushoffsetclosure_step_pre ofs)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_PUSHTRAP :
     forall handler_pc,
@@ -3580,7 +3646,13 @@ Module Type InstructVerificationSpec.
     forall (_nc _nb : nat) (const_targets block_targets : list Z),
     handler_correct (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s) f_instr_SWITCH
       (switch_step_pre _nc _nb const_targets block_targets)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "SWITCH: constant index out of range"%string /\
+         match Machine.accu s with Val_int _ => True | _ => False end) \/
+        (msg = "SWITCH: block tag out of range"%string) \/
+        (msg = "SWITCH: dangling pointer"%string /\
+         match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end))
+      (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_UGEINT :
     handler_correct handle_UGEINT f_instr_UGEINT

@@ -143,7 +143,7 @@ Theorem verify_BOOLNOT_correct :
         exists le' m' out,
           exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_BOOLNOT) E0 le' m' out /\
           abs_rel e le' m' s'
-    | Error msg => True
+    | Error msg => False
     | Halt v => False
     | CCall_request _ _ _ => False
     end.
@@ -526,7 +526,7 @@ Qed.
 Theorem verify_BOOLNOT_handler_correct :
     handler_correct handle_BOOLNOT f_instr_BOOLNOT
       (pre_and accu_is_bool accu_is_long)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
   pose proof (verify_BOOLNOT_correct e le m s) as H.

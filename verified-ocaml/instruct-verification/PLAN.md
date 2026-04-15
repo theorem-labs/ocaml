@@ -1,290 +1,306 @@
-# Plan: Eliminate 70 Remaining Admitted Handlers via Parallel Agents
+# Plan: Generalize CLOSURE/CLOSUREREC + Fix Trivial Error Predicates
 
 ## Context
 
-151 bytecode handler correctness theorems need preconditions composed from named building blocks in InstructSpec.v. **81 are proved (Definition), 70 are Admitted.** All 70 Admitted handlers have completed proofs (Qed) in their `_correct.v` files — the `Admitted` in InstructVerification.v exists because the step_pres don't yet match the Module Type signatures.
+Two issues in `InstructVerificationSpec` (InstructSpec.v):
 
-**Goal**: Zero Admitted, zero False preconditions, zero contradictory step_pres. Every step_pre auditable by reading InstructSpec.v alone.
+**Issue 1 — CLOSURE/CLOSUREREC restricted to trivial cases:**
+- **CLOSURE**: Only `nvars=0` (no captured environment variables). Real OCaml closures almost always capture variables.
+- **CLOSUREREC**: Only `nfuncs=1, nvars=0` (single recursive function, no captured variables). Mutual recursion (`let rec f ... and g ...`) and captured variables are common.
 
-## Two Distinct Problems
+Both restrictions exist because the C handlers contain `for`-loops (copying env vars, building infix headers) that require loop reasoning. The existing proofs avoid this by specializing to cases where loops execute 0 iterations.
 
-### Problem 1: 53 handlers need wrapper theorems (building-block step_pres)
-These have working proofs with non-contradictory step_pres. They just need wrapper theorems using `handler_correct_weaken` to bridge from building blocks to internal step_pres.
+The established pattern for handling loops (from `MAKEBLOCK_correct.v`) is to **assume the loop's cumulative effect as an exec_stmt hypothesis in the step_pre**, rather than proving loop correctness inductively. This keeps proofs tractable.
 
-### Problem 2: ~12 handlers have contradictory step_pres (val_repr gap)
-These close by `inversion` on an impossible `val_repr` case. The root cause: `val_repr` maps `Val_int` exclusively to `Vlong` (tagged integer), but code pointers in C are `Vptr`. When return addresses or handler PCs are stored on the stack as `Val_int pc` in Rocq, `stack_repr` (which uses `val_repr`) can't represent the corresponding `Vptr` in C memory.
+**Issue 2 — 15 handlers have trivially `True` error predicates:**
 
-**Affected handlers**:
-- APPLY1, APPLY2, APPLY3 — push return address (Val_int pc) as Vptr on stack
-- PUSHTRAP, PUSH_RETADDR — push handler_pc / ret_addr as Vptr
-- RAISE, RAISE_NOTRACE, RERAISE — read handler_pc (Val_int) as Vptr from trap frame
-- RETURN — read return address (Val_int) from stack
-- RESTART — step_pre is literally `False` (different issue: data-dependent loop)
+In `handler_correct`, the error predicate `P_error` must hold for ALL states where the handler returns `Error`. Using `(fun _ _ => True)` means the spec makes zero claims about error behavior — it's vacuously satisfied. This is unjustified when the handler CAN error and the spec should characterize when.
 
-Handlers that DON'T have the contradiction despite being in Batch H:
-- APPTERM1-3, APPTERM — tail calls, no return address push
-- GRAB — closure code loading, not PC contradiction  
-- POPTRAP — stack manipulation, no PC val_repr issue
-- APPLY — need to verify
+Affected handlers (13 can actually error, 2 never error):
 
-### Problem 2 Root Cause
+| Handler | Can error? | Should be |
+|---------|-----------|-----------|
+| BGEINT | Yes ("not an integer") | Same pattern as BLTINT |
+| BGTINT | Yes ("not an integer") | Same pattern as BLTINT |
+| BLEINT | Yes ("not an integer") | Same pattern as BLTINT |
+| BUGEINT | Yes ("not an integer") | Same pattern as BULTINT with unsigned |
+| BULTINT | Yes ("not an integer") | Same pattern as BULTINT with unsigned |
+| BOOLNOT | **No** (always Step) | `(fun _ _ => False)` |
+| ISINT | **No** (always Step) | `(fun _ _ => False)` |
+| OFFSETCLOSURE0 | Yes (invalid env) | Characterize env conditions |
+| OFFSETCLOSURE2 | Yes (invalid env) | Characterize env conditions |
+| OFFSETCLOSUREM2 | Yes (invalid env) | Characterize env conditions |
+| OFFSETCLOSURE | Yes (invalid env) | Characterize env conditions |
+| PUSHOFFSETCLOSURE0 | Yes (invalid env) | Characterize env conditions |
+| PUSHOFFSETCLOSURE2 | Yes (invalid env) | Characterize env conditions |
+| PUSHOFFSETCLOSUREM2 | Yes (invalid env) | Characterize env conditions |
+| PUSHOFFSETCLOSURE | Yes (invalid env) | Characterize env conditions |
+| GETDYNMET | Yes (3 paths) | Characterize each |
+| GETPUBMET | Yes (2 paths) | Characterize each |
+| GETMETHOD | Yes (4 paths) | Characterize each — currently `match msg with _ => True end` |
+| SWITCH | Yes (4 paths) | Characterize each |
 
-`handler_correct` (InstructSpec.v:261-280) requires:
-```rocq
-| Step s' =>
-    forall ard, abs_rel_with_ard e le m s ard -> step_pre e m s ard ->
-    exists le' m' out,
-      exec_stmt ... e le m f.(fn_body) E0 le' m' out /\
-      abs_rel e le' m' s'    (* POST-state must satisfy abs_rel *)
+Reference: BLTINT already has the correct pattern (line 2885):
+```coq
+(fun msg s => msg = "BLTINT: not an integer"%string /\
+  match Machine.accu s with Val_int _ => False | _ => True end)
 ```
 
-After APPLY1 pushes `Val_int (pc+1)` onto the Rocq stack, the post-state `s'` has this value in `s'.stack`. The C code stores `Vptr code_b (code_ofs + (pc+1)*4)` at the same stack position. `abs_rel` requires `stack_repr` to hold, which uses `val_repr`. Since `val_repr` maps `Val_int` only to `Vlong`, `stack_repr` cannot relate the Rocq and C post-states. **The fix must change either val_repr or stack_repr.**
+## Approach
 
-## val_repr Extension: Add Code Pointer Constructor
+Follow the MAKEBLOCK pattern: define named Clight AST fragments for each loop, then add loop postcondition hypotheses to the step_pre definitions. The proofs stitch together the pre-loop code, the assumed loop execution, and the post-loop code.
 
-```rocq
-Inductive val_repr (hm : nat -> option (block * ptrofs)) (cb : block) (co : ptrofs)
-    : Value.value -> val -> Prop :=
-  | vr_int : forall z,
-      val_repr hm cb co (Val_int z) (Vlong (Int64.repr (z * 2 + 1)))
-  | vr_ptr : forall addr b ofs,
-      hm addr = Some (b, ofs) ->
-      val_repr hm cb co (Val_ptr addr) (Vptr b ofs)
-  | vr_closure : forall addr offset b ofs delta,
-      hm addr = Some (b, ofs) ->
-      delta = Ptrofs.repr (Z.of_nat offset * 8) ->
-      val_repr hm cb co (Val_closure addr offset) (Vptr b (Ptrofs.add ofs delta))
-  | vr_block_atom : forall tag,
-      val_repr hm cb co (Val_block tag nil)
-        (Vlong (Int64.repr (Z.of_nat tag * 1024)))
-  | vr_code_ptr : forall pc,
-      val_repr hm cb co (Val_int pc)
-        (Vptr cb (Ptrofs.add co (Ptrofs.repr (pc * sizeof_code_t)))).
+## Step-by-step plan
+
+### Step 1: Define Clight loop ASTs in InstructSpec.v
+
+Extract the loop body/increment ASTs from `instruct_handlers.v` into named definitions, mirroring `makeblock_loop_body`/`makeblock_loop_incr`/`makeblock_loop` (lines 1500-1535).
+
+**CLOSURE env copy loop** (from instruct_handlers.v lines 4823-4851):
+```
+Definition closure_env_loop_body : statement := ...
+Definition closure_env_loop_incr : statement := ...
+Definition closure_env_loop : statement := Sloop closure_env_loop_body closure_env_loop_incr.
+```
+This loop copies `nvars` values from the stack to `block[2..nvars+1]`.
+
+**CLOSUREREC env copy loop** (from instruct_handlers.v lines 5029-5058):
+```
+Definition closurerec_env_loop_body : statement := ...
+Definition closurerec_env_loop_incr : statement := ...
+Definition closurerec_env_loop : statement := Sloop ...
+```
+This loop copies `nvars` values via pointer `_p` starting at `block + envofs`.
+
+**CLOSUREREC infix header loop** (from instruct_handlers.v lines 5162-5297):
+```
+Definition closurerec_infix_loop_body : statement := ...
+Definition closurerec_infix_loop_incr : statement := ...
+Definition closurerec_infix_loop : statement := Sloop ...
+```
+This loop builds infix headers + code pointers for functions 1..nfuncs-1 and pushes closures onto the stack.
+
+### Step 2: Define generalized step_pre in InstructSpec.v
+
+**closure_general_step_pre** (new, for arbitrary nvars):
+- Code buffer: `nvars` at PC, `code_ofs` at PC+1
+- `nvars` in signed int range, `code_ofs` in signed int range
+- If `nvars > 0`: SP has room for push (`sp_at_least 16`)
+- Heap alloc: size = `2 + nvars`, tag = 247
+- Store chain: field 0 (code ptr) + field 1 (closinfo) storeable
+- **Loop postcondition hypothesis** (MAKEBLOCK pattern): assumes `exec_stmt` for `closure_env_loop` after field 0/1 are stored, yielding a post-loop memory where fields 2..nvars+1 contain the stack values and SP is advanced by nvars
+- SP restoration postcondition
+
+**closurerec_general_step_pre** (replace existing `closurerec_step_pre`, for arbitrary nfuncs, nvars):
+- Code buffer: `nfuncs` at PC, `nvars` at PC+1, `code_offsets[0..nfuncs-1]` at PC+2..
+- All code offsets in signed int range
+- If `nvars > 0`: SP has room for push
+- Heap alloc: size = `3*nfuncs - 1 + nvars`, tag = 247
+- **Env copy loop postcondition**: assumes `exec_stmt` for `closurerec_env_loop` copying nvars values to block
+- **Infix header loop postcondition**: assumes `exec_stmt` for `closurerec_infix_loop` building headers for functions 1..nfuncs-1 and pushing closures
+- SP/stack state after both loops
+
+### Step 3: Update Module Type parameters in InstructSpec.v
+
+Change the two existing Parameter declarations:
+
+```coq
+(* Before *)
+Parameter correct_CLOSURE :
+  forall code_ofs, ... ->
+  handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE ...
+
+(* After *)
+Parameter correct_CLOSURE :
+  forall nvars code_ofs, ... ->
+  handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+    (closure_general_step_pre nvars code_ofs)
+    ... .
 ```
 
-**Impact**: val_repr gains 2 parameters (cb, co). ~661 occurrences across 118 files need `cb co` added. stack_repr, global_repr, abs_rel all propagate cb/co. Mechanical but pervasive.
+```coq
+(* Before *)
+Parameter correct_CLOSUREREC :
+  forall code_ofs, ... ->
+  handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC ...
 
-**Tradeoff**: val_repr becomes non-deterministic for `Val_int` — a `Val_int z` can be represented as either `Vlong` (tagged integer) or `Vptr` (code pointer). Proofs that invert on `val_repr (Val_int ...)` get an extra case to handle.
-
-The non-determinism in val_repr is benign — in practice, the proof context always disambiguates which constructor applies (e.g., if we know the C value is Vlong, only vr_int can fire; if Vptr in the code section, only vr_code_ptr).
-
-## Execution Plan
-
-### Phase 0: val_repr Extension (prerequisite for ~12 handlers)
-
-**Step 0a**: Extend val_repr with `vr_code_ptr` + add `cb co` parameters
-**Step 0b**: Update stack_repr, global_repr, abs_rel to propagate cb/co
-**Step 0c**: Fix all compilation errors in existing 81 proved handlers
-**Step 0d**: Fix the 14 already-converted wrapper theorems (ACC, GETGLOBAL, BEQ, etc.)
-**Step 0e**: Build and verify: `dune build instruct-verification/`
-**Step 0f**: Commit
-
-This is a large mechanical change. It can be partially parallelized:
-- Agent in worktree: fix _correct.v files (add cb co to val_repr/stack_repr uses)
-- Main: fix InstructSpec.v, InstructVerification.v, HandlerLemmas.v
-
-**Estimated scope**: ~700 mechanical edits across ~120 files. Each edit is adding `cb co` or `(ar_code_base_block ard) (ar_code_base_ofs ard)` to val_repr/stack_repr calls.
-
-### Phase 1: Central Preparation (building blocks + Module Type)
-
-**Step 1a**: Read all 70 _correct.v files, catalog step_pres, determine building blocks
-**Step 1b**: Add new building blocks to InstructSpec.v
-**Step 1c**: Update all 70 Module Type entries to use building blocks
-**Step 1d**: Update all 70 IV entries to match (still Admitted)
-**Step 1e**: Build, commit
-
-### Phase 2: Parallel Wrappers — Non-contradictory Handlers (3 agents, ~53 handlers)
-
-**Constraint**: Maximum 5 agents can run in parallel at any time.
-
-**Agent 1** (Batch A+B — 15 files): Heap read + env access
-GETFIELD0-3, GETFIELD, GETFLOATFIELD, GETSTRINGCHAR, GETBYTESCHAR, GETVECTITEM, VECTLENGTH, ENVACC1-4, ENVACC
-
-**Agent 2** (Batch C+D — 15 files): Heap write + closure offset
-SETFIELD0-3, SETFIELD, SETFLOATFIELD, SETBYTESCHAR, SETVECTITEM, OFFSETREF, OFFSETCLOSURE2/M2/n, PUSHOFFSETCLOSURE2/M2/n
-
-**Agent 3** (Batch E+F+misc — 23 files): Push+env, code/branch, C-function, non-contradictory control flow
-PUSHENVACC1-4, PUSHENVACC, PUSHGETGLOBALFIELD, PUSHCONSTINT, ASSIGN, BRANCHIF, BRANCHIFNOT, GETGLOBALFIELD, SWITCH, GETDYNMET, GETMETHOD, GETPUBMET, MAKEBLOCK1-3, MAKEBLOCK, MAKEFLOATBLOCK, CLOSURE, CLOSUREREC, SETGLOBAL, APPTERM1-3, APPTERM, GRAB, POPTRAP
-
-After agents complete: merge, update IV.v, build.
-
-### Phase 3: Re-prove Contradictory Handlers (~12 handlers)
-
-These need REAL Step case proofs, not inversion tricks. The val_repr extension enables this.
-
-**Agent 4** (5 files): APPLY1, APPLY2, APPLY3, PUSHTRAP, PUSH_RETADDR
-- Re-prove Step case: construct post-state abs_rel using `vr_code_ptr` for return address / handler_pc
-- Building block step_pre: e.g., `sp_at_least 32` (APPLY) or `sp_at_least 40` (PUSHTRAP)
-
-**Agent 5** (4 files): RAISE, RAISE_NOTRACE, RERAISE, RETURN
-- Re-prove Step case: when reading return address / handler_pc from stack, use `vr_code_ptr` case of val_repr inversion (instead of contradiction)
-- Building block step_pre: `no_pre` or `stack_has_return_frame`
-
-**RESTART** (1 file): Full axiom-free proof using loop induction. Building block: `pre_and heap_header_consistent (sp_at_least N)`. Proof by induction on num_args (see RESTART section below). This is the hardest handler — ~280 lines of new proof code.
-
-### Phase 4: Final Integration
-
-- Wire all IV.v entries from Admitted to Definition
-- `grep -c "Admitted" InstructVerification.v` → 0
-- Full build: `dune build instruct-verification/`
-
-## Phase 0 Approach: Mechanical val_repr Extension
-
-The val_repr change is mechanical. Each occurrence follows one of these patterns:
-
-**Pattern 1: val_repr in a type annotation / step_pre**
-```diff
-- val_repr hm v cv
-+ val_repr hm cb co v cv
-```
-where `cb = ar_code_base_block ard` and `co = ar_code_base_ofs ard` (available from ard).
-
-**Pattern 2: stack_repr usage**
-```diff
-- stack_repr hm m stk sp_b sp_ofs
-+ stack_repr hm cb co m stk sp_b sp_ofs
+(* After *)
+Parameter correct_CLOSUREREC :
+  forall nfuncs nvars code_offsets, ... ->
+  handler_correct (handle_CLOSUREREC nfuncs nvars code_offsets) f_instr_CLOSUREREC
+    (closurerec_general_step_pre nfuncs nvars code_offsets)
+    ... .
 ```
 
-**Pattern 3: Constructing val_repr (apply vr_int, etc.)**
-No change needed — constructors just gain implicit parameters.
+### Step 4: Write generalized CLOSURE_correct.v proof
 
-**Pattern 4: Inverting val_repr**
-Extra case for `vr_code_ptr`. For most handlers, this case is vacuous (e.g., if we know the value is `Val_ptr`, the `Val_int` code pointer case can't fire).
+Structure (following MAKEBLOCK_correct pattern):
+1. **Pre-loop**: PC reads (nvars, code_ofs), conditional push (`if nvars > 0`), heap_alloc call, store field 0 (code ptr), store field 1 (closinfo)
+2. **Loop**: Invoke the loop postcondition hypothesis from step_pre — this gives us `exec_stmt` for the env copy loop and the resulting memory state
+3. **Post-loop**: PC advance, SP restoration (`sp += nvars`), accu = block, return 0
+4. **abs_rel preservation**: Construct the extended heap map, prove all 8 state fields match
 
-**Parallelization** (max 5 agents in parallel): Since each _correct.v file is independent, agents in worktrees can fix batches of files in parallel. The main thread handles InstructSpec.v + HandlerLemmas.v + InstructVerification.v.
+The conditional `if nvars > 0` creates two branches in the Clight:
+- `nvars = 0`: Skip push, skip loop (loop condition `0 < 0` is false, immediate break)
+- `nvars > 0`: Push accu, run loop, advance SP
 
-## RESTART: Axiom-Free Proof Strategy
+### Step 5: Write generalized CLOSUREREC_correct.v proof
 
-RESTART's `False` step_pre is NOT due to val_repr — it's because the C code contains a data-dependent loop. The fix requires real loop verification.
+Structure:
+1. **Pre-loop**: PC reads (nfuncs, nvars), conditional push, heap_alloc call
+2. **Env copy loop**: Invoke env loop postcondition from step_pre
+3. **SP advance + push block onto stack**: `sp += nvars; *--sp = block`
+4. **Store code_ptr[0] and closinfo[0]**: First function's fields
+5. **Infix header loop**: Invoke infix loop postcondition from step_pre
+6. **PC advance by nfuncs**: `pc += nfuncs`
+7. **abs_rel preservation**: Extended heap map with all closures
 
-### C Loop Structure
-```c
-_num_args = (int)((*((long*)env - 1) >> 10) - 3);
-s->sp -= _num_args;
-for (_i = 0; _i < _num_args; _i++)
-    sp[_i] = ((long*)env)[_i + 3];
-s->env = ((long*)env)[2];
-s->extra_args += _num_args;
+### Step 6: Update InstructVerification.v
+
+Wire the new proof theorems into the module:
+```coq
+Definition correct_CLOSURE := verify_CLOSURE_general_correct.
+Definition correct_CLOSUREREC := verify_CLOSUREREC_general_correct.
 ```
 
-### Rocq Semantics
-```rocq
-let fields := skipn ofs all_fields in
-let num_args := length fields - 3 in
-let args := skipn 3 fields in
-Step (s <|stack := args ++ s.(stack)|> <|env := saved_env|> ...)
+### Step 7: Fix trivial error predicates in InstructSpec.v
+
+Derive each error predicate from the corresponding `handle_X` in `Interpret.v`. The predicate must characterize exactly which `(msg, s)` pairs arise from `Error msg` — not `True`.
+
+**Group A — Branch comparisons (5 handlers): BGEINT, BGTINT, BLEINT, BUGEINT, BULTINT**
+
+Same pattern as existing BLTINT (InstructSpec.v:2885). Replace `(fun _ _ => True)` with:
+```coq
+(fun msg s => msg = "BGEINT: not an integer"%string /\
+  match Machine.accu s with Val_int _ => False | _ => True end)
+```
+(Substitute the handler name in the string for each.) These handlers error iff accu is not `Val_int`.
+
+**Group B — Never-error handlers (2 handlers): BOOLNOT, ISINT**
+
+Replace `(fun _ _ => True)` with `(fun _ _ => False)`. These handlers always return `Step`, never `Error`. The proof obligation becomes vacuously true in the *correct* direction — no error state exists to satisfy.
+
+**Group C — Offset closure handlers (8 handlers)**
+
+`handle_OFFSETCLOSURE ofs` errors in two cases (Interpret.v:370-380):
+1. `"OFFSETCLOSURE: non-zero offset on non-closure env"` — env is `Val_block` and `ofs != 0`
+2. `"OFFSETCLOSURE: invalid env"` — env is neither `Val_closure` nor `Val_block`
+
+For fixed-offset variants, specialize:
+- **OFFSETCLOSURE0** (ofs=0): Only error path 2 — Val_block with ofs=0 succeeds.
+  ```coq
+  (fun msg s => msg = "OFFSETCLOSURE: invalid env"%string /\
+    match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
+  ```
+- **OFFSETCLOSURE2, OFFSETCLOSUREM2** (ofs!=0): Both error paths possible.
+  ```coq
+  (fun msg s =>
+    (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+     match Machine.env s with Val_block _ _ => True | _ => False end) \/
+    (msg = "OFFSETCLOSURE: invalid env"%string /\
+     match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+  ```
+- **OFFSETCLOSURE** (generic ofs): General form with both paths.
+
+Same pattern for **PUSHOFFSETCLOSURE0, PUSHOFFSETCLOSURE2, PUSHOFFSETCLOSUREM2, PUSHOFFSETCLOSURE** — push happens before the env check, doesn't affect error conditions. Use `"PUSHOFFSETCLOSURE: ..."` messages.
+
+**Group D — Method lookup (3 handlers): GETMETHOD, GETPUBMET, GETDYNMET**
+
+Error conditions involve heap lookups (`field_or_heap`, `scan` loop) whose state characterization is complex. Characterize by message strings, which is still non-trivial (proves the proof must actually reach the Error branch with the right message):
+
+- **GETMETHOD** (Interpret.v:817-833) — 4 error messages:
+  ```coq
+  (fun msg _ => msg = "GETMETHOD: stack underflow"%string \/
+    msg = "GETMETHOD: no class table"%string \/
+    msg = "GETMETHOD: not an integer index"%string \/
+    msg = "GETMETHOD: method not found"%string)
+  ```
+- **GETPUBMET** (Interpret.v:842-867) — 2 error messages:
+  ```coq
+  (fun msg _ => msg = "GETPUBMET: no class table"%string \/
+    msg = "GETPUBMET: method not found"%string)
+  ```
+- **GETDYNMET** (Interpret.v:870-898) — 3 error messages:
+  ```coq
+  (fun msg _ => msg = "GETDYNMET: stack underflow"%string \/
+    msg = "GETDYNMET: no class table"%string \/
+    msg = "GETDYNMET: method not found"%string)
+  ```
+
+**Group E — SWITCH (1 handler)**
+
+`handle_SWITCH` (Interpret.v:618-639) has 3 error messages. Characterize both message and accu structure:
+```coq
+(fun msg s =>
+  (msg = "SWITCH: constant index out of range"%string /\
+   match Machine.accu s with Val_int _ => True | _ => False end) \/
+  (msg = "SWITCH: block tag out of range"%string) \/
+  (msg = "SWITCH: dangling pointer"%string /\
+   match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end))
 ```
 
-### Building Blocks Needed
+### Step 8: Update proof files for changed error predicates
 
-**heap_header_consistent** (extend heap_consistent with header access):
-```rocq
-Definition heap_header_consistent : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
-  fun _ m s ard =>
-    let hm := ar_heap_map ard in
-    forall addr b ofs tag fields,
-      hm addr = Some (b, ofs) ->
-      heap_lookup s.(hp) addr = Some (tag, fields) ->
-      (* Fields loadable *)
-      (forall i v, nth_error fields i = Some v ->
-        exists cv, Mem.load Mint64 m b (Ptrofs.unsigned ofs + Z.of_nat i * 8) = Some cv /\
-                   val_repr hm cb co v cv) /\
-      (* Header loadable with correct size *)
-      (exists hdr_word,
-        Mem.load Mint64 m b (Ptrofs.unsigned ofs - 8) = Some (Vlong hdr_word) /\
-        Int64.shru hdr_word (Int64.repr 10) = Int64.repr (Z.of_nat (length fields))) /\
-      (* Block is separate from struct/stack/global *)
-      b <> ar_sptr_block ard /\ b <> ar_global_block ard.
-```
+For each handler whose error predicate changes from `True` to a specific characterization, the corresponding `_correct.v` proof file must be updated. The Error branch of `handler_correct` now requires proving the specific predicate instead of `True`.
 
-**RESTART step_pre building block**:
-```rocq
-pre_and heap_header_consistent (sp_at_least (num_args * 8))
-```
-where num_args is derived from the closure structure.
+- **Groups A, B**: Simple — destruct the handler match, read off the error message string.
+- **Group C**: Destruct `Machine.env s`, case-split on ofs=0 vs ofs!=0 where relevant.
+- **Groups D, E**: Destruct the nested matches, read off the message for each Error branch.
 
-### Proof Structure (Axiom-Free)
+These proofs are typically short (a few lines of `simpl; destruct; auto`) since the Error branches in the handler definition directly produce the characterized message.
 
-The proof uses **induction on the number of fields to copy** (num_args):
+### Step 9: Update InstructVerification.v for changed signatures
 
-1. **Extract num_args**: From heap_header_consistent, load header word. The C expression `(header >> 10) - 3` equals `length fields - 3` by the header consistency hypothesis.
+If any Parameter signature changes (it will for all 19 handlers), verify that the corresponding proof in InstructVerification.v still type-checks. The proof term itself shouldn't change — only the type it must satisfy.
 
-2. **SP room**: From sp_at_least, the stack pointer can be decremented by num_args * 8 without underflowing.
+## Files to modify
 
-3. **Loop invariant**: After iteration `i`, the first `i` stack slots contain the corresponding closure fields:
-   ```
-   forall j < i,
-     Mem.load Mint64 m' sp_b (sp_ofs - num_args*8 + j*8) = Some cv_j /\
-     val_repr hm (nth (j+3) fields) cv_j
-   ```
+All source files live in `verified-ocaml/instruct-verification/theories/`; `_build/default/` copies are generated by dune.
 
-4. **Base case** (num_args = 0): Loop body doesn't execute. The C code just updates env and extra_args. Straightforward.
+| File | Action |
+|------|--------|
+| `InstructSpec.v` | Add loop AST defs, closure/closurerec general step_pre; fix 19 error predicates in Parameter declarations |
+| `CLOSURE_correct.v` | Rewrite: generalize from nvars=0 to arbitrary nvars |
+| `CLOSUREREC_correct.v` | Rewrite: generalize from nfuncs=1,nvars=0 to arbitrary nfuncs,nvars |
+| `BGEINT_correct.v` | Update Error branch proof for new predicate |
+| `BGTINT_correct.v` | Update Error branch proof for new predicate |
+| `BLEINT_correct.v` | Update Error branch proof for new predicate |
+| `BUGEINT_correct.v` | Update Error branch proof for new predicate |
+| `BULTINT_correct.v` | Update Error branch proof for new predicate |
+| `BOOLNOT_correct.v` | Update Error branch proof for `False` predicate |
+| `ISINT_correct.v` | Update Error branch proof for `False` predicate |
+| `OFFSETCLOSURE0_correct.v` | Update Error branch proof |
+| `OFFSETCLOSURE2_correct.v` | Update Error branch proof |
+| `OFFSETCLOSUREM2_correct.v` | Update Error branch proof |
+| `OFFSETCLOSURE_correct.v` | Update Error branch proof |
+| `PUSHOFFSETCLOSURE0_correct.v` | Update Error branch proof |
+| `PUSHOFFSETCLOSURE2_correct.v` | Update Error branch proof |
+| `PUSHOFFSETCLOSUREM2_correct.v` | Update Error branch proof |
+| `PUSHOFFSETCLOSURE_correct.v` | Update Error branch proof |
+| `GETDYNMET_correct.v` | Update Error branch proof |
+| `GETPUBMET_correct.v` | Update Error branch proof |
+| `GETMETHOD_correct.v` | Update Error branch proof |
+| `SWITCH_correct.v` | Update Error branch proof |
+| `InstructVerification.v` | Verify all 151 bindings type-check with new signatures |
 
-5. **Inductive step**: One loop iteration:
-   - Load field[i+3] from closure block (from heap_header_consistent)
-   - Store to sp[i] (Mem.store succeeds because SP region is writable from abs_rel)
-   - Memory after store still satisfies the loop invariant for previous fields (because closure block ≠ stack block, from block separation)
-   - Advance loop counter
+## Key patterns to reuse
 
-6. **Post-loop**: After all iterations, the stack region contains `args` (= skipn 3 fields). Load saved_env from field[2] (from heap_header_consistent). Construct post-state abs_rel:
-   - Stack: args ++ old_stack → stack_repr holds (each field has val_repr from heap_header_consistent)
-   - Env: saved_env → val_repr from heap_header_consistent
-   - PC: unchanged (same pc_rel)
-   - Extra_args: old + num_args (integer arithmetic)
-
-### CompCert Loop Semantics
-
-In Clight bigstep, the `for` loop is desugared to `Sloop (Sseq Sifthenelse body) Sskip`. Verification uses `exec_Sloop_loop` (loop body returns normally → continue) and `exec_Sloop_stop` (condition false → exit).
-
-The key lemma to prove:
-```rocq
-Lemma restart_loop_correct :
-  forall n env_b env_ofs sp_b sp_ofs m i_val,
-    (* n remaining iterations *)
-    (* heap fields at env_b are loadable *)
-    (* SP region is writable *)
-    ...
-    exec_stmt ... e le m loop_body ... le' m' Out_normal.
-```
-
-This is proved by well-founded induction on `n` (iterations remaining), which decreases at each step.
-
-### Estimated Complexity
-
-This is the hardest single handler proof in the project:
-- Loop invariant formulation: ~50 lines
-- Loop correctness lemma: ~200 lines (induction + memory reasoning)  
-- Wrapper integration: ~30 lines
-- Total: ~280 lines of new proof code
-
-But it is **fully axiom-free** — all reasoning follows from heap_header_consistent + abs_rel + CompCert memory model.
-
-## Key Risks
-
-1. **val_repr non-determinism**: After extension, `val_repr hm cb co (Val_int z) cv` has two possible `cv` values. Proofs that assumed determinism (e.g., `val_repr uniqueness lemmas`) may need updating.
-
-2. **Scope of Phase 0**: ~700 mechanical edits is large. May take significant time even with parallel agents. Mitigated by the mechanical nature — each edit follows a fixed pattern.
-
-3. **Re-proving Step cases (Phase 3)**: The ~12 contradictory handlers need real proofs, not just wrappers. This is genuine proof engineering work, not mechanical editing.
-
-4. **RESTART loop proof**: ~280 lines of loop induction reasoning. The hardest single handler, but axiom-free.
-
-## Critical Files
-
-- `instruct-verification/theories/InstructSpec.v` — val_repr, stack_repr, abs_rel, building blocks, Module Type
-- `instruct-verification/theories/InstructVerification.v` — Pure direct assignments
-- `instruct-verification/theories/HandlerLemmas.v` — Shared lemmas (heavily uses val_repr/stack_repr)
-- 151 `_correct.v` files — Per-handler proofs
+- `makeblock_step_pre` loop postcondition pattern (InstructSpec.v:2294-2330)
+- `heap_alloc_with_stores` / `heap_alloc_pre` building blocks (InstructSpec.v:800-824, 913-930)
+- `alloc_store_2` for the 2-field base case; inline store chain for variable-size blocks
+- `HandlerLemmas.v` memory store/load lemmas
+- `ExternalCallSpecs.v` heap_alloc specification
+- `StepToBigstep.v` comp_eval_stmt + eval_stmt_to_exec pattern for non-loop code
 
 ## Verification
 
-After each phase:
-```bash
-cd verified-ocaml && dune build instruct-verification/
-```
+1. Build with `cd verified-ocaml && dune build instruct-verification/` — this compiles all .v files and checks the Module Type instantiation
+2. The `Module InstructVerification <: InstructVerificationSpec` declaration in InstructVerification.v is the machine-checked proof that all 151 parameters are satisfied
+3. Check `Print Assumptions verify_CLOSURE_general_correct.` and `Print Assumptions verify_CLOSUREREC_general_correct.` to confirm 0 axioms/admitted
 
-Final checks:
-```bash
-grep -c "Admitted" instruct-verification/theories/InstructVerification.v  # 0
-grep "False" instruct-verification/theories/InstructSpec.v | grep -c "step_pre\|:="  # 0
-```
+## Ordering / dependencies
+
+1. **Error predicate fixes first** (Steps 7-9): These are localized changes to InstructSpec.v + corresponding `_correct.v` files. Each is independent — can be done in any order. Do these before CLOSURE/CLOSUREREC since they touch InstructSpec.v and we want a clean baseline.
+2. **CLOSURE generalization** (Steps 1-4, 6): One loop, simpler layout. Serves as warm-up and template.
+3. **CLOSUREREC generalization** (Steps 1-2, 3, 5-6): Two loops, infix headers, pointer arithmetic. Builds on CLOSURE pattern.
+4. **Final build** (`cd verified-ocaml && dune build instruct-verification/`): Confirms all 151 parameters satisfied with 0 Admitted.

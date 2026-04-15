@@ -51,7 +51,8 @@ Proof. intros. rewrite Z.add_0_r. apply Nat2Z.id. Qed.
 Theorem verify_OFFSETCLOSURE0_compl_comp :
     handler_correct (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
       (fun _ _ _ _ => True)
-      (fun _ _ => True)
+      (fun msg s => msg = "OFFSETCLOSURE: invalid env"%string /\
+        match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
@@ -64,7 +65,7 @@ Proof.
   (* ================================================================ *)
   (* Case: env = Val_int z => Error                                    *)
   (* ================================================================ *)
-  - exact I.
+  - exact (conj eq_refl I).
 
   (* ================================================================ *)
   (* Case: env = Val_block n l => Step (Z.eqb 0 0 = true)            *)
@@ -254,7 +255,7 @@ Proof.
   (* ================================================================ *)
   (* Case: env = Val_ptr n => Error                                    *)
   (* ================================================================ *)
-  - exact I.
+  - exact (conj eq_refl I).
 
   (* ================================================================ *)
   (* Case: env = Val_closure n n0 => Step                              *)

@@ -192,61 +192,8 @@ Proof.
   lia.
 Qed.
 
-(* ================================================================== *)
-(* The loop statement extracted from f_instr_MAKEFLOATBLOCK            *)
-(* ================================================================== *)
-
-Definition makefloatblock_loop_body : statement :=
-  (Ssequence
-    (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
-                   (Etempvar _size tulong) tint)
-      Sskip
-      Sbreak)
-    (Ssequence
-      (Ssequence
-        (Sset _t'4
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Ssequence
-          (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
-          (Ssequence
-            (Sset _t'6
-              (Ederef
-                (Ecast (Etempvar _t'5 tlong) (tptr tdouble))
-                tdouble))
-            (Sassign
-              (Ederef
-                (Ecast
-                  (Ebinop Oadd
-                    (Ecast (Etempvar _block tlong) (tptr tlong))
-                    (Ebinop Omul (Etempvar _i tulong)
-                      (Ebinop Odiv (Esizeof tdouble tulong)
-                        (Esizeof tlong tulong) tulong) tulong)
-                    (tptr tlong)) (tptr tdouble)) tdouble)
-              (Etempvar _t'6 tdouble)))))
-      (Ssequence
-        (Sset _t'3
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sassign
-          (Efield
-            (Ederef
-              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong))
-          (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
-            (Econst_int (Int.repr 1) tint) (tptr tlong)))))).
-
-Definition makefloatblock_loop_incr : statement :=
-  (Sset _i
-    (Ebinop Oadd (Etempvar _i tulong)
-      (Econst_int (Int.repr 1) tint) tulong)).
-
-Definition makefloatblock_loop : statement :=
-  Sloop makefloatblock_loop_body makefloatblock_loop_incr.
+(* makefloatblock_loop_body, makefloatblock_loop_incr, makefloatblock_loop
+   are now in instruct_handlers.v *)
 
 (* First theorem attempt removed -- it used a different step_pre structure
    that did not cleanly handle the float-specific double cast operations.
@@ -940,35 +887,7 @@ Abort.
 (* store.  This cleanly abstracts the float-specific operations.      *)
 (* ================================================================== *)
 
-Definition makefloatblock_body_after_setblock : statement :=
-  Ssequence
-    (Ssequence
-      (Sset _t'7
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _accu tlong))
-      (Ssequence
-        (Sset _t'8
-          (Ederef (Ecast (Etempvar _t'7 tlong) (tptr tdouble)) tdouble))
-        (Sassign
-          (Ederef
-            (Ecast
-              (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                (Ebinop Omul (Econst_int (Int.repr 0) tint)
-                  (Ebinop Odiv (Esizeof tdouble tulong)
-                    (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
-              (tptr tdouble)) tdouble) (Etempvar _t'8 tdouble))))
-    (Ssequence
-      (Ssequence
-        (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
-        (Sloop
-          makefloatblock_loop_body
-          makefloatblock_loop_incr))
-      (Sassign
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _accu tlong)
-        (Etempvar _block tlong))).
+(* makefloatblock_body_after_setblock is now in instruct_handlers.v *)
 
 Theorem verify_MAKEFLOATBLOCK_correct : forall (n : nat),
     (n >= 1)%nat ->

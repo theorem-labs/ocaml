@@ -2,7 +2,8 @@
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
-From compcert Require Import Integers Ctypes Cop Clight Globalenvs Memory Values.
+From compcert Require Import AST Integers Ctypes Cop Clight ClightBigstep Events Globalenvs Memory Values.
+From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine Bytecode.Interpret.
 Require Import instruct_handlers.
@@ -187,7 +188,26 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_APPTERM1 := verify_APPTERM1_correct.
   Definition correct_APPTERM2 := verify_APPTERM2_correct.
   Definition correct_APPTERM3 := verify_APPTERM3_correct.
-  Definition correct_APPTERM := verify_APPTERM_correct.
+  Definition correct_APPTERM : forall nargs slotsize,
+    handler_correct (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
+      (fun e0 m s ard =>
+         get_code_ptr_s s s.(Machine.accu) <> None /\
+         let s' := match get_code_ptr_s s s.(Machine.accu) with
+                   | Some target_pc =>
+                     s <|pc := target_pc|>
+                       <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
+                       <|env := s.(Machine.accu)|>
+                       <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
+                   | None => s
+                   end in
+         forall le,
+           abs_rel_with_ard e0 le m s ard ->
+           exists le' m' out,
+             exec_stmt function_entry1 clight_ge e0 le m
+               (fn_body f_instr_APPTERM) E0 le' m' out /\
+             abs_rel e0 le' m' s')
+      (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
+  Proof. exact verify_APPTERM_correct. Qed.
   Definition correct_ASRINT := verify_ASRINT_handler_correct.
   Definition correct_ASSIGN := verify_ASSIGN_correct.
   Definition correct_ATOM0 := verify_ATOM0_correct.
@@ -204,21 +224,21 @@ Module InstructVerification <: InstructVerificationSpec.
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGEINT n target) f_instr_BGEINT
       (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
+      (fun msg s => msg = "BGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
     := verify_BGEINT_handler_correct.
   Definition correct_BGTINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGTINT n target) f_instr_BGTINT
       (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
+      (fun msg s => msg = "BGTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
     := verify_BGTINT_handler_correct.
   Definition correct_BLEINT :
     forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BLEINT n target) f_instr_BLEINT
       (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
+      (fun msg s => msg = "BLEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
     := verify_BLEINT_handler_correct.
   Definition correct_BLTINT :
     forall n target,
@@ -249,14 +269,14 @@ Module InstructVerification <: InstructVerificationSpec.
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
       (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
+      (fun msg s => msg = "BUGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
     := verify_BUGEINT_handler_correct.
   Definition correct_BULTINT :
     forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BULTINT n target) f_instr_BULTINT
       (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False)
+      (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
     := verify_BULTINT_handler_correct.
   Definition correct_CHECK_SIGNALS := verify_CHECK_SIGNALS_correct.
   Definition correct_CLOSUREREC : forall code_ofs,
@@ -310,34 +330,18 @@ Module InstructVerification <: InstructVerificationSpec.
           exists (k - 1). simpl align_chunk in *. lia.
         - lia. }
   Qed.
-  Definition correct_CLOSURE : forall code_ofs,
+  Definition correct_CLOSURE : forall nvars code_ofs,
+    (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
-      (heap_alloc_with_stores 2 247 alloc_store_2
-       /\p code_at (Int.repr 0) /\p code_arg_at 1 (Int.repr code_ofs))
+    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+      (closure_general_step_pre nvars code_ofs)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
   Proof.
-    intros code_ofs Hrange. eapply handler_correct_weaken.
-    - exact (verify_CLOSURE_correct code_ofs).
-    - intros e le m s ard _ [[Hhap Hsu] [Hc0 Hc1]].
-      unfold heap_alloc_pre in Hhap.
-      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
-      split; [exact H0|]. split; [exact Hc0|]. split; [exact Hc1|].
-      split; [exact Hrange|]. split; [exact H2|]. split; [exact H3|].
-      split; [exact H4|].
-      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
-      exists ma, nb, no.
-      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
-      split; [exact Hp|].
-      (* alloc_store_2 has m_alloc perm; CLOSURE inline has valid_block + m_store perm *)
-      pose proof (Hsu m' ma nb no He Hf Hl Hp) as Has2.
-      intros cv. destruct (Has2 cv) as (ms & Hs & Hld & Hld_other & Hinner).
-      exists ms. split; [exact Hs|]. split; [exact Hld|]. split; [exact Hld_other|].
-      intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hld1 & Hf0ld & Hld1_other & Hperm).
-      exists ms1. split; [exact Hs1|]. split; [exact Hld1|].
-      split; [exact Hf0ld|]. split; [exact Hld1_other|].
-      intros b ofs k p _ Hpm.
-      apply Hperm. eapply Mem.perm_store_2. exact Hs. exact Hpm.
+    intros nvars code_ofs Hnvars_range Hcode_ofs_range.
+    apply verify_CLOSURE_general_correct.
+    - rewrite Nat2Z.inj_add in Hnvars_range. simpl (Z.of_nat 2) in Hnvars_range.
+      split; [apply Nat2Z.is_nonneg | lia].
+    - exact Hcode_ofs_range.
   Qed.
   Definition correct_CONST0 := verify_CONST0_compl_comp.
   Definition correct_CONST1 := verify_CONST1_correct.
@@ -471,8 +475,18 @@ Module InstructVerification <: InstructVerificationSpec.
       split; [exact Hp|].
       exact (Hsu m' ma nb no He Hf Hl Hp).
   Qed.
-  Definition correct_MAKEBLOCK := verify_MAKEBLOCK_correct.
-  Definition correct_MAKEFLOATBLOCK := verify_MAKEFLOATBLOCK_correct.
+  Definition correct_MAKEBLOCK : forall t size,
+    (size >= 1)%nat ->
+    handler_correct (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
+      (makeblock_step_pre t size)
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Proof. exact verify_MAKEBLOCK_correct. Qed.
+  Definition correct_MAKEFLOATBLOCK : forall n,
+    (n >= 1)%nat ->
+    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+      (makefloatblock_step_pre n)
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Proof. exact verify_MAKEFLOATBLOCK_correct. Qed.
   Definition correct_MODINT := verify_MODINT_handler_correct.
   Definition correct_MULINT := verify_MULINT_correct.
   Definition correct_NEGINT := verify_NEGINT_compl_comp.

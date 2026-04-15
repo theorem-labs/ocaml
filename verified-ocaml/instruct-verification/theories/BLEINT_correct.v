@@ -272,7 +272,7 @@ Theorem verify_BLEINT_correct : forall n target,
          | _ => False
          end /\
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BLEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target e le m s.
   unfold handle_BLEINT.
@@ -796,11 +796,11 @@ Proof.
   }
 
   (* ================================================================ *)
-  (* Cases 2-4: non-integer accu => Error, trivially True              *)
+  (* Cases 2-4: non-integer accu => Error, precise P_error            *)
   (* ================================================================ *)
-  - destruct fields as [| h t]; exact I.
-  - exact I.
-  - exact I.
+  - destruct fields as [| h t]; exact (conj eq_refl I).
+  - exact (conj eq_refl I).
+  - exact (conj eq_refl I).
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
@@ -808,7 +808,7 @@ Theorem verify_BLEINT_handler_correct : forall n target,
     Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BLEINT n target) f_instr_BLEINT
       (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BLEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target Hn.
   eapply handler_correct_weaken.

@@ -304,7 +304,12 @@ Theorem verify_SWITCH_correct :
         exists le' m' out,
           exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_SWITCH) E0 le' m' out /\
           abs_rel e le' m' s'
-    | Error msg => True
+    | Error msg =>
+        (msg = "SWITCH: constant index out of range"%string /\
+         match Machine.accu s with Val_int _ => True | _ => False end) \/
+        (msg = "SWITCH: block tag out of range"%string) \/
+        (msg = "SWITCH: dangling pointer"%string /\
+         match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end)
     | Halt v => False
     | CCall_request _ _ _ => False
     end.
@@ -1180,9 +1185,9 @@ Proof.
     }
 
     (* ============================================================== *)
-    (* Case 1b: nth_error fails => Error, trivially true              *)
+    (* Case 1b: nth_error fails => Error, constant index out of range *)
     (* ============================================================== *)
-    { exact I. }
+    { left; exact (conj eq_refl I). }
   }
 
   (* ================================================================ *)
@@ -1192,8 +1197,8 @@ Proof.
     destruct (nth_error block_targets tag) as [target|] eqn:Hnth.
     - (* Step: precondition is False *)
       intros ard _ Hfalse. contradiction.
-    - (* Error: trivially true *)
-      exact I.
+    - (* Error: block tag out of range *)
+      right; left; reflexivity.
   }
 
   (* ================================================================ *)
@@ -1203,8 +1208,8 @@ Proof.
     destruct (tag_or_heap s (Val_ptr addr)) as [t|] eqn:Htag.
     - destruct (nth_error block_targets t) as [target|] eqn:Hnth.
       + intros ard _ Hfalse. contradiction.
-      + exact I.
-    - exact I.
+      + right; left; reflexivity.
+    - right; right; exact (conj eq_refl I).
   }
 
   (* ================================================================ *)
@@ -1214,8 +1219,8 @@ Proof.
     destruct (tag_or_heap s (Val_closure addr off)) as [t|] eqn:Htag.
     - destruct (nth_error block_targets t) as [target|] eqn:Hnth.
       + intros ard _ Hfalse. contradiction.
-      + exact I.
-    - exact I.
+      + right; left; reflexivity.
+    - right; right; exact (conj eq_refl I).
   }
 Qed.
 
@@ -1255,7 +1260,13 @@ Theorem verify_SWITCH_handler_correct :
                  = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t)))
          | _ => False
          end)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s =>
+        (msg = "SWITCH: constant index out of range"%string /\
+         match Machine.accu s with Val_int _ => True | _ => False end) \/
+        (msg = "SWITCH: block tag out of range"%string) \/
+        (msg = "SWITCH: dangling pointer"%string /\
+         match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end))
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros _nc _nb ct bt.
   exact (verify_SWITCH_correct _nc _nb ct bt).

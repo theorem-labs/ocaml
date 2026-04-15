@@ -87,7 +87,11 @@ Qed.
 Theorem verify_OFFSETCLOSUREM2_compl_comp :
     handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM2
       (closure_offset_pre (-2) (-24))
-      (fun _ _ => True)
+      (fun msg s =>
+        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "OFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
@@ -98,19 +102,19 @@ Proof.
   destruct (Machine.env s) eqn:Henv_eq.
 
   (* ================================================================ *)
-  (* Case 1: env = Val_int z => Error                                  *)
+  (* Case 1: env = Val_int z => Error "invalid env"                    *)
   (* ================================================================ *)
-  - exact I.
+  - right; exact (conj eq_refl I).
 
   (* ================================================================ *)
-  (* Case 2: env = Val_block n l => Error (Z.eqb (-2) 0 = false)      *)
+  (* Case 2: env = Val_block n l => Error "non-zero offset" (Z.eqb (-2) 0 = false) *)
   (* ================================================================ *)
-  - exact I.
+  - left; exact (conj eq_refl I).
 
   (* ================================================================ *)
-  (* Case 3: env = Val_ptr n => Error                                  *)
+  (* Case 3: env = Val_ptr n => Error "invalid env"                    *)
   (* ================================================================ *)
-  - exact I.
+  - right; exact (conj eq_refl I).
 
   (* ================================================================ *)
   (* Case 4: env = Val_closure n n0 => Step                            *)

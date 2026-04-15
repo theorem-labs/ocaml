@@ -199,10 +199,10 @@ Theorem verify_GETMETHOD_correct :
                         (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int n) cv -> exists z, cv = Vlong z)
          | _ => True
          end)
-      (fun msg s =>
-         match msg with
-         | _ => True
-         end)
+      (fun msg _ => msg = "GETMETHOD: stack underflow"%string \/
+        msg = "GETMETHOD: no class table"%string \/
+        msg = "GETMETHOD: not an integer index"%string \/
+        msg = "GETMETHOD: method not found"%string)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
@@ -210,20 +210,20 @@ Proof.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [| obj stk_tl] eqn:Hstk.
-  { (* stack = nil => Error *) trivial. }
+  { (* stack = nil => Error *) left; reflexivity. }
 
   (* stack = obj :: stk_tl *)
   destruct (field_or_heap s obj 0) as [class_tbl|] eqn:Hclass.
-  2: { (* field_or_heap = None => Error *) trivial. }
+  2: { (* field_or_heap = None => Error *) right; left; reflexivity. }
 
   (* field_or_heap obj 0 = Some class_tbl *)
   destruct (Machine.accu s) as [n | | |] eqn:Haccu_eq.
 
-  2-4: trivial.
+  2-4: right; right; left; reflexivity.
 
   (* accu = Val_int n *)
   destruct (field_or_heap s class_tbl (Z.to_nat n)) as [method_fn|] eqn:Hmethod.
-  2: { (* method not found => Error *) trivial. }
+  2: { (* method not found => Error *) right; right; right; reflexivity. }
 
   (* ================================================================ *)
   (* Step case: all lookups succeeded                                  *)

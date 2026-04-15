@@ -190,7 +190,11 @@ Theorem verify_PUSHOFFSETCLOSURE_correct : forall ofs,
                Int64.add env_long (Int64.mul (Int64.repr (Int.signed (Int.repr ofs))) (Int64.repr 8)) = env_long
          | _ => True
          end)
-      (fun _ _ => True)
+      (fun msg s =>
+        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+         match Machine.env s with Val_block _ _ => True | _ => False end) \/
+        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
+         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
@@ -202,9 +206,9 @@ Proof.
   destruct (Machine.env s) eqn:Henv_eq.
 
   (* ================================================================ *)
-  (* Case 1: env = Val_int z => Error                                  *)
+  (* Case 1: env = Val_int z => Error "invalid env"                    *)
   (* ================================================================ *)
-  - exact I.
+  - right; exact (conj eq_refl I).
 
   (* ================================================================ *)
   (* Case 2: env = Val_block n l                                       *)
@@ -673,13 +677,13 @@ Proof.
           apply Hsb_writable. exact Hofs'. }
       }
 
-    (* Case 2b: ofs <> 0 => Error *)
-    + exact I.
+    (* Case 2b: ofs <> 0 => Error "non-zero offset" *)
+    + left; exact (conj eq_refl I).
 
   (* ================================================================ *)
-  (* Case 3: env = Val_ptr n => Error                                  *)
+  (* Case 3: env = Val_ptr n => Error "invalid env"                    *)
   (* ================================================================ *)
-  - exact I.
+  - right; exact (conj eq_refl I).
 
   (* ================================================================ *)
   (* Case 4: env = Val_closure n n0 => Step                            *)

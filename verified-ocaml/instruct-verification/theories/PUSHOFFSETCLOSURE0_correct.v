@@ -67,7 +67,8 @@ Theorem verify_PUSHOFFSETCLOSURE0_correct :
          exists sp_b sp_ofs,
            Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
            Ptrofs.unsigned sp_ofs >= 16)
-      (fun _ _ => True)
+      (fun msg s => msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
+        match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
@@ -78,9 +79,9 @@ Proof.
   destruct (Machine.env s) eqn:Henv_eq.
 
   (* ================================================================ *)
-  (* Case: env = Val_int z => Error                                    *)
+  (* Case: env = Val_int z => Error "invalid env"                      *)
   (* ================================================================ *)
-  - exact I.
+  - exact (conj eq_refl I).
 
   (* ================================================================ *)
   (* Case: env = Val_block n l => Step (Z.eqb 0 0 = true)            *)
@@ -431,9 +432,9 @@ Proof.
     }
 
   (* ================================================================ *)
-  (* Case: env = Val_ptr n => Error                                    *)
+  (* Case: env = Val_ptr n => Error "invalid env"                       *)
   (* ================================================================ *)
-  - exact I.
+  - exact (conj eq_refl I).
 
   (* ================================================================ *)
   (* Case: env = Val_closure n n0 => Step                              *)

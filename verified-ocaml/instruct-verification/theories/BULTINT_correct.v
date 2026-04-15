@@ -301,7 +301,7 @@ Theorem verify_BULTINT_correct : forall n target,
          | _ => False
          end /\
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target e le m s.
   unfold handle_BULTINT.
@@ -815,11 +815,11 @@ Proof.
   }
 
   (* ================================================================ *)
-  (* Cases 2-4: non-integer accu => excluded by precondition           *)
+  (* Cases 2-4: non-integer accu => Error, precise P_error            *)
   (* ================================================================ *)
-  - exact I.
-  - exact I.
-  - exact I.
+  - exact (conj eq_refl I).
+  - exact (conj eq_refl I).
+  - exact (conj eq_refl I).
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
@@ -827,7 +827,7 @@ Theorem verify_BULTINT_handler_correct : forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BULTINT n target) f_instr_BULTINT
       (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
-      (fun _ _ => True) (fun _ => False) (fun _ _ _ => False).
+      (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target Hn0 Hn.
   eapply handler_correct_weaken.
