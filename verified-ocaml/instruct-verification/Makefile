@@ -1,8 +1,12 @@
-INTERP_C = ../../system-ocaml/runtime/interp.c
+SUBMODULE := ../../system-ocaml
+INTERP_C = $(SUBMODULE)/runtime/interp.c
 
 .PHONY: all clean
 
 all: gen/instruct_handlers.c
+
+$(INTERP_C):
+	if [ ! -d $(SUBMODULE) ]; then git submodule update --init $(SUBMODULE); fi
 
 gen/instruct_handlers.c: $(INTERP_C) extract_handlers.sh
 	mkdir -p gen
