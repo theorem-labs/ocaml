@@ -43,6 +43,134 @@ Definition val_int_repr (z : Z) : val :=
   Vlong (Int64.repr (z * 2 + 1)).
 
 (* ================================================================== *)
+(* Loop AST fragments used by step_pre definitions below and by        *)
+(* MAKEBLOCK_correct.v / MAKEFLOATBLOCK_correct.v.  Kept here (not in  *)
+(* instruct_handlers.v) because instruct_handlers.v is auto-generated  *)
+(* by clightgen and overwritten on regeneration.                       *)
+(* ================================================================== *)
+
+(* MAKEBLOCK field copy loop *)
+Definition makeblock_loop_body : statement :=
+  (Ssequence
+    (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
+                   (Etempvar _wosize tulong) tint)
+      Sskip
+      Sbreak)
+    (Ssequence
+      (Ssequence
+        (Sset _t'4
+          (Efield
+            (Ederef
+              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Sassign
+          (Efield
+            (Ederef
+              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong))
+          (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+            (Econst_int (Int.repr 1) tint) (tptr tlong))))
+      (Ssequence
+        (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
+        (Sassign
+          (Ederef
+            (Ebinop Oadd
+              (Ecast (Etempvar _block tlong) (tptr tlong))
+              (Etempvar _i tulong) (tptr tlong)) tlong)
+          (Etempvar _t'5 tlong))))).
+
+Definition makeblock_loop_incr : statement :=
+  (Sset _i
+    (Ebinop Oadd (Etempvar _i tulong)
+      (Econst_int (Int.repr 1) tint) tulong)).
+
+Definition makeblock_loop : statement :=
+  Sloop makeblock_loop_body makeblock_loop_incr.
+
+(* MAKEFLOATBLOCK field copy loop *)
+Definition makefloatblock_loop_body : statement :=
+  (Ssequence
+    (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
+                   (Etempvar _size tulong) tint)
+      Sskip
+      Sbreak)
+    (Ssequence
+      (Ssequence
+        (Sset _t'4
+          (Efield
+            (Ederef
+              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Ssequence
+          (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
+          (Ssequence
+            (Sset _t'6
+              (Ederef
+                (Ecast (Etempvar _t'5 tlong) (tptr tdouble))
+                tdouble))
+            (Sassign
+              (Ederef
+                (Ecast
+                  (Ebinop Oadd
+                    (Ecast (Etempvar _block tlong) (tptr tlong))
+                    (Ebinop Omul (Etempvar _i tulong)
+                      (Ebinop Odiv (Esizeof tdouble tulong)
+                        (Esizeof tlong tulong) tulong) tulong)
+                    (tptr tlong)) (tptr tdouble)) tdouble)
+              (Etempvar _t'6 tdouble)))))
+      (Ssequence
+        (Sset _t'3
+          (Efield
+            (Ederef
+              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Sassign
+          (Efield
+            (Ederef
+              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong))
+          (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
+            (Econst_int (Int.repr 1) tint) (tptr tlong)))))).
+
+Definition makefloatblock_loop_incr : statement :=
+  (Sset _i
+    (Ebinop Oadd (Etempvar _i tulong)
+      (Econst_int (Int.repr 1) tint) tulong)).
+
+Definition makefloatblock_loop : statement :=
+  Sloop makefloatblock_loop_body makefloatblock_loop_incr.
+
+Definition makefloatblock_body_after_setblock : statement :=
+  Ssequence
+    (Ssequence
+      (Sset _t'7
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _accu tlong))
+      (Ssequence
+        (Sset _t'8
+          (Ederef (Ecast (Etempvar _t'7 tlong) (tptr tdouble)) tdouble))
+        (Sassign
+          (Ederef
+            (Ecast
+              (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                (Ebinop Omul (Econst_int (Int.repr 0) tint)
+                  (Ebinop Odiv (Esizeof tdouble tulong)
+                    (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
+              (tptr tdouble)) tdouble) (Etempvar _t'8 tdouble))))
+    (Ssequence
+      (Ssequence
+        (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
+        (Sloop
+          makefloatblock_loop_body
+          makefloatblock_loop_incr))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _accu tlong)
+        (Etempvar _block tlong))).
+
+(* ================================================================== *)
 (* Abstraction relation                                                *)
 (* ================================================================== *)
 

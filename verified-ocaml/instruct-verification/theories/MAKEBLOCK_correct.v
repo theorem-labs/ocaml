@@ -202,7 +202,7 @@ Local Lemma load_result_vptr_mb : forall b ofs,
   Val.load_result Mint64 (Vptr b ofs) = Vptr b ofs.
 Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
-(* makeblock_loop_body, makeblock_loop_incr, makeblock_loop are now in instruct_handlers.v *)
+(* makeblock_loop_body, makeblock_loop_incr, makeblock_loop are in InstructSpec.v *)
 
 (* ================================================================== *)
 (* Main theorem                                                        *)

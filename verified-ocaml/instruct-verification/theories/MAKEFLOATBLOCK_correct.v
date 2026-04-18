@@ -193,7 +193,7 @@ Proof.
 Qed.
 
 (* makefloatblock_loop_body, makefloatblock_loop_incr, makefloatblock_loop
-   are now in instruct_handlers.v *)
+   are in InstructSpec.v *)
 
 (* First theorem attempt removed -- it used a different step_pre structure
    that did not cleanly handle the float-specific double cast operations.
@@ -887,7 +887,7 @@ Abort.
 (* store.  This cleanly abstracts the float-specific operations.      *)
 (* ================================================================== *)
 
-(* makefloatblock_body_after_setblock is now in instruct_handlers.v *)
+(* makefloatblock_body_after_setblock is in InstructSpec.v *)
 
 Theorem verify_MAKEFLOATBLOCK_correct : forall (n : nat),
     (n >= 1)%nat ->
