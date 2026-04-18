@@ -1,4 +1,4 @@
-INTERP_C = ../../system-ocaml-compiler/runtime/interp.c
+INTERP_C = ../../system-ocaml/runtime/interp.c
 
 .PHONY: all clean
 
