@@ -133,12 +133,17 @@ awk '
 # Rewrite Caml_state->trapsp so cpp can expand it; strip trailing `:` from
 # `Instruct(X):` so the shim's Instruct macro doesn't leave a stray colon
 # inside the function body; split same-line stacked labels
-# (`Instruct(X) Instruct(Y)`) onto separate lines so each gets its own body.
+# (`Instruct(X) Instruct(Y)`) onto separate lines so each gets its own body;
+# delete interp.c's own Integer_{,branch_}comparison #define blocks so the
+# shim's colon-free versions survive through cpp expansion.
 sed -i -e 's/Caml_state->trapsp/Caml_state_trapsp/g' \
        -e 's/Instruct(\([A-Z0-9_]\+\)):/Instruct(\1)/g' \
        -e ':a' \
        -e 's/\(Instruct([A-Z0-9_]\+)\)[ \t]\+\(Instruct(\)/\1\n    \2/' \
-       -e 'ta' "$TMP/dispatch.c"
+       -e 'ta' \
+       -e '/^#define Integer_comparison(/,/Next;$/d' \
+       -e '/^#define Integer_branch_comparison(/,/Next;$/d' \
+       -e 's/goto check_stacks;/Next;/g' "$TMP/dispatch.c"
 
 # Inline `/* Fallthrough */` bodies and flatten block-form handlers.
 awk -f "$INLINE_AWK" "$TMP/dispatch.c" > "$TMP/dispatch_norm.c"
@@ -229,95 +234,29 @@ emit_raw "PUSHOFFSETCLOSURE2" "    *--s->sp = s->accu;
 emit_raw "STOP" "    /* Halt execution */"
 emit_raw "CHECK_SIGNALS" "    /* Signal check abstracted */"
 
-# --- Integer comparisons (macro-generated in interp.c via Integer_comparison) ---
+# --- Integer comparisons and branch comparisons ---
+# Macro-generated in interp.c via Integer_{,branch_}comparison; the interp.c
+# #define blocks are stripped from the slice above so the shim's colon-free
+# versions expand for each invocation.
+for OP in EQ NEQ LTINT LEINT GTINT GEINT ULTINT UGEINT \
+          BEQ BNEQ BLTINT BLEINT BGTINT BGEINT BULTINT BUGEINT; do
+    emit_cpp "$OP"
+done
 
-emit_raw "EQ"     "    s->accu = Val_int((intnat) s->accu == (intnat) *s->sp++);"
-emit_raw "NEQ"    "    s->accu = Val_int((intnat) s->accu != (intnat) *s->sp++);"
-emit_raw "LTINT"  "    s->accu = Val_int((intnat) s->accu < (intnat) *s->sp++);"
-emit_raw "LEINT"  "    s->accu = Val_int((intnat) s->accu <= (intnat) *s->sp++);"
-emit_raw "GTINT"  "    s->accu = Val_int((intnat) s->accu > (intnat) *s->sp++);"
-emit_raw "GEINT"  "    s->accu = Val_int((intnat) s->accu >= (intnat) *s->sp++);"
-emit_raw "ULTINT" "    s->accu = Val_int((uintnat) s->accu < (uintnat) *s->sp++);"
-emit_raw "UGEINT" "    s->accu = Val_int((uintnat) s->accu >= (uintnat) *s->sp++);"
-
-# --- Integer branch comparisons ---
-# (macro-generated in interp.c via Integer_branch_comparison, manually expanded)
-emit_raw "BEQ" "    if ((intnat) *s->pc++ == (intnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-emit_raw "BNEQ" "    if ((intnat) *s->pc++ != (intnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-emit_raw "BLTINT" "    if ((intnat) *s->pc++ < (intnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-emit_raw "BLEINT" "    if ((intnat) *s->pc++ <= (intnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-emit_raw "BGTINT" "    if ((intnat) *s->pc++ > (intnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-emit_raw "BGEINT" "    if ((intnat) *s->pc++ >= (intnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-# --- Unsigned integer branch comparisons ---
-# (macro-generated in interp.c via Integer_branch_comparison)
-emit_raw "BULTINT" "    if ((uintnat) *s->pc++ < (uintnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-emit_raw "BUGEINT" "    if ((uintnat) *s->pc++ >= (uintnat) Long_val(s->accu)) {
-        s->pc += *s->pc;
-    } else {
-        s->pc++;
-    }"
-
-# --- String/Bytes operations (fallthroughs in interp.c) ---
-
-# GETSTRINGCHAR and GETBYTESCHAR are identical in interp.c (fallthrough)
-emit_raw "GETSTRINGCHAR" "    s->accu = Val_int(Byte_u(s->accu, Long_val(s->sp[0])));
-    s->sp += 1;"
-
-emit_raw "GETBYTESCHAR" "    s->accu = Val_int(Byte_u(s->accu, Long_val(s->sp[0])));
-    s->sp += 1;"
-
-emit_raw "SETBYTESCHAR" "    Byte_u(s->accu, Long_val(s->sp[0])) = Int_val(s->sp[1]);
-    s->sp += 2;
-    s->accu = Val_unit;"
+# --- String/Bytes operations (GETSTRINGCHAR/GETBYTESCHAR stacked) ---
+emit_cpp "GETSTRINGCHAR"
+emit_cpp "GETBYTESCHAR"
+emit_cpp "SETBYTESCHAR"
 
 # --- Function application ---
 
 # PUSH_RETADDR: set up return frame
-emit_raw "PUSH_RETADDR" "    s->sp -= 3;
-    s->sp[0] = (value) (s->pc + *s->pc);
-    s->sp[1] = s->env;
-    s->sp[2] = Val_long(s->extra_args);
-    s->pc++;"
+emit_cpp "PUSH_RETADDR"
 
-# APPLY: generic apply (reads nargs from pc)
-emit_raw "APPLY" "    s->extra_args = *s->pc - 1;
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;"
+# APPLY: generic apply (reads nargs from pc). interp.c's `goto check_stacks`
+# is rewritten to `Next;` in the sed preprocessor above so the trailing jump
+# drops out.
+emit_cpp "APPLY"
 
 # APPLY1: apply with 1 argument
 emit_raw "APPLY1" "    {
@@ -510,19 +449,9 @@ emit_raw "CLOSUREREC" "    {
     }"
 
 # --- Global variable access (with field) ---
-
-# GETGLOBALFIELD: accu = Field(Field(global_data, n), p)
-emit_raw "GETGLOBALFIELD" "    s->accu = Field(s->global_data, *s->pc);
-    s->pc++;
-    s->accu = Field(s->accu, *s->pc);
-    s->pc++;"
-
-# PUSHGETGLOBALFIELD: push then getglobalfield
-emit_raw "PUSHGETGLOBALFIELD" "    *--s->sp = s->accu;
-    s->accu = Field(s->global_data, *s->pc);
-    s->pc++;
-    s->accu = Field(s->accu, *s->pc);
-    s->pc++;"
+# PUSHGETGLOBALFIELD falls through to GETGLOBALFIELD in interp.c.
+emit_cpp "GETGLOBALFIELD"
+emit_cpp "PUSHGETGLOBALFIELD"
 
 # --- Block allocation ---
 
@@ -598,21 +527,12 @@ emit_raw "GETFLOATFIELD" "    {
     }"
 
 # SETFLOATFIELD: store a float into a float field
-emit_raw "SETFLOATFIELD" "    Store_double_flat_field(s->accu, *s->pc, Double_val(*s->sp));
-    s->accu = Val_unit;
-    s->sp++;
-    s->pc++;"
+emit_cpp "SETFLOATFIELD"
 
 # --- Exception handling ---
 
 # PUSHTRAP: push a trap frame
-emit_raw "PUSHTRAP" "    s->sp -= 4;
-    Trap_pc(s->sp) = s->pc + *s->pc;
-    Trap_link_offset(s->sp) = Val_long(s->trap_sp - s->sp);
-    s->sp[2] = s->env;
-    s->sp[3] = Val_long(s->extra_args);
-    s->trap_sp = s->sp;
-    s->pc++;"
+emit_cpp "PUSHTRAP"
 
 # POPTRAP: pop the current trap frame
 # Simplified: omits signal check (handled abstractly)
@@ -708,15 +628,13 @@ emit_raw "SWITCH" "    {
     }
     }"
 
-# --- ATOM0 / PUSHATOM0 (specialized, have fallthroughs in interp.c) ---
-emit_raw "ATOM0" "    s->accu = Atom(0);"
-emit_raw "PUSHATOM0" "    *--s->sp = s->accu;
-    s->accu = Atom(0);"
+# --- ATOM0 / PUSHATOM0 (have fallthroughs in interp.c) ---
+emit_cpp "ATOM0"
+emit_cpp "PUSHATOM0"
 
 # --- Object-oriented operations ---
-
-# GETMETHOD: accu = Field(Field(sp[0], 0), Int_val(accu))
-emit_raw "GETMETHOD" "    s->accu = Field(Field(s->sp[0], 0), Int_val(s->accu));"
+# GETMETHOD: accu = Lookup(sp[0], accu) where Lookup is #defined in the slice.
+emit_cpp "GETMETHOD"
 
 # GETPUBMET: method lookup with cache
 # Simplified: does a binary search (skips cache optimization for verification)

@@ -39,6 +39,9 @@
 #define Alloc_small(x, n, t) (x) = heap_alloc(s, (n), (t))
 #define Alloc_small_origin
 
+/* Runtime assertion macros: erase. Our model doesn't carry their checks. */
+#define CAMLassert(x)
+
 /* Caml_state access. The input is pre-rewritten so Caml_state->trapsp
    becomes Caml_state_trapsp (a bare identifier cpp can expand). */
 #define Caml_state_trapsp (s->trap_sp)
@@ -62,7 +65,7 @@
 
 #define Integer_branch_comparison(typ, opname, tst, debug) \
     Instruct(opname) \
-    if (*pc++ tst (typ) Long_val(accu)) { \
+    if ((typ) *pc++ tst (typ) Long_val(accu)) { \
         pc += *pc; \
     } else { \
         pc++; \
