@@ -63,7 +63,7 @@ automatic/Bytecode/
   HandleInstr.v             -- NEW. All handle_<OP> + top-level handle_instr.
                                NO Module ascription here — raw impl only.
 
-instruct-verification/theories/
+manual/Bytecode/
   InstructSpec.v            -- EDIT. Add dispatchers (f_instr, step_pre_instr,
                                P_error_instr, P_halt_instr, P_ccall_instr) and
                                a single `correct_handle_instr` theorem.
@@ -353,7 +353,13 @@ Remove `manual/Bytecode/Interpret.v`. Confirm no `_RocqProject` /
 
 ### Step 10 — Verify build and PBT
 
-1. `cd verified-ocaml && dune build` with no new Admitted / axioms.
+1. From `verified-ocaml/`, verify Rocq compilation with the `coq_makefile`
+   flow (see CLAUDE.md "Verifying Rocq compilation"):
+   ```bash
+   make Makefile.coq.checker
+   make -f Makefile.coq.checker
+   ```
+   No new Admitted / axioms beyond the baseline.
 2. `make extract` produces the same `Interp_extracted.ml` byte-for-byte
    (the functor instantiation should extract identically to the
    current direct definition — confirm with a diff on the output).
@@ -391,9 +397,9 @@ Should also produce no output.
 1. Steps 1-3 (types, spec, functor) together — can be done in one PR
    since the functor doesn't compile without the spec and the spec is
    trivial without the types.
-2. Step 4 (move implementation) in the same PR to keep `dune build`
-   green; the move is strictly cut-and-paste until the module
-   ascription at the bottom.
+2. Step 4 (move implementation) in the same PR to keep
+   `make -f Makefile.coq` green; the move is strictly cut-and-paste
+   until the module ascription at the bottom.
 3. Step 5 (collapse the 151 specs) is independent of the functor
    plumbing and of `checker/`. It can ride the same PR or split out —
    the only requirement is that `handle_instr` exists as a name by
@@ -411,8 +417,9 @@ step 8 turns up surprises, in which case pausing between 6 and 7 is
 the natural checkpoint.
 
 Step 5 is the one piece that can safely ride in a follow-up PR
-without leaving `dune build` red — the 151 `correct_<OP>` lemmas keep
-compiling even if `handle_instr_correct` has not yet been added.
+without leaving `make -f Makefile.coq` red — the 151 `correct_<OP>`
+lemmas keep compiling even if `handle_instr_correct` has not yet been
+added.
 
 ## Interactions with other plans
 
@@ -423,12 +430,12 @@ compiling even if `handle_instr_correct` has not yet been added.
   Step 5's dispatchers are the same dispatchers the meta-spec wants
   for its `HandlerSpecBundle` table, so this plan pays down part of
   that work.
-- **`PLAN.md` (instruct-verification)**: Partially affected. The
-  per-handler `correct_<OP>` lemmas are preserved but get inlined as
-  the 151 arms of `handle_instr_correct` in Step 5. The outstanding
-  proof work from `PROGRESS.md` (8 compile failures, 2 Admitted, 23
-  missing) is *unchanged* — until those lemmas exist, the
-  corresponding arms of `handle_instr_correct` are the same
+- **`automatic/Bytecode/InstructVerification/PLAN.md`**: Partially
+  affected. The per-handler `correct_<OP>` lemmas are preserved but get
+  inlined as the 151 arms of `handle_instr_correct` in Step 5. The
+  outstanding proof work from the sibling `PROGRESS.md` (8 compile
+  failures, 2 Admitted, 23 missing) is *unchanged* — until those lemmas
+  exist, the corresponding arms of `handle_instr_correct` are the same
   `Admitted.` they are today.
 - **`EXTRACT_SIMPLIFICATION_PLAN.md`**: Mildly interacts. The
   parametric handlers proposed there (CLOSURE/CLOSUREREC,

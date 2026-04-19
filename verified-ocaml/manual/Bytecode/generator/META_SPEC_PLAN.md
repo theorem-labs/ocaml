@@ -36,13 +36,15 @@ semantics is fixed. This is the missing justification for shrinking
     theorem against proofs (or `Admitted` placeholders, see "Phasing").
 - Edits to existing file: `manual/Bytecode/Interpret.v` — factor the big
   `match` in `step` into a free-standing `handle_instr`.
-- Edits to existing file: `instruct-verification/theories/InstructSpec.v` —
-  introduce the `HandlerSpecBundle` record and `spec_of : instruction ->
-  HandlerSpecBundle` dispatch function, so that the meta-spec can quantify
-  over *one* thing instead of 151.
+- Edits to existing file: `manual/Bytecode/InstructSpec.v` — introduce the
+  `HandlerSpecBundle` record and `spec_of : instruction -> HandlerSpecBundle`
+  dispatch function, so that the meta-spec can quantify over *one* thing
+  instead of 151.
 
-md plans and progress docs now live in `manual/Bytecode/` alongside the
-existing `PLAN.md` / `PROGRESS.md`.
+Generator-local md plans (this file, `EXTRACT_SIMPLIFICATION_PLAN.md`,
+`INTERPRET_FUNCTOR_PLAN.md`) live in `manual/Bytecode/generator/`. The
+per-handler verification plans (`PLAN.md` / `PROGRESS.md`) live in
+`automatic/Bytecode/InstructVerification/`.
 
 ## Core definitions
 
@@ -157,8 +159,8 @@ three ways on a single input state `s`:
    a trivially-satisfiable disjunction), the handler can return
    `Error msg'` for any `msg'` *or* return `Step s'` freely
    on step_pre-false states. The current `P_error = fun _ _ => True`
-   in 15 handlers (see `instruct-verification/PLAN.md` Issue 2) is the
-   stark case.
+   in 15 handlers (see `automatic/Bytecode/InstructVerification/PLAN.md`
+   Issue 2) is the stark case.
 
 4. **`abs_rel` might be relational.** Two distinct abstract states
    `s1 ≠ s2` might both be in `abs_rel` with the same concrete
@@ -201,10 +203,10 @@ forall i pc' s,
   <no-step-outcome s i pc' /\ no-halt /\ no-ccall>.
 ```
 The 15 `fun _ _ => True` predicates flagged in
-`instruct-verification/PLAN.md` violate the forward direction; the
-`BLTINT` pattern (`msg = "..." /\ match accu with Val_int _ => False | _ => True`)
-satisfies both directions. The fix set in `PLAN.md` Step 7 is a
-prerequisite.
+`automatic/Bytecode/InstructVerification/PLAN.md` violate the forward
+direction; the `BLTINT` pattern (`msg = "..." /\ match accu with Val_int _
+=> False | _ => True`) satisfies both directions. The fix set in that
+`PLAN.md` Step 7 is a prerequisite.
 
 **Obligation D — outcome kinds are mutually exclusive.**
 ```coq
@@ -238,9 +240,10 @@ Proof is ~40 lines once the four obligations are in place.
 
 ### Phase 1 — refactor only (no new theorems)
 1. Introduce `handle_instr` in `Interpret.v`; rewrite `step` to use it.
-   Pure refactor; all downstream `dune build` stays green.
-2. Introduce `HandlerSpecBundle` and `spec_of` in `InstructSpec.v`.
-   Add a lemma `handler_correct_bundle_of_parameters :
+   Pure refactor; `make -f Makefile.coq.checker` stays green.
+2. Introduce `HandlerSpecBundle` and `spec_of` in
+   `manual/Bytecode/InstructSpec.v`. Add a lemma
+   `handler_correct_bundle_of_parameters :
    forall i pc', handler_correct_bundle (spec_of i pc')`, proven by
    `match i; apply correct_<OP>`. This is ~200 lines of boilerplate,
    mechanical.
@@ -261,9 +264,11 @@ Proof is ~40 lines once the four obligations are in place.
 8. For each instruction `i`, prove:
    - `step_pre_total_<OP>` (Obligation A specialized to `i`).
    - `P_error_characterizes_<OP>` (Obligation C specialized to `i`).
-   Co-located with the existing `<OP>_correct.v` proof, or in a sibling
-   `<OP>_meta.v` if keeping files separate. ~15 lines per handler after
-   the error-predicate fixes in `instruct-verification/PLAN.md` land.
+   Co-located with the existing
+   `automatic/Bytecode/InstructVerification/<OP>_correct.v` proof, or in a
+   sibling `<OP>_meta.v` if keeping files separate. ~15 lines per handler
+   after the error-predicate fixes in
+   `automatic/Bytecode/InstructVerification/PLAN.md` land.
 9. Discharge `handler_unique_mod_errors` by assembling A+B+C+D per
    instruction; one central proof using the per-handler lemmas.
 
@@ -282,8 +287,8 @@ Proof is ~40 lines once the four obligations are in place.
 - Phase 1 is independent; land first.
 - Phase 2 depends on Phase 1 #2 (the bundle).
 - Phase 3 depends on Phase 2 *and* on the error-predicate strengthening
-  already queued in `instruct-verification/PLAN.md` Step 7. Do that one
-  first.
+  already queued in `automatic/Bytecode/InstructVerification/PLAN.md`
+  Step 7. Do that one first.
 - Phase 4 is strictly optional and orthogonal to the rest of the
   verification effort.
 
@@ -292,20 +297,22 @@ Proof is ~40 lines once the four obligations are in place.
 | File | Phase | Action |
 |------|-------|--------|
 | `manual/Bytecode/Interpret.v` | 1 | Factor `step` → `handle_instr` + 3-line `step` |
-| `instruct-verification/theories/InstructSpec.v` | 1 | Add `HandlerSpecBundle`, `spec_of`, bundle-collecting lemma |
+| `manual/Bytecode/InstructSpec.v` | 1 | Add `HandlerSpecBundle`, `spec_of`, bundle-collecting lemma |
 | `manual/Bytecode/Interpret/MetaSpec.v` | 1 | New — Module Type with `em_eq`, `handler_matches`, meta-theorem |
-| `manual/Bytecode/Interpret/MetaSpecChecker.v` | 1 | New — Module Check with Admitted meta-theorem |
+| `checker/Bytecode/MetaSpecChecker.v` | 1 | New — `Module Check <: MetaSpec` with Admitted meta-theorem |
 | `manual/Bytecode/Machine.v` (or new `MachineInvariants.v`) | 2 | Prove `abs_rel_functional` |
-| `instruct-verification/theories/InstructSpec.v` | 2 | Prove `outcome_exclusive` shared tactic-lemma |
-| 151 × per-handler obligation proofs | 3 | `step_pre_total_<OP>` + `P_error_characterizes_<OP>` |
-| `manual/Bytecode/Interpret/MetaSpecChecker.v` | 3 | Replace Admitted with `Qed.`; assemble obligations |
-| `_RocqProject` | 1, 3 | Register new files |
+| `manual/Bytecode/InstructSpec.v` | 2 | Prove `outcome_exclusive` shared tactic-lemma |
+| 151 × per-handler obligation proofs under `automatic/Bytecode/InstructVerification/` | 3 | `step_pre_total_<OP>` + `P_error_characterizes_<OP>` |
+| `checker/Bytecode/MetaSpecChecker.v` | 3 | Replace Admitted with `Qed.`; assemble obligations |
+| `_CoqProject*` (regenerate via `etc/organize-_CoqProject.sh`) | 1, 3 | Register new files |
 
 ## Verification
 
-- After each phase: `cd verified-ocaml && dune build` passes with no
+- After each phase: from `verified-ocaml/`, run the `coq_makefile` flow
+  (see CLAUDE.md "Verifying Rocq compilation") —
+  `make Makefile.coq.checker && make -f Makefile.coq.checker` — with no
   newly Admitted or new Axioms beyond the known `Admitted` in
-  `MetaSpecChecker.v` during Phase 1-2.
+  `checker/Bytecode/MetaSpecChecker.v` during Phase 1-2.
 - After Phase 3: `Print Assumptions handler_unique_mod_errors.` lists
   zero axioms beyond `abs_rel_functional`'s dependencies (which should
   themselves be axiom-free).
@@ -317,8 +324,8 @@ Proof is ~40 lines once the four obligations are in place.
 
 1. Does `abs_rel` today actually admit a functional proof, or do we
    need new state invariants (e.g. `heap_block_well_formed` from
-   `instruct-verification/PROGRESS.md` Phase 6A)? If the latter, those
-   invariants are a prerequisite for Phase 2.
+   `automatic/Bytecode/InstructVerification/PROGRESS.md` Phase 6A)? If
+   the latter, those invariants are a prerequisite for Phase 2.
 2. Should `spec_of` be a Definition (match on `instruction`) or a
    typeclass dispatch? Definition is simpler and sufficient; typeclass
    adds inference overhead without proof benefit.

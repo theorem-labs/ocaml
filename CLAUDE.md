@@ -32,6 +32,30 @@ make testsuite-all  # Run OCaml test suite (all basic-* dirs)
 make clean          # Clean build artifacts
 ```
 
+### Verifying Rocq compilation (without dune)
+
+A full `dune build` / `make build` here can take long enough to time out a
+tool-call. To check whether `.v` files compile, use the
+`coq_makefile`-generated makefiles driven from `_CoqProject`:
+
+```bash
+make Makefile.coq                          # regenerate Makefile.coq from _CoqProject
+make -f Makefile.coq                       # build every .vo listed in _CoqProject
+make -f Makefile.coq path/to/File.vo ...   # build a specific subset
+```
+
+Per-tier cumulative variants exist (generated from `_CoqProject.<tier>`):
+`Makefile.coq.manual`, `Makefile.coq.semi-auto`, `Makefile.coq.automatic`,
+`Makefile.coq.checker`. Each tier's makefile builds its tier and the tiers
+it depends on.
+
+`_CoqProject` is kept in sync with `git ls-files "*.v"` via
+`etc/organize-_CoqProject.sh`; re-run that script after adding or moving
+`.v` files so the makefiles pick them up.
+
+Prefer `make -f Makefile.coq <.vo targets>` over `dune build` when all you
+need is a compilation check on a subset of theories.
+
 ### Running individual test suites
 
 All PBT suites use QCheck. Run from `verified-ocaml/`:
