@@ -28,3 +28,5 @@ verified-ocaml/Makefile.coq*
 !verified-ocaml/Makefile.coq*.local
 .lia.cache
 .nia.cache
+
+.claude/worktrees
