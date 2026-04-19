@@ -54,11 +54,31 @@ END {
         }
     }
 
-    # Second sweep: emit lines, inlining fallthroughs.
+    # Second sweep: emit lines, inlining fallthroughs and replicating bodies
+    # across stacked Instruct labels.
     i = 1
     while (i <= NR) {
         line = L[i]
         print line
+
+        # Stacked labels: if this Instruct's next non-blank line is also
+        # Instruct, inline the chain's body-bearing block after this label too.
+        if (is_instruct(line)) {
+            j = i + 1
+            while (j <= NR && L[j] ~ /^[[:space:]]*$/) j++
+            if (j <= NR && is_instruct(L[j])) {
+                # Skip past the chain of Instruct/blank lines to the body.
+                k = j
+                while (k <= NR && (is_instruct(L[k]) || L[k] ~ /^[[:space:]]*$/)) k++
+                # Copy body up to and including Next;.
+                m = k
+                while (m <= NR && !has_next(L[m]) && !is_instruct(L[m])) m++
+                if (m <= NR && has_next(L[m])) {
+                    for (p = k; p <= m; p++) print L[p]
+                }
+            }
+        }
+
         if (line ~ /\/\*[[:space:]]*[Ff]allthrough[[:space:]]*\*\//) {
             j = i + 1
             while (j <= NR && !is_instruct(L[j])) j++

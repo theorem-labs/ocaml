@@ -116,6 +116,59 @@ emit_raw() {
     echo ""
 }
 
+# --- cpp shim pipeline: run once, emit handlers on demand ---
+
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
+
+# Slice the dispatch body (anchored by the "Basic stack operations" comment
+# at the top of the switch and `Restart_curr_instr;` at the end of BREAK).
+awk '
+    /\/\* Basic stack operations \*\//    { on=1 }
+    on                                   { print }
+    on && /Instruct\(BREAK\):/           { in_break=1 }
+    in_break && /^[[:space:]]*Restart_curr_instr;[[:space:]]*$/ { exit }
+' "$INTERP" > "$TMP/dispatch.c"
+
+# Rewrite Caml_state->trapsp so cpp can expand it; strip trailing `:` from
+# `Instruct(X):` so the shim's Instruct macro doesn't leave a stray colon
+# inside the function body; split same-line stacked labels
+# (`Instruct(X) Instruct(Y)`) onto separate lines so each gets its own body.
+sed -i -e 's/Caml_state->trapsp/Caml_state_trapsp/g' \
+       -e 's/Instruct(\([A-Z0-9_]\+\)):/Instruct(\1)/g' \
+       -e ':a' \
+       -e 's/\(Instruct([A-Z0-9_]\+)\)[ \t]\+\(Instruct(\)/\1\n    \2/' \
+       -e 'ta' "$TMP/dispatch.c"
+
+# Inline `/* Fallthrough */` bodies and flatten block-form handlers.
+awk -f "$INLINE_AWK" "$TMP/dispatch.c" > "$TMP/dispatch_norm.c"
+
+# Prepend a dummy function so the first Instruct has one to close; append
+# a final `}` so the last handler closes cleanly.
+{
+    echo 'int __head(struct interp_state *s) {'
+    cat "$TMP/dispatch_norm.c"
+    echo 'return STATUS_STEP; }'
+} > "$TMP/wrapped.c"
+
+# Expand via cpp with the shim, then split so each `int instr_X(` starts
+# on its own line.
+cpp -E -P -include "$SHIM" "$TMP/wrapped.c" 2>/dev/null \
+  | sed -E -e 's/(return STATUS_STEP; \})( int instr_)/\1\n\2/g' \
+           -e 's/(int instr_[A-Z0-9_]+\(struct interp_state \*s\) \{)/\n\1/g' \
+  > "$TMP/split.c"
+
+# --- Helper: emit a handler extracted from the cpp output ---
+emit_cpp() {
+    local NAME="$1"
+    awk -v NAME="$NAME" '
+        $0 ~ "^int instr_"NAME"\\(" { in_func=1; print; next }
+        in_func && /^int instr_[A-Z0-9_]+\(/ { exit }
+        in_func && NF>0 { print }
+    ' "$TMP/split.c"
+    echo ""
+}
+
 # ===================================================================
 # SECTION 1: Manually defined simple/specialized handlers
 # These are one-liners, have fallthroughs, or use macros that
@@ -123,55 +176,22 @@ emit_raw() {
 # ===================================================================
 
 # --- Basic stack operations ---
-
-# ACC0-ACC7: accu = sp[N]
-for i in 0 1 2 3 4 5 6 7; do
-    emit_raw "ACC${i}" "    s->accu = s->sp[${i}];"
-done
-
-# PUSH (same as PUSHACC0)
-emit_raw "PUSH" "    *--s->sp = s->accu;"
-
-# PUSHACC1-7: push then accu = sp[N]
-for i in 1 2 3 4 5 6 7; do
-    emit_raw "PUSHACC${i}" "    *--s->sp = s->accu;
-    s->accu = s->sp[${i}];"
-done
+for i in 0 1 2 3 4 5 6 7; do emit_cpp "ACC${i}";       done
+emit_cpp "PUSH"                                  # PUSHACC0 shares this label
+for i in 1 2 3 4 5 6 7;   do emit_cpp "PUSHACC${i}";   done
 
 # --- Environment access ---
-
-# ENVACC1-ENVACC4: accu = Field(env, N)
-for i in 1 2 3 4; do
-    emit_raw "ENVACC${i}" "    s->accu = Field(s->env, ${i});"
-done
-
-# PUSHENVACC1-PUSHENVACC4: push then accu = Field(env, N)
-for i in 1 2 3 4; do
-    emit_raw "PUSHENVACC${i}" "    *--s->sp = s->accu;
-    s->accu = Field(s->env, ${i});"
-done
+for i in 1 2 3 4; do emit_cpp "ENVACC${i}";     done
+for i in 1 2 3 4; do emit_cpp "PUSHENVACC${i}"; done
 
 # --- Integer constants ---
-
-# CONST0-3
-for i in 0 1 2 3; do
-    emit_raw "CONST${i}" "    s->accu = Val_int(${i});"
-done
-
-# PUSHCONST0-3
-for i in 0 1 2 3; do
-    emit_raw "PUSHCONST${i}" "    *--s->sp = s->accu;
-    s->accu = Val_int(${i});"
-done
+for i in 0 1 2 3; do emit_cpp "CONST${i}";      done
+for i in 0 1 2 3; do emit_cpp "PUSHCONST${i}";  done
 
 # --- Block field access ---
+for i in 0 1 2 3; do emit_cpp "GETFIELD${i}";   done
 
-# GETFIELD0-3
-for i in 0 1 2 3; do
-    emit_raw "GETFIELD${i}" "    s->accu = Field(s->accu, ${i});"
-done
-
-# SETFIELD0-3
+# SETFIELD0-3: interp.c uses caml_modify; our model uses direct assignment.
 for i in 0 1 2 3; do
     emit_raw "SETFIELD${i}" "    Field(s->accu, ${i}) = *s->sp++;
     s->accu = Val_unit;"
@@ -747,9 +767,8 @@ emit_raw "REPERFORMTERM" "    s->pc++; /* skip nargs operand */
     /* Effect handler (OCaml 5.x) — not in 4.14, no-op */"
 
 # ===================================================================
-# SECTION 2: Handlers extracted from interp.c via the cpp shim
-# (gen/extract_shim.h). Produces byte-identical Clight to the old
-# sed-based extractor for every handler in $EXTRACT.
+# SECTION 2: Handlers whose interp.c body matches our model — emitted
+# straight from the cpp shim output (see extract_shim.h).
 # ===================================================================
 
 EXTRACT="ACC POP ASSIGN CONSTINT PUSHCONSTINT
@@ -764,53 +783,6 @@ GETGLOBAL PUSHGETGLOBAL SETGLOBAL
 ENVACC PUSHENVACC
 "
 
-TMP=$(mktemp -d)
-trap 'rm -rf "$TMP"' EXIT
-
-# 1. Slice the dispatch body (between the first Instruct of the dispatch
-#    switch and the last handler before `default:`). Anchored by comments
-#    that delimit the region in upstream interp.c.
-awk '
-    /\/\* Basic stack operations \*\//    { on=1 }
-    on                                   { print }
-    on && /Instruct\(BREAK\):/           { in_break=1 }
-    in_break && /^[[:space:]]*Restart_curr_instr;[[:space:]]*$/ { exit }
-' "$INTERP" > "$TMP/dispatch.c"
-
-# 2. Rewrite Caml_state->trapsp to a bare identifier that cpp can expand.
-sed -i 's/Caml_state->trapsp/Caml_state_trapsp/g' "$TMP/dispatch.c"
-
-# 3. Strip the trailing `:` from each `Instruct(X):` so the cpp shim's
-#    Instruct macro doesn't leave a stray colon inside the function body.
-sed -i 's/Instruct(\([A-Z0-9_]\+\)):/Instruct(\1)/g' "$TMP/dispatch.c"
-
-# 4. Normalize the dispatch body (inline fallthroughs, flatten block-form
-#    handlers so `Instruct(X): { ... }` becomes a flat body).
-awk -f "$INLINE_AWK" "$TMP/dispatch.c" > "$TMP/dispatch_norm.c"
-
-# 5. Wrap with a dummy `__head` function so the first Instruct macro has a
-#    preceding function to close, and append a final `return STATUS_STEP; }`
-#    so the last handler closes cleanly.
-{
-    echo 'int __head(struct interp_state *s) {'
-    cat "$TMP/dispatch_norm.c"
-    echo 'return STATUS_STEP; }'
-} > "$TMP/wrapped.c"
-
-# 6. Expand via cpp with the shim.
-cpp -E -P -include "$SHIM" "$TMP/wrapped.c" > "$TMP/expanded.c" 2>/dev/null
-
-# 7. Split so each `int instr_X(` starts on its own line.
-sed -E -e 's/(return STATUS_STEP; \})( int instr_)/\1\n\2/g' \
-       -e 's/(int instr_[A-Z0-9_]+\(struct interp_state \*s\) \{)/\n\1/g' \
-       "$TMP/expanded.c" > "$TMP/split.c"
-
-# 8. Emit each requested Section 2 handler from the cpp output.
 for INSTR in $EXTRACT; do
-    awk -v NAME="$INSTR" '
-        $0 ~ "^int instr_"NAME"\\(" { in_func=1; print; next }
-        in_func && /^int instr_[A-Z0-9_]+\(/ { exit }
-        in_func && NF>0 { print }
-    ' "$TMP/split.c"
-    echo ""
+    emit_cpp "$INSTR"
 done
