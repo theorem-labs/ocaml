@@ -8,7 +8,7 @@ all: gen/instruct_handlers.c
 $(INTERP_C):
 	if [ ! -d $(SUBMODULE) ]; then git submodule update --init $(SUBMODULE); fi
 
-gen/instruct_handlers.c: $(INTERP_C) extract_handlers.sh
+gen/instruct_handlers.c: $(INTERP_C) extract_handlers.sh extract_shim.h inline_fallthroughs.awk
 	mkdir -p gen
 	./extract_handlers.sh $(INTERP_C) > gen/instruct_handlers.c
 

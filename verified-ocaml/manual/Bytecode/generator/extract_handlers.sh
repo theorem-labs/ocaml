@@ -3,11 +3,22 @@
 # into standalone C functions suitable for clightgen/VST verification.
 #
 # Usage: ./extract_handlers.sh path/to/interp.c > gen/instruct_handlers.c
+#
+# Section 2 handlers are produced by a cpp shim (gen/extract_shim.h) that
+# redefines interp.c's dispatch macros; see EXTRACT_SIMPLIFICATION_PLAN.md.
+# Section 1 handlers are hand-written because they diverge semantically
+# from interp.c (simplified RAISE, C_CALL stubs, debugger no-ops, etc.).
 
 set -euo pipefail
 
 INTERP="${1:?Usage: $0 path/to/interp.c}"
 [ -f "$INTERP" ] || { echo "Error: $INTERP not found" >&2; exit 1; }
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SHIM="${SCRIPT_DIR}/extract_shim.h"
+INLINE_AWK="${SCRIPT_DIR}/inline_fallthroughs.awk"
+[ -f "$SHIM" ]       || { echo "Error: $SHIM not found" >&2; exit 1; }
+[ -f "$INLINE_AWK" ] || { echo "Error: $INLINE_AWK not found" >&2; exit 1; }
 
 # --- Generate header ---
 cat << 'HEADER'
@@ -103,26 +114,6 @@ emit_raw() {
     echo "    return ${RET};"
     echo "}"
     echo ""
-}
-
-# --- Helper: emit a handler extracted from interp.c (rewrite register vars) ---
-emit_extract() {
-    local NAME="$1" BODY="$2"
-    BODY=$(echo "$BODY" | sed \
-        -e 's/\baccu\b/s->accu/g' \
-        -e 's/\bsp\b/s->sp/g' \
-        -e 's/\bpc\b/s->pc/g' \
-        -e 's/\benv\b/s->env/g' \
-        -e 's/\bextra_args\b/s->extra_args/g' \
-        -e 's/Setup_for_gc;//g' \
-        -e 's/Restore_after_gc;//g' \
-        -e 's/Setup_for_c_call;//g' \
-        -e 's/Restore_after_c_call;//g' \
-        -e 's/Caml_state->trapsp/s->trap_sp/g' \
-        -e 's/caml_global_data/s->global_data/g' \
-        -e '/Instruct(/d' \
-    )
-    emit_raw "$NAME" "$BODY"
 }
 
 # ===================================================================
@@ -756,8 +747,9 @@ emit_raw "REPERFORMTERM" "    s->pc++; /* skip nargs operand */
     /* Effect handler (OCaml 5.x) — not in 4.14, no-op */"
 
 # ===================================================================
-# SECTION 2: Handlers extracted from interp.c via sed
-# These are multi-line handlers without fallthroughs.
+# SECTION 2: Handlers extracted from interp.c via the cpp shim
+# (gen/extract_shim.h). Produces byte-identical Clight to the old
+# sed-based extractor for every handler in $EXTRACT.
 # ===================================================================
 
 EXTRACT="ACC POP ASSIGN CONSTINT PUSHCONSTINT
@@ -772,14 +764,53 @@ GETGLOBAL PUSHGETGLOBAL SETGLOBAL
 ENVACC PUSHENVACC
 "
 
-for INSTR in $EXTRACT; do
-    BODY=$(sed -n "/^[[:space:]]*Instruct($INSTR):/,/Next;/{
-        /Instruct($INSTR):/d
-        s/[[:space:]]*Next;[[:space:]]*//
-        /^[[:space:]]*$/d
-        p
-    }" "$INTERP" 2>/dev/null)
+TMP=$(mktemp -d)
+trap 'rm -rf "$TMP"' EXIT
 
-    [ -z "$BODY" ] && continue
-    emit_extract "$INSTR" "$BODY"
+# 1. Slice the dispatch body (between the first Instruct of the dispatch
+#    switch and the last handler before `default:`). Anchored by comments
+#    that delimit the region in upstream interp.c.
+awk '
+    /\/\* Basic stack operations \*\//    { on=1 }
+    on                                   { print }
+    on && /Instruct\(BREAK\):/           { in_break=1 }
+    in_break && /^[[:space:]]*Restart_curr_instr;[[:space:]]*$/ { exit }
+' "$INTERP" > "$TMP/dispatch.c"
+
+# 2. Rewrite Caml_state->trapsp to a bare identifier that cpp can expand.
+sed -i 's/Caml_state->trapsp/Caml_state_trapsp/g' "$TMP/dispatch.c"
+
+# 3. Strip the trailing `:` from each `Instruct(X):` so the cpp shim's
+#    Instruct macro doesn't leave a stray colon inside the function body.
+sed -i 's/Instruct(\([A-Z0-9_]\+\)):/Instruct(\1)/g' "$TMP/dispatch.c"
+
+# 4. Normalize the dispatch body (inline fallthroughs, flatten block-form
+#    handlers so `Instruct(X): { ... }` becomes a flat body).
+awk -f "$INLINE_AWK" "$TMP/dispatch.c" > "$TMP/dispatch_norm.c"
+
+# 5. Wrap with a dummy `__head` function so the first Instruct macro has a
+#    preceding function to close, and append a final `return STATUS_STEP; }`
+#    so the last handler closes cleanly.
+{
+    echo 'int __head(struct interp_state *s) {'
+    cat "$TMP/dispatch_norm.c"
+    echo 'return STATUS_STEP; }'
+} > "$TMP/wrapped.c"
+
+# 6. Expand via cpp with the shim.
+cpp -E -P -include "$SHIM" "$TMP/wrapped.c" > "$TMP/expanded.c" 2>/dev/null
+
+# 7. Split so each `int instr_X(` starts on its own line.
+sed -E -e 's/(return STATUS_STEP; \})( int instr_)/\1\n\2/g' \
+       -e 's/(int instr_[A-Z0-9_]+\(struct interp_state \*s\) \{)/\n\1/g' \
+       "$TMP/expanded.c" > "$TMP/split.c"
+
+# 8. Emit each requested Section 2 handler from the cpp output.
+for INSTR in $EXTRACT; do
+    awk -v NAME="$INSTR" '
+        $0 ~ "^int instr_"NAME"\\(" { in_func=1; print; next }
+        in_func && /^int instr_[A-Z0-9_]+\(/ { exit }
+        in_func && NF>0 { print }
+    ' "$TMP/split.c"
+    echo ""
 done
