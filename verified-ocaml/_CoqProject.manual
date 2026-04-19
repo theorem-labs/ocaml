@@ -2,9 +2,12 @@
 manual/Bytecode/AST.v
 manual/Bytecode/DecodeSpec.v
 manual/Bytecode/Encode.v
+manual/Bytecode/Generated/instruct_handlers.v
 manual/Bytecode/IO.v
+manual/Bytecode/InstructSpec.v
 manual/Bytecode/Interpret.v
 manual/Bytecode/Machine.v
+manual/Bytecode/SatisfiabilityCheck.v
 manual/Compile/CompileSpec.v
 manual/ExtractSetup.v
 manual/LexParse/LexParseSpec.v

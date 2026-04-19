@@ -1,6 +1,6 @@
 (coq.theory
  (name OCamlInterp.Checker)
- (theories Stdlib Ltac2 RecordUpdate
+ (theories Stdlib Ltac2 RecordUpdate compcert
   OCamlInterp.Manual
   OCamlInterp.SemiAutomatic
   OCamlInterp.Automatic

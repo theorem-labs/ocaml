@@ -1,6 +1,0 @@
-(coq.theory
- (name InstructVerification)
- (theories Stdlib Ltac2 RecordUpdate
-  Flocq.Core Flocq.IEEE754 Flocq.Prop Flocq.Calc
-  compcert
-  OCamlInterp.Manual))

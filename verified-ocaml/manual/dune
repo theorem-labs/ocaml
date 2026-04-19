@@ -2,4 +2,4 @@
 
 (coq.theory
  (name OCamlInterp.Manual)
- (theories Stdlib Ltac2 RecordUpdate))
+ (theories Stdlib Ltac2 RecordUpdate compcert))
