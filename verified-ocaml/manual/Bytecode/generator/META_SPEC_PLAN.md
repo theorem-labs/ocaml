@@ -309,9 +309,12 @@ Proof is ~40 lines once the four obligations are in place.
 ## Verification
 
 - After each phase: from `verified-ocaml/`, run the `coq_makefile` flow
-  (see CLAUDE.md "Verifying Rocq compilation") —
-  `make Makefile.coq.checker && make -f Makefile.coq.checker` — with no
-  newly Admitted or new Axioms beyond the known `Admitted` in
+  (see CLAUDE.md "Verifying Rocq compilation") with an explicit `.vo`
+  target list — never a bare `make -f Makefile.coq.checker` (which
+  rebuilds every file in the tier and times out). For each phase name
+  only the files that phase touches, e.g.
+  `make -f Makefile.coq.checker manual/Bytecode/InstructSpec.vo manual/Bytecode/Interpret/MetaSpec.vo checker/Bytecode/MetaSpecChecker.vo`.
+  No newly Admitted or new Axioms beyond the known `Admitted` in
   `checker/Bytecode/MetaSpecChecker.v` during Phase 1-2.
 - After Phase 3: `Print Assumptions handler_unique_mod_errors.` lists
   zero axioms beyond `abs_rel_functional`'s dependencies (which should

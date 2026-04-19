@@ -134,16 +134,17 @@ Verification: `clightgen -normalize` must produce a Clight AST byte-for-byte
 equivalent to the current `../Generated/instruct_handlers.v` for every
 handler that was already extracted via sed in Section 2. Check from
 `verified-ocaml/` with the `coq_makefile`-driven flow (see CLAUDE.md
-"Verifying Rocq compilation"):
+"Verifying Rocq compilation") — always with an explicit `.vo` target
+list (never a bare `make -f Makefile.coq.automatic`, which would rebuild
+every file in the tier and time out):
 
 ```bash
 make Makefile.coq.automatic
 make -f Makefile.coq.automatic $(git ls-files 'automatic/Bytecode/InstructVerification/*_correct.v' | sed 's/$/o/')
 ```
 
-All 118 clean proofs must still go through unchanged. (Prefer the
-targeted `.vo` list over `make -f Makefile.coq.automatic` with no target
-when you want a quick subset.)
+The spot-check list above is the 118 clean proofs; all must still go
+through unchanged.
 
 Files touched: `extract_handlers.sh`, new `gen/extract_shim.h`, `Makefile`.
 
@@ -271,11 +272,17 @@ flow (see CLAUDE.md "Verifying Rocq compilation"), not `dune build`.
   handlers the old Section 2 covered. For handlers moved out of Section 1,
   diff the new Clight AST against the old one and justify any differences
   (normalization artifacts only; no semantic drift).
-- After Step 2: `make Makefile.coq.automatic && make -f Makefile.coq.automatic`
-  must succeed with 0 Admitted added.
-- After Step 3: regenerated `Generated/instruct_handlers.v` must compile and
-  all 118 clean proofs still go through. Spot-check with
-  `make -f Makefile.coq.automatic automatic/Bytecode/InstructVerification/<OP>_correct.vo`.
+- After Step 2: rebuild only the `.vo` files actually touched by the
+  rename — name them explicitly rather than invoking a bare
+  `make -f Makefile.coq.automatic`, e.g.
+  `make -f Makefile.coq.automatic automatic/Bytecode/InstructVerification/<OP>_correct.vo …`
+  for the 8 affected handler files plus
+  `manual/Bytecode/Generated/instruct_handlers.vo` and the InstructSpec/
+  InstructChecker chain. 0 Admitted added.
+- After Step 3: regenerated `Generated/instruct_handlers.v` must compile
+  (`make -f Makefile.coq.manual manual/Bytecode/Generated/instruct_handlers.vo`)
+  and the 118 clean proofs still go through (spot-check with explicit
+  `automatic/Bytecode/InstructVerification/<OP>_correct.vo` targets).
 - After Step 4 (per family): `Print Assumptions correct_OFFSETCLOSURE_ofs.`
   (etc.) must show zero axioms; the
   `Module InstructVerification <: InstructVerificationSpec` ascription in

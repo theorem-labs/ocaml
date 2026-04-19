@@ -36,18 +36,24 @@ make clean          # Clean build artifacts
 
 A full `dune build` / `make build` here can take long enough to time out a
 tool-call. To check whether `.v` files compile, use the
-`coq_makefile`-generated makefiles driven from `_CoqProject`:
+`coq_makefile`-generated makefiles driven from `_CoqProject`, **always
+with an explicit `.vo` target list**:
 
 ```bash
 make Makefile.coq                          # regenerate Makefile.coq from _CoqProject
-make -f Makefile.coq                       # build every .vo listed in _CoqProject
 make -f Makefile.coq path/to/File.vo ...   # build a specific subset
 ```
 
+Do **not** invoke `make -f Makefile.coq` with no target — that rebuilds
+every `.v` listed in `_CoqProject` (hundreds of files, including ~10k-line
+`instruct_handlers.v` and 151 per-handler proofs) and will time out the
+tool call. Same rule applies to the per-tier variants.
+
 Per-tier cumulative variants exist (generated from `_CoqProject.<tier>`):
 `Makefile.coq.manual`, `Makefile.coq.semi-auto`, `Makefile.coq.automatic`,
-`Makefile.coq.checker`. Each tier's makefile builds its tier and the tiers
-it depends on.
+`Makefile.coq.checker`. Each tier's makefile knows about its tier and the
+tiers it depends on; pick the narrowest tier whose loadpath covers the
+targets you want to build.
 
 `_CoqProject` is kept in sync with `git ls-files "*.v"` via
 `etc/organize-_CoqProject.sh`; re-run that script after adding or moving

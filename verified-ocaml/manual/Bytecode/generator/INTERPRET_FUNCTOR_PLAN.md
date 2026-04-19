@@ -354,12 +354,21 @@ Remove `manual/Bytecode/Interpret.v`. Confirm no `_RocqProject` /
 ### Step 10 — Verify build and PBT
 
 1. From `verified-ocaml/`, verify Rocq compilation with the `coq_makefile`
-   flow (see CLAUDE.md "Verifying Rocq compilation"):
+   flow (see CLAUDE.md "Verifying Rocq compilation"). Name the touched
+   `.vo` files explicitly — never invoke a bare `make -f Makefile.coq.checker`,
+   which rebuilds the whole tier and times out:
    ```bash
    make Makefile.coq.checker
-   make -f Makefile.coq.checker
+   make -f Makefile.coq.checker \
+     manual/Bytecode/Interpret/Types.vo \
+     manual/Bytecode/Interpret/HandleInstrSpec.vo \
+     manual/Bytecode/Interpret/Run.vo \
+     automatic/Bytecode/HandleInstr.vo \
+     checker/Bytecode/InterpretChecker.vo \
+     checker/Extract.vo
    ```
-   No new Admitted / axioms beyond the baseline.
+   Add any InstructSpec `.vo` that was touched by Step 5. No new
+   Admitted / axioms beyond the baseline.
 2. `make extract` produces the same `Interp_extracted.ml` byte-for-byte
    (the functor instantiation should extract identically to the
    current direct definition — confirm with a diff on the output).

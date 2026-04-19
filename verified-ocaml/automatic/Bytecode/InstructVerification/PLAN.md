@@ -300,12 +300,16 @@ Source locations after the instruct-verification reorganization:
 ## Verification
 
 1. Build from `verified-ocaml/` with the `coq_makefile` flow (see CLAUDE.md
-   "Verifying Rocq compilation") — this compiles all .v files and checks
-   the Module Type instantiation:
+   "Verifying Rocq compilation"), naming only the specific `.vo` targets
+   — never run a bare `make -f Makefile.coq.*` over a whole tier (it
+   rebuilds every file in the tier and times out):
    ```bash
    make Makefile.coq.checker
    make -f Makefile.coq.checker checker/Bytecode/InstructChecker.vo
    ```
+   `InstructChecker.vo` transitively pulls in `manual/Bytecode/InstructSpec.vo`
+   and every per-handler `_correct.vo` that the module ascription uses,
+   so this is the right single target to drive.
 2. The `Module InstructVerification <: InstructVerificationSpec` declaration
    in `checker/Bytecode/InstructChecker.v` is the machine-checked proof
    that all 151 parameters are satisfied.
