@@ -18,7 +18,7 @@ From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import Handlers.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 
 (* ================================================================== *)
@@ -2828,6 +2828,196 @@ Definition switch_step_pre (_nc _nb : nat) (const_targets block_targets : list Z
   end.
 
 (* ================================================================== *)
+(* Handler spec bundle                                                 *)
+(*                                                                      *)
+(* HandlerSpecBundle packages the six arguments to [handler_correct]   *)
+(* as a single record.  The per-instruction dispatcher [spec_of]        *)
+(* picks a bundle for each instruction variant, mirroring the          *)
+(* structure of manual/Bytecode/Interpret/Dispatch.v.                   *)
+(*                                                                      *)
+(* The bundle machinery is Phase 1 of META_SPEC_PLAN.md — it sets up   *)
+(* the uniform vocabulary that the uniqueness meta-theorem              *)
+(* [handler_unique_mod_errors] quantifies over.                         *)
+(* ================================================================== *)
+
+Record HandlerSpecBundle : Type := mk_handler_spec_bundle {
+  hs_handler  : Z -> state -> step_result;
+  hs_clight   : function;
+  hs_step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop;
+  hs_P_error  : string -> state -> Prop;
+  hs_P_halt   : value -> Prop;
+  hs_P_ccall  : nat -> list value -> state -> Prop;
+}.
+
+Definition handler_correct_bundle (b : HandlerSpecBundle) : Prop :=
+  handler_correct b.(hs_handler) b.(hs_clight) b.(hs_step_pre)
+                  b.(hs_P_error) b.(hs_P_halt) b.(hs_P_ccall).
+
+(* A bundle whose predicates are all trivially satisfiable, so that
+   [handler_correct_bundle] holds for any handler.  Used by [spec_of]
+   for cases where the parameters in [InstructVerificationSpec] have
+   side conditions (e.g. [Z.of_nat n < Int.half_modulus]) that need
+   not be assumed at Phase 1. *)
+Definition trivial_bundle (h : Z -> state -> step_result) (f : function)
+    : HandlerSpecBundle :=
+  {| hs_handler  := h;
+     hs_clight   := f;
+     hs_step_pre := fun _ _ _ _ => False;
+     hs_P_error  := fun _ _ => True;
+     hs_P_halt   := fun _ => True;
+     hs_P_ccall  := fun _ _ _ => True |}.
+
+Lemma handler_correct_trivial_bundle : forall h f,
+  handler_correct_bundle (trivial_bundle h f).
+Proof.
+  intros h f.
+  unfold handler_correct_bundle, trivial_bundle, handler_correct. simpl.
+  intros e le m s. destruct (h s.(Machine.pc) s); auto.
+  intros ard _ HF. exfalso; exact HF.
+Qed.
+
+(* ================================================================== *)
+(* Per-instruction spec dispatch                                       *)
+(*                                                                      *)
+(* [spec_of i pc'] returns a HandlerSpecBundle whose handler coincides  *)
+(* with the concrete dispatcher in manual/Bytecode/Interpret/Dispatch.v.*)
+(* The predicate fields are set trivially in this Phase 1 landing — a   *)
+(* Phase 2/3 refinement (see manual/Bytecode/generator/META_SPEC_PLAN.md*)
+(* "Strengthening obligations") will replace [trivial_bundle] with      *)
+(* per-instruction bundles keyed off the existing [InstructVerification *)
+(* Spec] parameters so that [handler_correct_bundle (spec_of i pc')]    *)
+(* carries real content.                                                *)
+(* ================================================================== *)
+
+Definition spec_of (i : instruction) (pc' : Z) : HandlerSpecBundle :=
+  match i with
+  | ACC n => trivial_bundle (fun _ s => handle_ACC n pc' s) f_instr_ACC0
+  | PUSH => trivial_bundle (fun _ s => handle_PUSH pc' s) f_instr_PUSH
+  | PUSHACC n => trivial_bundle (fun _ s => handle_PUSHACC n pc' s) f_instr_ACC0
+  | POP n => trivial_bundle (fun _ s => handle_POP n pc' s) f_instr_POP
+  | ASSIGN n => trivial_bundle (fun _ s => handle_ASSIGN n pc' s) f_instr_ASSIGN
+  | ENVACC n => trivial_bundle (fun _ s => handle_ENVACC n pc' s) f_instr_ENVACC
+  | PUSHENVACC n => trivial_bundle (fun _ s => handle_PUSHENVACC n pc' s) f_instr_PUSHENVACC
+  | PUSH_RETADDR ret_addr =>
+      trivial_bundle (fun _ s => handle_PUSH_RETADDR ret_addr pc' s) f_instr_PUSH_RETADDR
+  | APPLY n => trivial_bundle (fun _ s => handle_APPLY n s) f_instr_APPLY
+  | APPLY1 => trivial_bundle (fun _ s => handle_APPLY1 pc' s) f_instr_APPLY1
+  | APPLY2 => trivial_bundle (fun _ s => handle_APPLY2 pc' s) f_instr_APPLY2
+  | APPLY3 => trivial_bundle (fun _ s => handle_APPLY3 pc' s) f_instr_APPLY3
+  | APPTERM nargs slotsize =>
+      trivial_bundle (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
+  | APPTERM1 slotsize =>
+      trivial_bundle (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
+  | APPTERM2 slotsize =>
+      trivial_bundle (fun _ s => handle_APPTERM2 slotsize s) f_instr_APPTERM2
+  | APPTERM3 slotsize =>
+      trivial_bundle (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
+  | RETURN stacksize =>
+      trivial_bundle (fun _ s => handle_RETURN stacksize s) f_instr_RETURN
+  | RESTART => trivial_bundle (fun _ s => handle_RESTART pc' s) f_instr_RESTART
+  | GRAB required => trivial_bundle (fun _ s => handle_GRAB required pc' s) f_instr_GRAB
+  | CLOSURE nvars code_ofs =>
+      trivial_bundle (fun _ s => handle_CLOSURE nvars code_ofs pc' s) f_instr_CLOSURE
+  | CLOSUREREC nfuncs nvars code_offsets =>
+      trivial_bundle (fun _ s => handle_CLOSUREREC nfuncs nvars code_offsets pc' s)
+                     f_instr_CLOSUREREC
+  | OFFSETCLOSURE ofs =>
+      trivial_bundle (fun _ s => handle_OFFSETCLOSURE ofs pc' s) f_instr_OFFSETCLOSURE
+  | PUSHOFFSETCLOSURE ofs =>
+      trivial_bundle (fun _ s => handle_PUSHOFFSETCLOSURE ofs pc' s) f_instr_PUSHOFFSETCLOSURE
+  | GETGLOBAL n => trivial_bundle (fun _ s => handle_GETGLOBAL n pc' s) f_instr_GETGLOBAL
+  | PUSHGETGLOBAL n =>
+      trivial_bundle (fun _ s => handle_PUSHGETGLOBAL n pc' s) f_instr_PUSHGETGLOBAL
+  | GETGLOBALFIELD n p =>
+      trivial_bundle (fun _ s => handle_GETGLOBALFIELD n p pc' s) f_instr_GETGLOBALFIELD
+  | PUSHGETGLOBALFIELD n p =>
+      trivial_bundle (fun _ s => handle_PUSHGETGLOBALFIELD n p pc' s) f_instr_PUSHGETGLOBALFIELD
+  | SETGLOBAL n => trivial_bundle (fun _ s => handle_SETGLOBAL n pc' s) f_instr_SETGLOBAL
+  | ATOM t => trivial_bundle (fun _ s => handle_ATOM t pc' s) f_instr_ATOM0
+  | PUSHATOM t => trivial_bundle (fun _ s => handle_PUSHATOM t pc' s) f_instr_PUSHATOM0
+  | MAKEBLOCK t size => trivial_bundle (fun _ s => handle_MAKEBLOCK t size pc' s) f_instr_MAKEBLOCK
+  | MAKEBLOCK1 t => trivial_bundle (fun _ s => handle_MAKEBLOCK1 t pc' s) f_instr_MAKEBLOCK1
+  | MAKEBLOCK2 t => trivial_bundle (fun _ s => handle_MAKEBLOCK2 t pc' s) f_instr_MAKEBLOCK2
+  | MAKEBLOCK3 t => trivial_bundle (fun _ s => handle_MAKEBLOCK3 t pc' s) f_instr_MAKEBLOCK3
+  | MAKEFLOATBLOCK n =>
+      trivial_bundle (fun _ s => handle_MAKEFLOATBLOCK n pc' s) f_instr_MAKEFLOATBLOCK
+  | GETFIELD n => trivial_bundle (fun _ s => handle_GETFIELD n pc' s) f_instr_GETFIELD
+  | GETFLOATFIELD n =>
+      trivial_bundle (fun _ s => handle_GETFLOATFIELD n pc' s) f_instr_GETFLOATFIELD
+  | SETFIELD n => trivial_bundle (fun _ s => handle_SETFIELD n pc' s) f_instr_SETFIELD
+  | SETFLOATFIELD n =>
+      trivial_bundle (fun _ s => handle_SETFLOATFIELD n pc' s) f_instr_SETFLOATFIELD
+  | VECTLENGTH => trivial_bundle (fun _ s => handle_VECTLENGTH pc' s) f_instr_VECTLENGTH
+  | GETVECTITEM => trivial_bundle (fun _ s => handle_GETVECTITEM pc' s) f_instr_GETVECTITEM
+  | SETVECTITEM => trivial_bundle (fun _ s => handle_SETVECTITEM pc' s) f_instr_SETVECTITEM
+  | GETBYTESCHAR => trivial_bundle (fun _ s => handle_GETSTRINGCHAR pc' s) f_instr_GETSTRINGCHAR
+  | SETBYTESCHAR => trivial_bundle (fun _ s => handle_SETBYTESCHAR pc' s) f_instr_SETBYTESCHAR
+  | GETSTRINGCHAR => trivial_bundle (fun _ s => handle_GETSTRINGCHAR pc' s) f_instr_GETSTRINGCHAR
+  | BRANCH target => trivial_bundle (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+  | BRANCHIF target => trivial_bundle (fun _ s => handle_BRANCHIF target pc' s) f_instr_BRANCHIF
+  | BRANCHIFNOT target =>
+      trivial_bundle (fun _ s => handle_BRANCHIFNOT target pc' s) f_instr_BRANCHIFNOT
+  | SWITCH _nc _nb const_targets block_targets =>
+      trivial_bundle (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s)
+                     f_instr_SWITCH
+  | BOOLNOT => trivial_bundle (fun _ s => handle_BOOLNOT pc' s) f_instr_BOOLNOT
+  | PUSHTRAP handler_pc =>
+      trivial_bundle (fun _ s => handle_PUSHTRAP handler_pc pc' s) f_instr_PUSHTRAP
+  | POPTRAP => trivial_bundle (fun _ s => handle_POPTRAP pc' s) f_instr_POPTRAP
+  | RAISE => trivial_bundle (fun _ s => do_raise s.(accu) s) f_instr_RAISE
+  | RERAISE => trivial_bundle (fun _ s => do_raise s.(accu) s) f_instr_RERAISE
+  | RAISE_NOTRACE => trivial_bundle (fun _ s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
+  | CHECK_SIGNALS =>
+      trivial_bundle (fun _ s => handle_CHECK_SIGNALS pc' s) f_instr_CHECK_SIGNALS
+  | C_CALL nargs prim_idx =>
+      trivial_bundle (fun _ s => handle_C_CALL nargs prim_idx pc' s) f_instr_C_CALLN
+  | CONSTINT n => trivial_bundle (fun _ s => handle_CONSTINT n pc' s) f_instr_CONSTINT
+  | PUSHCONSTINT n =>
+      trivial_bundle (fun _ s => handle_PUSHCONSTINT n pc' s) f_instr_PUSHCONSTINT
+  | NEGINT => trivial_bundle (fun _ s => handle_NEGINT pc' s) f_instr_NEGINT
+  | ADDINT => trivial_bundle (fun _ s => handle_ADDINT pc' s) f_instr_ADDINT
+  | SUBINT => trivial_bundle (fun _ s => handle_SUBINT pc' s) f_instr_SUBINT
+  | MULINT => trivial_bundle (fun _ s => handle_MULINT pc' s) f_instr_MULINT
+  | DIVINT => trivial_bundle (fun _ s => handle_DIVINT pc' s) f_instr_DIVINT
+  | MODINT => trivial_bundle (fun _ s => handle_MODINT pc' s) f_instr_MODINT
+  | ANDINT => trivial_bundle (fun _ s => handle_ANDINT pc' s) f_instr_ANDINT
+  | ORINT => trivial_bundle (fun _ s => handle_ORINT pc' s) f_instr_ORINT
+  | XORINT => trivial_bundle (fun _ s => handle_XORINT pc' s) f_instr_XORINT
+  | LSLINT => trivial_bundle (fun _ s => handle_LSLINT pc' s) f_instr_LSLINT
+  | LSRINT => trivial_bundle (fun _ s => handle_LSRINT pc' s) f_instr_LSRINT
+  | ASRINT => trivial_bundle (fun _ s => handle_ASRINT pc' s) f_instr_ASRINT
+  | EQ => trivial_bundle (fun _ s => handle_EQ pc' s) f_instr_EQ
+  | NEQ => trivial_bundle (fun _ s => handle_NEQ pc' s) f_instr_NEQ
+  | LTINT => trivial_bundle (fun _ s => handle_LTINT pc' s) f_instr_LTINT
+  | LEINT => trivial_bundle (fun _ s => handle_LEINT pc' s) f_instr_LEINT
+  | GTINT => trivial_bundle (fun _ s => handle_GTINT pc' s) f_instr_GTINT
+  | GEINT => trivial_bundle (fun _ s => handle_GEINT pc' s) f_instr_GEINT
+  | OFFSETINT n => trivial_bundle (fun _ s => handle_OFFSETINT n pc' s) f_instr_OFFSETINT
+  | OFFSETREF n => trivial_bundle (fun _ s => handle_OFFSETREF n pc' s) f_instr_OFFSETREF
+  | ISINT => trivial_bundle (fun _ s => handle_ISINT pc' s) f_instr_ISINT
+  | GETMETHOD => trivial_bundle (fun _ s => handle_GETMETHOD pc' s) f_instr_GETMETHOD
+  | GETPUBMET tag => trivial_bundle (fun _ s => handle_GETPUBMET tag pc' s) f_instr_GETPUBMET
+  | GETDYNMET => trivial_bundle (fun _ s => handle_GETDYNMET pc' s) f_instr_GETDYNMET
+  | BEQ n target => trivial_bundle (fun _ s => handle_BEQ n target pc' s) f_instr_BEQ
+  | BNEQ n target => trivial_bundle (fun _ s => handle_BNEQ n target pc' s) f_instr_BNEQ
+  | BLTINT n target => trivial_bundle (fun _ s => handle_BLTINT n target pc' s) f_instr_BLTINT
+  | BLEINT n target => trivial_bundle (fun _ s => handle_BLEINT n target pc' s) f_instr_BLEINT
+  | BGTINT n target => trivial_bundle (fun _ s => handle_BGTINT n target pc' s) f_instr_BGTINT
+  | BGEINT n target => trivial_bundle (fun _ s => handle_BGEINT n target pc' s) f_instr_BGEINT
+  | ULTINT => trivial_bundle (fun _ s => handle_ULTINT pc' s) f_instr_ULTINT
+  | UGEINT => trivial_bundle (fun _ s => handle_UGEINT pc' s) f_instr_UGEINT
+  | BULTINT n target => trivial_bundle (fun _ s => handle_BULTINT n target pc' s) f_instr_BULTINT
+  | BUGEINT n target => trivial_bundle (fun _ s => handle_BUGEINT n target pc' s) f_instr_BUGEINT
+  | STOP => trivial_bundle (fun _ s => handle_STOP s) f_instr_STOP
+  | EVENT => trivial_bundle (fun _ s => handle_EVENT pc' s) f_instr_EVENT
+  | BREAK => trivial_bundle (fun _ s => handle_BREAK pc' s) f_instr_BREAK
+  | PERFORM => trivial_bundle (fun _ s => handle_PERFORM pc' s) f_instr_PERFORM
+  | RESUME => trivial_bundle (fun _ s => handle_RESUME pc' s) f_instr_RESUME
+  | RESUMETERM _ => trivial_bundle (fun _ s => handle_RESUMETERM pc' s) f_instr_RESUMETERM
+  | REPERFORMTERM _ => trivial_bundle (fun _ s => handle_REPERFORMTERM pc' s) f_instr_REPERFORMTERM
+  end.
+
+(* ================================================================== *)
 (* Module Type                                                         *)
 (*                                                                      *)
 (* Building block vocabulary (18 shared blocks):                        *)
@@ -3802,5 +3992,17 @@ Module Type InstructVerificationSpec.
     handler_correct handle_XORINT f_instr_XORINT
       (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
+
+  (* Phase 1 bundle collector: every [spec_of i pc'] satisfies its own
+     handler-correctness obligation.  Holds unconditionally because
+     [spec_of] currently uses [trivial_bundle] for every instruction;
+     a Phase 2/3 refinement will replace [trivial_bundle] with per-
+     instruction bundles and route this proof through the 151 Parameters
+     above.  See manual/Bytecode/generator/META_SPEC_PLAN.md. *)
+  Lemma handler_correct_bundle_of_parameters :
+    forall i pc', handler_correct_bundle (spec_of i pc').
+  Proof.
+    intros i pc'; destruct i; apply handler_correct_trivial_bundle.
+  Qed.
 
 End InstructVerificationSpec.
