@@ -10,11 +10,11 @@ The core correctness theorem: `forall source, interpret(source) = (interpret-byt
 
 ## Repository Structure
 
-- `verified-ocaml/` — The main project, organized by automation level:
+- `verified-ocaml/` — The main project, organized by automation/trust level:
   - `manual/` — Human-authored Rocq theories (trusted core)
   - `semi-auto/` — LLM-generated Rocq theories with human-defined constraints
-  - `automatic/` — LLM-generated Rocq theories and PBT test harness
-  - `Extract.v` — Extraction directives (top-level, imports from all three)
+  - `automatic/` — LLM-generated Rocq theories
+  - `checker/` — Thin `Module Check <: Spec` ascriptions that verify proofs satisfy interface specs; also hosts the PBT test harness (`checker/common/`, `checker/<Component>/test/`) and `checker/Extract.v` (extraction directives, imports from manual/semi-auto/automatic)
 - `system-ocaml/` — Git submodule: OCaml 4.14 source (`github.com/ocaml/ocaml`), reference implementation and test suite source
 - `camlboot/` — Git submodule: OCaml bootstrap experiment (`github.com/Ekdohibs/camlboot`), reference for bootstrapping goals
 
@@ -25,8 +25,8 @@ All build commands run from `verified-ocaml/`:
 ```bash
 make all            # Build Rocq theories, extract to OCaml, run all tests
 make build          # Build Rocq theories with dune
-make extract        # Extract Rocq to OCaml (copies to manual/test/common/interp_extracted.ml)
-make test           # Run all 5 PBT suites + manual tests
+make extract        # Extract Rocq to OCaml (copies to checker/common/interp_extracted.ml)
+make test           # Run all PBT suites
 make testsuite      # Run OCaml test suite (basic/) through our interpreter
 make testsuite-all  # Run OCaml test suite (all basic-* dirs)
 make clean          # Clean build artifacts
@@ -37,12 +37,16 @@ make clean          # Clean build artifacts
 All PBT suites use QCheck. Run from `verified-ocaml/`:
 
 ```bash
-dune exec manual/test/bytecode-pbt/manual_test.exe         # Manual bytecode tests
-dune exec manual/test/bytecode-pbt/harness.exe             # Bytecode PBT (interpret-bytecode vs ocamlrun)
-dune exec manual/test/compile-pbt/harness.exe              # Compiler PBT (compile + interpret-bytecode vs ocamlrun)
-dune exec manual/test/compile-pbt/roundtrip_test.exe       # Parser round-trip PBT
-dune exec manual/test/compile-pbt/source_interp_test.exe   # Source interpreter PBT
-dune exec manual/test/compile-pbt/bytecode_equiv_test.exe  # Bytecode equivalence PBT (our compiler vs ocamlc)
+dune exec checker/Bytecode/test/pbt.exe                    # Bytecode PBT (interpret-bytecode vs ocamlrun)
+dune exec checker/Bytecode/test/ocaml_testsuite_runner.exe # Runs OCaml's own test suite through our interpreter
+dune exec checker/Bytecode/test/pipeline_runner.exe        # Disk -> decode -> interpret -> output pipeline
+dune exec checker/Compile/test/pbt.exe                     # Compiler PBT (compile + interpret-bytecode vs ocamlrun)
+dune exec checker/Compile/test/equiv_test.exe              # Bytecode equivalence PBT (our compiler vs ocamlc)
+dune exec checker/LexParse/test/pbt.exe                    # Parser round-trip PBT
+dune exec checker/Interpret/test/source_interp_test.exe    # Source interpreter PBT
+dune exec checker/Interpret/test/correctness_test.exe      # Cross-validates interpret vs compile+interpret-bytecode
+dune exec checker/Interpret/test/advanced_test.exe         # Hand-crafted complex program tests
+dune exec checker/Interpret/test/rocq_source_test.exe      # Tests using Rocq-style function patterns
 ```
 
 ## Architecture
@@ -51,10 +55,13 @@ Theories are organized by automation level: **Manual** (human-authored), **SemiA
 
 ### `manual/` — Human-authored Rocq theories (trusted core)
 
+Files sit flat in each component subfolder (no `theories/` layer).
+
 - **`Utils/`** — Shared type definitions (no bytecode dependency):
   - `Value.v` — Value representation (used by interpreter, compiler, source interpreter)
   - `Observable.v` — Observable behavior type (output events + termination)
   - `Syntax.v` — OCaml source AST subset (expressions, declarations, patterns, types)
+  - `WellFormed.v` — Well-formedness predicates
 
 - **`Bytecode/`** — Bytecode interpreter pipeline (trusted core):
   - `AST.v` — Bytecode instruction set (~107 variants, one-to-one with `opcodes.h`)
@@ -63,17 +70,14 @@ Theories are organized by automation level: **Manual** (human-authored), **SemiA
   - `Encode.v` — Bytecode encoder (AST -> bytes)
   - `DecodeSpec.v` — Module Type spec for encode/decode roundtrip
   - `IO.v` — Opaque axioms for OS interaction (disk-to-bytes, syscalls-to-real-world)
-  - `Main.v` — Pipeline: disk -> decode -> interpret -> output (parameterized over decoder via `DecoderSpec` Module Type)
 
-- **`Correctness/`** — Step 4: Compiler correctness theorem definition:
-  - `CorrectnessSpec.v` — Module Type declaring the theorem signature
+- **`Compile/`** — Compiler specification:
+  - `CompileSpec.v` — Module Type for the compiler
 
-- **`Checker/`** — Thin modules verifying proofs satisfy specs:
-  - `CorrectnessChecker.v` — `Module Check <: CorrectnessSpec`
-  - `DecodeCorrectnessChecker.v` — `Module Check <: DecodeSpec`
+- **`LexParse/`** — Lex/parse specification:
+  - `LexParseSpec.v` — Module Type for lex-parse/pretty-print roundtrip
 
-- **`theories/`** — Specs with integrated checkers:
-  - `LexParseSpec.v` — Module Type for lex-parse/pretty-print roundtrip + `Module Check <: LexParseSpec`
+- **`ExtractSetup.v`** — Extraction configuration shared across the build.
 
 ### `semi-auto/` — LLM-generated Rocq theories with human-defined constraints
 
@@ -83,49 +87,36 @@ Theories are organized by automation level: **Manual** (human-authored), **SemiA
 - **`Interpret/`** — Step 3: Source-level interpreter (length penalty):
   - `SourceInterp.v` — Fuel-based source interpreter
 
-### `automatic/` — LLM-generated code and tests
+### `automatic/` — LLM-generated Rocq theories
 
-**`theories/`** — Rocq theories:
-
-- **`Compile/`** — Step 3: Compiler (AST -> bytecode):
-  - `Compile.v` — Compiler: closures, recursion, match, tuples
-
-- **`Correctness/`** — Step 4: Compiler correctness proof:
-  - `CorrectnessProofs.v` — Proof infrastructure (main theorem Admitted)
+Files sit flat in each component subfolder (no `theories/` layer).
 
 - **`Bytecode/`** — Untrusted decoder and proofs:
   - `Decode.v` — Bytecode decoder (bytes -> AST, reverse of Encode.v)
-  - `Main.v` — Instantiates the trusted pipeline with the concrete decoder
   - `DecodeProof.v` — Proof that Decode.v satisfies DecodeSpec.v (Admitted)
 
-**`LexParse/`** — Untrusted parser and proofs:
-- `LexParse.v` — OCaml source string to AST parser (reverse of PrettyPrint.v)
-- `LexParseProof.v` — Proof that LexParse.v and PrettyPrint.v roundtrip (Admitted)
+- **`Compile/`** — Compiler and its proof:
+  - `Compile.v` — Compiler: closures, recursion, match, tuples
+  - `CompileProof.v` — Proof that Compile.v satisfies CompileSpec.v (Admitted)
 
-**`test/`** — PBT test harness:
+- **`LexParse/`** — Untrusted parser and proofs:
+  - `LexParse.v` — OCaml source string to AST parser (reverse of PrettyPrint.v)
+  - `LexParseProof.v` — Proof that LexParse.v and PrettyPrint.v roundtrip (Admitted)
 
+### `checker/` — Thin ascriptions and PBT harness
+
+- **`<Component>/<Component>Checker.v`** — `Module Check <: <Component>Spec` (e.g. `Bytecode/DecodeChecker.v`, `Compile/CompileChecker.v`, `LexParse/LexParseChecker.v`).
+- **`Bytecode/Main.v`** — Pipeline: disk -> decode -> interpret -> output, parameterized over decoder via `DecoderSpec`.
+- **`Extract.v`** — Top-level extraction directives; imports from manual/semi-auto/automatic.
 - **`common/`** — Shared test infrastructure:
   - `interp_extracted.ml` — **Generated file**: extracted OCaml from Rocq, do not edit
   - `test_common.ml` — Shared utilities (temp dirs, process runners, C-call handlers)
-  - `loader.ml` — Bytecode file loader (parses ocamlc `.cmo` output)
-
-- **`bytecode-pbt/`** — Step 1.1: Bytecode interpreter PBT:
-  - `harness.ml` — Bytecode PBT: interpret-bytecode vs ocamlrun (37 generators)
-  - `manual_test.ml` — Hand-written bytecode tests
-  - `ocaml_testsuite_runner.ml` — Runs OCaml's own test suite through our interpreter
-
-- **`compile-pbt/`** — Steps 2, 3, 5: Compiler and parser PBT:
-  - `harness.ml` — Compiler PBT: compile + interpret-bytecode vs ocamlrun (step 3)
-  - `roundtrip_test.ml` — Parser round-trip PBT (step 2)
-  - `bytecode_equiv_test.ml` — Bytecode equivalence PBT: our compiler vs ocamlc (step 5)
-  - `source_interp_test.ml` — Source interpreter vs ocamlrun (step 3)
-  - `cross_test.ml` — Cross-validates interpret vs compile+interpret-bytecode (step 4)
-  - `advanced_test.ml` — Hand-crafted complex program tests
-  - `rocq_source_test.ml` — Tests using Rocq-style function patterns
+  - `code_arr.ml`, `uint63.ml` — Runtime support for the extracted code
+- **`<Component>/test/`** — Per-component PBT harnesses (e.g. `checker/Bytecode/test/pbt.ml`, `checker/Compile/test/...`).
 
 ### Extraction flow
 
-Rocq theories are built with dune, then `coqc` extracts to `manual/test/common/interp_extracted.ml`. This extracted file is compiled as a library (`pbt_common`) alongside `test_common.ml` and `loader.ml`, shared by all PBT test executables.
+Rocq theories are built with dune, then `coqc` extracts to `checker/common/interp_extracted.ml`. This extracted file is compiled as a library alongside `test_common.ml`, shared by all PBT test executables under `checker/<Component>/test/`.
 
 ## Named Components
 
@@ -163,11 +154,11 @@ Pretty-printers go in the reverse direction (AST -> source string, bytecode AST 
 
 Each step is tagged with a trust level (**[Trusted]**, **[Untrusted]**, **[Trusted-ish]**) and an automation level: **[Manual]** = human-authored, **[Auto]** = LLM-generated, **[Semi-auto]** = LLM-generated with human-defined constraints.
 
-1. **[Trusted] [Manual] Bytecode interpreter** (`manual/theories/Bytecode/`) -- AST + pretty-printer + interpreter for OCaml bytecode. **[Auto]** PBT harness verifies `ocamlrun` and `interpret-bytecode` agree.
-2. **[Untrusted] [Auto] Lexer/parser** (`manual/test/compile-pbt/`) -- `lex-parse` processes OCaml source into AST. **[Trusted] [Semi-auto]** `pretty-printer` goes in reverse direction (`semi-auto/theories/Compile/LexParse/`).
-3. **[Untrusted] [Auto] Compiler + source interpreter** (`automatic/theories/Compile/`, `semi-auto/theories/Interpret/`) -- `compile` (using `lex-parse`) and `interpret`.
-4. **[Trusted] [Manual] Correctness theorem** (`manual/theories/Correctness/`) -- `forall source, interpret(source) = (interpret-bytecode . compile)(source)`. **[Auto]** Proof evolves with `compile`/`interpret` (`automatic/theories/Correctness/`). **[Semi-auto]** Penalty for `interpret` length, amplified if LLM cannot find a program where the previous `interpret` and `ocamlrun`∘`ocamlc` disagree on behavior.
-5. **[Trusted-ish] [Auto] PBT: `ocamlc` vs `compile`** (`manual/test/compile-pbt/`) -- Verify identical/equivalent bytecode on **[Manual]** infinite families of syntax trees.
+1. **[Trusted] [Manual] Bytecode interpreter** (`manual/Bytecode/`) -- AST + pretty-printer + interpreter for OCaml bytecode. **[Auto]** PBT harness (`checker/Bytecode/test/`) verifies `ocamlrun` and `interpret-bytecode` agree.
+2. **[Untrusted] [Auto] Lexer/parser** (`automatic/LexParse/`) -- `lex-parse` processes OCaml source into AST. **[Trusted] [Semi-auto]** `pretty-printer` goes in reverse direction (`semi-auto/LexParse/PrettyPrint.v`).
+3. **[Untrusted] [Auto] Compiler + source interpreter** (`automatic/Compile/`, `semi-auto/Interpret/`) -- `compile` (using `lex-parse`) and `interpret`.
+4. **[Trusted] [Manual] Correctness theorem** (`manual/Correctness/`, planned) -- `forall source, interpret(source) = (interpret-bytecode . compile)(source)`. **[Auto]** Proof evolves with `compile`/`interpret` (`automatic/Correctness/`, planned). **[Semi-auto]** Penalty for `interpret` length, amplified if LLM cannot find a program where the previous `interpret` and `ocamlrun`∘`ocamlc` disagree on behavior.
+5. **[Trusted-ish] [Auto] PBT: `ocamlc` vs `compile`** (`checker/Compile/test/`) -- Verify identical/equivalent bytecode on **[Manual]** infinite families of syntax trees.
 6. **[Trusted-ish] [Auto] Rocq self-verification** -- As each Rocq source file comes into scope, **[Manual]** add it to the PBT suite for `ocamlc` vs `compile`.
 7. **[Trusted-ish] [Auto] OCaml compiler in OCaml (bootstrapping)** -- As OCaml extraction comes into scope, **[Manual]** prove:
    - `compile` = `process . interpret . extract(compile src)`
@@ -178,7 +169,7 @@ Each step is tagged with a trust level (**[Trusted]**, **[Untrusted]**, **[Trust
 
 ## Key Design Decisions
 
-- The bytecode interpreter (`Interp.v`) is the core trusted component — it must faithfully model OCaml's bytecode semantics
+- The bytecode interpreter (`manual/Bytecode/Interpret.v`) is the core trusted component — it must faithfully model OCaml's bytecode semantics
 - PBT compares our Rocq-extracted interpreter against `ocamlrun` (the real OCaml runtime) to validate correctness
 - The compiler and source interpreter are untrusted — they can be complex because PBT and eventually proofs validate them
 - Checker modules enforce that proofs satisfy interface specs (`Module Check <: Spec`)
