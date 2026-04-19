@@ -22,3 +22,8 @@ verified-ocaml/testsuite-results.txt
 *.fls
 *.fdb_latexmk
 *.synctex.gz
+
+verified-ocaml/.Makefile.coq*.d
+verified-ocaml/Makefile.coq*
+!verified-ocaml/Makefile.coq*.local
+.lia.cache

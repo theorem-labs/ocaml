@@ -18,6 +18,11 @@ build-instruct:
 	$(MAKE) -C instruct-verification gen/instruct_handlers.c
 	dune build instruct-verification/theories/
 
+SUBPROJECTS = manual semi-auto automatic checker
+
+Makefile.coq $(addprefix Makefile.coq., $(SUBPROJECTS)): Makefile.coq% : _CoqProject%
+	$(COQBIN)coq_makefile -f $< -o $@
+
 # ---- Extraction ----
 
 COQC_FLAGS = \
