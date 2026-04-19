@@ -10,6 +10,10 @@ manual/Bytecode/Generated/instruct_handlers.v
 manual/Bytecode/IO.v
 manual/Bytecode/InstructSpec.v
 manual/Bytecode/Interpret.v
+manual/Bytecode/Interpret/Dispatch.v
+manual/Bytecode/Interpret/HandleInstrSpec.v
+manual/Bytecode/Interpret/Handlers.v
+manual/Bytecode/Interpret/Run.v
 manual/Bytecode/Machine.v
 manual/Bytecode/SatisfiabilityCheck.v
 manual/Compile/CompileSpec.v
@@ -182,6 +186,7 @@ automatic/LexParse/LexParse.v
 automatic/LexParse/LexParseProof.v
 checker/Bytecode/DecodeChecker.v
 checker/Bytecode/InstructChecker.v
+checker/Bytecode/InterpretChecker.v
 checker/Bytecode/Main.v
 checker/Compile/CompileChecker.v
 checker/Extract.v

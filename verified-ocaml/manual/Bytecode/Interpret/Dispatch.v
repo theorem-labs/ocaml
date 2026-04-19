@@ -1,35 +1,16 @@
-(* Interpret.v - [TRUSTED] Back-compat umbrella for the bytecode
-   interpreter.  The implementation has been split into the submodules
-   in manual/Bytecode/Interpret/:
+(* Dispatch.v - [TRUSTED] Concrete per-instruction dispatcher.  Ascribed to
+   HandleInstrSpec inside checker/Bytecode/InterpretChecker.v.  Currently
+   lives in manual/ because InstructSpec.v references each handle_<OP> by
+   name as a Module Type Parameter; a future refactor can move this (and
+   Handlers.v) into automatic/ once InstructSpec is restructured. *)
 
-     HandleInstrSpec.v  Module Type signature for handle_instr
-     Handlers.v         151 per-opcode handle_<OP> definitions
-     Dispatch.v         107-arm handle_instr that calls into Handlers
-     Run.v              Fetch + Run.Make functor over HandleInstrSpec
-
-   This file re-exports those pieces so existing callers (InstructSpec,
-   CompileSpec, CompileProof, the InstructVerification proofs, extraction
-   targets) keep compiling unchanged.  Trust-boundary ascription of
-   Dispatch against HandleInstrSpec lives in
-   checker/Bytecode/InterpretChecker.v; this file provides concrete
-   definitions of step / run / run_micro / handle_bcmicro / run_pure
-   so that unfolds in existing proofs still reduce the way they did
-   before the split. *)
-
-From Stdlib Require Import ZArith PeanoNat Strings.String.
-From Stdlib.Array Require Import PrimArray.
-From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
+From Stdlib Require Import ZArith.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
-From OCamlInterp.Manual.Bytecode.Interpret Require Export Handlers Dispatch Run.
-From RecordUpdate Require Import RecordUpdate.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import Handlers.
 Open Scope Z_scope.
 
-Definition step (code : array instruction) (s : state) : step_result :=
-  match fetch_instr code s.(pc) with
-  | None => Error "pc out of bounds"
-  | Some instr =>
-  let pc' := s.(pc) + 1 in
+Definition handle_instr (instr : instruction) (pc' : Z) (s : state) : step_result :=
   match instr with
 
   | ACC n => handle_ACC n pc' s
@@ -130,45 +111,4 @@ Definition step (code : array instruction) (s : state) : step_result :=
   | RESUMETERM _ => handle_RESUMETERM pc' s
   | REPERFORMTERM _ => handle_REPERFORMTERM pc' s
 
-  end
   end.
-
-Fixpoint run_micro (fuel : nat) (code : array instruction) (s : state) : bcmicro :=
-  match fuel with
-  | O => MFuel s
-  | S fuel' =>
-    match step code s with
-    | Step s' => run_micro fuel' code s'
-    | Halt v => MRet v
-    | Error msg => MErr msg
-    | CCall_request prim_idx args cont =>
-      MVis prim_idx args (fun result =>
-        match result with
-        | Some v => run_micro fuel' code (cont <|accu := v|>)
-        | None => MErr "C call returned None"
-        end)
-    end
-  end.
-
-Fixpoint handle_bcmicro (fuel : nat) (t : bcmicro)
-  (h : nat -> list value -> option value) : run_result :=
-  match fuel with
-  | O => match t with
-         | MFuel s => Out_of_fuel s
-         | _ => Run_error "handler fuel exhausted"
-         end
-  | S fuel' =>
-    match t with
-    | MRet v => Finished v
-    | MErr msg => Run_error msg
-    | MFuel s => Out_of_fuel s
-    | MVis idx args k => handle_bcmicro fuel' (k (h idx args)) h
-    end
-  end.
-
-Definition run (fuel : nat) (code : array instruction) (s : state)
-  (handle_ccall : nat -> list value -> option value) : run_result :=
-  handle_bcmicro fuel (run_micro fuel code s) handle_ccall.
-
-Definition run_pure (fuel : nat) (code : array instruction) (global_data : list value) : run_result :=
-  run fuel code (initial_state global_data) (fun _ _ => None).
