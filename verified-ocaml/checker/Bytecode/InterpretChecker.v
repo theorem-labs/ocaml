@@ -1,20 +1,35 @@
-(* InterpretChecker.v - Trust-boundary ascription for the bytecode
-   interpreter.  Verifies that Dispatch.handle_instr satisfies the
-   spec in manual/Bytecode/Interpret/HandleInstrSpec.v, then instantiates
-   the Run functor at the checked module.  Downstream code (Main.v,
-   Extract.v, PBT) consumes the flat re-exports below. *)
+(* InterpretChecker.v - Verifies that Dispatch.handle_instr (the concrete
+   107-arm dispatcher in manual/Bytecode/Interpret/Dispatch.v) satisfies
+   the HandleInstrSpec module type, then instantiates the Run functor
+   at the checked module and re-exports step / run_micro / handle_bcmicro
+   / run / run_pure alongside fetch_instr / list_to_code_array.
 
+   Downstream code (checker/Bytecode/Main.v, checker/Extract.v, PBT
+   harnesses) consumes the flat re-exports below. *)
+
+From OCamlInterp.Manual.Bytecode.Interpret Require Export Handlers.
 From OCamlInterp.Manual.Bytecode.Interpret Require HandleInstrSpec Run Dispatch.
 
-(* Ascription: Rocq verifies that Dispatch.handle_instr has the type
-   declared in HandleInstrSpec.handle_instr.  If Dispatch ever drifts
-   from the spec, compilation of this file fails. *)
-Module HandleInstrCheck <: HandleInstrSpec.HandleInstrSpec.
+Module Check <: HandleInstrSpec.HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
-End HandleInstrCheck.
+
+  Section __.
+  Set Printing All.
+  Set Printing Fully Qualified.
+  Set Printing Depth 10000000000.
+  Set Printing Width 2000.
+  Goal True.
+    idtac "<handle_instr>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions handle_instr.
+    idtac "</PrintAssumptions>".
+    idtac "</handle_instr>".
+  Abort.
+  End __.
+End Check.
 
 (* Instantiate the functor at the checked module. *)
-Module Interp := Run.Make HandleInstrCheck.
+Module Interp := Run.Make Check.
 
 (* Re-export the names downstream callers expect.  Extraction picks these
    up as flat top-level definitions. *)

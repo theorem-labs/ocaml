@@ -13,7 +13,7 @@ From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
-From OCamlInterp.Manual.Bytecode Require Import Interpret.
+From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
 From OCamlInterp.SemiAutomatic.Interpret Require Import Interpret.
@@ -364,7 +364,7 @@ Lemma step_constint : forall code s n,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n Hnth.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_CONSTINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -375,7 +375,7 @@ Lemma step_stop : forall code s,
   step_list code s = Halt (accu s).
 Proof.
   intros code s Hnth.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_STOP. reflexivity.
 Qed.
@@ -386,7 +386,7 @@ Lemma step_push : forall code s,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s Hnth.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_PUSH, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -399,7 +399,7 @@ Lemma step_addint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_ADDINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -413,7 +413,7 @@ Lemma step_subint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_SUBINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -427,7 +427,7 @@ Lemma step_mulint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_MULINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -440,7 +440,7 @@ Lemma step_pop : forall code s n,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n Hnth.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_POP, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -452,7 +452,7 @@ Lemma step_branch : forall code s target,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s target Hnth.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_BRANCH, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -465,7 +465,7 @@ Lemma step_branchifnot_zero : forall code s target,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s target Hnth Hacc.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_BRANCHIFNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
@@ -479,7 +479,7 @@ Lemma step_branchifnot_nonzero : forall code s target n,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s target n Hnth Hacc Hn.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_BRANCHIFNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
@@ -494,7 +494,7 @@ Lemma step_eq_instr : forall code s b rest,
                         rest (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s b rest Hnth Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_EQ. rewrite Hstk.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -508,7 +508,7 @@ Lemma step_ccall : forall code s nargs prim_idx,
        (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s nargs prim_idx Hnth.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_C_CALL, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -521,7 +521,7 @@ Lemma step_negint : forall code s n,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n Hnth Hacc.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_NEGINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
@@ -535,7 +535,7 @@ Lemma step_boolnot_zero : forall code s,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s Hnth Hacc.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_BOOLNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
@@ -549,7 +549,7 @@ Lemma step_boolnot_nonzero : forall code s n,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n Hnth Hacc Hn.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_BOOLNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
@@ -563,7 +563,7 @@ Lemma step_acc : forall code s n v,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n v Hnth Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_ACC. rewrite Hstk.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -576,7 +576,7 @@ Lemma step_envacc_early : forall code s n v,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n v Hnth Hfld.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_ENVACC. rewrite Hfld.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -589,7 +589,7 @@ Lemma step_gtint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_GTINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -603,7 +603,7 @@ Lemma step_ltint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_LTINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -617,7 +617,7 @@ Lemma step_leint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_LEINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -631,7 +631,7 @@ Lemma step_geint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_GEINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -645,7 +645,7 @@ Lemma step_getfield : forall code s n v,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n v Hnth Hfld.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_GETFIELD. rewrite Hfld.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -662,7 +662,7 @@ Lemma step_apply1 : forall code s arg rest target_pc,
     (accu s) 0 (Machine.global s) (trap_sp s)).
 Proof.
   intros code s arg rest target_pc Hnth Hstk Hcp.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_APPLY1. rewrite Hstk, Hcp.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -677,7 +677,7 @@ Lemma step_return_zero_extra : forall code s stacksize ret_pc saved_env saved_ea
                         (Machine.global s) (trap_sp s)).
 Proof.
   intros code s stacksize ret_pc saved_env saved_ea rest Hnth Hea Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_RETURN. rewrite Hstk, Hea. simpl.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -689,7 +689,7 @@ Lemma step_closure : forall code s nvars code_ofs,
   exists s', step_list code s = Step s' /\ pc s' = pc s + 1.
 Proof.
   intros code s nvars code_ofs Hnth.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_CLOSURE.
   destruct (heap_alloc s Closure_tag _) as [s' base_ptr] eqn:Halloc.
@@ -705,7 +705,7 @@ Lemma step_closurerec : forall code s nfuncs nvars offsets,
   exists s', step_list code s = Step s' /\ pc s' = pc s + 1.
 Proof.
   intros code s nfuncs nvars offsets Hnth Hne.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_CLOSUREREC.
   destruct offsets as [|o rest]; [exfalso; apply Hne; reflexivity |].
@@ -2258,7 +2258,7 @@ Lemma step_neqint : forall code s a b rest,
     rest (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_NEQ, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -2272,7 +2272,7 @@ Lemma step_envacc : forall code s n v,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s n v Hnth Hfld.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_ENVACC. rewrite Hfld.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -2288,7 +2288,7 @@ Lemma step_divint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk Hb.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_DIVINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -2305,7 +2305,7 @@ Lemma step_modint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk Hb.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_MODINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -2321,7 +2321,7 @@ Lemma step_andint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_ANDINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
@@ -2335,7 +2335,7 @@ Lemma step_orint : forall code s a b rest,
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
   intros code s a b rest Hnth Hacc Hstk.
-  unfold step_list, step.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
   rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
   unfold handle_ORINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.

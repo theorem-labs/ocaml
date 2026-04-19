@@ -15,7 +15,7 @@ From compcert Require Import Integers Floats Ctypes Cop
   Clight Clightdefs Globalenvs Maps Memory Values.
 From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
-From OCamlInterp.Manual Require Import Bytecode.Machine Bytecode.Interpret.
+From OCamlInterp.Manual Require Import Bytecode.Machine.
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
 From OCamlInterp.Manual Require Import Bytecode.InstructSpec.

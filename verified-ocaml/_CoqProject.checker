@@ -8,7 +8,6 @@ manual/Bytecode/Encode.v
 manual/Bytecode/Generated/instruct_handlers.v
 manual/Bytecode/IO.v
 manual/Bytecode/InstructSpec.v
-manual/Bytecode/Interpret.v
 manual/Bytecode/Interpret/Dispatch.v
 manual/Bytecode/Interpret/HandleInstrSpec.v
 manual/Bytecode/Interpret/Handlers.v
@@ -178,6 +177,7 @@ automatic/Bytecode/InstructVerification/UGEINT_correct.v
 automatic/Bytecode/InstructVerification/ULTINT_correct.v
 automatic/Bytecode/InstructVerification/VECTLENGTH_correct.v
 automatic/Bytecode/InstructVerification/XORINT_correct.v
+automatic/Bytecode/Interpret.v
 automatic/Bytecode/StepToBigstep.v
 automatic/Compile/Compile.v
 automatic/Compile/CompileProof.v

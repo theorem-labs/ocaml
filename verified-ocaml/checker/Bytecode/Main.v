@@ -8,7 +8,8 @@ From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Import Ascii.
 From OCamlInterp.Manual.Utils Require Import Value.
-From OCamlInterp.Manual.Bytecode Require Import AST Machine Interpret IO DecodeSpec.
+From OCamlInterp.Manual.Bytecode Require Import AST Machine IO DecodeSpec.
+From OCamlInterp.Checker.Bytecode Require Import InterpretChecker.
 Open Scope Z_scope.
 Open Scope bool_scope.
 

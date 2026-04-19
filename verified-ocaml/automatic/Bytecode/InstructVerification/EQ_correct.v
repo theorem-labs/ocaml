@@ -15,7 +15,8 @@ From compcert Require Import Coqlib Integers Floats Ctypes Cop
   Clight Clightdefs Globalenvs Maps Memory Memdata Events Values.
 From compcert Require Import ClightBigstep AST.
 From OCamlInterp.Manual Require Import Utils.Value.
-From OCamlInterp.Manual Require Import Bytecode.Machine Bytecode.Interpret.
+From OCamlInterp.Manual Require Import Bytecode.Machine.
+From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.InstructSpec.

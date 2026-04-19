@@ -16,9 +16,19 @@ From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Value.
 From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
-From OCamlInterp.Manual.Bytecode Require Import Interpret.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import Handlers Dispatch Run HandleInstrSpec.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
+
+(* Instantiate the Run functor at the manual Dispatch to expose
+   step / run / run_micro / handle_bcmicro / run_pure at top level.
+   CompileSpec is in manual/ and cannot depend on automatic/, so it
+   cannot reuse automatic/Bytecode/Interpret.v; it builds its own copy
+   of the same instantiation here. *)
+Module DispatchImpl <: HandleInstrSpec.
+  Definition handle_instr := Dispatch.handle_instr.
+End DispatchImpl.
+Include Run.Make DispatchImpl.
 
 (* === Trusted definitions for running compiled bytecode === *)
 

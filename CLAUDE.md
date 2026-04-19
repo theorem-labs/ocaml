@@ -180,6 +180,10 @@ Pretty-printers go in the reverse direction (AST -> source string, bytecode AST 
 - **Checker**: Thin modules that verify proofs satisfy interface specs.
 - **Trusted-ish**: Ongoing PBT/proof obligations that grow as scope expands (cross-validation of `ocamlc` vs `compile`, bootstrapping proofs, Rocq self-verification).
 
+**`manual/` must never depend on `automatic/`, `semi-auto/`, or `checker/`.** This is a hard, one-directional dependency rule — violating it collapses the trust hierarchy. `manual/` may only import from `manual/` and external libraries. If a manual file is reaching for a definition outside manual/, the answer is either (a) move the definition into manual/, (b) restructure so the manual file doesn't need it, or (c) parameterize manual over the missing piece via a Module Type.
+
+**Never complicate `manual/` to make proofs in `automatic/` easier.** `manual/` is the trusted core and must stay minimal; it is not a place to park shims, duplicated definitions, or back-compat re-exports that exist solely to spare downstream proof scripts from being updated. If a refactor in `manual/` forces a large mechanical update in `automatic/`, do the update — sed / scripted rewrites are cheap and reviewable; bloat in the trusted base is not. When an umbrella/re-export module is genuinely useful for downstream ergonomics, put it in `automatic/` (or `checker/`) and have it `Include` the functor or re-export the split manual submodules from there.
+
 ## Roadmap
 
 Each step is tagged with a trust level (**[Trusted]**, **[Untrusted]**, **[Trusted-ish]**) and an automation level: **[Manual]** = human-authored, **[Auto]** = LLM-generated, **[Semi-auto]** = LLM-generated with human-defined constraints.

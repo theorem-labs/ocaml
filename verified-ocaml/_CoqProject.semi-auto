@@ -6,7 +6,6 @@ manual/Bytecode/Encode.v
 manual/Bytecode/Generated/instruct_handlers.v
 manual/Bytecode/IO.v
 manual/Bytecode/InstructSpec.v
-manual/Bytecode/Interpret.v
 manual/Bytecode/Interpret/Dispatch.v
 manual/Bytecode/Interpret/HandleInstrSpec.v
 manual/Bytecode/Interpret/Handlers.v
