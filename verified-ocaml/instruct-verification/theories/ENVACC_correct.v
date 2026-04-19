@@ -527,3 +527,15 @@ Proof.
     }
   }
 Qed.
+
+Definition ENVACC_correct_for_spec : forall n, Z.of_nat n < Int.half_modulus ->
+    handler_correct (handle_ENVACC n) f_instr_ENVACC
+      (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
+      (fun _ s => field_or_heap s s.(Machine.env) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros n Hrange.
+    eapply handler_correct_weaken.
+    - exact (verify_ENVACC_correct n).
+    - intros e le m s ard _ [Hcode Henv]. exact (conj Hcode (conj Hrange Henv)).
+  Qed.

@@ -105,12 +105,12 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* caml_modify definitions                                             *)
 (* ================================================================== *)
 
-Local Definition cm_ef : external_function :=
+Local Definition caml_modify_ef : external_function :=
   EF_external "caml_modify"
     (mksignature (AST.Xptr :: AST.Xlong :: nil) AST.Xvoid cc_default).
 
-Local Definition cm_fundef : Ctypes.fundef function :=
-  Ctypes.External cm_ef ((tptr tlong) :: tlong :: nil) tvoid cc_default.
+Local Definition caml_modify_fundef : Ctypes.fundef function :=
+  Ctypes.External caml_modify_ef ((tptr tlong) :: tlong :: nil) tvoid cc_default.
 
 (* ================================================================== *)
 (* Precondition                                                        *)
@@ -136,7 +136,7 @@ Definition setvectitem_pre
     e ! _caml_modify = None /\
     (exists b_cm,
        Genv.find_symbol ge _caml_modify = Some b_cm /\
-       Genv.find_funct ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
+       Genv.find_funct ge (Vptr b_cm Ptrofs.zero) = Some caml_modify_fundef) /\
     (* caml_modify call and its effects *)
     (forall accu_v newval_cv,
        val_repr hm cb co (Machine.accu s) accu_v ->
@@ -149,7 +149,7 @@ Definition setvectitem_pre
             Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
             hb <> sp_b) /\
          exists m_cm,
-           external_call cm_ef ge
+           external_call caml_modify_ef ge
              (Vptr hb (Ptrofs.add hofs (Ptrofs.repr (idx * 8)))
               :: newval_cv :: nil)
              m E0 Vundef m_cm /\

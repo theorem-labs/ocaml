@@ -892,12 +892,12 @@ Definition pushenvacc_step_pre (n : nat) (_ : Clight.env) (m : mem) (s : Machine
           b <> sb /\ b <> sp_b).
 
 
-Definition cm_ef : external_function :=
+Definition caml_modify_ef : external_function :=
   EF_external "caml_modify"
     (mksignature (AST.Xptr :: AST.Xlong :: nil) AST.Xvoid cc_default).
 
-Definition cm_fundef : Ctypes.fundef function :=
-  Ctypes.External cm_ef ((tptr tlong) :: tlong :: nil) tvoid cc_default.
+Definition caml_modify_fundef : Ctypes.fundef function :=
+  Ctypes.External caml_modify_ef ((tptr tlong) :: tlong :: nil) tvoid cc_default.
 
 Definition heap_alloc_ef : external_function :=
   EF_external "heap_alloc"
@@ -1074,7 +1074,7 @@ Definition setvectitem_pre
     e ! _caml_modify = None /\
     (exists b_cm,
        Genv.find_symbol clight_ge _caml_modify = Some b_cm /\
-       Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
+       Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some caml_modify_fundef) /\
     (* caml_modify call and its effects *)
     (forall accu_v newval_cv,
        val_repr hm cb co (Machine.accu s) accu_v ->
@@ -1087,7 +1087,7 @@ Definition setvectitem_pre
             Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
             hb <> sp_b) /\
          exists m_cm,
-           external_call cm_ef clight_ge
+           external_call caml_modify_ef clight_ge
              (Vptr hb (Ptrofs.add hofs (Ptrofs.repr (idx * 8)))
               :: newval_cv :: nil)
              m E0 Vundef m_cm /\
@@ -2706,7 +2706,7 @@ Definition setfield_step_pre (n : nat)
   Int.min_signed <= Z.of_nat n <= Int.max_signed /\
   (exists b_cm,
      Genv.find_symbol clight_ge _caml_modify = Some b_cm /\
-     Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
+     Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some caml_modify_fundef) /\
   (forall newval rest,
      Machine.stack s = newval :: rest ->
      forall accu_v,
@@ -2729,7 +2729,7 @@ Definition setfield_step_pre (n : nat)
          Mem.load Mint64 m_sp sb (Ptrofs.unsigned so + 0) =
            Some (Vptr cb (Ptrofs.add co (Ptrofs.repr (Machine.pc s * sizeof_code_t)))) /\
          (exists m_cm,
-           external_call cm_ef clight_ge
+           external_call caml_modify_ef clight_ge
              (Vptr hb (heap_field_target hofs (Int.repr (Z.of_nat n)))
               :: stk_top_cv :: nil)
              m_sp E0 Vundef m_cm /\
@@ -2767,11 +2767,11 @@ Definition setglobal_step_pre (n : nat)
   Int.min_signed <= Z.of_nat n <= Int.max_signed /\
   (exists b_cm,
      Genv.find_symbol clight_ge _caml_modify = Some b_cm /\
-     Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some cm_fundef) /\
+     Genv.find_funct clight_ge (Vptr b_cm Ptrofs.zero) = Some caml_modify_fundef) /\
   (forall accu_v,
      val_repr hm cb co (Machine.accu s) accu_v ->
      exists m_cm,
-       external_call cm_ef clight_ge
+       external_call caml_modify_ef clight_ge
          (Vptr gb (heap_field_target go (Int.repr (Z.of_nat n)))
           :: accu_v :: nil)
          m E0 Vundef m_cm /\

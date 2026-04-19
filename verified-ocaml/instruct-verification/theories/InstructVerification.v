@@ -188,26 +188,7 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_APPTERM1 := verify_APPTERM1_correct.
   Definition correct_APPTERM2 := verify_APPTERM2_correct.
   Definition correct_APPTERM3 := verify_APPTERM3_correct.
-  Definition correct_APPTERM : forall nargs slotsize,
-    handler_correct (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
-      (fun e0 m s ard =>
-         get_code_ptr_s s s.(Machine.accu) <> None /\
-         let s' := match get_code_ptr_s s s.(Machine.accu) with
-                   | Some target_pc =>
-                     s <|pc := target_pc|>
-                       <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
-                       <|env := s.(Machine.accu)|>
-                       <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
-                   | None => s
-                   end in
-         forall le,
-           abs_rel_with_ard e0 le m s ard ->
-           exists le' m' out,
-             exec_stmt function_entry1 clight_ge e0 le m
-               (fn_body f_instr_APPTERM) E0 le' m' out /\
-             abs_rel e0 le' m' s')
-      (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-  Proof. exact verify_APPTERM_correct. Qed.
+  Definition correct_APPTERM := verify_APPTERM_correct.
   Definition correct_ASRINT := verify_ASRINT_handler_correct.
   Definition correct_ASSIGN := verify_ASSIGN_correct.
   Definition correct_ATOM0 := verify_ATOM0_correct.
@@ -279,70 +260,8 @@ Module InstructVerification <: InstructVerificationSpec.
       (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
     := verify_BULTINT_handler_correct.
   Definition correct_CHECK_SIGNALS := verify_CHECK_SIGNALS_correct.
-  Definition correct_CLOSUREREC : forall code_ofs,
-    Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
-      (heap_alloc_with_stores 2 247 alloc_store_2
-       /\p code_at (Int.repr 1) /\p code_arg_at 1 (Int.repr 0)
-       /\p code_arg_at 2 (Int.repr code_ofs) /\p sp_at_least 16)
-      (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False)
-      (fun _ => False) (fun _ _ _ => False).
-  Proof.
-    intros code_ofs Hrange.
-    apply handler_correct_weaken with
-      (sp := fun e m s ard => closurerec_step_pre code_ofs e m s ard).
-    - exact (verify_CLOSUREREC_correct code_ofs).
-    - intros e le m s ard Hrel [Hhaw [Hc0 [Hc1 [Hc2 Hsp16]]]].
-      destruct Hhaw as [Hhap Hsu].
-      unfold heap_alloc_pre in Hhap.
-      destruct Hhap as (He & Hhm & Hvb & Hfs & H5).
-      unfold closurerec_step_pre.
-      split; [exact He|].
-      split; [exact Hc0|].
-      split; [exact Hc1|].
-      split; [exact Hc2|].
-      split; [exact Hrange|].
-      split; [exact Hhm|].
-      split; [exact Hvb|].
-      split; [exact Hfs|].
-      split.
-      { intros m'. destruct (H5 m') as (ma & nb & no & Hex & Hfr & Hld & Hpm).
-        exists ma, nb, no.
-        split; [exact Hex|]. split; [exact Hfr|]. split; [exact Hld|].
-        split; [exact Hpm|].
-        pose proof (Hsu m' ma nb no Hex Hfr Hld Hpm) as Has2.
-        intros cv. destruct (Has2 cv) as (ms & Hs & Hl & Hlo & Hinner).
-        exists ms. split; [exact Hs|]. split; [exact Hl|]. split; [exact Hlo|].
-        intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hl1 & Hf0ld & Hlo1 & Hperm).
-        exists ms1. split; [exact Hs1|]. split; [exact Hl1|].
-        split; [exact Hf0ld|]. split; [exact Hlo1|].
-        intros b ofs k p Hvb_s Hpm_s.
-        apply Hperm. eapply Mem.perm_store_2. exact Hs. exact Hpm_s. }
-      { intros sp_b sp_ofs Hsp_load.
-        destruct Hsp16 as (sp_b' & sp_ofs' & Hsp_load' & Hsp_ge16).
-        rewrite Hsp_load in Hsp_load'. inversion Hsp_load'. subst sp_b' sp_ofs'.
-        destruct Hrel as (_ & _ & _ & (sp_ptr0 & sp_b0 & sp_ofs0 & Hsp_load0 & Hsp_eq0 & _ & _ & _ & _ & _ & Hsp_bounded0 & _ & Hsp_align0) & _).
-        subst sp_ptr0.
-        rewrite Hsp_load in Hsp_load0. inversion Hsp_load0. subst sp_b0 sp_ofs0.
-        split; [exact Hsp_ge16|].
-        split.
-        - destruct Hsp_align0 as [k Hk].
-          exists (k - 1). simpl align_chunk in *. lia.
-        - lia. }
-  Qed.
-  Definition correct_CLOSURE : forall nvars code_ofs,
-    (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
-    Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
-      (closure_general_step_pre nvars code_ofs)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Proof.
-    intros nvars code_ofs Hnvars_range Hcode_ofs_range.
-    apply verify_CLOSURE_general_correct.
-    - rewrite Nat2Z.inj_add in Hnvars_range. simpl (Z.of_nat 2) in Hnvars_range.
-      split; [apply Nat2Z.is_nonneg | lia].
-    - exact Hcode_ofs_range.
-  Qed.
+  Definition correct_CLOSUREREC := CLOSUREREC_correct_for_spec.
+  Definition correct_CLOSURE := CLOSURE_correct_for_spec.
   Definition correct_CONST0 := verify_CONST0_compl_comp.
   Definition correct_CONST1 := verify_CONST1_correct.
   Definition correct_CONST2 := verify_CONST2_correct.
@@ -359,17 +278,7 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_ENVACC2 := verify_ENVACC2_with_pre.
   Definition correct_ENVACC3 := verify_ENVACC3_with_pre.
   Definition correct_ENVACC4 := verify_ENVACC4_with_pre.
-  Definition correct_ENVACC : forall n, Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ENVACC n) f_instr_ENVACC
-      (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
-      (fun _ s => field_or_heap s s.(Machine.env) n = None)
-      (fun _ => False) (fun _ _ _ => False).
-  Proof.
-    intros n Hrange.
-    eapply handler_correct_weaken.
-    - exact (verify_ENVACC_correct n).
-    - intros e le m s ard _ [Hcode Henv]. exact (conj Hcode (conj Hrange Henv)).
-  Qed.
+  Definition correct_ENVACC := ENVACC_correct_for_spec.
   Definition correct_EQ := verify_EQ_handler_correct.
   Definition correct_EVENT := verify_EVENT_correct.
   Definition correct_GEINT := verify_GEINT_handler_correct.
@@ -379,17 +288,7 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_GETFIELD1 := verify_GETFIELD1_with_pre.
   Definition correct_GETFIELD2 := verify_GETFIELD2_with_pre.
   Definition correct_GETFIELD3 := verify_GETFIELD3_with_pre.
-  Definition correct_GETFIELD : forall n, Int.min_signed <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
-      (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
-      (fun _ s => field_or_heap s s.(Machine.accu) n = None)
-      (fun _ => False) (fun _ _ _ => False).
-  Proof.
-    intros n Hrange.
-    eapply handler_correct_weaken.
-    - exact (verify_GETFIELD_correct n).
-    - intros e le m s ard _ [Hhfl Hcode]. exact (conj Hhfl (conj Hcode Hrange)).
-  Qed.
+  Definition correct_GETFIELD := GETFIELD_correct_for_spec.
   Definition correct_GETFLOATFIELD := verify_GETFLOATFIELD_correct.
   Definition correct_GETGLOBALFIELD := verify_GETGLOBALFIELD_correct.
   Definition correct_GETGLOBAL :
@@ -410,83 +309,11 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_LSLINT := verify_LSLINT_handler_correct.
   Definition correct_LSRINT := verify_LSRINT_handler_correct.
   Definition correct_LTINT := verify_LTINT_handler_correct.
-  Definition correct_MAKEBLOCK1 : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
-      (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1
-       /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Proof.
-    intros t Hrange. eapply handler_correct_weaken.
-    - exact (verify_MAKEBLOCK1_correct t).
-    - intros e le m s ard _ [[Hhap Hsu] Hcode].
-      unfold heap_alloc_pre in Hhap.
-      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
-      split; [exact H0|]. split; [exact Hcode|]. split; [exact Hrange|].
-      split; [exact H2|]. split; [exact H3|]. split; [exact H4|].
-      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
-      exists ma, nb, no.
-      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
-      split; [exact Hp|].
-      exact (Hsu m' ma nb no He Hf Hl Hp).
-  Qed.
-  Definition correct_MAKEBLOCK2 : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
-      (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
-       /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
-  Proof.
-    intros t Hrange. eapply handler_correct_weaken.
-    - exact (verify_MAKEBLOCK2_correct t).
-    - intros e le m s ard _ [[Hhap Hsu] Hcode].
-      unfold heap_alloc_pre in Hhap.
-      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
-      split; [exact H0|]. split; [exact Hcode|]. split; [exact Hrange|].
-      split; [exact H2|]. split; [exact H3|]. split; [exact H4|].
-      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
-      exists ma, nb, no.
-      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
-      split; [exact Hp|].
-      (* alloc_store_2 has 5 inner conjuncts; MAKEBLOCK2 inline has 4 (no field0-load-pres) *)
-      pose proof (Hsu m' ma nb no He Hf Hl Hp) as Has2.
-      intros cv. destruct (Has2 cv) as (ms & Hs & Hld & Hld_other & Hinner).
-      exists ms. split; [exact Hs|]. split; [exact Hld|]. split; [exact Hld_other|].
-      intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hld1 & _ & Hld1_other & Hperm).
-      exists ms1. split; [exact Hs1|]. split; [exact Hld1|]. split; [exact Hld1_other|].
-      exact Hperm.
-  Qed.
-  Definition correct_MAKEBLOCK3 : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
-      (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
-       /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
-  Proof.
-    intros t Hrange. eapply handler_correct_weaken.
-    - exact (verify_MAKEBLOCK3_correct t).
-    - intros e le m s ard _ [[Hhap Hsu] Hcode].
-      unfold heap_alloc_pre in Hhap.
-      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
-      split; [exact H0|]. split; [exact Hcode|]. split; [exact Hrange|].
-      split; [exact H2|]. split; [exact H3|]. split; [exact H4|].
-      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
-      exists ma, nb, no.
-      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
-      split; [exact Hp|].
-      exact (Hsu m' ma nb no He Hf Hl Hp).
-  Qed.
-  Definition correct_MAKEBLOCK : forall t size,
-    (size >= 1)%nat ->
-    handler_correct (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
-      (makeblock_step_pre t size)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Proof. exact verify_MAKEBLOCK_correct. Qed.
-  Definition correct_MAKEFLOATBLOCK : forall n,
-    (n >= 1)%nat ->
-    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
-      (makefloatblock_step_pre n)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-  Proof. exact verify_MAKEFLOATBLOCK_correct. Qed.
+  Definition correct_MAKEBLOCK1 := MAKEBLOCK1_correct_for_spec.
+  Definition correct_MAKEBLOCK2 := MAKEBLOCK2_correct_for_spec.
+  Definition correct_MAKEBLOCK3 := MAKEBLOCK3_correct_for_spec.
+  Definition correct_MAKEBLOCK := verify_MAKEBLOCK_correct.
+  Definition correct_MAKEFLOATBLOCK := verify_MAKEFLOATBLOCK_correct.
   Definition correct_MODINT := verify_MODINT_handler_correct.
   Definition correct_MULINT := verify_MULINT_correct.
   Definition correct_NEGINT := verify_NEGINT_compl_comp.

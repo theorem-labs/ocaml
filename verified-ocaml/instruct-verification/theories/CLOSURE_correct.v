@@ -30,7 +30,6 @@ Require Import instruct_handlers.
 Require Import InstructSpec.
 Require Import StepToBigstep.
 Require Import HandlerLemmas.
-Require Import ExternalCallSpecs.
 
 Local Notation ge := clight_ge.
 
@@ -5145,3 +5144,17 @@ Proof.
       - apply Hsb_writable_s0. exact Hofs0. }
   }
 Qed.
+
+Definition CLOSURE_correct_for_spec : forall nvars code_ofs,
+    (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
+    Int.min_signed <= code_ofs <= Int.max_signed ->
+    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+      (closure_general_step_pre nvars code_ofs)
+      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros nvars code_ofs Hnvars_range Hcode_ofs_range.
+    apply verify_CLOSURE_general_correct.
+    - rewrite Nat2Z.inj_add in Hnvars_range. simpl (Z.of_nat 2) in Hnvars_range.
+      split; [apply Nat2Z.is_nonneg | lia].
+    - exact Hcode_ofs_range.
+  Qed.

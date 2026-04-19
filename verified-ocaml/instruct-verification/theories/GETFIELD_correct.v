@@ -538,3 +538,15 @@ Proof.
     }
   }
 Qed.
+
+Definition GETFIELD_correct_for_spec : forall n, Int.min_signed <= Z.of_nat n <= Int.max_signed ->
+    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
+      (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
+      (fun _ s => field_or_heap s s.(Machine.accu) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros n Hrange.
+    eapply handler_correct_weaken.
+    - exact (verify_GETFIELD_correct n).
+    - intros e le m s ard _ [Hhfl Hcode]. exact (conj Hhfl (conj Hcode Hrange)).
+  Qed.

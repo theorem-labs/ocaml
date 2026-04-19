@@ -60,7 +60,6 @@ Require Import instruct_handlers.
 Require Import InstructSpec.
 Require Import StepToBigstep.
 Require Import HandlerLemmas.
-Require Import ExternalCallSpecs.
 
 Local Notation ge := clight_ge.
 

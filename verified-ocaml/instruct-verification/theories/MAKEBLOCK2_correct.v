@@ -38,7 +38,6 @@ Require Import instruct_handlers.
 Require Import InstructSpec.
 Require Import StepToBigstep.
 Require Import HandlerLemmas.
-Require Import ExternalCallSpecs.
 
 Local Notation ge := clight_ge.
 
@@ -1507,3 +1506,30 @@ Proof.
           apply Hsb_writable. exact Hofs0. }
     }
 Qed.
+
+Definition MAKEBLOCK2_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
+    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
+      (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
+       /\p code_at (Int.repr (Z.of_nat t)))
+      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
+      (fun _ => False) (fun _ _ _ => False).
+  Proof.
+    intros t Hrange. eapply handler_correct_weaken.
+    - exact (verify_MAKEBLOCK2_correct t).
+    - intros e le m s ard _ [[Hhap Hsu] Hcode].
+      unfold heap_alloc_pre in Hhap.
+      destruct Hhap as (H0 & H2 & H3 & H4 & H5).
+      split; [exact H0|]. split; [exact Hcode|]. split; [exact Hrange|].
+      split; [exact H2|]. split; [exact H3|]. split; [exact H4|].
+      intros m'. destruct (H5 m') as (ma & nb & no & He & Hf & Hl & Hp).
+      exists ma, nb, no.
+      split; [exact He|]. split; [exact Hf|]. split; [exact Hl|].
+      split; [exact Hp|].
+      (* alloc_store_2 has 5 inner conjuncts; MAKEBLOCK2 inline has 4 (no field0-load-pres) *)
+      pose proof (Hsu m' ma nb no He Hf Hl Hp) as Has2.
+      intros cv. destruct (Has2 cv) as (ms & Hs & Hld & Hld_other & Hinner).
+      exists ms. split; [exact Hs|]. split; [exact Hld|]. split; [exact Hld_other|].
+      intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hld1 & _ & Hld1_other & Hperm).
+      exists ms1. split; [exact Hs1|]. split; [exact Hld1|]. split; [exact Hld1_other|].
+      exact Hperm.
+  Qed.
