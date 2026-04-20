@@ -2876,145 +2876,1047 @@ Proof.
   intros ard _ HF. exfalso; exact HF.
 Qed.
 
+(* [weaken_by WF] absorbs a side condition [WF] into a bundle's
+   predicates: [step_pre] gains [WF /\ _], and [P_error], [P_halt],
+   [P_ccall] gain [WF -> _].  This lets us wrap an
+   [InstructVerificationSpec] parameter whose statement is
+   [WF -> handler_correct ...] into a bundle without that extra
+   hypothesis surfacing in the bundle's type. *)
+Definition weaken_by (WF : Prop)
+    (h : Z -> state -> step_result) (f : function)
+    (pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
+    (Q_err : string -> state -> Prop)
+    (Q_halt : value -> Prop)
+    (Q_ccall : nat -> list value -> state -> Prop) : HandlerSpecBundle :=
+  {| hs_handler  := h;
+     hs_clight   := f;
+     hs_step_pre := fun e m s ard => WF /\ pre e m s ard;
+     hs_P_error  := fun msg s => WF -> Q_err msg s;
+     hs_P_halt   := fun v => WF -> Q_halt v;
+     hs_P_ccall  := fun n a s => WF -> Q_ccall n a s |}.
+
+Lemma weaken_by_correct :
+  forall WF h f pre Q_err Q_halt Q_ccall,
+    (WF -> handler_correct h f pre Q_err Q_halt Q_ccall) ->
+    handler_correct_bundle (weaken_by WF h f pre Q_err Q_halt Q_ccall).
+Proof.
+  intros WF h f pre Q_err Q_halt Q_ccall H.
+  unfold handler_correct_bundle, weaken_by, handler_correct; simpl.
+  intros e le m s.
+  destruct (h s.(Machine.pc) s) eqn:Heq.
+  - intros ard Habs [HWF Hpre].
+    specialize (H HWF e le m s). rewrite Heq in H.
+    exact (H ard Habs Hpre).
+  - intros HWF. specialize (H HWF e le m s). rewrite Heq in H. exact H.
+  - intros HWF. specialize (H HWF e le m s). rewrite Heq in H. exact H.
+  - intros HWF. specialize (H HWF e le m s). rewrite Heq in H. exact H.
+Qed.
+
+(* [mk_bundle_correct] is the trivial bridge from a bare
+   [handler_correct] fact to [handler_correct_bundle] on the canonical
+   record built by [mk_handler_spec_bundle].  Used in each unconditional
+   arm of [handler_correct_bundle_of_parameters] below. *)
+Lemma mk_bundle_correct :
+  forall h f pre Q_err Q_halt Q_ccall,
+    handler_correct h f pre Q_err Q_halt Q_ccall ->
+    handler_correct_bundle (mk_handler_spec_bundle h f pre Q_err Q_halt Q_ccall).
+Proof. intros h f pre Q_err Q_halt Q_ccall H; exact H. Qed.
+
 (* ================================================================== *)
 (* Per-instruction spec dispatch                                       *)
 (*                                                                      *)
-(* [spec_of i pc'] returns a HandlerSpecBundle whose handler coincides  *)
-(* with the concrete dispatcher in manual/Bytecode/Interpret/Dispatch.v.*)
-(* The predicate fields are set trivially in this Phase 1 landing — a   *)
-(* Phase 2/3 refinement (see manual/Bytecode/generator/META_SPEC_PLAN.md*)
-(* "Strengthening obligations") will replace [trivial_bundle] with      *)
-(* per-instruction bundles keyed off the existing [InstructVerification *)
-(* Spec] parameters so that [handler_correct_bundle (spec_of i pc')]    *)
-(* carries real content.                                                *)
+(* [spec_of i pc'] returns a HandlerSpecBundle keyed off the existing   *)
+(* [InstructVerificationSpec] parameters so that                        *)
+(* [handler_correct_bundle (spec_of i pc')] carries real content per    *)
+(* arm.  Each arm uses one of:                                          *)
+(*   - [mk_handler_spec_bundle] when the parameter is unconditional;    *)
+(*   - [weaken_by WF] when the parameter has a side condition [WF]      *)
+(*     (the condition is absorbed into the bundle's step_pre via        *)
+(*     conjunction, and into P_error / P_halt / P_ccall via implication *)
+(*     so the bundle's surface type has no WF premise);                 *)
+(*   - [trivial_bundle] as a fallback in inner matches for narrow-      *)
+(*     domain parameters (PUSHACC 0 / ≥8, and CLOSUREREC off the        *)
+(*     1-0-[ofs] shape).                                                *)
 (* ================================================================== *)
 
 Definition spec_of (i : instruction) (pc' : Z) : HandlerSpecBundle :=
   match i with
-  | ACC n => trivial_bundle (fun _ s => handle_ACC n pc' s) f_instr_ACC0
-  | PUSH => trivial_bundle (fun _ s => handle_PUSH pc' s) f_instr_PUSH
-  | PUSHACC n => trivial_bundle (fun _ s => handle_PUSHACC n pc' s) f_instr_ACC0
-  | POP n => trivial_bundle (fun _ s => handle_POP n pc' s) f_instr_POP
-  | ASSIGN n => trivial_bundle (fun _ s => handle_ASSIGN n pc' s) f_instr_ASSIGN
-  | ENVACC n => trivial_bundle (fun _ s => handle_ENVACC n pc' s) f_instr_ENVACC
-  | PUSHENVACC n => trivial_bundle (fun _ s => handle_PUSHENVACC n pc' s) f_instr_PUSHENVACC
+  | ACC n =>
+      weaken_by (Z.of_nat n < Int.half_modulus)
+        (handle_ACC n) f_instr_ACC
+        (code_at (Int.repr (Z.of_nat n)))
+        (fun _ s => nth_error s.(Machine.stack) n = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | PUSH =>
+      mk_handler_spec_bundle
+        handle_PUSH f_instr_PUSH
+        (sp_at_least 16)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | PUSHACC n =>
+      match n with
+      | 1%nat =>
+          mk_handler_spec_bundle
+            (handle_PUSHACC 1) f_instr_PUSHACC1
+            (sp_at_least 16)
+            (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 1 = None)
+            (fun _ => False) (fun _ _ _ => False)
+      | 2%nat =>
+          mk_handler_spec_bundle
+            (handle_PUSHACC 2) f_instr_PUSHACC2
+            (sp_at_least 16)
+            (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 2 = None)
+            (fun _ => False) (fun _ _ _ => False)
+      | 3%nat =>
+          mk_handler_spec_bundle
+            (handle_PUSHACC 3) f_instr_PUSHACC3
+            (sp_at_least 16)
+            (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 3 = None)
+            (fun _ => False) (fun _ _ _ => False)
+      | 4%nat =>
+          mk_handler_spec_bundle
+            (handle_PUSHACC 4) f_instr_PUSHACC4
+            (sp_at_least 16)
+            (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 4 = None)
+            (fun _ => False) (fun _ _ _ => False)
+      | 5%nat =>
+          mk_handler_spec_bundle
+            (handle_PUSHACC 5) f_instr_PUSHACC5
+            (sp_at_least 16)
+            (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 5 = None)
+            (fun _ => False) (fun _ _ _ => False)
+      | 6%nat =>
+          mk_handler_spec_bundle
+            (handle_PUSHACC 6) f_instr_PUSHACC6
+            (sp_at_least 16)
+            (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 6 = None)
+            (fun _ => False) (fun _ _ _ => False)
+      | 7%nat =>
+          mk_handler_spec_bundle
+            (handle_PUSHACC 7) f_instr_PUSHACC7
+            (sp_at_least 16)
+            (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 7 = None)
+            (fun _ => False) (fun _ _ _ => False)
+      | _ =>
+          trivial_bundle (fun _ s => handle_PUSHACC n pc' s) f_instr_PUSHACC1
+      end
+  | POP n =>
+      weaken_by (Z.of_nat n < Int.half_modulus)
+        (handle_POP n) f_instr_POP
+        ((code_at (Int.repr (Z.of_nat n)) /\p code_ne_struct) /\p stack_length_ge n)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ASSIGN n =>
+      mk_handler_spec_bundle
+        (handle_ASSIGN n) f_instr_ASSIGN
+        (assign_step_pre n)
+        (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ENVACC n =>
+      weaken_by (Z.of_nat n < Int.half_modulus)
+        (handle_ENVACC n) f_instr_ENVACC
+        (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
+        (fun _ s => field_or_heap s s.(Machine.env) n = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | PUSHENVACC n =>
+      mk_handler_spec_bundle
+        (handle_PUSHENVACC n) f_instr_PUSHENVACC
+        (pushenvacc_generic_step_pre n)
+        (fun _ s => field_or_heap s s.(Machine.env) n = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | PUSH_RETADDR ret_addr =>
-      trivial_bundle (fun _ s => handle_PUSH_RETADDR ret_addr pc' s) f_instr_PUSH_RETADDR
-  | APPLY n => trivial_bundle (fun _ s => handle_APPLY n s) f_instr_APPLY
-  | APPLY1 => trivial_bundle (fun _ s => handle_APPLY1 pc' s) f_instr_APPLY1
-  | APPLY2 => trivial_bundle (fun _ s => handle_APPLY2 pc' s) f_instr_APPLY2
-  | APPLY3 => trivial_bundle (fun _ s => handle_APPLY3 pc' s) f_instr_APPLY3
+      mk_handler_spec_bundle
+        (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
+        (push_retaddr_step_pre ret_addr)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | APPLY n =>
+      mk_handler_spec_bundle
+        (fun _ s => handle_APPLY n s) f_instr_APPLY
+        (apply_n_step_pre n)
+        (fun _ s => get_code_ptr_s s s.(Machine.accu) = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | APPLY1 =>
+      mk_handler_spec_bundle
+        (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
+        apply1_step_pre
+        (fun msg s =>
+          (msg = "APPLY1: accu is not a closure"%string /\
+           get_code_ptr_s s s.(Machine.accu) = None) \/
+          (msg = "APPLY1: stack underflow"%string))
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | APPLY2 =>
+      mk_handler_spec_bundle
+        (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
+        apply2_step_pre
+        (fun msg s =>
+          (msg = "APPLY2: accu is not a closure"%string /\
+           get_code_ptr_s s s.(Machine.accu) = None) \/
+          (msg = "APPLY2: stack underflow"%string))
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | APPLY3 =>
+      mk_handler_spec_bundle
+        (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
+        apply3_step_pre
+        (fun _ s => match s.(Machine.stack) with
+                    | _ :: _ :: _ :: _ => get_code_ptr_s s s.(Machine.accu) = None
+                    | _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | APPTERM nargs slotsize =>
-      trivial_bundle (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
+      mk_handler_spec_bundle
+        (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
+        (fun e0 m s ard =>
+           get_code_ptr_s s s.(Machine.accu) <> None /\
+           let s' := match get_code_ptr_s s s.(Machine.accu) with
+                     | Some target_pc =>
+                       s <|pc := target_pc|>
+                         <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
+                         <|env := s.(Machine.accu)|>
+                         <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
+                     | None => s
+                     end in
+           forall le,
+             abs_rel_with_ard e0 le m s ard ->
+             exists le' m' out,
+               exec_stmt function_entry1 clight_ge e0 le m
+                 (fn_body f_instr_APPTERM) E0 le' m' out /\
+               abs_rel e0 le' m' s')
+        (fun _ s => get_code_ptr_s s s.(Machine.accu) = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | APPTERM1 slotsize =>
-      trivial_bundle (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
+      mk_handler_spec_bundle
+        (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
+        (appterm1_step_pre slotsize)
+        (fun _ s => s.(Machine.stack) = nil \/
+                    get_code_ptr_s s s.(Machine.accu) = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | APPTERM2 slotsize =>
-      trivial_bundle (fun _ s => handle_APPTERM2 slotsize s) f_instr_APPTERM2
+      mk_handler_spec_bundle
+        (fun _ s => handle_APPTERM2 slotsize s) f_instr_APPTERM2
+        (appterm2_step_pre slotsize)
+        (fun _ s => s.(Machine.stack) = nil \/
+                    (exists a, s.(Machine.stack) = a :: nil) \/
+                    get_code_ptr_s s s.(Machine.accu) = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | APPTERM3 slotsize =>
-      trivial_bundle (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
+      mk_handler_spec_bundle
+        (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
+        (appterm3_step_pre slotsize)
+        (fun _ s => match s.(Machine.stack) with
+                    | _ :: _ :: _ :: _ => False
+                    | _ => True
+                    end \/ get_code_ptr_s s s.(Machine.accu) = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | RETURN stacksize =>
-      trivial_bundle (fun _ s => handle_RETURN stacksize s) f_instr_RETURN
-  | RESTART => trivial_bundle (fun _ s => handle_RESTART pc' s) f_instr_RESTART
-  | GRAB required => trivial_bundle (fun _ s => handle_GRAB required pc' s) f_instr_GRAB
+      mk_handler_spec_bundle
+        (fun _ => handle_RETURN stacksize) f_instr_RETURN
+        (return_step_pre stacksize)
+        (fun msg _ => msg = "RETURN: accu is not a closure"%string \/
+                      msg = "RETURN: malformed return frame"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | RESTART =>
+      mk_handler_spec_bundle
+        handle_RESTART f_instr_RESTART
+        restart_step_pre
+        (fun msg s =>
+          (msg = "RESTART: env is not a block"%string /\
+           match Machine.env s with | Val_int _ | Val_ptr _ => True | _ => False end) \/
+          (msg = "RESTART: dangling pointer"%string /\
+           exists addr ofs, Machine.env s = Val_closure addr ofs /\
+                            heap_lookup s.(Machine.hp) addr = None) \/
+          (msg = "RESTART: env is not a closure"%string /\
+           ((exists addr ofs t fs, Machine.env s = Val_closure addr ofs /\
+                                   heap_lookup s.(Machine.hp) addr = Some (t, fs) /\
+                                   Nat.eqb t Closure_tag = false) \/
+            (exists t fs, Machine.env s = Val_block t fs /\
+                          Nat.eqb t Closure_tag = false))) \/
+          (msg = "RESTART: malformed closure"%string /\
+           ((exists addr ofs t all_fields, Machine.env s = Val_closure addr ofs /\
+                                           heap_lookup s.(Machine.hp) addr = Some (t, all_fields) /\
+                                           Nat.eqb t Closure_tag = true /\
+                                           nth_error (skipn ofs all_fields) 2 = None) \/
+            (exists t fs, Machine.env s = Val_block t fs /\
+                          Nat.eqb t Closure_tag = true /\
+                          nth_error fs 2 = None))))
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GRAB required =>
+      mk_handler_spec_bundle
+        (handle_GRAB required) f_instr_GRAB
+        (grab_step_pre required)
+        (fun msg s => msg = "GRAB: malformed return frame"%string /\
+                      Nat.leb required (extra_args s) = false /\
+                      match skipn (S (extra_args s)) (Machine.stack s) with
+                      | Val_int _ :: _ :: Val_int _ :: _ => False
+                      | _ => True
+                      end)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | CLOSURE nvars code_ofs =>
-      trivial_bundle (fun _ s => handle_CLOSURE nvars code_ofs pc' s) f_instr_CLOSURE
+      weaken_by ((0 <= Z.of_nat (2 + nvars) <= Int.max_signed) /\
+                 (Int.min_signed <= code_ofs <= Int.max_signed))
+        (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+        (closure_general_step_pre nvars code_ofs)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | CLOSUREREC nfuncs nvars code_offsets =>
-      trivial_bundle (fun _ s => handle_CLOSUREREC nfuncs nvars code_offsets pc' s)
-                     f_instr_CLOSUREREC
+      match nfuncs, nvars, code_offsets with
+      | 1%nat, 0%nat, (code_ofs :: nil)%list =>
+          weaken_by (Int.min_signed <= code_ofs <= Int.max_signed)
+            (handle_CLOSUREREC 1 0 (code_ofs :: nil)) f_instr_CLOSUREREC
+            (heap_alloc_with_stores 2 247 alloc_store_2
+             /\p code_at (Int.repr 1)
+             /\p code_arg_at 1 (Int.repr 0)
+             /\p code_arg_at 2 (Int.repr code_ofs)
+             /\p sp_at_least 16)
+            (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False)
+            (fun _ => False) (fun _ _ _ => False)
+      | _, _, _ =>
+          trivial_bundle (fun _ s => handle_CLOSUREREC nfuncs nvars code_offsets pc' s)
+                         f_instr_CLOSUREREC
+      end
   | OFFSETCLOSURE ofs =>
-      trivial_bundle (fun _ s => handle_OFFSETCLOSURE ofs pc' s) f_instr_OFFSETCLOSURE
+      mk_handler_spec_bundle
+        (handle_OFFSETCLOSURE ofs) f_instr_OFFSETCLOSURE
+        (offsetclosure_pre ofs)
+        (fun msg s =>
+          (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+           match Machine.env s with Val_block _ _ => True | _ => False end) \/
+          (msg = "OFFSETCLOSURE: invalid env"%string /\
+           match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+        (fun _ => False)
+        (fun _ _ _ => False)
   | PUSHOFFSETCLOSURE ofs =>
-      trivial_bundle (fun _ s => handle_PUSHOFFSETCLOSURE ofs pc' s) f_instr_PUSHOFFSETCLOSURE
-  | GETGLOBAL n => trivial_bundle (fun _ s => handle_GETGLOBAL n pc' s) f_instr_GETGLOBAL
+      mk_handler_spec_bundle
+        (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
+        (pushoffsetclosure_step_pre ofs)
+        (fun msg s =>
+          (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
+           match Machine.env s with Val_block _ _ => True | _ => False end) \/
+          (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
+           match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETGLOBAL n =>
+      weaken_by (0 <= Z.of_nat n <= Int.max_signed)
+        (handle_GETGLOBAL n) f_instr_GETGLOBAL
+        (code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n)
+        (fun _ s => nth_error s.(Machine.global) n = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | PUSHGETGLOBAL n =>
-      trivial_bundle (fun _ s => handle_PUSHGETGLOBAL n pc' s) f_instr_PUSHGETGLOBAL
+      weaken_by (0 <= Z.of_nat n <= Int.max_signed)
+        (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
+        ((code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) /\p sp_at_least 16)
+        (fun _ s => nth_error s.(Machine.global) n = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | GETGLOBALFIELD n p =>
-      trivial_bundle (fun _ s => handle_GETGLOBALFIELD n p pc' s) f_instr_GETGLOBALFIELD
+      mk_handler_spec_bundle
+        (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
+        (getglobalfield_step_pre n p)
+        (fun msg s =>
+          (nth_error s.(Machine.global) n = None /\
+           msg = "GETGLOBALFIELD: index out of bounds"%string) \/
+          (exists glob, nth_error s.(Machine.global) n = Some glob /\
+                        field_or_heap s glob p = None /\
+                        msg = "GETGLOBALFIELD: field access failed"%string))
+        (fun _ => False)
+        (fun _ _ _ => False)
   | PUSHGETGLOBALFIELD n p =>
-      trivial_bundle (fun _ s => handle_PUSHGETGLOBALFIELD n p pc' s) f_instr_PUSHGETGLOBALFIELD
-  | SETGLOBAL n => trivial_bundle (fun _ s => handle_SETGLOBAL n pc' s) f_instr_SETGLOBAL
-  | ATOM t => trivial_bundle (fun _ s => handle_ATOM t pc' s) f_instr_ATOM0
-  | PUSHATOM t => trivial_bundle (fun _ s => handle_PUSHATOM t pc' s) f_instr_PUSHATOM0
-  | MAKEBLOCK t size => trivial_bundle (fun _ s => handle_MAKEBLOCK t size pc' s) f_instr_MAKEBLOCK
-  | MAKEBLOCK1 t => trivial_bundle (fun _ s => handle_MAKEBLOCK1 t pc' s) f_instr_MAKEBLOCK1
-  | MAKEBLOCK2 t => trivial_bundle (fun _ s => handle_MAKEBLOCK2 t pc' s) f_instr_MAKEBLOCK2
-  | MAKEBLOCK3 t => trivial_bundle (fun _ s => handle_MAKEBLOCK3 t pc' s) f_instr_MAKEBLOCK3
+      mk_handler_spec_bundle
+        (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
+        (pushgetglobalfield_step_pre n p)
+        (fun _ s =>
+          nth_error s.(Machine.global) n = None \/
+          (exists glob, nth_error s.(Machine.global) n = Some glob /\
+                        field_or_heap s glob p = None))
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | SETGLOBAL n =>
+      mk_handler_spec_bundle
+        (handle_SETGLOBAL n) f_instr_SETGLOBAL
+        (setglobal_step_pre n)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ATOM t =>
+      weaken_by (Z.of_nat t <= 2097151)
+        (handle_ATOM t) f_instr_ATOM
+        (code_at (Int.repr (Z.of_nat t)))
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | PUSHATOM t =>
+      weaken_by (Z.of_nat t <= 2097151)
+        (handle_PUSHATOM t) f_instr_PUSHATOM
+        (sp_at_least 16 /\p code_at (Int.repr (Z.of_nat t)))
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | MAKEBLOCK t size =>
+      weaken_by ((size >= 1)%nat)
+        (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
+        (makeblock_step_pre t size)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | MAKEBLOCK1 t =>
+      weaken_by (0 <= Z.of_nat t <= 255)
+        (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
+        (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1
+         /\p code_at (Int.repr (Z.of_nat t)))
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | MAKEBLOCK2 t =>
+      weaken_by (0 <= Z.of_nat t <= 255)
+        (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
+        (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
+         /\p code_at (Int.repr (Z.of_nat t)))
+        (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | MAKEBLOCK3 t =>
+      weaken_by (0 <= Z.of_nat t <= 255)
+        (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+        (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
+         /\p code_at (Int.repr (Z.of_nat t)))
+        (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | MAKEFLOATBLOCK n =>
-      trivial_bundle (fun _ s => handle_MAKEFLOATBLOCK n pc' s) f_instr_MAKEFLOATBLOCK
-  | GETFIELD n => trivial_bundle (fun _ s => handle_GETFIELD n pc' s) f_instr_GETFIELD
+      weaken_by ((n >= 1)%nat)
+        (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+        (makefloatblock_step_pre n)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETFIELD n =>
+      weaken_by (Int.min_signed <= Z.of_nat n <= Int.max_signed)
+        (handle_GETFIELD n) f_instr_GETFIELD
+        (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
+        (fun _ s => field_or_heap s s.(Machine.accu) n = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | GETFLOATFIELD n =>
-      trivial_bundle (fun _ s => handle_GETFLOATFIELD n pc' s) f_instr_GETFLOATFIELD
-  | SETFIELD n => trivial_bundle (fun _ s => handle_SETFIELD n pc' s) f_instr_SETFIELD
+      mk_handler_spec_bundle
+        (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
+        (getfloatfield_step_pre n)
+        (fun _ s => field_or_heap s s.(Machine.accu) n = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | SETFIELD n =>
+      mk_handler_spec_bundle
+        (handle_SETFIELD n) f_instr_SETFIELD
+        (setfield_step_pre n)
+        (fun _ s => match s.(Machine.stack) with
+                    | newval :: _ =>
+                      match s.(Machine.accu) with
+                      | Val_ptr addr =>
+                        match heap_lookup s.(Machine.hp) addr with
+                        | Some (_, fields) => set_nth fields n newval = None
+                        | None => True
+                        end
+                      | _ => True
+                      end
+                    | _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | SETFLOATFIELD n =>
-      trivial_bundle (fun _ s => handle_SETFLOATFIELD n pc' s) f_instr_SETFLOATFIELD
-  | VECTLENGTH => trivial_bundle (fun _ s => handle_VECTLENGTH pc' s) f_instr_VECTLENGTH
-  | GETVECTITEM => trivial_bundle (fun _ s => handle_GETVECTITEM pc' s) f_instr_GETVECTITEM
-  | SETVECTITEM => trivial_bundle (fun _ s => handle_SETVECTITEM pc' s) f_instr_SETVECTITEM
-  | GETBYTESCHAR => trivial_bundle (fun _ s => handle_GETSTRINGCHAR pc' s) f_instr_GETSTRINGCHAR
-  | SETBYTESCHAR => trivial_bundle (fun _ s => handle_SETBYTESCHAR pc' s) f_instr_SETBYTESCHAR
-  | GETSTRINGCHAR => trivial_bundle (fun _ s => handle_GETSTRINGCHAR pc' s) f_instr_GETSTRINGCHAR
-  | BRANCH target => trivial_bundle (fun _ s => handle_BRANCH target s) f_instr_BRANCH
-  | BRANCHIF target => trivial_bundle (fun _ s => handle_BRANCHIF target pc' s) f_instr_BRANCHIF
+      mk_handler_spec_bundle
+        (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
+        (setfloatfield_step_pre n)
+        (fun _ s => match s.(Machine.stack) with
+                    | _ :: _ =>
+                      match s.(Machine.accu) with
+                      | Val_ptr addr =>
+                        match heap_lookup s.(Machine.hp) addr with
+                        | Some (_, fields) =>
+                            set_nth fields n (hd (Val_int 0) s.(Machine.stack)) = None
+                        | None => True
+                        end
+                      | _ => True
+                      end
+                    | _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | VECTLENGTH =>
+      mk_handler_spec_bundle
+        handle_VECTLENGTH f_instr_VECTLENGTH
+        (fun _ => vectlength_pre)
+        (fun _ s => size_or_heap s s.(Machine.accu) = None)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETVECTITEM =>
+      mk_handler_spec_bundle
+        handle_GETVECTITEM f_instr_GETVECTITEM
+        getvectitem_step_pre
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | _, Val_int idx :: _ =>
+                      field_or_heap s s.(Machine.accu) (Z.to_nat idx) = None
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | SETVECTITEM =>
+      mk_handler_spec_bundle
+        handle_SETVECTITEM f_instr_SETVECTITEM
+        setvectitem_pre
+        (fun _ s => match s.(Machine.stack) with
+                    | Val_int idx :: newval :: _ =>
+                      match s.(Machine.accu) with
+                      | Val_ptr addr =>
+                        match heap_lookup s.(Machine.hp) addr with
+                        | Some (_, fields) =>
+                            set_nth fields (Z.to_nat idx) newval = None
+                        | None => True
+                        end
+                      | _ => True
+                      end
+                    | _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETBYTESCHAR =>
+      mk_handler_spec_bundle
+        handle_GETSTRINGCHAR f_instr_GETBYTESCHAR
+        getstringchar_step_pre
+        (fun _ s => match s.(Machine.stack) with
+                    | Val_int idx :: _ =>
+                      match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
+                      | Some (Val_int _) => False
+                      | _ => True
+                      end
+                    | _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | SETBYTESCHAR =>
+      mk_handler_spec_bundle
+        handle_SETBYTESCHAR f_instr_SETBYTESCHAR
+        setbyteschar_step_pre
+        (fun _ s =>
+          match s.(Machine.stack) with
+          | Val_int idx :: Val_int newchar :: _ =>
+            match s.(Machine.accu) with
+            | Val_ptr addr =>
+              match heap_lookup s.(Machine.hp) addr with
+              | Some (_, fields) =>
+                  set_nth fields (Z.to_nat idx) (Val_int newchar) = None
+              | None => True
+              end
+            | _ => True
+            end
+          | _ => True
+          end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETSTRINGCHAR =>
+      mk_handler_spec_bundle
+        handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
+        getstringchar_step_pre
+        (fun _ s =>
+          match s.(Machine.stack) with
+          | Val_int idx :: _ =>
+            match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
+            | Some (Val_int _) => False
+            | _ => True
+            end
+          | _ => True
+          end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BRANCH target =>
+      mk_handler_spec_bundle
+        (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+        code_loadable
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BRANCHIF target =>
+      mk_handler_spec_bundle
+        (handle_BRANCHIF target) f_instr_BRANCHIF
+        (branchif_step_pre target)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | BRANCHIFNOT target =>
-      trivial_bundle (fun _ s => handle_BRANCHIFNOT target pc' s) f_instr_BRANCHIFNOT
+      mk_handler_spec_bundle
+        (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
+        (branchifnot_step_pre target)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | SWITCH _nc _nb const_targets block_targets =>
-      trivial_bundle (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s)
-                     f_instr_SWITCH
-  | BOOLNOT => trivial_bundle (fun _ s => handle_BOOLNOT pc' s) f_instr_BOOLNOT
+      mk_handler_spec_bundle
+        (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s) f_instr_SWITCH
+        (switch_step_pre _nc _nb const_targets block_targets)
+        (fun msg s =>
+          (msg = "SWITCH: constant index out of range"%string /\
+           match Machine.accu s with Val_int _ => True | _ => False end) \/
+          (msg = "SWITCH: block tag out of range"%string) \/
+          (msg = "SWITCH: dangling pointer"%string /\
+           match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end))
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BOOLNOT =>
+      mk_handler_spec_bundle
+        handle_BOOLNOT f_instr_BOOLNOT
+        (accu_check ak_bool /\p accu_check ak_long)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | PUSHTRAP handler_pc =>
-      trivial_bundle (fun _ s => handle_PUSHTRAP handler_pc pc' s) f_instr_PUSHTRAP
-  | POPTRAP => trivial_bundle (fun _ s => handle_POPTRAP pc' s) f_instr_POPTRAP
-  | RAISE => trivial_bundle (fun _ s => do_raise s.(accu) s) f_instr_RAISE
-  | RERAISE => trivial_bundle (fun _ s => do_raise s.(accu) s) f_instr_RERAISE
-  | RAISE_NOTRACE => trivial_bundle (fun _ s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
+      mk_handler_spec_bundle
+        (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
+        (pushtrap_step_pre handler_pc)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | POPTRAP =>
+      mk_handler_spec_bundle
+        handle_POPTRAP f_instr_POPTRAP
+        poptrap_step_pre
+        (fun msg _ => msg = "POPTRAP: malformed trap frame"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | RAISE =>
+      mk_handler_spec_bundle
+        (fun _pc s => do_raise s.(accu) s) f_instr_RAISE
+        raise_step_pre
+        (fun msg _ => msg = "unhandled exception"%string \/
+                      msg = "RAISE: malformed trap frame"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | RERAISE =>
+      mk_handler_spec_bundle
+        (fun _pc s => do_raise s.(accu) s) f_instr_RERAISE
+        raise_step_pre
+        (fun msg _ => msg = "unhandled exception"%string \/
+                      msg = "RAISE: malformed trap frame"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | RAISE_NOTRACE =>
+      mk_handler_spec_bundle
+        (fun _pc s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
+        raise_step_pre
+        (fun msg _ => msg = "unhandled exception"%string \/
+                      msg = "RAISE: malformed trap frame"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | CHECK_SIGNALS =>
-      trivial_bundle (fun _ s => handle_CHECK_SIGNALS pc' s) f_instr_CHECK_SIGNALS
+      mk_handler_spec_bundle
+        handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | C_CALL nargs prim_idx =>
-      trivial_bundle (fun _ s => handle_C_CALL nargs prim_idx pc' s) f_instr_C_CALLN
-  | CONSTINT n => trivial_bundle (fun _ s => handle_CONSTINT n pc' s) f_instr_CONSTINT
+      mk_handler_spec_bundle
+        (handle_C_CALL nargs prim_idx) f_instr_C_CALLN
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => True)
+  | CONSTINT n =>
+      weaken_by (Int.min_signed <= n <= Int.max_signed)
+        (handle_CONSTINT n) f_instr_CONSTINT
+        (code_at (Int.repr n))
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
   | PUSHCONSTINT n =>
-      trivial_bundle (fun _ s => handle_PUSHCONSTINT n pc' s) f_instr_PUSHCONSTINT
-  | NEGINT => trivial_bundle (fun _ s => handle_NEGINT pc' s) f_instr_NEGINT
-  | ADDINT => trivial_bundle (fun _ s => handle_ADDINT pc' s) f_instr_ADDINT
-  | SUBINT => trivial_bundle (fun _ s => handle_SUBINT pc' s) f_instr_SUBINT
-  | MULINT => trivial_bundle (fun _ s => handle_MULINT pc' s) f_instr_MULINT
-  | DIVINT => trivial_bundle (fun _ s => handle_DIVINT pc' s) f_instr_DIVINT
-  | MODINT => trivial_bundle (fun _ s => handle_MODINT pc' s) f_instr_MODINT
-  | ANDINT => trivial_bundle (fun _ s => handle_ANDINT pc' s) f_instr_ANDINT
-  | ORINT => trivial_bundle (fun _ s => handle_ORINT pc' s) f_instr_ORINT
-  | XORINT => trivial_bundle (fun _ s => handle_XORINT pc' s) f_instr_XORINT
-  | LSLINT => trivial_bundle (fun _ s => handle_LSLINT pc' s) f_instr_LSLINT
-  | LSRINT => trivial_bundle (fun _ s => handle_LSRINT pc' s) f_instr_LSRINT
-  | ASRINT => trivial_bundle (fun _ s => handle_ASRINT pc' s) f_instr_ASRINT
-  | EQ => trivial_bundle (fun _ s => handle_EQ pc' s) f_instr_EQ
-  | NEQ => trivial_bundle (fun _ s => handle_NEQ pc' s) f_instr_NEQ
-  | LTINT => trivial_bundle (fun _ s => handle_LTINT pc' s) f_instr_LTINT
-  | LEINT => trivial_bundle (fun _ s => handle_LEINT pc' s) f_instr_LEINT
-  | GTINT => trivial_bundle (fun _ s => handle_GTINT pc' s) f_instr_GTINT
-  | GEINT => trivial_bundle (fun _ s => handle_GEINT pc' s) f_instr_GEINT
-  | OFFSETINT n => trivial_bundle (fun _ s => handle_OFFSETINT n pc' s) f_instr_OFFSETINT
-  | OFFSETREF n => trivial_bundle (fun _ s => handle_OFFSETREF n pc' s) f_instr_OFFSETREF
-  | ISINT => trivial_bundle (fun _ s => handle_ISINT pc' s) f_instr_ISINT
-  | GETMETHOD => trivial_bundle (fun _ s => handle_GETMETHOD pc' s) f_instr_GETMETHOD
-  | GETPUBMET tag => trivial_bundle (fun _ s => handle_GETPUBMET tag pc' s) f_instr_GETPUBMET
-  | GETDYNMET => trivial_bundle (fun _ s => handle_GETDYNMET pc' s) f_instr_GETDYNMET
-  | BEQ n target => trivial_bundle (fun _ s => handle_BEQ n target pc' s) f_instr_BEQ
-  | BNEQ n target => trivial_bundle (fun _ s => handle_BNEQ n target pc' s) f_instr_BNEQ
-  | BLTINT n target => trivial_bundle (fun _ s => handle_BLTINT n target pc' s) f_instr_BLTINT
-  | BLEINT n target => trivial_bundle (fun _ s => handle_BLEINT n target pc' s) f_instr_BLEINT
-  | BGTINT n target => trivial_bundle (fun _ s => handle_BGTINT n target pc' s) f_instr_BGTINT
-  | BGEINT n target => trivial_bundle (fun _ s => handle_BGEINT n target pc' s) f_instr_BGEINT
-  | ULTINT => trivial_bundle (fun _ s => handle_ULTINT pc' s) f_instr_ULTINT
-  | UGEINT => trivial_bundle (fun _ s => handle_UGEINT pc' s) f_instr_UGEINT
-  | BULTINT n target => trivial_bundle (fun _ s => handle_BULTINT n target pc' s) f_instr_BULTINT
-  | BUGEINT n target => trivial_bundle (fun _ s => handle_BUGEINT n target pc' s) f_instr_BUGEINT
-  | STOP => trivial_bundle (fun _ s => handle_STOP s) f_instr_STOP
-  | EVENT => trivial_bundle (fun _ s => handle_EVENT pc' s) f_instr_EVENT
-  | BREAK => trivial_bundle (fun _ s => handle_BREAK pc' s) f_instr_BREAK
-  | PERFORM => trivial_bundle (fun _ s => handle_PERFORM pc' s) f_instr_PERFORM
-  | RESUME => trivial_bundle (fun _ s => handle_RESUME pc' s) f_instr_RESUME
-  | RESUMETERM _ => trivial_bundle (fun _ s => handle_RESUMETERM pc' s) f_instr_RESUMETERM
-  | REPERFORMTERM _ => trivial_bundle (fun _ s => handle_REPERFORMTERM pc' s) f_instr_REPERFORMTERM
+      mk_handler_spec_bundle
+        (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
+        (pushconstint_step_pre n)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | NEGINT =>
+      mk_handler_spec_bundle
+        handle_NEGINT f_instr_NEGINT
+        (accu_check ak_long)
+        (fun _ s => forall n, s.(Machine.accu) <> Val_int n)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ADDINT =>
+      mk_handler_spec_bundle
+        handle_ADDINT f_instr_ADDINT
+        (accu_check ak_long /\p stack_head_is_long)
+        (fun _ s => forall a b rest,
+                      s.(Machine.accu) = Val_int a ->
+                      s.(Machine.stack) = Val_int b :: rest -> False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | SUBINT =>
+      mk_handler_spec_bundle
+        handle_SUBINT f_instr_SUBINT
+        (accu_check ak_long /\p stack_head_is_long)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | MULINT =>
+      mk_handler_spec_bundle
+        handle_MULINT f_instr_MULINT
+        (accu_check ak_long /\p stack_head_is_long)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | DIVINT =>
+      mk_handler_spec_bundle
+        handle_DIVINT f_instr_DIVINT
+        (arith_safe arith_divmod)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | MODINT =>
+      mk_handler_spec_bundle
+        handle_MODINT f_instr_MODINT
+        (arith_safe arith_divmod)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ANDINT =>
+      mk_handler_spec_bundle
+        handle_ANDINT f_instr_ANDINT
+        (accu_check ak_long /\p stack_head_is_long)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ORINT =>
+      mk_handler_spec_bundle
+        handle_ORINT f_instr_ORINT
+        (accu_check ak_long /\p stack_head_is_long)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | XORINT =>
+      mk_handler_spec_bundle
+        handle_XORINT f_instr_XORINT
+        (accu_check ak_long /\p stack_head_is_long)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | LSLINT =>
+      mk_handler_spec_bundle
+        handle_LSLINT f_instr_LSLINT
+        (arith_safe arith_shift)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | LSRINT =>
+      mk_handler_spec_bundle
+        handle_LSRINT f_instr_LSRINT
+        (arith_safe arith_shift)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ASRINT =>
+      mk_handler_spec_bundle
+        handle_ASRINT f_instr_ASRINT
+        (arith_safe arith_shift)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | EQ =>
+      mk_handler_spec_bundle
+        handle_EQ f_instr_EQ
+        (arith_safe arith_unsigned)
+        (fun _ s => s.(Machine.stack) = nil)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | NEQ =>
+      mk_handler_spec_bundle
+        handle_NEQ f_instr_NEQ
+        (arith_safe arith_unsigned)
+        (fun _ s => s.(Machine.stack) = nil)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | LTINT =>
+      mk_handler_spec_bundle
+        handle_LTINT f_instr_LTINT
+        (arith_safe arith_signed)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | LEINT =>
+      mk_handler_spec_bundle
+        handle_LEINT f_instr_LEINT
+        (arith_safe arith_signed)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GTINT =>
+      mk_handler_spec_bundle
+        handle_GTINT f_instr_GTINT
+        (arith_safe arith_signed)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GEINT =>
+      mk_handler_spec_bundle
+        handle_GEINT f_instr_GEINT
+        (arith_safe arith_signed)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | OFFSETINT ofs =>
+      weaken_by (Int.min_signed <= ofs * 2 <= Int.max_signed)
+        (handle_OFFSETINT ofs) f_instr_OFFSETINT
+        (code_at (Int.repr ofs) /\p accu_check ak_long)
+        (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | OFFSETREF n =>
+      mk_handler_spec_bundle
+        (handle_OFFSETREF n) f_instr_OFFSETREF
+        (fun _ => offsetref_heap_pre n)
+        (fun _ s => match s.(Machine.accu) with
+                    | Val_ptr addr =>
+                      match heap_lookup s.(Machine.hp) addr with
+                      | Some (_, Val_int _ :: _) => False
+                      | _ => True
+                      end
+                    | _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ISINT =>
+      mk_handler_spec_bundle
+        handle_ISINT f_instr_ISINT
+        (accu_check ak_immediate)
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETMETHOD =>
+      mk_handler_spec_bundle
+        handle_GETMETHOD f_instr_GETMETHOD
+        getmethod_step_pre
+        (fun msg _ => msg = "GETMETHOD: stack underflow"%string \/
+                      msg = "GETMETHOD: no class table"%string \/
+                      msg = "GETMETHOD: not an integer index"%string \/
+                      msg = "GETMETHOD: method not found"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETPUBMET tag =>
+      mk_handler_spec_bundle
+        (handle_GETPUBMET tag) f_instr_GETPUBMET
+        (getpubmet_pre tag)
+        (fun msg _ => msg = "GETPUBMET: no class table"%string \/
+                      msg = "GETPUBMET: method not found"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | GETDYNMET =>
+      mk_handler_spec_bundle
+        handle_GETDYNMET f_instr_GETDYNMET
+        getdynmet_pre
+        (fun msg _ => msg = "GETDYNMET: stack underflow"%string \/
+                      msg = "GETDYNMET: no class table"%string \/
+                      msg = "GETDYNMET: method not found"%string)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BEQ n target =>
+      weaken_by (Int.min_signed <= n <= Int.max_signed)
+        (handle_BEQ n target) f_instr_BEQ
+        (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+         /\p (accu_check ak_signed_range /\p accu_check ak_long))
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BNEQ n target =>
+      weaken_by (Int.min_signed <= n <= Int.max_signed)
+        (handle_BNEQ n target) f_instr_BNEQ
+        (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+         /\p (accu_check ak_signed_range /\p accu_check ak_long))
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BLTINT n target =>
+      weaken_by (Int.min_signed <= n <= Int.max_signed)
+        (handle_BLTINT n target) f_instr_BLTINT
+        (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+         /\p (accu_check ak_signed_range /\p accu_check ak_long))
+        (fun msg s => msg = "BLTINT: not an integer"%string /\
+                      match Machine.accu s with Val_int _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BLEINT n target =>
+      weaken_by (Int.min_signed <= n <= Int.max_signed)
+        (handle_BLEINT n target) f_instr_BLEINT
+        (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+         /\p (accu_check ak_signed_range /\p accu_check ak_long))
+        (fun msg s => msg = "BLEINT: not an integer"%string /\
+                      match Machine.accu s with Val_int _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BGTINT n target =>
+      weaken_by (Int.min_signed <= n <= Int.max_signed)
+        (handle_BGTINT n target) f_instr_BGTINT
+        (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+         /\p (accu_check ak_signed_range /\p accu_check ak_long))
+        (fun msg s => msg = "BGTINT: not an integer"%string /\
+                      match Machine.accu s with Val_int _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BGEINT n target =>
+      weaken_by (Int.min_signed <= n <= Int.max_signed)
+        (handle_BGEINT n target) f_instr_BGEINT
+        (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+         /\p (accu_check ak_signed_range /\p accu_check ak_long))
+        (fun msg s => msg = "BGEINT: not an integer"%string /\
+                      match Machine.accu s with Val_int _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | ULTINT =>
+      mk_handler_spec_bundle
+        handle_ULTINT f_instr_ULTINT
+        (arith_safe arith_ucompare)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | UGEINT =>
+      mk_handler_spec_bundle
+        handle_UGEINT f_instr_UGEINT
+        (arith_safe arith_ucompare)
+        (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
+                    | Val_int _, Val_int _ :: _ => False
+                    | _, _ => True
+                    end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BULTINT n target =>
+      weaken_by ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed))
+        (handle_BULTINT n target) f_instr_BULTINT
+        ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+          /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
+        (fun msg s => msg = "BULTINT: not an integer"%string /\
+                      match Machine.accu s with Val_int _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BUGEINT n target =>
+      weaken_by ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed))
+        (handle_BUGEINT n target) f_instr_BUGEINT
+        ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target)
+          /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
+        (fun msg s => msg = "BUGEINT: not an integer"%string /\
+                      match Machine.accu s with Val_int _ => False | _ => True end)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | STOP =>
+      mk_handler_spec_bundle
+        (fun _ => handle_STOP) f_instr_STOP
+        no_pre
+        (fun _ _ => False)
+        (fun _ => True)
+        (fun _ _ _ => False)
+  | EVENT =>
+      mk_handler_spec_bundle
+        handle_EVENT f_instr_EVENT
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | BREAK =>
+      mk_handler_spec_bundle
+        handle_BREAK f_instr_BREAK
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | PERFORM =>
+      mk_handler_spec_bundle
+        handle_PERFORM f_instr_PERFORM
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | RESUME =>
+      mk_handler_spec_bundle
+        handle_RESUME f_instr_RESUME
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | RESUMETERM _ =>
+      mk_handler_spec_bundle
+        handle_RESUMETERM f_instr_RESUMETERM
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
+  | REPERFORMTERM _ =>
+      mk_handler_spec_bundle
+        handle_REPERFORMTERM f_instr_REPERFORMTERM
+        no_pre
+        (fun _ _ => False)
+        (fun _ => False)
+        (fun _ _ _ => False)
   end.
 
 (* ================================================================== *)
@@ -3993,16 +4895,139 @@ Module Type InstructVerificationSpec.
       (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
-  (* Phase 1 bundle collector: every [spec_of i pc'] satisfies its own
-     handler-correctness obligation.  Holds unconditionally because
-     [spec_of] currently uses [trivial_bundle] for every instruction;
-     a Phase 2/3 refinement will replace [trivial_bundle] with per-
-     instruction bundles and route this proof through the 151 Parameters
-     above.  See manual/Bytecode/generator/META_SPEC_PLAN.md. *)
+  (* Bundle collector: every [spec_of i pc'] satisfies its own
+     handler-correctness obligation.  Each AST arm routes through one of
+     the 151 [correct_<OP>] Parameters above via [mk_bundle_correct] (for
+     unconditional Parameters) or [weaken_by_correct] (for Parameters
+     with side conditions).  The narrow-domain Parameters [correct_PUSHACC1..7]
+     and [correct_CLOSUREREC] have inner matches whose off-path cases
+     fall back to [trivial_bundle].  See manual/Bytecode/generator/META_SPEC_PLAN.md. *)
   Lemma handler_correct_bundle_of_parameters :
     forall i pc', handler_correct_bundle (spec_of i pc').
   Proof.
-    intros i pc'; destruct i; apply handler_correct_trivial_bundle.
+    intros i pc'; destruct i; cbn [spec_of].
+    - (* ACC n *) apply weaken_by_correct; intros H; apply correct_ACC; exact H.
+    - (* PUSH *) apply mk_bundle_correct; apply correct_PUSH.
+    - (* PUSHACC n *)
+      destruct n as [|[|[|[|[|[|[|[|n']]]]]]]].
+      + apply handler_correct_trivial_bundle.
+      + apply mk_bundle_correct; apply correct_PUSHACC1.
+      + apply mk_bundle_correct; apply correct_PUSHACC2.
+      + apply mk_bundle_correct; apply correct_PUSHACC3.
+      + apply mk_bundle_correct; apply correct_PUSHACC4.
+      + apply mk_bundle_correct; apply correct_PUSHACC5.
+      + apply mk_bundle_correct; apply correct_PUSHACC6.
+      + apply mk_bundle_correct; apply correct_PUSHACC7.
+      + apply handler_correct_trivial_bundle.
+    - (* POP n *) apply weaken_by_correct; intros H; apply correct_POP; exact H.
+    - (* ASSIGN n *) apply mk_bundle_correct; apply correct_ASSIGN.
+    - (* ENVACC n *) apply weaken_by_correct; intros H; apply correct_ENVACC; exact H.
+    - (* PUSHENVACC n *) apply mk_bundle_correct; apply correct_PUSHENVACC.
+    - (* PUSH_RETADDR *) apply mk_bundle_correct; apply correct_PUSH_RETADDR.
+    - (* APPLY n *) apply mk_bundle_correct; apply correct_APPLY.
+    - (* APPLY1 *) apply mk_bundle_correct; apply correct_APPLY1.
+    - (* APPLY2 *) apply mk_bundle_correct; apply correct_APPLY2.
+    - (* APPLY3 *) apply mk_bundle_correct; apply correct_APPLY3.
+    - (* APPTERM *) apply mk_bundle_correct; apply correct_APPTERM.
+    - (* APPTERM1 *) apply mk_bundle_correct; apply correct_APPTERM1.
+    - (* APPTERM2 *) apply mk_bundle_correct; apply correct_APPTERM2.
+    - (* APPTERM3 *) apply mk_bundle_correct; apply correct_APPTERM3.
+    - (* RETURN *) apply mk_bundle_correct; apply correct_RETURN.
+    - (* RESTART *) apply mk_bundle_correct; apply correct_RESTART.
+    - (* GRAB *) apply mk_bundle_correct; apply correct_GRAB.
+    - (* CLOSURE nvars code_ofs *)
+      apply weaken_by_correct; intros [H1 H2]; apply correct_CLOSURE; assumption.
+    - (* CLOSUREREC nfuncs nvars code_offsets — default names: n n0 l *)
+      destruct n as [|[|nfuncs']].
+      + apply handler_correct_trivial_bundle.
+      + destruct n0 as [|nvars'].
+        * destruct l as [|code_ofs [|rest_ofs]].
+          -- apply handler_correct_trivial_bundle.
+          -- apply weaken_by_correct; intros H; apply correct_CLOSUREREC; exact H.
+          -- apply handler_correct_trivial_bundle.
+        * apply handler_correct_trivial_bundle.
+      + apply handler_correct_trivial_bundle.
+    - (* OFFSETCLOSURE *) apply mk_bundle_correct; apply correct_OFFSETCLOSURE.
+    - (* PUSHOFFSETCLOSURE *) apply mk_bundle_correct; apply correct_PUSHOFFSETCLOSURE.
+    - (* GETGLOBAL *) apply weaken_by_correct; intros H; apply correct_GETGLOBAL; exact H.
+    - (* PUSHGETGLOBAL *) apply weaken_by_correct; intros H; apply correct_PUSHGETGLOBAL; exact H.
+    - (* GETGLOBALFIELD *) apply mk_bundle_correct; apply correct_GETGLOBALFIELD.
+    - (* PUSHGETGLOBALFIELD *) apply mk_bundle_correct; apply correct_PUSHGETGLOBALFIELD.
+    - (* SETGLOBAL *) apply mk_bundle_correct; apply correct_SETGLOBAL.
+    - (* ATOM *) apply weaken_by_correct; intros H; apply correct_ATOM; exact H.
+    - (* PUSHATOM *) apply weaken_by_correct; intros H; apply correct_PUSHATOM; exact H.
+    - (* MAKEBLOCK *) apply weaken_by_correct; intros H; apply correct_MAKEBLOCK; exact H.
+    - (* MAKEBLOCK1 *) apply weaken_by_correct; intros H; apply correct_MAKEBLOCK1; exact H.
+    - (* MAKEBLOCK2 *) apply weaken_by_correct; intros H; apply correct_MAKEBLOCK2; exact H.
+    - (* MAKEBLOCK3 *) apply weaken_by_correct; intros H; apply correct_MAKEBLOCK3; exact H.
+    - (* MAKEFLOATBLOCK *) apply weaken_by_correct; intros H; apply correct_MAKEFLOATBLOCK; exact H.
+    - (* GETFIELD *) apply weaken_by_correct; intros H; apply correct_GETFIELD; exact H.
+    - (* GETFLOATFIELD *) apply mk_bundle_correct; apply correct_GETFLOATFIELD.
+    - (* SETFIELD *) apply mk_bundle_correct; apply correct_SETFIELD.
+    - (* SETFLOATFIELD *) apply mk_bundle_correct; apply correct_SETFLOATFIELD.
+    - (* VECTLENGTH *) apply mk_bundle_correct; apply correct_VECTLENGTH.
+    - (* GETVECTITEM *) apply mk_bundle_correct; apply correct_GETVECTITEM.
+    - (* SETVECTITEM *) apply mk_bundle_correct; apply correct_SETVECTITEM.
+    - (* GETBYTESCHAR *) apply mk_bundle_correct; apply correct_GETBYTESCHAR.
+    - (* SETBYTESCHAR *) apply mk_bundle_correct; apply correct_SETBYTESCHAR.
+    - (* GETSTRINGCHAR *) apply mk_bundle_correct; apply correct_GETSTRINGCHAR.
+    - (* BRANCH *) apply mk_bundle_correct; apply correct_BRANCH.
+    - (* BRANCHIF *) apply mk_bundle_correct; apply correct_BRANCHIF.
+    - (* BRANCHIFNOT *) apply mk_bundle_correct; apply correct_BRANCHIFNOT.
+    - (* SWITCH *) apply mk_bundle_correct; apply correct_SWITCH.
+    - (* BOOLNOT *) apply mk_bundle_correct; apply correct_BOOLNOT.
+    - (* PUSHTRAP *) apply mk_bundle_correct; apply correct_PUSHTRAP.
+    - (* POPTRAP *) apply mk_bundle_correct; apply correct_POPTRAP.
+    - (* RAISE *) apply mk_bundle_correct; apply correct_RAISE.
+    - (* RERAISE *) apply mk_bundle_correct; apply correct_RERAISE.
+    - (* RAISE_NOTRACE *) apply mk_bundle_correct; apply correct_RAISE_NOTRACE.
+    - (* CHECK_SIGNALS *) apply mk_bundle_correct; apply correct_CHECK_SIGNALS.
+    - (* C_CALL *) apply mk_bundle_correct; apply correct_C_CALLN.
+    - (* CONSTINT *) apply weaken_by_correct; intros H; apply correct_CONSTINT; exact H.
+    - (* PUSHCONSTINT *) apply mk_bundle_correct; apply correct_PUSHCONSTINT.
+    - (* NEGINT *) apply mk_bundle_correct; apply correct_NEGINT.
+    - (* ADDINT *) apply mk_bundle_correct; apply correct_ADDINT.
+    - (* SUBINT *) apply mk_bundle_correct; apply correct_SUBINT.
+    - (* MULINT *) apply mk_bundle_correct; apply correct_MULINT.
+    - (* DIVINT *) apply mk_bundle_correct; apply correct_DIVINT.
+    - (* MODINT *) apply mk_bundle_correct; apply correct_MODINT.
+    - (* ANDINT *) apply mk_bundle_correct; apply correct_ANDINT.
+    - (* ORINT *) apply mk_bundle_correct; apply correct_ORINT.
+    - (* XORINT *) apply mk_bundle_correct; apply correct_XORINT.
+    - (* LSLINT *) apply mk_bundle_correct; apply correct_LSLINT.
+    - (* LSRINT *) apply mk_bundle_correct; apply correct_LSRINT.
+    - (* ASRINT *) apply mk_bundle_correct; apply correct_ASRINT.
+    - (* EQ *) apply mk_bundle_correct; apply correct_EQ.
+    - (* NEQ *) apply mk_bundle_correct; apply correct_NEQ.
+    - (* LTINT *) apply mk_bundle_correct; apply correct_LTINT.
+    - (* LEINT *) apply mk_bundle_correct; apply correct_LEINT.
+    - (* GTINT *) apply mk_bundle_correct; apply correct_GTINT.
+    - (* GEINT *) apply mk_bundle_correct; apply correct_GEINT.
+    - (* OFFSETINT *) apply weaken_by_correct; intros H; apply correct_OFFSETINT; exact H.
+    - (* OFFSETREF *) apply mk_bundle_correct; apply correct_OFFSETREF.
+    - (* ISINT *) apply mk_bundle_correct; apply correct_ISINT.
+    - (* GETMETHOD *) apply mk_bundle_correct; apply correct_GETMETHOD.
+    - (* GETPUBMET *) apply mk_bundle_correct; apply correct_GETPUBMET.
+    - (* GETDYNMET *) apply mk_bundle_correct; apply correct_GETDYNMET.
+    - (* BEQ *) apply weaken_by_correct; intros H; apply correct_BEQ; exact H.
+    - (* BNEQ *) apply weaken_by_correct; intros H; apply correct_BNEQ; exact H.
+    - (* BLTINT *) apply weaken_by_correct; intros H; apply correct_BLTINT; exact H.
+    - (* BLEINT *) apply weaken_by_correct; intros H; apply correct_BLEINT; exact H.
+    - (* BGTINT *) apply weaken_by_correct; intros H; apply correct_BGTINT; exact H.
+    - (* BGEINT *) apply weaken_by_correct; intros H; apply correct_BGEINT; exact H.
+    - (* ULTINT *) apply mk_bundle_correct; apply correct_ULTINT.
+    - (* UGEINT *) apply mk_bundle_correct; apply correct_UGEINT.
+    - (* BULTINT *)
+      apply weaken_by_correct; intros [H1 H2]; apply correct_BULTINT; assumption.
+    - (* BUGEINT *)
+      apply weaken_by_correct; intros [H1 H2]; apply correct_BUGEINT; assumption.
+    - (* STOP *) apply mk_bundle_correct; apply correct_STOP.
+    - (* EVENT *) apply mk_bundle_correct; apply correct_EVENT.
+    - (* BREAK *) apply mk_bundle_correct; apply correct_BREAK.
+    - (* PERFORM *) apply mk_bundle_correct; apply correct_PERFORM.
+    - (* RESUME *) apply mk_bundle_correct; apply correct_RESUME.
+    - (* RESUMETERM *) apply mk_bundle_correct; apply correct_RESUMETERM.
+    - (* REPERFORMTERM *) apply mk_bundle_correct; apply correct_REPERFORMTERM.
   Qed.
 
 End InstructVerificationSpec.
