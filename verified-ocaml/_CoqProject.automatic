@@ -26,6 +26,7 @@ semi-auto/LexParse/PrettyPrint.v
 automatic/Bytecode/Decode.v
 automatic/Bytecode/DecodeProof.v
 automatic/Bytecode/HandlerLemmas.v
+automatic/Bytecode/MetaSpecProof.v
 automatic/Bytecode/InstructVerification/ACC0_correct.v
 automatic/Bytecode/InstructVerification/ACC1_correct.v
 automatic/Bytecode/InstructVerification/ACC2_correct.v
