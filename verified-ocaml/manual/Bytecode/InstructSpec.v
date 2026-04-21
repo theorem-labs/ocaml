@@ -4135,199 +4135,6 @@ Module Type InstructVerificationFineGrainedSpec.
       (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
-  Lemma handler_correct_of_parameters :
-    forall i, handler_correct (handle_instr i) (clight_of i)
-                (fun e m s ard => instr_wfb i = true /\ pre_of i e m s ard)
-                (P_error_of i) (P_halt_of i) (P_ccall_of i).
-  Proof.
-    intro i; destruct i;
-      cbn [handle_instr Dispatch.handle_instr clight_of instr_wfb pre_of P_error_of P_halt_of P_ccall_of].
-    - (* ACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ACC; apply Z.ltb_lt; exact H.
-    - (* PUSH *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH.
-    - (* PUSHACC *)
-      destruct n as [|[|[|[|[|[|[|[|n']]]]]]]];
-        apply handler_correct_absorb_wfb; intro H; try discriminate H.
-      + apply correct_PUSHACC1. + apply correct_PUSHACC2.
-      + apply correct_PUSHACC3. + apply correct_PUSHACC4.
-      + apply correct_PUSHACC5. + apply correct_PUSHACC6.
-      + apply correct_PUSHACC7.
-    - (* POP *) apply handler_correct_absorb_wfb; intro H; apply correct_POP; apply Z.ltb_lt; exact H.
-    - (* ASSIGN *) apply handler_correct_absorb_wfb; intro; apply correct_ASSIGN.
-    - (* ENVACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ENVACC; apply Z.ltb_lt; exact H.
-    - (* PUSHENVACC *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHENVACC.
-    - (* PUSH_RETADDR *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH_RETADDR.
-    - (* APPLY *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY.
-    - (* APPLY1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY1.
-    - (* APPLY2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY2.
-    - (* APPLY3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY3.
-    - (* APPTERM *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM.
-    - (* APPTERM1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM1.
-    - (* APPTERM2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM2.
-    - (* APPTERM3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM3.
-    - (* RETURN *) apply handler_correct_absorb_wfb; intro; apply correct_RETURN.
-    - (* RESTART *) apply handler_correct_absorb_wfb; intro; apply correct_RESTART.
-    - (* GRAB *) apply handler_correct_absorb_wfb; intro; apply correct_GRAB.
-    - (* CLOSURE *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply andb_prop in H1; destruct H1 as [H1 H3].
-      apply andb_prop in H1; destruct H1 as [H1 H4].
-      apply Z.leb_le in H2; apply Z.leb_le in H3; apply Z.leb_le in H4; apply Z.leb_le in H1.
-      apply correct_CLOSURE; lia.
-    - (* CLOSUREREC *)
-      destruct n as [|[|nfuncs']].
-      + apply handler_correct_absorb_wfb; intro H; discriminate.
-      + destruct n0 as [|nvars'].
-        * destruct l as [|code_ofs [|rest_ofs]].
-          -- apply handler_correct_absorb_wfb; intro H; discriminate.
-          -- apply handler_correct_absorb_wfb; intro H.
-             apply andb_prop in H; destruct H as [H1 H2].
-             apply Z.leb_le in H1; apply Z.leb_le in H2.
-             apply correct_CLOSUREREC; lia.
-          -- apply handler_correct_absorb_wfb; intro H; discriminate.
-        * apply handler_correct_absorb_wfb; intro H; discriminate.
-      + apply handler_correct_absorb_wfb; intro H; discriminate.
-    - (* OFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETCLOSURE.
-    - (* PUSHOFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHOFFSETCLOSURE.
-    - (* GETGLOBAL *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_GETGLOBAL; lia.
-    - (* PUSHGETGLOBAL *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_PUSHGETGLOBAL; lia.
-    - (* GETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETGLOBALFIELD.
-    - (* PUSHGETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHGETGLOBALFIELD.
-    - (* SETGLOBAL *) apply handler_correct_absorb_wfb; intro; apply correct_SETGLOBAL.
-    - (* ATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_ATOM; apply Z.leb_le; exact H.
-    - (* PUSHATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_PUSHATOM; apply Z.leb_le; exact H.
-    - (* MAKEBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEBLOCK; apply Nat.leb_le; exact H.
-    - (* MAKEBLOCK1 *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_MAKEBLOCK1; lia.
-    - (* MAKEBLOCK2 *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_MAKEBLOCK2; lia.
-    - (* MAKEBLOCK3 *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_MAKEBLOCK3; lia.
-    - (* MAKEFLOATBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEFLOATBLOCK; apply Nat.leb_le; exact H.
-    - (* GETFIELD *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_GETFIELD; lia.
-    - (* GETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETFLOATFIELD.
-    - (* SETFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFIELD.
-    - (* SETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFLOATFIELD.
-    - (* VECTLENGTH *) apply handler_correct_absorb_wfb; intro; apply correct_VECTLENGTH.
-    - (* GETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_GETVECTITEM.
-    - (* SETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_SETVECTITEM.
-    - (* GETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETBYTESCHAR.
-    - (* SETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_SETBYTESCHAR.
-    - (* GETSTRINGCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETSTRINGCHAR.
-    - (* BRANCH *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCH.
-    - (* BRANCHIF *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIF.
-    - (* BRANCHIFNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIFNOT.
-    - (* SWITCH *) apply handler_correct_absorb_wfb; intro; apply correct_SWITCH.
-    - (* BOOLNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BOOLNOT.
-    - (* PUSHTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHTRAP.
-    - (* POPTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_POPTRAP.
-    - (* RAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE.
-    - (* RERAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RERAISE.
-    - (* RAISE_NOTRACE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE_NOTRACE.
-    - (* CHECK_SIGNALS *) apply handler_correct_absorb_wfb; intro; apply correct_CHECK_SIGNALS.
-    - (* C_CALL *) apply handler_correct_absorb_wfb; intro; apply correct_C_CALLN.
-    - (* CONSTINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_CONSTINT; lia.
-    - (* PUSHCONSTINT *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHCONSTINT.
-    - (* NEGINT *) apply handler_correct_absorb_wfb; intro; apply correct_NEGINT.
-    - (* ADDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ADDINT.
-    - (* SUBINT *) apply handler_correct_absorb_wfb; intro; apply correct_SUBINT.
-    - (* MULINT *) apply handler_correct_absorb_wfb; intro; apply correct_MULINT.
-    - (* DIVINT *) apply handler_correct_absorb_wfb; intro; apply correct_DIVINT.
-    - (* MODINT *) apply handler_correct_absorb_wfb; intro; apply correct_MODINT.
-    - (* ANDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ANDINT.
-    - (* ORINT *) apply handler_correct_absorb_wfb; intro; apply correct_ORINT.
-    - (* XORINT *) apply handler_correct_absorb_wfb; intro; apply correct_XORINT.
-    - (* LSLINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSLINT.
-    - (* LSRINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSRINT.
-    - (* ASRINT *) apply handler_correct_absorb_wfb; intro; apply correct_ASRINT.
-    - (* EQ *) apply handler_correct_absorb_wfb; intro; apply correct_EQ.
-    - (* NEQ *) apply handler_correct_absorb_wfb; intro; apply correct_NEQ.
-    - (* LTINT *) apply handler_correct_absorb_wfb; intro; apply correct_LTINT.
-    - (* LEINT *) apply handler_correct_absorb_wfb; intro; apply correct_LEINT.
-    - (* GTINT *) apply handler_correct_absorb_wfb; intro; apply correct_GTINT.
-    - (* GEINT *) apply handler_correct_absorb_wfb; intro; apply correct_GEINT.
-    - (* OFFSETINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_OFFSETINT; lia.
-    - (* OFFSETREF *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETREF.
-    - (* ISINT *) apply handler_correct_absorb_wfb; intro; apply correct_ISINT.
-    - (* GETMETHOD *) apply handler_correct_absorb_wfb; intro; apply correct_GETMETHOD.
-    - (* GETPUBMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETPUBMET.
-    - (* GETDYNMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETDYNMET.
-    - (* BEQ *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_BEQ; lia.
-    - (* BNEQ *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_BNEQ; lia.
-    - (* BLTINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_BLTINT; lia.
-    - (* BLEINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_BLEINT; lia.
-    - (* BGTINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_BGTINT; lia.
-    - (* BGEINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply Z.leb_le in H1; apply Z.leb_le in H2.
-      apply correct_BGEINT; lia.
-    - (* ULTINT *) apply handler_correct_absorb_wfb; intro; apply correct_ULTINT.
-    - (* UGEINT *) apply handler_correct_absorb_wfb; intro; apply correct_UGEINT.
-    - (* BULTINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply andb_prop in H1; destruct H1 as [H1 H3].
-      apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
-      apply correct_BULTINT; lia.
-    - (* BUGEINT *)
-      apply handler_correct_absorb_wfb; intro H.
-      apply andb_prop in H; destruct H as [H1 H2].
-      apply andb_prop in H1; destruct H1 as [H1 H3].
-      apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
-      apply correct_BUGEINT; lia.
-    - (* STOP *) apply handler_correct_absorb_wfb; intro; apply correct_STOP.
-  Qed.
-
 End InstructVerificationFineGrainedSpec.
 
 Module Type InstructVerificationSpec.
@@ -4338,6 +4145,198 @@ Module Type InstructVerificationSpec.
 End InstructVerificationSpec.
 
 Module InstructVerificationFromFineGrained
-       (FG : InstructVerificationFineGrainedSpec) <: InstructVerificationSpec.
-  Definition handler_correct_all := FG.handler_correct_of_parameters.
+       (Import FG : InstructVerificationFineGrainedSpec) <: InstructVerificationSpec.
+
+    Lemma handler_correct_all :
+      forall i, handler_correct (handle_instr i) (clight_of i)
+                  (fun e m s ard => instr_wfb i = true /\ pre_of i e m s ard)
+                  (P_error_of i) (P_halt_of i) (P_ccall_of i).
+    Proof.
+      intro i; destruct i;
+        cbn [handle_instr Dispatch.handle_instr clight_of instr_wfb pre_of P_error_of P_halt_of P_ccall_of].
+      - (* ACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ACC; apply Z.ltb_lt; exact H.
+      - (* PUSH *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH.
+      - (* PUSHACC *)
+        destruct n as [|[|[|[|[|[|[|[|n']]]]]]]];
+          apply handler_correct_absorb_wfb; intro H; try discriminate H.
+        + apply correct_PUSHACC1. + apply correct_PUSHACC2.
+        + apply correct_PUSHACC3. + apply correct_PUSHACC4.
+        + apply correct_PUSHACC5. + apply correct_PUSHACC6.
+        + apply correct_PUSHACC7.
+      - (* POP *) apply handler_correct_absorb_wfb; intro H; apply correct_POP; apply Z.ltb_lt; exact H.
+      - (* ASSIGN *) apply handler_correct_absorb_wfb; intro; apply correct_ASSIGN.
+      - (* ENVACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ENVACC; apply Z.ltb_lt; exact H.
+      - (* PUSHENVACC *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHENVACC.
+      - (* PUSH_RETADDR *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH_RETADDR.
+      - (* APPLY *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY.
+      - (* APPLY1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY1.
+      - (* APPLY2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY2.
+      - (* APPLY3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY3.
+      - (* APPTERM *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM.
+      - (* APPTERM1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM1.
+      - (* APPTERM2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM2.
+      - (* APPTERM3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM3.
+      - (* RETURN *) apply handler_correct_absorb_wfb; intro; apply correct_RETURN.
+      - (* RESTART *) apply handler_correct_absorb_wfb; intro; apply correct_RESTART.
+      - (* GRAB *) apply handler_correct_absorb_wfb; intro; apply correct_GRAB.
+      - (* CLOSURE *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply andb_prop in H1; destruct H1 as [H1 H3].
+        apply andb_prop in H1; destruct H1 as [H1 H4].
+        apply Z.leb_le in H2; apply Z.leb_le in H3; apply Z.leb_le in H4; apply Z.leb_le in H1.
+        apply correct_CLOSURE; lia.
+      - (* CLOSUREREC *)
+        destruct n as [|[|nfuncs']].
+        + apply handler_correct_absorb_wfb; intro H; discriminate.
+        + destruct n0 as [|nvars'].
+          * destruct l as [|code_ofs [|rest_ofs]].
+            -- apply handler_correct_absorb_wfb; intro H; discriminate.
+            -- apply handler_correct_absorb_wfb; intro H.
+              apply andb_prop in H; destruct H as [H1 H2].
+              apply Z.leb_le in H1; apply Z.leb_le in H2.
+              apply correct_CLOSUREREC; lia.
+            -- apply handler_correct_absorb_wfb; intro H; discriminate.
+          * apply handler_correct_absorb_wfb; intro H; discriminate.
+        + apply handler_correct_absorb_wfb; intro H; discriminate.
+      - (* OFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETCLOSURE.
+      - (* PUSHOFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHOFFSETCLOSURE.
+      - (* GETGLOBAL *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_GETGLOBAL; lia.
+      - (* PUSHGETGLOBAL *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_PUSHGETGLOBAL; lia.
+      - (* GETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETGLOBALFIELD.
+      - (* PUSHGETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHGETGLOBALFIELD.
+      - (* SETGLOBAL *) apply handler_correct_absorb_wfb; intro; apply correct_SETGLOBAL.
+      - (* ATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_ATOM; apply Z.leb_le; exact H.
+      - (* PUSHATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_PUSHATOM; apply Z.leb_le; exact H.
+      - (* MAKEBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEBLOCK; apply Nat.leb_le; exact H.
+      - (* MAKEBLOCK1 *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_MAKEBLOCK1; lia.
+      - (* MAKEBLOCK2 *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_MAKEBLOCK2; lia.
+      - (* MAKEBLOCK3 *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_MAKEBLOCK3; lia.
+      - (* MAKEFLOATBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEFLOATBLOCK; apply Nat.leb_le; exact H.
+      - (* GETFIELD *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_GETFIELD; lia.
+      - (* GETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETFLOATFIELD.
+      - (* SETFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFIELD.
+      - (* SETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFLOATFIELD.
+      - (* VECTLENGTH *) apply handler_correct_absorb_wfb; intro; apply correct_VECTLENGTH.
+      - (* GETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_GETVECTITEM.
+      - (* SETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_SETVECTITEM.
+      - (* GETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETBYTESCHAR.
+      - (* SETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_SETBYTESCHAR.
+      - (* GETSTRINGCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETSTRINGCHAR.
+      - (* BRANCH *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCH.
+      - (* BRANCHIF *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIF.
+      - (* BRANCHIFNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIFNOT.
+      - (* SWITCH *) apply handler_correct_absorb_wfb; intro; apply correct_SWITCH.
+      - (* BOOLNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BOOLNOT.
+      - (* PUSHTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHTRAP.
+      - (* POPTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_POPTRAP.
+      - (* RAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE.
+      - (* RERAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RERAISE.
+      - (* RAISE_NOTRACE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE_NOTRACE.
+      - (* CHECK_SIGNALS *) apply handler_correct_absorb_wfb; intro; apply correct_CHECK_SIGNALS.
+      - (* C_CALL *) apply handler_correct_absorb_wfb; intro; apply correct_C_CALLN.
+      - (* CONSTINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_CONSTINT; lia.
+      - (* PUSHCONSTINT *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHCONSTINT.
+      - (* NEGINT *) apply handler_correct_absorb_wfb; intro; apply correct_NEGINT.
+      - (* ADDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ADDINT.
+      - (* SUBINT *) apply handler_correct_absorb_wfb; intro; apply correct_SUBINT.
+      - (* MULINT *) apply handler_correct_absorb_wfb; intro; apply correct_MULINT.
+      - (* DIVINT *) apply handler_correct_absorb_wfb; intro; apply correct_DIVINT.
+      - (* MODINT *) apply handler_correct_absorb_wfb; intro; apply correct_MODINT.
+      - (* ANDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ANDINT.
+      - (* ORINT *) apply handler_correct_absorb_wfb; intro; apply correct_ORINT.
+      - (* XORINT *) apply handler_correct_absorb_wfb; intro; apply correct_XORINT.
+      - (* LSLINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSLINT.
+      - (* LSRINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSRINT.
+      - (* ASRINT *) apply handler_correct_absorb_wfb; intro; apply correct_ASRINT.
+      - (* EQ *) apply handler_correct_absorb_wfb; intro; apply correct_EQ.
+      - (* NEQ *) apply handler_correct_absorb_wfb; intro; apply correct_NEQ.
+      - (* LTINT *) apply handler_correct_absorb_wfb; intro; apply correct_LTINT.
+      - (* LEINT *) apply handler_correct_absorb_wfb; intro; apply correct_LEINT.
+      - (* GTINT *) apply handler_correct_absorb_wfb; intro; apply correct_GTINT.
+      - (* GEINT *) apply handler_correct_absorb_wfb; intro; apply correct_GEINT.
+      - (* OFFSETINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_OFFSETINT; lia.
+      - (* OFFSETREF *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETREF.
+      - (* ISINT *) apply handler_correct_absorb_wfb; intro; apply correct_ISINT.
+      - (* GETMETHOD *) apply handler_correct_absorb_wfb; intro; apply correct_GETMETHOD.
+      - (* GETPUBMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETPUBMET.
+      - (* GETDYNMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETDYNMET.
+      - (* BEQ *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_BEQ; lia.
+      - (* BNEQ *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_BNEQ; lia.
+      - (* BLTINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_BLTINT; lia.
+      - (* BLEINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_BLEINT; lia.
+      - (* BGTINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_BGTINT; lia.
+      - (* BGEINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply Z.leb_le in H1; apply Z.leb_le in H2.
+        apply correct_BGEINT; lia.
+      - (* ULTINT *) apply handler_correct_absorb_wfb; intro; apply correct_ULTINT.
+      - (* UGEINT *) apply handler_correct_absorb_wfb; intro; apply correct_UGEINT.
+      - (* BULTINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply andb_prop in H1; destruct H1 as [H1 H3].
+        apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
+        apply correct_BULTINT; lia.
+      - (* BUGEINT *)
+        apply handler_correct_absorb_wfb; intro H.
+        apply andb_prop in H; destruct H as [H1 H2].
+        apply andb_prop in H1; destruct H1 as [H1 H3].
+        apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
+        apply correct_BUGEINT; lia.
+      - (* STOP *) apply handler_correct_absorb_wfb; intro; apply correct_STOP.
+    Qed.
 End InstructVerificationFromFineGrained.
