@@ -41,6 +41,13 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETRE
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import DIVINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLEINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BULTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ACC_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCH_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CONSTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import POP_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import STOP_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RERAISE_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -49,8 +56,8 @@ End DispatchHI.
 Definition correct_ACC : forall n,
   handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
     (pre_of (ACC n))
-    (P_error_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
-Admitted.
+    (P_error_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n))
+  := ACC_correct.correct_ACC.
 
 Definition correct_PUSH :
   handler_correct (handle_instr PUSH) (clight_of PUSH)
@@ -67,8 +74,8 @@ Admitted.
 Definition correct_POP : forall n,
   handler_correct (handle_instr (POP n)) (clight_of (POP n))
     (pre_of (POP n))
-    (P_error_of (POP n)) (P_halt_of (POP n)) (P_ccall_of (POP n)).
-Admitted.
+    (P_error_of (POP n)) (P_halt_of (POP n)) (P_ccall_of (POP n))
+  := POP_correct.correct_POP.
 
 Definition correct_ASSIGN : forall n,
   handler_correct (handle_instr (ASSIGN n)) (clight_of (ASSIGN n))
@@ -319,8 +326,8 @@ Admitted.
 Definition correct_BRANCH : forall z,
   handler_correct (handle_instr (BRANCH z)) (clight_of (BRANCH z))
     (pre_of (BRANCH z))
-    (P_error_of (BRANCH z)) (P_halt_of (BRANCH z)) (P_ccall_of (BRANCH z)).
-Admitted.
+    (P_error_of (BRANCH z)) (P_halt_of (BRANCH z)) (P_ccall_of (BRANCH z))
+  := BRANCH_correct.correct_BRANCH.
 
 Definition correct_BRANCHIF : forall z,
   handler_correct (handle_instr (BRANCHIF z)) (clight_of (BRANCHIF z))
@@ -367,8 +374,8 @@ Admitted.
 Definition correct_RERAISE :
   handler_correct (handle_instr RERAISE) (clight_of RERAISE)
     (pre_of RERAISE)
-    (P_error_of RERAISE) (P_halt_of RERAISE) (P_ccall_of RERAISE).
-Admitted.
+    (P_error_of RERAISE) (P_halt_of RERAISE) (P_ccall_of RERAISE)
+  := RERAISE_correct.correct_RERAISE.
 
 Definition correct_RAISE_NOTRACE :
   handler_correct (handle_instr RAISE_NOTRACE) (clight_of RAISE_NOTRACE)
@@ -391,8 +398,8 @@ Admitted.
 Definition correct_CONSTINT : forall z,
   handler_correct (handle_instr (CONSTINT z)) (clight_of (CONSTINT z))
     (pre_of (CONSTINT z))
-    (P_error_of (CONSTINT z)) (P_halt_of (CONSTINT z)) (P_ccall_of (CONSTINT z)).
-Admitted.
+    (P_error_of (CONSTINT z)) (P_halt_of (CONSTINT z)) (P_ccall_of (CONSTINT z))
+  := CONSTINT_correct.correct_CONSTINT.
 
 Definition correct_PUSHCONSTINT : forall z,
   handler_correct (handle_instr (PUSHCONSTINT z)) (clight_of (PUSHCONSTINT z))
@@ -511,8 +518,8 @@ Definition correct_GEINT :
 Definition correct_OFFSETINT : forall z,
   handler_correct (handle_instr (OFFSETINT z)) (clight_of (OFFSETINT z))
     (pre_of (OFFSETINT z))
-    (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)).
-Admitted.
+    (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z))
+  := OFFSETINT_correct.correct_OFFSETINT.
 
 Definition correct_OFFSETREF : forall z,
   handler_correct (handle_instr (OFFSETREF z)) (clight_of (OFFSETREF z))
@@ -611,5 +618,5 @@ Admitted.
 Definition correct_STOP :
   handler_correct (handle_instr STOP) (clight_of STOP)
     (pre_of STOP)
-    (P_error_of STOP) (P_halt_of STOP) (P_ccall_of STOP).
-Admitted.
+    (P_error_of STOP) (P_halt_of STOP) (P_ccall_of STOP)
+  := STOP_correct.correct_STOP.
