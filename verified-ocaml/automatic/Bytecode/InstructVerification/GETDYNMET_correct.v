@@ -232,6 +232,22 @@ Proof.
     + exact (IH l'' s1 Hscan_eq).
 Qed.
 
+(* Connection between getdynmet_scan and method_scan from InstructSpec *)
+Lemma getdynmet_scan_to_method_scan : forall s pc' tag l s0,
+  getdynmet_scan s pc' tag l = Step s0 ->
+  method_scan l tag = Some (Machine.accu s0).
+Proof.
+  intros s0 pc' tag.
+  fix IH 1.
+  intros [|r1 [|r2 l'']] s1 Hscan_eq.
+  - simpl in Hscan_eq. discriminate.
+  - simpl in Hscan_eq. discriminate.
+  - simpl in Hscan_eq. simpl.
+    destruct (value_eqb r2 tag) eqn:Heqb.
+    + injection Hscan_eq as Hinj. subst s1. simpl. reflexivity.
+    + exact (IH l'' s1 Hscan_eq).
+Qed.
+
 (* ================================================================== *)
 (* Precondition                                                        *)
 (*                                                                      *)
@@ -550,15 +566,15 @@ Proof.
 
     pose proof (getdynmet_scan_shape s (Machine.pc s) tag _ _ Hscan_gd) as Hs'_fields.
 
-    assert (Hhdm_mk : handle_GETDYNMET (Machine.pc s) s =
-              Step (mk_state (Machine.pc s) method_fn (Machine.stack s)
-                     (Machine.env s) (Machine.extra_args s) (Machine.global s)
-                     (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s))).
-    { unfold handle_GETDYNMET. rewrite Hstk. rewrite Hclass.
-      fold tag fields scan. rewrite Hscan. f_equal.
-      unfold method_fn. rewrite <- Hstk. exact Hs'_fields. }
+    (* Connect scan result to method_scan from InstructSpec.
+       value_all_fields s class_tbl is definitionally equal to fields,
+       Machine.accu s is definitionally equal to tag,
+       Machine.accu s' is definitionally equal to method_fn. *)
+    assert (Hmscan : method_scan (skipn 2 (value_all_fields s class_tbl))
+                       (Machine.accu s) = Some method_fn).
+    { exact (getdynmet_scan_to_method_scan s (Machine.pc s) tag _ _ Hscan_gd). }
 
-    destruct (Hstep_pre obj stk_tl Hstk method_fn Hhdm_mk cv_obj Hval_repr_obj)
+    destruct (Hstep_pre obj stk_tl Hstk class_tbl Hclass method_fn Hmscan cv_obj Hval_repr_obj)
       as (obj_b & obj_ofs & meths_v & meths_b & meths_ofs & hi_v &
           final_li & meth_cv &
           Hobj_is_ptr & Hobj_load & Hmeths_is_ptr & Hhi_load &

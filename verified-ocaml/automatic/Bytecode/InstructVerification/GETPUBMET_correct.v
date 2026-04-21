@@ -274,6 +274,22 @@ Proof.
     + exact (IH l'' s1 Hscan_eq).
 Qed.
 
+(* Connection between getpubmet_scan and method_scan from InstructSpec *)
+Lemma getpubmet_scan_to_method_scan : forall s pc' tag l s0,
+  getpubmet_scan s pc' tag l = Step s0 ->
+  method_scan l (Val_int tag) = Some (Machine.accu s0).
+Proof.
+  intros s0 pc' tag.
+  fix IH 1.
+  intros [|r1 [|r2 l'']] s1 Hscan_eq.
+  - simpl in Hscan_eq. discriminate.
+  - simpl in Hscan_eq. discriminate.
+  - simpl in Hscan_eq. simpl.
+    destruct (value_eqb r2 (Val_int tag)) eqn:Heqb.
+    + injection Hscan_eq as Hinj. subst s1. simpl. reflexivity.
+    + exact (IH l'' s1 Hscan_eq).
+Qed.
+
 (* ================================================================== *)
 (* Precondition                                                        *)
 (* ================================================================== *)
@@ -683,27 +699,14 @@ Proof.
 
     pose proof (getpubmet_scan_shape s (Machine.pc s) tag _ _ Hscan_gp) as Hs'_fields.
 
-    assert (Hgpm_mk : handle_GETPUBMET tag (Machine.pc s) s =
-              Step (mk_state (Machine.pc s) method_fn
-                     (s.(Machine.accu) :: s.(Machine.stack))
-                     (Machine.env s) (Machine.extra_args s) (Machine.global s)
-                     (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s))).
-    { unfold handle_GETPUBMET. rewrite Hclass.
-      (* The inline scan and our scan agree *)
-      change (match class_tbl with
-              | Val_block _ fs => fs
-              | Val_ptr addr => match heap_lookup (hp s) addr with Some (_, fs) => fs | None => nil end
-              | _ => nil
-              end) with actual_fields.
-      transitivity (scan (skipn 2 actual_fields)); [| rewrite Hscan; f_equal;
-        unfold method_fn; rewrite <- Hs'_fields at 1; reflexivity].
-      subst scan. generalize (skipn 2 actual_fields) as l.
-      fix IH 1. intros [|r1 [|r2 l'']]; simpl.
-      - reflexivity.
-      - reflexivity.
-      - destruct (value_eqb r2 (Val_int tag)); [reflexivity | exact (IH l'')]. }
+    (* Connect scan result to method_scan from InstructSpec.
+       value_all_fields s class_tbl is definitionally equal to actual_fields,
+       Machine.accu s' is definitionally equal to method_fn. *)
+    assert (Hmscan : method_scan (skipn 2 (value_all_fields s class_tbl))
+                       (Val_int tag) = Some method_fn).
+    { exact (getpubmet_scan_to_method_scan s (Machine.pc s) tag _ _ Hscan_gp). }
 
-    destruct (Hheap_pre method_fn Hgpm_mk accu_v Haccu_repr)
+    destruct (Hheap_pre class_tbl Hclass method_fn Hmscan accu_v Haccu_repr)
       as (accu_b & accu_ofs & meths_b & meths_ofs & hi_v &
           final_li & meth_cv &
           Haccu_is_ptr & Hobj_load & Hhi_load &

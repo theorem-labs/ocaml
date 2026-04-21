@@ -507,12 +507,16 @@ Definition correct_GETPUBMET : forall z,
   handler_correct (handle_instr (GETPUBMET z)) (clight_of (GETPUBMET z))
     (pre_of (GETPUBMET z))
     (P_error_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
+(* Proof in automatic/Bytecode/InstructVerification/GETPUBMET_correct.v
+   (verify_GETPUBMET_correct); needs Clight body update after handler migration. *)
 Admitted.
 
 Definition correct_GETDYNMET :
   handler_correct (handle_instr GETDYNMET) (clight_of GETDYNMET)
     (pre_of GETDYNMET)
     (P_error_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET).
+(* Proof in automatic/Bytecode/InstructVerification/GETDYNMET_correct.v
+   (verify_GETDYNMET_correct); needs Clight body update after handler migration. *)
 Admitted.
 
 Definition correct_BEQ : forall z1 z2,
