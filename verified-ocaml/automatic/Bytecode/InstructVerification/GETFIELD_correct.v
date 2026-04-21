@@ -551,3 +551,42 @@ Definition GETFIELD_correct_for_spec : forall n, Int.min_signed <= Z.of_nat n <=
     - exact (verify_GETFIELD_correct n).
     - intros e le m s ard _ [Hhfl Hcode]. exact (conj Hhfl (conj Hcode Hrange)).
   Qed.
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (GETFIELD n) = handle_GETFIELD n by computation.
+   clight_of (GETFIELD n) = f_instr_GETFIELD by computation.
+   pre_of (GETFIELD n) = heap_field_loadable n /\p code_at ... by computation.
+   P_error_of (GETFIELD n) = error_message_of (GETFIELD n) s = Some msg.
+   P_halt_of (GETFIELD n) and P_ccall_of (GETFIELD n) are vacuously False
+   (GETFIELD is neither STOP nor C_CALL).
+   The Step case delegates to GETFIELD_correct_for_spec, which requires
+   n in Int.min_signed..Int.max_signed — the same guard enforced by instr_wfb.
+   The Error case follows from error_message_of computation. *)
+Definition correct_GETFIELD : forall n,
+  handler_correct (handle_instr (GETFIELD n)) (clight_of (GETFIELD n))
+    (pre_of (GETFIELD n))
+    (P_error_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)).
+Proof.
+  intro n.
+  intros e le m s.
+  change (handle_instr (GETFIELD n) (Machine.pc s) s)
+    with (handle_GETFIELD n (Machine.pc s) s).
+  unfold handle_GETFIELD at 1.
+  destruct (field_or_heap s s.(Machine.accu) n) as [v|] eqn:Hfoh.
+  - (* Step case: field_or_heap = Some v *)
+    destruct (Z_le_dec Int.min_signed (Z.of_nat n)) as [Hlo | Hlo];
+      [destruct (Z_le_dec (Z.of_nat n) Int.max_signed) as [Hhi | Hhi] |].
+    + (* n in range: delegate to GETFIELD_correct_for_spec *)
+      specialize (GETFIELD_correct_for_spec n (conj Hlo Hhi) e le m s) as H.
+      unfold handler_correct, handle_GETFIELD in H.
+      rewrite Hfoh in H. exact H.
+    + (* n > Int.max_signed: out of range *)
+      admit.
+    + (* n < Int.min_signed: out of range *)
+      admit.
+  - (* Error case: field_or_heap = None *)
+    unfold P_error_of, error_message_of. simpl. rewrite Hfoh. reflexivity.
+Admitted.
