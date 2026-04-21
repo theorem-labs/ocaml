@@ -8,6 +8,7 @@ From compcert Require Import AST Integers Ctypes Cop Clight ClightBigstep Events
 From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
+From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import Dispatch HandleInstrSpec.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
