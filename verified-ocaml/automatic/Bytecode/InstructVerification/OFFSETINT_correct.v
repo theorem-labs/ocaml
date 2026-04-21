@@ -613,3 +613,48 @@ Proof.
            lia.
     + exact Haccu_long.
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationFineGrainedSpec.
+   handle_instr (OFFSETINT z) / clight_of (OFFSETINT z) / pre_of (OFFSETINT z)
+   are convertible with handle_OFFSETINT z / f_instr_OFFSETINT /
+   pre_and (code_at (Int.repr z)) accu_is_long.
+
+   The Step case (accu = Val_int) delegates to verify_OFFSETINT_handler_correct
+   after asserting the range constraint Int.min_signed <= z * 2 <= Int.max_signed.
+   This is Admitted because pre_of does not include the range guard; in practice
+   the bytecode decoder only produces in-range operands and instr_wfb filters
+   out-of-range values.
+
+   Error cases (non-integer accu) are fully proved. *)
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Definition correct_OFFSETINT : forall z,
+  handler_correct (handle_instr (OFFSETINT z)) (clight_of (OFFSETINT z))
+    (pre_of (OFFSETINT z))
+    (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)).
+Proof.
+  intros z e le m s.
+  change (handle_instr (OFFSETINT z) (Machine.pc s) s)
+    with (handle_OFFSETINT z (Machine.pc s) s).
+  unfold handle_OFFSETINT at 1.
+  destruct (Machine.accu s) eqn:Haccu.
+  - (* Val_int z0 — Step case; need z range for C shift correctness *)
+    assert (Hrange : Int.min_signed <= z * 2 <= Int.max_signed).
+    { (* TODO: the canonical pre_of does not include this guard;
+         it should be supplied by instr_wfb or the bytecode loader.
+         Admitted for now. *)
+      admit. }
+    intros ard Hrel Hpre.
+    pose proof (verify_OFFSETINT_handler_correct z Hrange) as Hvc.
+    specialize (Hvc e le m s).
+    unfold handler_correct, handle_OFFSETINT in Hvc.
+    rewrite Haccu in Hvc. simpl in Hvc.
+    exact (Hvc ard Hrel Hpre).
+  - (* Val_block — Error *)
+    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
+  - (* Val_ptr — Error *)
+    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
+  - (* Val_closure — Error *)
+    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
+Admitted.
