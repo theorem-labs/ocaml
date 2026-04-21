@@ -45,7 +45,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -469,4 +469,55 @@ Proof.
       { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsb_writable. exact Hofs'. }
     }
   }
+Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr GETMETHOD / clight_of GETMETHOD / pre_of GETMETHOD are
+   convertible with handle_GETMETHOD / f_instr_GETMETHOD / getmethod_step_pre.
+   P_halt_of and P_ccall_of are vacuously satisfied (GETMETHOD never halts or
+   issues a C call).  P_error_of requires bridging from the disjunction in the
+   old proof to `error_message_of GETMETHOD s = Some msg`. *)
+Definition correct_GETMETHOD :
+    handler_correct (handle_instr GETMETHOD) (clight_of GETMETHOD)
+      (pre_of GETMETHOD)
+      (P_error_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD).
+Proof.
+  intros e le m s.
+  change (handle_instr GETMETHOD (Machine.pc s) s)
+    with (handle_GETMETHOD (Machine.pc s) s).
+  unfold handle_GETMETHOD at 1.
+  (* Case split on stack *)
+  destruct (Machine.stack s) as [| obj stk_tl] eqn:Hstk.
+  { (* stack = nil => Error "GETMETHOD: stack underflow" *)
+    unfold P_error_of. simpl. rewrite Hstk. reflexivity. }
+  (* stack = obj :: stk_tl *)
+  destruct (field_or_heap s obj 0) as [class_tbl|] eqn:Hclass.
+  2: { (* field_or_heap = None => Error "GETMETHOD: no class table" *)
+    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass. reflexivity. }
+  (* field_or_heap obj 0 = Some class_tbl *)
+  destruct (Machine.accu s) as [n | | |] eqn:Haccu_eq.
+  - (* Val_int n *)
+    destruct (field_or_heap s class_tbl (Z.to_nat n)) as [method_fn|] eqn:Hmethod.
+    + (* Step case: all lookups succeeded — delegate to verify_GETMETHOD_correct *)
+      intros ard Habs Hpre.
+      specialize (verify_GETMETHOD_correct e le m s) as Hold.
+      unfold handler_correct, handle_GETMETHOD in Hold.
+      rewrite Hstk in Hold. rewrite Hclass in Hold.
+      rewrite Haccu_eq in Hold. rewrite Hmethod in Hold.
+      specialize (Hold ard Habs).
+      apply Hold.
+      unfold pre_of, getmethod_step_pre in Hpre.
+      rewrite Haccu_eq in Hpre. exact Hpre.
+    + (* method not found => Error *)
+      unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass.
+      rewrite Haccu_eq. rewrite Hmethod. reflexivity.
+  - (* Val_block: Error "GETMETHOD: not an integer index" *)
+    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass.
+    rewrite Haccu_eq. reflexivity.
+  - (* Val_ptr: Error "GETMETHOD: not an integer index" *)
+    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass.
+    rewrite Haccu_eq. reflexivity.
+  - (* Val_closure: Error "GETMETHOD: not an integer index" *)
+    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass.
+    rewrite Haccu_eq. reflexivity.
 Qed.
