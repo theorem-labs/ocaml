@@ -78,6 +78,32 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import C_CALL_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHGETGLOBALFIELD_correct.
 
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RESTART_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GRAB_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETFIELD_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CLOSUREREC_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEBLOCK2_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEBLOCK3_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETVECTITEM_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SWITCH_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import POPTRAP_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY1_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY3_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM3_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETFLOATFIELD_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETVECTITEM_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETBYTESCHAR_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETBYTESCHAR_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETDYNMET_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETPUBMET_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM1_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RAISE_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RAISE_NOTRACE_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEBLOCK_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEFLOATBLOCK_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CLOSURE_correct.
+
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
 End DispatchHI.
@@ -139,8 +165,8 @@ Admitted.
 Definition correct_APPLY1 :
   handler_correct (handle_instr APPLY1) (clight_of APPLY1)
     (pre_of APPLY1)
-    (P_error_of APPLY1) (P_halt_of APPLY1) (P_ccall_of APPLY1).
-Admitted.
+    (P_error_of APPLY1) (P_halt_of APPLY1) (P_ccall_of APPLY1)
+  := APPLY1_correct.correct_APPLY1.
 
 Definition correct_APPLY2 :
   handler_correct (handle_instr APPLY2) (clight_of APPLY2)
@@ -151,20 +177,20 @@ Admitted.
 Definition correct_APPLY3 :
   handler_correct (handle_instr APPLY3) (clight_of APPLY3)
     (pre_of APPLY3)
-    (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3).
-Admitted.
+    (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3)
+  := APPLY3_correct.correct_APPLY3.
 
 Definition correct_APPTERM : forall nargs slotsize,
   handler_correct (handle_instr (APPTERM nargs slotsize)) (clight_of (APPTERM nargs slotsize))
     (pre_of (APPTERM nargs slotsize))
-    (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)).
-Admitted.
+    (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize))
+  := APPTERM_correct.correct_APPTERM.
 
 Definition correct_APPTERM1 : forall n,
   handler_correct (handle_instr (APPTERM1 n)) (clight_of (APPTERM1 n))
     (pre_of (APPTERM1 n))
-    (P_error_of (APPTERM1 n)) (P_halt_of (APPTERM1 n)) (P_ccall_of (APPTERM1 n)).
-Admitted.
+    (P_error_of (APPTERM1 n)) (P_halt_of (APPTERM1 n)) (P_ccall_of (APPTERM1 n))
+  := APPTERM1_correct.correct_APPTERM1.
 
 Definition correct_APPTERM2 : forall n,
   handler_correct (handle_instr (APPTERM2 n)) (clight_of (APPTERM2 n))
@@ -175,8 +201,8 @@ Admitted.
 Definition correct_APPTERM3 : forall n,
   handler_correct (handle_instr (APPTERM3 n)) (clight_of (APPTERM3 n))
     (pre_of (APPTERM3 n))
-    (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)).
-Admitted.
+    (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n))
+  := APPTERM3_correct.correct_APPTERM3.
 
 Definition correct_RETURN : forall n,
   handler_correct (handle_instr (RETURN n)) (clight_of (RETURN n))
@@ -187,26 +213,26 @@ Admitted.
 Definition correct_RESTART :
   handler_correct (handle_instr RESTART) (clight_of RESTART)
     (pre_of RESTART)
-    (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART).
-Admitted.
+    (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART)
+  := RESTART_correct.correct_RESTART.
 
 Definition correct_GRAB : forall n,
   handler_correct (handle_instr (GRAB n)) (clight_of (GRAB n))
     (pre_of (GRAB n))
-    (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)).
-Admitted.
+    (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n))
+  := GRAB_correct.correct_GRAB.
 
 Definition correct_CLOSURE : forall nvars code_ofs,
   handler_correct (handle_instr (CLOSURE nvars code_ofs)) (clight_of (CLOSURE nvars code_ofs))
     (pre_of (CLOSURE nvars code_ofs))
-    (P_error_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs)).
-Admitted.
+    (P_error_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs))
+  := CLOSURE_correct.correct_CLOSURE.
 
 Definition correct_CLOSUREREC : forall nfuncs nvars code_offsets,
   handler_correct (handle_instr (CLOSUREREC nfuncs nvars code_offsets)) (clight_of (CLOSUREREC nfuncs nvars code_offsets))
     (pre_of (CLOSUREREC nfuncs nvars code_offsets))
-    (P_error_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets)).
-Admitted.
+    (P_error_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets))
+  := CLOSUREREC_correct.correct_CLOSUREREC.
 
 Definition correct_OFFSETCLOSURE : forall z,
   handler_correct (handle_instr (OFFSETCLOSURE z)) (clight_of (OFFSETCLOSURE z))
@@ -265,8 +291,8 @@ Definition correct_PUSHATOM : forall n,
 Definition correct_MAKEBLOCK : forall t size,
   handler_correct (handle_instr (MAKEBLOCK t size)) (clight_of (MAKEBLOCK t size))
     (pre_of (MAKEBLOCK t size))
-    (P_error_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)).
-Admitted.
+    (P_error_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size))
+  := MAKEBLOCK_correct.correct_MAKEBLOCK.
 
 Definition correct_MAKEBLOCK1 : forall n,
   handler_correct (handle_instr (MAKEBLOCK1 n)) (clight_of (MAKEBLOCK1 n))
@@ -277,20 +303,20 @@ Definition correct_MAKEBLOCK1 : forall n,
 Definition correct_MAKEBLOCK2 : forall n,
   handler_correct (handle_instr (MAKEBLOCK2 n)) (clight_of (MAKEBLOCK2 n))
     (pre_of (MAKEBLOCK2 n))
-    (P_error_of (MAKEBLOCK2 n)) (P_halt_of (MAKEBLOCK2 n)) (P_ccall_of (MAKEBLOCK2 n)).
-Admitted.
+    (P_error_of (MAKEBLOCK2 n)) (P_halt_of (MAKEBLOCK2 n)) (P_ccall_of (MAKEBLOCK2 n))
+  := MAKEBLOCK2_correct.correct_MAKEBLOCK2.
 
 Definition correct_MAKEBLOCK3 : forall n,
   handler_correct (handle_instr (MAKEBLOCK3 n)) (clight_of (MAKEBLOCK3 n))
     (pre_of (MAKEBLOCK3 n))
-    (P_error_of (MAKEBLOCK3 n)) (P_halt_of (MAKEBLOCK3 n)) (P_ccall_of (MAKEBLOCK3 n)).
-Admitted.
+    (P_error_of (MAKEBLOCK3 n)) (P_halt_of (MAKEBLOCK3 n)) (P_ccall_of (MAKEBLOCK3 n))
+  := MAKEBLOCK3_correct.correct_MAKEBLOCK3.
 
 Definition correct_MAKEFLOATBLOCK : forall n,
   handler_correct (handle_instr (MAKEFLOATBLOCK n)) (clight_of (MAKEFLOATBLOCK n))
     (pre_of (MAKEFLOATBLOCK n))
-    (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)).
-Admitted.
+    (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n))
+  := MAKEFLOATBLOCK_correct.correct_MAKEFLOATBLOCK.
 
 Definition correct_GETFIELD : forall n,
   handler_correct (handle_instr (GETFIELD n)) (clight_of (GETFIELD n))
@@ -301,14 +327,14 @@ Definition correct_GETFIELD : forall n,
 Definition correct_GETFLOATFIELD : forall n,
   handler_correct (handle_instr (GETFLOATFIELD n)) (clight_of (GETFLOATFIELD n))
     (pre_of (GETFLOATFIELD n))
-    (P_error_of (GETFLOATFIELD n)) (P_halt_of (GETFLOATFIELD n)) (P_ccall_of (GETFLOATFIELD n)).
-Admitted.
+    (P_error_of (GETFLOATFIELD n)) (P_halt_of (GETFLOATFIELD n)) (P_ccall_of (GETFLOATFIELD n))
+  := GETFLOATFIELD_correct.correct_GETFLOATFIELD.
 
 Definition correct_SETFIELD : forall n,
   handler_correct (handle_instr (SETFIELD n)) (clight_of (SETFIELD n))
     (pre_of (SETFIELD n))
-    (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)).
-Admitted.
+    (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n))
+  := SETFIELD_correct.correct_SETFIELD.
 
 Definition correct_SETFLOATFIELD : forall n,
   handler_correct (handle_instr (SETFLOATFIELD n)) (clight_of (SETFLOATFIELD n))
@@ -325,26 +351,26 @@ Definition correct_VECTLENGTH :
 Definition correct_GETVECTITEM :
   handler_correct (handle_instr GETVECTITEM) (clight_of GETVECTITEM)
     (pre_of GETVECTITEM)
-    (P_error_of GETVECTITEM) (P_halt_of GETVECTITEM) (P_ccall_of GETVECTITEM).
-Admitted.
+    (P_error_of GETVECTITEM) (P_halt_of GETVECTITEM) (P_ccall_of GETVECTITEM)
+  := GETVECTITEM_correct.correct_GETVECTITEM.
 
 Definition correct_SETVECTITEM :
   handler_correct (handle_instr SETVECTITEM) (clight_of SETVECTITEM)
     (pre_of SETVECTITEM)
-    (P_error_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM).
-Admitted.
+    (P_error_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM)
+  := SETVECTITEM_correct.correct_SETVECTITEM.
 
 Definition correct_GETBYTESCHAR :
   handler_correct (handle_instr GETBYTESCHAR) (clight_of GETBYTESCHAR)
     (pre_of GETBYTESCHAR)
-    (P_error_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR).
-Admitted.
+    (P_error_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR)
+  := GETBYTESCHAR_correct.correct_GETBYTESCHAR.
 
 Definition correct_SETBYTESCHAR :
   handler_correct (handle_instr SETBYTESCHAR) (clight_of SETBYTESCHAR)
     (pre_of SETBYTESCHAR)
-    (P_error_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR).
-Admitted.
+    (P_error_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR)
+  := SETBYTESCHAR_correct.correct_SETBYTESCHAR.
 
 Definition correct_GETSTRINGCHAR :
   handler_correct (handle_instr GETSTRINGCHAR) (clight_of GETSTRINGCHAR)
@@ -373,8 +399,8 @@ Definition correct_BRANCHIFNOT : forall z,
 Definition correct_SWITCH : forall nc nb const_targets block_targets,
   handler_correct (handle_instr (SWITCH nc nb const_targets block_targets)) (clight_of (SWITCH nc nb const_targets block_targets))
     (pre_of (SWITCH nc nb const_targets block_targets))
-    (P_error_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets)).
-Admitted.
+    (P_error_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets))
+  := SWITCH_correct.correct_SWITCH.
 
 Definition correct_BOOLNOT :
   handler_correct (handle_instr BOOLNOT) (clight_of BOOLNOT)
@@ -391,14 +417,14 @@ Definition correct_PUSHTRAP : forall z,
 Definition correct_POPTRAP :
   handler_correct (handle_instr POPTRAP) (clight_of POPTRAP)
     (pre_of POPTRAP)
-    (P_error_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP).
-Admitted.
+    (P_error_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP)
+  := POPTRAP_correct.correct_POPTRAP.
 
 Definition correct_RAISE :
   handler_correct (handle_instr RAISE) (clight_of RAISE)
     (pre_of RAISE)
-    (P_error_of RAISE) (P_halt_of RAISE) (P_ccall_of RAISE).
-Admitted.
+    (P_error_of RAISE) (P_halt_of RAISE) (P_ccall_of RAISE)
+  := RAISE_correct.correct_RAISE.
 
 Definition correct_RERAISE :
   handler_correct (handle_instr RERAISE) (clight_of RERAISE)
@@ -409,8 +435,8 @@ Definition correct_RERAISE :
 Definition correct_RAISE_NOTRACE :
   handler_correct (handle_instr RAISE_NOTRACE) (clight_of RAISE_NOTRACE)
     (pre_of RAISE_NOTRACE)
-    (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE).
-Admitted.
+    (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE)
+  := RAISE_NOTRACE_correct.correct_RAISE_NOTRACE.
 
 Definition correct_CHECK_SIGNALS :
   handler_correct (handle_instr CHECK_SIGNALS) (clight_of CHECK_SIGNALS)
@@ -571,18 +597,14 @@ Definition correct_GETMETHOD :
 Definition correct_GETPUBMET : forall z,
   handler_correct (handle_instr (GETPUBMET z)) (clight_of (GETPUBMET z))
     (pre_of (GETPUBMET z))
-    (P_error_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
-(* Proof in automatic/Bytecode/InstructVerification/GETPUBMET_correct.v
-   (verify_GETPUBMET_correct); needs Clight body update after handler migration. *)
-Admitted.
+    (P_error_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z))
+  := GETPUBMET_correct.correct_GETPUBMET.
 
 Definition correct_GETDYNMET :
   handler_correct (handle_instr GETDYNMET) (clight_of GETDYNMET)
     (pre_of GETDYNMET)
-    (P_error_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET).
-(* Proof in automatic/Bytecode/InstructVerification/GETDYNMET_correct.v
-   (verify_GETDYNMET_correct); needs Clight body update after handler migration. *)
-Admitted.
+    (P_error_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET)
+  := GETDYNMET_correct.correct_GETDYNMET.
 
 Definition correct_BEQ : forall z1 z2,
   handler_correct (handle_instr (BEQ z1 z2)) (clight_of (BEQ z1 z2))

@@ -1054,3 +1054,126 @@ Proof.
           intro; exact (IHrf _ Hscan0)
         end).
 Qed.
+
+(* ================================================================== *)
+(* Wrapper with uniform type for InstructVerificationProof.v           *)
+(*                                                                      *)
+(* Bridges verify_GETDYNMET_correct (string-disjunction errors,        *)
+(* custom precondition) to the uniform P_error_of / pre_of interface.  *)
+(* ================================================================== *)
+
+(* Helper: scan_method_table returns Some msg iff the local scan returns
+   Error msg.  This is the key bridging lemma for error cases. *)
+Local Lemma scan_method_table_scan_equiv :
+  forall (tag : value) (remaining : list value),
+    scan_method_table tag remaining "GETDYNMET: method not found" =
+    match (fix scan (r : list value) : step_result :=
+       match r with
+       | [] => Error "GETDYNMET: method not found"
+       | _ :: [] => Error "GETDYNMET: method not found"
+       | method_fn :: tag_val :: rest =>
+         if value_eqb tag_val tag then
+           Step (mk_state 0 method_fn [] [] 0 [] 0 [] 0)
+         else scan rest
+       end) remaining
+    with
+    | Step _ => None
+    | Error msg => Some msg
+    | _ => None
+    end.
+Proof.
+  intros tag.
+  fix IH 1.
+  intros [|r1 [|r2 rest]].
+  - reflexivity.
+  - reflexivity.
+  - simpl. destruct (value_eqb r2 tag); [reflexivity | exact (IH rest)].
+Qed.
+
+Definition correct_GETDYNMET :
+    handler_correct (handle_instr GETDYNMET) (clight_of GETDYNMET)
+      (pre_of GETDYNMET)
+      (P_error_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET).
+Proof.
+  intros e le m s.
+  change (handle_instr GETDYNMET (Machine.pc s) s)
+    with (handle_GETDYNMET (Machine.pc s) s).
+  unfold handle_GETDYNMET at 1.
+  (* Case split on stack *)
+  destruct (Machine.stack s) as [| obj stk_tl] eqn:Hstk.
+  { (* stack = nil => Error "GETDYNMET: stack underflow" *)
+    unfold P_error_of. simpl. rewrite Hstk. reflexivity. }
+  (* stack = obj :: stk_tl *)
+  destruct (field_or_heap s obj 0) as [class_tbl|] eqn:Hclass.
+  2: { (* field_or_heap = None => Error "GETDYNMET: no class table" *)
+    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass. reflexivity. }
+  (* field_or_heap obj 0 = Some class_tbl *)
+  set (tag := Machine.accu s).
+  set (fields :=
+    match class_tbl with
+    | Val_block _ fs => fs
+    | Val_ptr addr => match heap_lookup (hp s) addr with Some (_, fs) => fs | None => nil end
+    | _ => nil
+    end).
+  set (scan := fix scan (remaining : list value) : step_result :=
+    match remaining with
+    | nil => Error "GETDYNMET: method not found"
+    | _ :: nil => Error "GETDYNMET: method not found"
+    | method_fn :: tag_val :: rest =>
+      if value_eqb tag_val tag then
+        Step (s <|pc := pc s|> <|accu := method_fn|>)
+      else scan rest
+    end).
+  destruct (scan (skipn 2 fields)) as [s'|msg| |] eqn:Hscan.
+
+  - (* Step case: delegate to verify_GETDYNMET_correct *)
+    intros ard Habs Hpre.
+    specialize (verify_GETDYNMET_correct e le m s) as Hold.
+    unfold handler_correct, handle_GETDYNMET in Hold.
+    rewrite Hstk in Hold. rewrite Hclass in Hold.
+    fold tag in Hold. fold fields in Hold. fold scan in Hold.
+    rewrite Hscan in Hold.
+    exact (Hold ard Habs Hpre).
+
+  - (* Error case from scan *)
+    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass.
+    (* error_message_of GETDYNMET s computes through scan_method_table *)
+    (* We need to show scan_method_table tag (skipn 2 fields) "..." = Some msg *)
+    (* where scan (skipn 2 fields) = Error msg *)
+    subst scan. subst fields.
+    change (error_message_of GETDYNMET s = Some msg).
+    unfold error_message_of. rewrite Hstk. rewrite Hclass.
+    (* Now both sides use scan_method_table / local scan on same data *)
+    set (flds := match class_tbl with
+      | Val_block _ fs => fs
+      | Val_ptr addr => match heap_lookup (hp s) addr with Some (_, fs) => fs | None => [] end
+      | _ => []
+      end).
+    set (remaining := skipn 2 flds).
+    (* We need a general lemma connecting scan_method_table and the local scan *)
+    clearbody remaining. revert msg Hscan. revert remaining.
+    fix IH 1.
+    intros [|r1 [|r2 rest]] msg Hsc.
+    + simpl in Hsc. injection Hsc as <-. reflexivity.
+    + simpl in Hsc. injection Hsc as <-. reflexivity.
+    + simpl in Hsc. simpl.
+      destruct (value_eqb r2 tag) eqn:Heqb.
+      * discriminate.
+      * exact (IH rest msg Hsc).
+
+  - (* Halt: impossible *)
+    exfalso.
+    subst scan.
+    set (rf := skipn 2 fields) in Hscan. clearbody rf.
+    revert Hscan. revert rf.
+    fix IH 1. intros [|? [|? ?]]; simpl; try (intro; discriminate).
+    destruct (value_eqb _ tag); [intro; discriminate | intro; exact (IH _ Hscan)].
+
+  - (* CCall_request: impossible *)
+    exfalso.
+    subst scan.
+    set (rf := skipn 2 fields) in Hscan. clearbody rf.
+    revert Hscan. revert rf.
+    fix IH 1. intros [|? [|? ?]]; simpl; try (intro; discriminate).
+    destruct (value_eqb _ tag); [intro; discriminate | intro; exact (IH _ Hscan)].
+Qed.

@@ -1775,3 +1775,41 @@ Proof.
     { exact Hsb_writable_m10. }
   }
 Qed.
+
+(* ================================================================== *)
+(* Canonical wrapper matching InstructVerificationFineGrainedSpec       *)
+(* ================================================================== *)
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Definition correct_APPLY3 :
+  handler_correct (handle_instr APPLY3) (clight_of APPLY3)
+    (pre_of APPLY3)
+    (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3).
+Proof.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr APPLY3 (Machine.pc s) s)
+    with (handle_APPLY3 (Machine.pc s) s).
+  unfold handle_APPLY3 at 1.
+  destruct (Machine.stack s) as [|arg1 stk1] eqn:Hstk.
+  { (* Empty stack => Error "stack underflow" *)
+    unfold P_error_of, error_message_of. rewrite Hstk. reflexivity. }
+  destruct stk1 as [|arg2 stk2].
+  { (* 1 element => Error "stack underflow" *)
+    unfold P_error_of, error_message_of. rewrite Hstk. reflexivity. }
+  destruct stk2 as [|arg3 rest].
+  { (* 2 elements => Error "stack underflow" *)
+    unfold P_error_of, error_message_of. rewrite Hstk. reflexivity. }
+  destruct (get_code_ptr_s s (Machine.accu s)) as [target_pc|] eqn:Hgcp.
+  - (* Step case: delegate to verify_APPLY3_correct *)
+    pose proof verify_APPLY3_correct as H.
+    unfold handler_correct in H. specialize (H e le m s).
+    unfold handle_APPLY3 at 1 in H.
+    rewrite Hstk in H. rewrite Hgcp in H.
+    change (pre_of APPLY3) with apply3_step_pre.
+    exact H.
+  - (* Error case: accu not a closure *)
+    unfold P_error_of, error_message_of. rewrite Hstk. rewrite Hgcp. reflexivity.
+Qed.

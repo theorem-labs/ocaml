@@ -1649,3 +1649,66 @@ Proof.
           intro; exact (IHrf _ Hscan0)
         end).
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (GETPUBMET z) / clight_of (GETPUBMET z) / pre_of (GETPUBMET z)
+   are convertible with handle_GETPUBMET z / f_instr_GETPUBMET / getpubmet_pre z.
+   P_halt_of and P_ccall_of are vacuously satisfied (GETPUBMET never halts or
+   issues a C call).  P_error_of requires bridging from the disjunction in
+   verify_GETPUBMET_correct to `error_message_of (GETPUBMET z) s = Some msg`. *)
+Definition correct_GETPUBMET : forall z,
+    handler_correct (handle_instr (GETPUBMET z)) (clight_of (GETPUBMET z))
+      (pre_of (GETPUBMET z))
+      (P_error_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
+Proof.
+  intro z.
+  intros e le m s.
+  change (handle_instr (GETPUBMET z) (Machine.pc s) s)
+    with (handle_GETPUBMET z (Machine.pc s) s).
+  specialize (verify_GETPUBMET_correct z e le m s) as Hold.
+  unfold handler_correct in Hold.
+  unfold handle_GETPUBMET at 1.
+  set (new_stack := Machine.accu s :: Machine.stack s) in *.
+  destruct (field_or_heap s (Machine.accu s) 0) as [class_tbl|] eqn:Hclass.
+  2: { (* field_or_heap = None => Error "GETPUBMET: no class table" *)
+    unfold P_error_of. simpl. rewrite Hclass. reflexivity. }
+  set (fields :=
+    match class_tbl with
+    | Val_block _ fs => fs
+    | Val_ptr addr => match heap_lookup (Machine.hp s) addr with Some (_, fs) => fs | None => nil end
+    | _ => nil
+    end) in *.
+  set (scan := fix scan (remaining : list value) : step_result :=
+    match remaining with
+    | nil => Error "GETPUBMET: method not found"
+    | _ :: nil => Error "GETPUBMET: method not found"
+    | method_fn :: tag_val :: rest =>
+      if value_eqb tag_val (Val_int z) then
+        Step (s <|Machine.pc := Machine.pc s|> <|Machine.accu := method_fn|> <|Machine.stack := new_stack|>)
+      else scan rest
+    end) in *.
+  destruct (scan (skipn 2 fields)) eqn:Hscan.
+  - (* Step case: delegate to verify_GETPUBMET_correct *)
+    intros ard Hpre Hstep_pre.
+    unfold handle_GETPUBMET in Hold. rewrite Hclass in Hold.
+    fold fields in Hold. fold scan in Hold. rewrite Hscan in Hold.
+    apply Hold; assumption.
+  - (* Error case *)
+    unfold P_error_of. simpl. rewrite Hclass.
+    (* Bridge: scan returning Error means scan_method_table returns Some msg *)
+    admit.
+  - (* Halt: impossible from scan *)
+    exfalso. clear Hold.
+    set (rf := skipn 2 fields) in Hscan. clearbody rf.
+    revert Hscan. revert rf.
+    fix IHrf 1; intros [| ? [| ? ?]]; simpl; try (intro; discriminate).
+    destruct (value_eqb _ (Val_int z)); try (intro; discriminate).
+    intro; exact (IHrf _ Hscan).
+  - (* CCall: impossible from scan *)
+    exfalso. clear Hold.
+    set (rf := skipn 2 fields) in Hscan. clearbody rf.
+    revert Hscan. revert rf.
+    fix IHrf 1; intros [| ? [| ? ?]]; simpl; try (intro; discriminate).
+    destruct (value_eqb _ (Val_int z)); try (intro; discriminate).
+    intro; exact (IHrf _ Hscan).
+Admitted.

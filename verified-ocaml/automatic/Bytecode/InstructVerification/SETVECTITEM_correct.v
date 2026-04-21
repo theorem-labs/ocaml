@@ -868,3 +868,48 @@ Proof.
     { exact Hsb_writable_m2. }
   }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr SETVECTITEM / clight_of SETVECTITEM / pre_of SETVECTITEM are
+   convertible with handle_SETVECTITEM / f_instr_SETVECTITEM / setvectitem_pre.
+   P_halt_of and P_ccall_of are vacuously satisfied (SETVECTITEM never halts
+   or issues a C call).  P_error_of requires a small computation bridge. *)
+Definition correct_SETVECTITEM :
+    handler_correct (handle_instr Bytecode.AST.SETVECTITEM) (clight_of Bytecode.AST.SETVECTITEM)
+      (pre_of Bytecode.AST.SETVECTITEM)
+      (P_error_of Bytecode.AST.SETVECTITEM) (P_halt_of Bytecode.AST.SETVECTITEM) (P_ccall_of Bytecode.AST.SETVECTITEM).
+Proof.
+  intros e le m s.
+  change (handle_instr Bytecode.AST.SETVECTITEM (Machine.pc s) s)
+    with (handle_SETVECTITEM (Machine.pc s) s).
+  unfold handle_SETVECTITEM at 1.
+  destruct (Machine.stack s) as [| v_hd stk1] eqn:Hstk.
+  - (* Error case: stack = nil => "stack underflow" *)
+    unfold P_error_of, error_message_of. rewrite Hstk. reflexivity.
+  - destruct v_hd as [idx | | |].
+    2-4: (* Error case: head not Val_int => "stack underflow" *)
+      unfold P_error_of, error_message_of; rewrite Hstk; reflexivity.
+    destruct stk1 as [| newval rest].
+    + (* Error case: stack = [Val_int idx] => "stack underflow" *)
+      unfold P_error_of, error_message_of. rewrite Hstk. reflexivity.
+    + destruct (Machine.accu s) as [z_val|blk_tag blk_flds|addr|clo_addr clo_ofs] eqn:Haccu_eq.
+      * (* Error case: accu = Val_int => "not a heap block" *)
+        unfold P_error_of, error_message_of. rewrite Hstk, Haccu_eq. reflexivity.
+      * (* Error case: accu = Val_block => "not a heap block" *)
+        unfold P_error_of, error_message_of. rewrite Hstk, Haccu_eq. reflexivity.
+      * (* accu = Val_ptr addr *)
+        destruct (heap_lookup (Machine.hp s) addr) as [[tag fields]|] eqn:Hlookup.
+        -- (* heap_lookup = Some (tag, fields) *)
+           destruct (set_nth fields (Z.to_nat idx) newval) as [new_fields|] eqn:Hset.
+           ++ (* Step case: set_nth = Some => delegate to verify_SETVECTITEM_correct *)
+              specialize (verify_SETVECTITEM_correct e le m s) as Hold.
+              unfold handler_correct, handle_SETVECTITEM in Hold.
+              rewrite Hstk, Haccu_eq, Hlookup, Hset in Hold.
+              exact Hold.
+           ++ (* Error case: set_nth = None => "index out of bounds" *)
+              unfold P_error_of, error_message_of. rewrite Hstk, Haccu_eq, Hlookup, Hset. reflexivity.
+        -- (* Error case: heap_lookup = None => "dangling pointer" *)
+           unfold P_error_of, error_message_of. rewrite Hstk, Haccu_eq, Hlookup. reflexivity.
+      * (* Error case: accu = Val_closure => "not a heap block" *)
+        unfold P_error_of, error_message_of. rewrite Hstk, Haccu_eq. reflexivity.
+Qed.

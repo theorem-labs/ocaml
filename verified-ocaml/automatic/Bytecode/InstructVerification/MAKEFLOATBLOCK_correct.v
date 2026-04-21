@@ -1627,3 +1627,31 @@ Proof.
       - apply Hsb_writable_m1. exact Hofs0. }
   }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (MAKEFLOATBLOCK n) / clight_of (MAKEFLOATBLOCK n) /
+   pre_of (MAKEFLOATBLOCK n) are convertible with handle_MAKEFLOATBLOCK n /
+   f_instr_MAKEFLOATBLOCK / makefloatblock_step_pre n.
+   P_error_of, P_halt_of, and P_ccall_of are vacuously satisfied
+   (MAKEFLOATBLOCK never errors, halts, or issues a C call). *)
+Definition correct_MAKEFLOATBLOCK : forall n,
+    handler_correct (handle_instr (MAKEFLOATBLOCK n)) (clight_of (MAKEFLOATBLOCK n))
+      (pre_of (MAKEFLOATBLOCK n))
+      (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)).
+Proof.
+  intro n.
+  intros e le m s.
+  change (handle_instr (MAKEFLOATBLOCK n) (Machine.pc s) s)
+    with (handle_MAKEFLOATBLOCK n (Machine.pc s) s).
+  unfold handle_MAKEFLOATBLOCK at 1. simpl.
+  (* Now in the Step branch — handle_MAKEFLOATBLOCK always returns Step. *)
+  intros ard Hrel Hpre.
+  (* Extract (n >= 1)%nat from pre_of, which contains (0 < Z.of_nat n). *)
+  assert (Hn : (n >= 1)%nat).
+  { unfold pre_of, makefloatblock_step_pre in Hpre.
+    destruct Hpre as (_ & _ & Hrange & _). lia. }
+  specialize (verify_MAKEFLOATBLOCK_correct n Hn) as Hvc.
+  unfold handler_correct in Hvc. specialize (Hvc e le m s).
+  unfold handle_MAKEFLOATBLOCK in Hvc. simpl in Hvc.
+  apply Hvc; [exact Hrel | exact Hpre].
+Qed.

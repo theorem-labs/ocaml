@@ -742,3 +742,78 @@ Proof.
              discriminate Hleb_eq.
   }
 Qed.
+
+(* Bridge lemma: when handle_GRAB returns Error msg, error_message_of
+   (GRAB required) s = Some msg.  Both functions share the same case
+   structure on Nat.leb and the rest_stack pattern, so this is direct. *)
+Local Lemma handle_GRAB_error_implies_error_message : forall required pc' s msg,
+  handle_GRAB required pc' s = Error msg ->
+  error_message_of (Bytecode.AST.GRAB required) s = Some msg.
+Proof.
+  intros required pc' s msg Herr.
+  unfold handle_GRAB in Herr.
+  unfold error_message_of.
+  destruct (Nat.leb required (extra_args s)) eqn:Hleb.
+  - (* Nat.leb = true => handle_GRAB returns Step, contradiction *)
+    discriminate.
+  - (* Nat.leb = false => both inspect skipn (S (extra_args s)) (stack s) *)
+    set (rest := skipn (S (extra_args s)) (Machine.stack s)) in *.
+    destruct rest as [| v0 rest0].
+    + (* rest = [] *)
+      inversion Herr. reflexivity.
+    + destruct rest0 as [| v1 rest1].
+      * (* rest = [v0] *)
+        destruct v0; inversion Herr; reflexivity.
+      * destruct rest1 as [| v2 rest2].
+        -- (* rest = [v0; v1] *)
+           destruct v0; inversion Herr; reflexivity.
+        -- (* rest = v0 :: v1 :: v2 :: rest2 *)
+           destruct v0 as [z0 | | |];
+             try (inversion Herr; reflexivity).
+           destruct v2 as [z2 | | |];
+             try (inversion Herr; reflexivity).
+           (* v0 = Val_int z0, v2 = Val_int z2 => handle_GRAB returns Step *)
+           discriminate.
+Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (GRAB n) = handle_GRAB n by computation in Dispatch.
+   clight_of (GRAB n) = f_instr_GRAB, pre_of (GRAB n) = grab_step_pre n.
+   The Step case delegates to verify_GRAB_correct.
+   Error cases are bridged via handle_GRAB_error_implies_error_message. *)
+Local Notation GRAB := Bytecode.AST.GRAB.
+
+Definition correct_GRAB : forall n,
+  handler_correct (handle_instr (GRAB n)) (clight_of (GRAB n))
+    (pre_of (GRAB n))
+    (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)).
+Proof.
+  intro n.
+  change (handler_correct (handle_GRAB n) f_instr_GRAB
+    (grab_step_pre n)
+    (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n))).
+  intros e le m s.
+  pose proof (verify_GRAB_correct n) as H.
+  unfold handler_correct in H. specialize (H e le m s).
+  destruct (handle_GRAB n (Machine.pc s) s) eqn:Hres.
+  - (* Step: delegate to existing proof *)
+    intros ard Habs Hpre.
+    apply H; assumption.
+  - (* Error: bridge P_error_of *)
+    unfold P_error_of. simpl.
+    exact (handle_GRAB_error_implies_error_message n (Machine.pc s) s s0 Hres).
+  - (* Halt: impossible — handle_GRAB never returns Halt *)
+    exfalso.
+    unfold handle_GRAB in Hres.
+    destruct (Nat.leb n (extra_args s)); discriminate.
+  - (* CCall: impossible — handle_GRAB never returns CCall_request *)
+    exfalso.
+    unfold handle_GRAB in Hres.
+    destruct (Nat.leb n (extra_args s)); try discriminate.
+    destruct (skipn (S (extra_args s)) (Machine.stack s)) as [| v0 rest0];
+      try discriminate.
+    destruct rest0 as [| v1 rest1]; try discriminate.
+    destruct rest1 as [| v2 rest2]; try discriminate.
+    destruct v0; try discriminate.
+    destruct v2; try discriminate.
+Qed.

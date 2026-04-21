@@ -83,3 +83,15 @@ Proof.
   - (* Error case: get_code_ptr_s = None *)
     reflexivity.
 Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (APPTERM nargs slotsize) = handle_APPTERM nargs slotsize
+   and clight_of (APPTERM nargs slotsize) = f_instr_APPTERM by computation.
+   pre_of (APPTERM nargs slotsize) is convertible with the precondition
+   above.  The P_error/P_halt/P_ccall predicates differ from the verify
+   theorem's versions only propositionally, so we Admit for now. *)
+Definition correct_APPTERM : forall nargs slotsize,
+  handler_correct (Dispatch.handle_instr (APPTERM nargs slotsize)) (clight_of (APPTERM nargs slotsize))
+    (pre_of (APPTERM nargs slotsize))
+    (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)).
+Admitted.

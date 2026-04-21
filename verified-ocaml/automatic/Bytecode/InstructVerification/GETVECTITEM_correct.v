@@ -582,3 +582,38 @@ Proof.
     }
   }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr GETVECTITEM / clight_of GETVECTITEM / pre_of GETVECTITEM are
+   convertible with handle_GETVECTITEM / f_instr_GETVECTITEM / getvectitem_step_pre.
+   P_halt_of and P_ccall_of are vacuously satisfied (GETVECTITEM never halts
+   or issues a C call).  P_error_of requires a small computation bridge. *)
+Definition correct_GETVECTITEM :
+    handler_correct (handle_instr Bytecode.AST.GETVECTITEM) (clight_of Bytecode.AST.GETVECTITEM)
+      (pre_of Bytecode.AST.GETVECTITEM)
+      (P_error_of Bytecode.AST.GETVECTITEM) (P_halt_of Bytecode.AST.GETVECTITEM) (P_ccall_of Bytecode.AST.GETVECTITEM).
+Proof.
+  intros e le m s.
+  change (handle_instr Bytecode.AST.GETVECTITEM (Machine.pc s) s)
+    with (handle_GETVECTITEM (Machine.pc s) s).
+  unfold handle_GETVECTITEM at 1.
+  destruct (Machine.stack s) as [| v_hd stk_tl] eqn:Hstk.
+  - (* stack = nil => Error *)
+    unfold P_error_of, error_message_of. rewrite Hstk. reflexivity.
+  - destruct v_hd as [idx | | |].
+    + (* Val_int idx *)
+      destruct (field_or_heap s (Machine.accu s) (Z.to_nat idx)) eqn:Hfoh.
+      * (* Some v: Step case -- delegate to verify_GETVECTITEM_correct *)
+        specialize (verify_GETVECTITEM_correct e le m s) as Hold.
+        unfold handler_correct, handle_GETVECTITEM in Hold.
+        rewrite Hstk in Hold. rewrite Hfoh in Hold.
+        exact Hold.
+      * (* None: Error case *)
+        unfold P_error_of, error_message_of. rewrite Hstk. rewrite Hfoh. reflexivity.
+    + (* Val_block *)
+      unfold P_error_of, error_message_of. rewrite Hstk. reflexivity.
+    + (* Val_ptr *)
+      unfold P_error_of, error_message_of. rewrite Hstk. reflexivity.
+    + (* Val_closure *)
+      unfold P_error_of, error_message_of. rewrite Hstk. reflexivity.
+Qed.

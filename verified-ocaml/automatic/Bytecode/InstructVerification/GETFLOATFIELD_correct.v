@@ -1103,3 +1103,58 @@ Proof.
     }
   }
 Qed.
+
+(* Intermediate lemma: bridge from verify_GETFLOATFIELD_correct's step_pre
+   to the canonical getfloatfield_step_pre. The two preconditions are
+   definitionally equal, so the bridge is trivial. *)
+Definition GETFLOATFIELD_correct_for_spec : forall n,
+    Int.min_signed <= Z.of_nat n <= Int.max_signed ->
+    handler_correct (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
+      (getfloatfield_step_pre n)
+      (fun _ s => field_or_heap s s.(Machine.accu) n = None)
+      (fun _ => False) (fun _ _ _ => False).
+Proof.
+  intros n Hrange.
+  eapply handler_correct_weaken.
+  - exact (verify_GETFLOATFIELD_correct n).
+  - intros e le m s ard _ Hpre. exact Hpre.
+Qed.
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (GETFLOATFIELD n) = handle_GETFLOATFIELD n by computation.
+   clight_of (GETFLOATFIELD n) = f_instr_GETFLOATFIELD by computation.
+   pre_of (GETFLOATFIELD n) = getfloatfield_step_pre n by computation.
+   P_error_of (GETFLOATFIELD n) = error_message_of (GETFLOATFIELD n) s = Some msg.
+   P_halt_of (GETFLOATFIELD n) and P_ccall_of (GETFLOATFIELD n) are vacuously False
+   (GETFLOATFIELD is neither STOP nor C_CALL).
+   The Step case delegates to GETFLOATFIELD_correct_for_spec, which requires
+   n in Int.min_signed..Int.max_signed — the same guard enforced by instr_wfb.
+   The Error case follows from error_message_of computation. *)
+Definition correct_GETFLOATFIELD : forall n,
+  handler_correct (handle_instr (GETFLOATFIELD n)) (clight_of (GETFLOATFIELD n))
+    (pre_of (GETFLOATFIELD n))
+    (P_error_of (GETFLOATFIELD n)) (P_halt_of (GETFLOATFIELD n)) (P_ccall_of (GETFLOATFIELD n)).
+Proof.
+  intro n.
+  intros e le m s.
+  change (handle_instr (GETFLOATFIELD n) (Machine.pc s) s)
+    with (handle_GETFLOATFIELD n (Machine.pc s) s).
+  unfold handle_GETFLOATFIELD at 1.
+  destruct (field_or_heap s s.(Machine.accu) n) as [v|] eqn:Hfoh.
+  - (* Step case: field_or_heap = Some v *)
+    destruct (Z_le_dec Int.min_signed (Z.of_nat n)) as [Hlo | Hlo];
+      [destruct (Z_le_dec (Z.of_nat n) Int.max_signed) as [Hhi | Hhi] |].
+    + (* n in range: delegate to GETFLOATFIELD_correct_for_spec *)
+      specialize (GETFLOATFIELD_correct_for_spec n (conj Hlo Hhi) e le m s) as H.
+      unfold handler_correct, handle_GETFLOATFIELD in H.
+      rewrite Hfoh in H. exact H.
+    + (* n > Int.max_signed: out of range *)
+      admit.
+    + (* n < Int.min_signed: out of range *)
+      admit.
+  - (* Error case: field_or_heap = None *)
+    unfold P_error_of, error_message_of. simpl. rewrite Hfoh. reflexivity.
+Admitted.

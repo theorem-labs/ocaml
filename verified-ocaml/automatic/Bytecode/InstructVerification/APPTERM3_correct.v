@@ -1322,3 +1322,17 @@ Proof.
     { exact Hsb_writable_m7'. }
   }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (APPTERM3 n) / clight_of (APPTERM3 n) / pre_of (APPTERM3 n)
+   are convertible with handle_APPTERM3 n / f_instr_APPTERM3 /
+   appterm3_step_pre n.  P_halt_of and P_ccall_of are vacuously False
+   (APPTERM3 never halts or issues a C call).  P_error_of is the standard
+   error_message_of predicate.  The bridge from verify_APPTERM3_correct to
+   correct_APPTERM3 requires matching the local precondition against
+   appterm3_step_pre from InstructSpec.v; Admitted for now. *)
+Definition correct_APPTERM3 : forall n,
+    handler_correct (handle_instr (Bytecode.AST.APPTERM3 n)) (clight_of (Bytecode.AST.APPTERM3 n))
+      (pre_of (Bytecode.AST.APPTERM3 n))
+      (P_error_of (Bytecode.AST.APPTERM3 n)) (P_halt_of (Bytecode.AST.APPTERM3 n)) (P_ccall_of (Bytecode.AST.APPTERM3 n)).
+Admitted.

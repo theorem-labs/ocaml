@@ -2226,3 +2226,45 @@ Definition CLOSUREREC_correct_for_spec : forall code_ofs,
           exists (k - 1). simpl align_chunk in *. lia.
         - lia. }
   Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (CLOSUREREC nf nv co) = handle_CLOSUREREC nf nv co by computation.
+   clight_of (CLOSUREREC nf nv co) = f_instr_CLOSUREREC by computation.
+   pre_of (CLOSUREREC 1 0 [code_ofs]) = heap_alloc_with_stores ... by computation.
+   P_error_of (CLOSUREREC nf nv co) is error_message_of applied.
+   P_halt_of and P_ccall_of are vacuously False (not STOP/C_CALL).
+   For the Error case (code_offsets = []), P_error_of holds by reflexivity.
+   For the Step case (nfuncs=1, nvars=0, code_offsets=[code_ofs]),
+   delegates to CLOSUREREC_correct_for_spec (range-dependent; out-of-range admitted).
+   Other constructor combinations are admitted. *)
+Definition correct_CLOSUREREC : forall nfuncs nvars code_offsets,
+  handler_correct (handle_instr (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
+    (clight_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
+    (pre_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
+    (P_error_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
+    (P_halt_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
+    (P_ccall_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets)).
+Proof.
+  intros nfuncs nvars code_offsets.
+  intros e le m s.
+  change (handle_instr (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets) (Machine.pc s) s)
+    with (handle_CLOSUREREC nfuncs nvars code_offsets (Machine.pc s) s).
+  unfold handle_CLOSUREREC at 1.
+  destruct code_offsets as [| code_ofs rest].
+  - (* code_offsets = []: Error "CLOSUREREC: no code offsets" *)
+    unfold P_error_of. simpl. reflexivity.
+  - (* code_offsets = code_ofs :: rest: Step *)
+    destruct nfuncs as [| [| nf']]; destruct nvars as [| nv'];
+      destruct rest as [| ofs2 rest2]; try admit.
+    (* nfuncs = 1, nvars = 0, code_offsets = [code_ofs] *)
+    destruct (Z_le_dec Int.min_signed code_ofs) as [Hlo | Hlo];
+      [destruct (Z_le_dec code_ofs Int.max_signed) as [Hhi | Hhi] |].
+    + (* code_ofs in signed range: delegate to CLOSUREREC_correct_for_spec *)
+      specialize (CLOSUREREC_correct_for_spec code_ofs (conj Hlo Hhi)) as H.
+      unfold handler_correct, handle_CLOSUREREC in H.
+      exact (H e le m s).
+    + (* code_ofs > Int.max_signed: out of range; admitted *)
+      admit.
+    + (* code_ofs < Int.min_signed: out of range; admitted *)
+      admit.
+Admitted.

@@ -570,3 +570,57 @@ Proof.
       * (* v1 = Val_block -- Error *)
         reflexivity.
 Qed.
+
+(* Bridge lemma: when handle_POPTRAP returns Error, error_message_of
+   computes the same message.  Both share the same case analysis on the
+   stack, so this is a direct computation. *)
+Local Lemma handle_POPTRAP_error_implies_error_message :
+  forall pc' s msg,
+    handle_POPTRAP pc' s = Error msg ->
+    error_message_of POPTRAP s = Some msg.
+Proof.
+  intros pc' s msg H.
+  unfold handle_POPTRAP in H.
+  unfold error_message_of.
+  destruct (Machine.stack s) as [| v0 stk1].
+  - inversion H. reflexivity.
+  - destruct stk1 as [| v1 stk2].
+    + inversion H. reflexivity.
+    + destruct v1 as [z1 | | |].
+      * destruct stk2 as [| v2 stk3].
+        -- inversion H. reflexivity.
+        -- destruct stk3 as [| v3 rest].
+           ++ inversion H. reflexivity.
+           ++ discriminate.
+      * inversion H. reflexivity.
+      * inversion H. reflexivity.
+      * inversion H. reflexivity.
+Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr POPTRAP / clight_of POPTRAP / pre_of POPTRAP are
+   convertible with handle_POPTRAP / f_instr_POPTRAP / poptrap_step_pre.
+   P_halt_of and P_ccall_of are vacuously satisfied (POPTRAP never halts
+   or issues a C call).  The Error case is bridged via
+   handle_POPTRAP_error_implies_error_message. *)
+Definition correct_POPTRAP :
+    handler_correct (handle_instr POPTRAP) (clight_of POPTRAP)
+      (pre_of POPTRAP)
+      (P_error_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP).
+Proof.
+  intros e le m s.
+  change (handle_instr POPTRAP (Machine.pc s) s)
+    with (handle_POPTRAP (Machine.pc s) s).
+  pose proof (verify_POPTRAP_correct e le m s) as H.
+  unfold handler_correct in H. simpl in H.
+  destruct (handle_POPTRAP (Machine.pc s) s) eqn:Hdo.
+  - (* Step: delegate to existing proof *)
+    exact H.
+  - (* Error: bridge P_error_of *)
+    unfold P_error_of. simpl.
+    exact (handle_POPTRAP_error_implies_error_message (Machine.pc s) s s0 Hdo).
+  - (* Halt: impossible — handle_POPTRAP never returns Halt *)
+    destruct H as [_ []].
+  - (* CCall: impossible — handle_POPTRAP never returns CCall_request *)
+    destruct H as [_ []].
+Qed.

@@ -1491,7 +1491,9 @@ Proof.
             (Sreturn (Some (Econst_int (Int.repr 0) tint)))).
 
         replace E0 with (E0 ** E0) by reflexivity.
-        eapply exec_Sseq_1; eauto.
+        eapply exec_Sseq_1.
+        - exact Hexec_body_pre_return.
+        - exact Hexec_return.
       }
 
       (* ============================================================== *)
@@ -1788,3 +1790,17 @@ Definition MAKEBLOCK3_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
       split; [exact Hp|].
       exact (Hsu m' ma nb no He Hf Hl Hp).
   Qed.
+
+(* Canonical wrapper: bridge from the per-instruction spec
+   (handle_instr (MAKEBLOCK3 n), clight_of, pre_of, P_error_of,
+   P_halt_of, P_ccall_of) to the existing proof.
+
+   Admitted because the underlying verify_MAKEBLOCK3_correct proof
+   needs updating after handler body regeneration (cpp shim migration),
+   and because the canonical pre_of does not include the 0 <= tag <= 255
+   range guard that the C handler requires. *)
+Definition correct_MAKEBLOCK3 : forall n,
+    handler_correct (handle_instr (Bytecode.AST.MAKEBLOCK3 n)) (clight_of (Bytecode.AST.MAKEBLOCK3 n))
+      (pre_of (Bytecode.AST.MAKEBLOCK3 n))
+      (P_error_of (Bytecode.AST.MAKEBLOCK3 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK3 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK3 n)).
+Admitted.

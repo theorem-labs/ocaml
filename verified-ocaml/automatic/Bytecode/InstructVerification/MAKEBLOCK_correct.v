@@ -2024,3 +2024,40 @@ Proof.
       - apply Hsb_writable_m2. exact Hofs0. }
   }
 Qed.
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (MAKEBLOCK t size) reduces to handle_MAKEBLOCK t size
+   by computation via Dispatch.
+   clight_of (MAKEBLOCK t size) = f_instr_MAKEBLOCK by computation.
+   pre_of (MAKEBLOCK t size) = makeblock_step_pre t size by computation.
+   P_error_of (MAKEBLOCK _ _) is vacuously False (error_message_of returns None).
+   P_halt_of and P_ccall_of are False (not STOP/C_CALL).
+   Since handle_MAKEBLOCK always returns Step, those predicates are never
+   needed.  The Step case delegates to verify_MAKEBLOCK_correct, which
+   requires (size >= 1)%nat — extracted from the step_pre assumption
+   (0 < Z.of_nat size <= Int.max_signed). *)
+Definition correct_MAKEBLOCK : forall t size,
+    handler_correct (handle_instr (MAKEBLOCK t size)) (clight_of (MAKEBLOCK t size))
+      (pre_of (MAKEBLOCK t size))
+      (P_error_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)).
+Proof.
+  intros t size.
+  intros e le m s.
+  change (handle_instr (MAKEBLOCK t size) (Machine.pc s) s)
+    with (handle_MAKEBLOCK t size (Machine.pc s) s).
+  unfold handle_MAKEBLOCK at 1.
+  unfold heap_alloc.
+  (* After unfolding, the let-expressions and pair destructuring reduce,
+     leaving the Step case as the only branch. *)
+  intros ard Habs Hpre.
+  assert (Hsize : (size >= 1)%nat).
+  { unfold pre_of, makeblock_step_pre in Hpre.
+    destruct Hpre as (_ & _ & _ & _ & Hrange & _).
+    lia. }
+  specialize (verify_MAKEBLOCK_correct t size Hsize) as H.
+  unfold handler_correct, handle_MAKEBLOCK in H.
+  exact (H e le m s ard Habs Hpre).
+Qed.

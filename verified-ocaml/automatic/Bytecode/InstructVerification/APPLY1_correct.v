@@ -1219,3 +1219,36 @@ Proof.
     { exact Hsb_writable_m8. }
   }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr APPLY1 = handle_APPLY1 and clight_of APPLY1 = f_instr_APPLY1
+   by computation.  pre_of APPLY1 = apply1_step_pre is convertible.
+   Error cases are bridged by case-splitting on the handler result and
+   unfolding P_error_of / P_halt_of / P_ccall_of. *)
+Definition correct_APPLY1 :
+    handler_correct (Dispatch.handle_instr Bytecode.AST.APPLY1)
+      (clight_of Bytecode.AST.APPLY1)
+      (pre_of Bytecode.AST.APPLY1)
+      (P_error_of Bytecode.AST.APPLY1) (P_halt_of Bytecode.AST.APPLY1)
+      (P_ccall_of Bytecode.AST.APPLY1).
+Proof.
+  intros e le m s.
+  pose proof (verify_APPLY1_correct e le m s) as H.
+  unfold handler_correct in H. simpl in H.
+  unfold handle_APPLY1 in H.
+  change (Dispatch.handle_instr Bytecode.AST.APPLY1)
+    with (fun pc' s0 => handle_APPLY1 pc' s0).
+  unfold handler_correct. simpl.
+  unfold handle_APPLY1 at 1.
+  destruct (Machine.stack s) as [|arg1 rest] eqn:Hstk.
+  - (* stack = [] -- Error "stack underflow" *)
+    unfold P_error_of. simpl. rewrite Hstk. reflexivity.
+  - (* stack = arg1 :: rest *)
+    destruct (get_code_ptr_s s s.(Machine.accu)) as [target_pc|] eqn:Hgcp.
+    + (* Step case: delegate to the old proof *)
+      unfold handle_APPLY1 in H.
+      rewrite Hstk in H. rewrite Hgcp in H.
+      exact H.
+    + (* Error: accu is not a closure *)
+      unfold P_error_of. simpl. rewrite Hstk. rewrite Hgcp. reflexivity.
+Qed.

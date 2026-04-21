@@ -639,3 +639,54 @@ Proof.
         (* 9. sb_writable *) { exact Hw6. }
       }
 Qed.
+
+(* Bridge lemma: when do_raise returns Error, error_message_of_raise
+   returns the same message.  Both functions share the same case
+   structure, so this is a direct computation. *)
+Local Lemma do_raise_error_implies_error_message : forall exn s msg,
+  do_raise exn s = Error msg ->
+  error_message_of_raise s = Some msg.
+Proof.
+  intros exn s msg H.
+  unfold do_raise in H. unfold error_message_of_raise.
+  destruct (Nat.eqb (trap_sp s) 0) eqn:Htsp.
+  - inversion H. reflexivity.
+  - set (k := Nat.sub (length (Machine.stack s)) (trap_sp s)) in *.
+    set (ft := skipn k (Machine.stack s)) in *.
+    destruct ft as [| v0 ft1].
+    + inversion H. reflexivity.
+    + destruct v0; try (inversion H; reflexivity).
+      destruct ft1 as [| v1 ft2]; try (inversion H; reflexivity).
+      destruct v1; try (inversion H; reflexivity).
+      destruct ft2 as [| v2 ft3]; try (inversion H; reflexivity).
+      destruct ft3 as [| v3 ft4]; try (inversion H; reflexivity).
+      destruct v3; try (inversion H; reflexivity).
+      discriminate.
+Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr RAISE_NOTRACE / clight_of RAISE_NOTRACE / pre_of RAISE_NOTRACE are
+   convertible with (fun _ s => do_raise s.(accu) s) / f_instr_RAISE_NOTRACE /
+   raise_step_pre.  The Step case is delegated to verify_RAISE_NOTRACE_correct.
+   Error cases are bridged via do_raise_error_implies_error_message. *)
+Definition correct_RAISE_NOTRACE :
+    handler_correct (handle_instr RAISE_NOTRACE) (clight_of RAISE_NOTRACE)
+      (pre_of RAISE_NOTRACE)
+      (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE).
+Proof.
+  intros e le m s.
+  change (handle_instr RAISE_NOTRACE (Machine.pc s) s)
+    with (do_raise s.(accu) s).
+  pose proof (verify_RAISE_NOTRACE_correct e le m s) as H.
+  unfold handler_correct in H. simpl in H.
+  destruct (do_raise (accu s) s) eqn:Hdo.
+  - (* Step: delegate to existing proof *)
+    exact H.
+  - (* Error: bridge P_error_of *)
+    unfold P_error_of. simpl.
+    exact (do_raise_error_implies_error_message (accu s) s s0 Hdo).
+  - (* Halt: impossible — do_raise never returns Halt *)
+    contradiction.
+  - (* CCall: impossible — do_raise never returns CCall_request *)
+    contradiction.
+Qed.
