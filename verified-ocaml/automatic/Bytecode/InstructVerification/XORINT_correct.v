@@ -182,3 +182,28 @@ Proof.
     (* 9. sb_writable -- permission preserved *)
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v *)
+Theorem correct_XORINT :
+  handler_correct (handle_instr Bytecode.AST.XORINT) (clight_of Bytecode.AST.XORINT)
+    (pre_of Bytecode.AST.XORINT)
+    (P_error_of Bytecode.AST.XORINT) (P_halt_of Bytecode.AST.XORINT) (P_ccall_of Bytecode.AST.XORINT).
+Proof.
+  change (handle_instr Bytecode.AST.XORINT) with handle_XORINT.
+  change (clight_of Bytecode.AST.XORINT) with f_instr_XORINT.
+  change (pre_of Bytecode.AST.XORINT) with (pre_and accu_is_long stack_head_is_long).
+  intros e le m s.
+  unfold P_error_of, P_halt_of, P_ccall_of, error_message_of, instr_wfb.
+  pose proof (verify_XORINT_correct e le m s) as H.
+  unfold handle_XORINT in H |- *.
+  destruct (Machine.accu s) as [a| | |].
+  - destruct (Machine.stack s) as [|[b| | |] tl].
+    + reflexivity.
+    + exact H.
+    + reflexivity.
+    + reflexivity.
+    + reflexivity.
+  - reflexivity.
+  - reflexivity.
+  - reflexivity.
+Qed.

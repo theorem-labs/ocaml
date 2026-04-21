@@ -38,6 +38,7 @@ Theorem verify_PUSH_correct :
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
+
 Proof.
   intros e le m s. unfold handler_correct, handle_PUSH. intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
@@ -313,4 +314,17 @@ Proof.
       eapply Mem.perm_store_1. exact Hstore_sp.
       apply Hsb_writable. exact Hofs'. }
   }
+Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr PUSH = handle_PUSH and clight_of PUSH = f_instr_PUSH
+   by computation.  pre_of PUSH = sp_at_least 16 which is convertible
+   with the lambda above.  Since handle_PUSH always returns Step, the
+   P_error/P_halt/P_ccall predicates are dead code in the match. *)
+Definition correct_PUSH :
+  handler_correct (Dispatch.handle_instr PUSH) (clight_of PUSH)
+    (pre_of PUSH)
+    (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
+Proof.
+  exact verify_PUSH_correct.
 Qed.

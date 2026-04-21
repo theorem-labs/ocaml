@@ -41,7 +41,7 @@ Proof.
     rewrite Z.land_spec. reflexivity.
 Qed.
 
-Theorem verify_ANDINT_correct :
+Local Theorem verify_ANDINT_correct :
     handler_correct handle_ANDINT f_instr_ANDINT
       (pre_and accu_is_long stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
@@ -170,4 +170,25 @@ Proof.
 
     (* 9. sb_writable -- permission preserved *)
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
+Qed.
+
+Import Bytecode.AST.
+
+(* Wrapper: lift verify_ANDINT_correct to the dispatch-level type
+   expected by InstructVerificationFineGrainedSpec. *)
+Theorem correct_ANDINT :
+    handler_correct (handle_instr ANDINT) (clight_of ANDINT)
+      (pre_of ANDINT)
+      (P_error_of ANDINT) (P_halt_of ANDINT) (P_ccall_of ANDINT).
+Proof.
+  intros e le m s.
+  pose proof (verify_ANDINT_correct e le m s) as H.
+  change (handle_instr ANDINT) with handle_ANDINT.
+  unfold handle_ANDINT, P_error_of, error_message_of in H |- *.
+  destruct (Machine.accu s) as [a| | |];
+    destruct (Machine.stack s) as [|v_hd v_tl];
+    try reflexivity;
+    try (destruct v_hd as [b| | |]; try reflexivity).
+  (* Only remaining case: Val_int a, Val_int b :: v_tl — the Step branch *)
+  exact H.
 Qed.

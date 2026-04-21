@@ -420,3 +420,26 @@ Proof.
     destruct Hra as [_ [Hivla Hivlb]].
     rewrite Ha, Hs. exact (conj Hb (conj Hivla Hivlb)).
 Qed.
+
+(* Wrapper with the exact type needed by InstructVerificationProof.v *)
+Import Bytecode.AST.
+
+Theorem correct_LSRINT :
+    handler_correct (handle_instr LSRINT) (clight_of LSRINT)
+      (pre_of LSRINT)
+      (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT).
+Proof.
+  unfold handler_correct.
+  change (handle_instr LSRINT) with handle_LSRINT.
+  change (clight_of LSRINT) with f_instr_LSRINT.
+  change (pre_of LSRINT) with shift_in_range.
+  intros e le m s.
+  unfold P_error_of, error_message_of, P_halt_of, P_ccall_of.
+  unfold handle_LSRINT.
+  pose proof (verify_LSRINT_handler_correct e le m s) as H.
+  unfold handler_correct, handle_LSRINT in H.
+  destruct (Machine.accu s) as [a| | |];
+    destruct (Machine.stack s) as [|[b| | |] rest];
+    try exact H;
+    reflexivity.
+Qed.

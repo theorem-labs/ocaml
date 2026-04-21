@@ -21,6 +21,8 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import NEGINT_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ANDINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ADDINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MULINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ASRINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import XORINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -401,8 +403,8 @@ Definition correct_SUBINT :
 Definition correct_MULINT :
   handler_correct (handle_instr MULINT) (clight_of MULINT)
     (pre_of MULINT)
-    (P_error_of MULINT) (P_halt_of MULINT) (P_ccall_of MULINT).
-Admitted.
+    (P_error_of MULINT) (P_halt_of MULINT) (P_ccall_of MULINT)
+  := MULINT_correct.correct_MULINT.
 
 Definition correct_DIVINT :
   handler_correct (handle_instr DIVINT) (clight_of DIVINT)
@@ -431,8 +433,8 @@ Admitted.
 Definition correct_XORINT :
   handler_correct (handle_instr XORINT) (clight_of XORINT)
     (pre_of XORINT)
-    (P_error_of XORINT) (P_halt_of XORINT) (P_ccall_of XORINT).
-Admitted.
+    (P_error_of XORINT) (P_halt_of XORINT) (P_ccall_of XORINT)
+  := XORINT_correct.correct_XORINT.
 
 Definition correct_LSLINT :
   handler_correct (handle_instr LSLINT) (clight_of LSLINT)

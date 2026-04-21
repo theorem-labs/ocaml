@@ -179,3 +179,34 @@ Proof.
     (* 9. sb_writable -- permission preserved *)
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v *)
+Theorem correct_SUBINT :
+  handler_correct (handle_instr Bytecode.AST.SUBINT) (clight_of Bytecode.AST.SUBINT)
+    (pre_of Bytecode.AST.SUBINT)
+    (P_error_of Bytecode.AST.SUBINT) (P_halt_of Bytecode.AST.SUBINT) (P_ccall_of Bytecode.AST.SUBINT).
+Proof.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr Bytecode.AST.SUBINT) with handle_SUBINT.
+  change (clight_of Bytecode.AST.SUBINT) with f_instr_SUBINT.
+  pose proof (verify_SUBINT_correct e le m s) as H.
+  unfold handler_correct in H.
+  destruct (handle_SUBINT (Machine.pc s) s) eqn:Hres.
+  - (* Step *)
+    intros ard Hrel Hpre.
+    change (pre_of Bytecode.AST.SUBINT) with (pre_and accu_is_long stack_head_is_long) in Hpre.
+    exact (H ard Hrel Hpre).
+  - (* Halt — impossible: handle_SUBINT never returns Halt *)
+    unfold handle_SUBINT in Hres.
+    destruct (Machine.accu s), (Machine.stack s) as [|[] ?]; discriminate.
+  - (* Error — derive error_message_of from handle_SUBINT = Error *)
+    unfold P_error_of, error_message_of.
+    unfold handle_SUBINT in Hres.
+    destruct (Machine.accu s) as [a| | |]; destruct (Machine.stack s) as [|[b| | |] ?];
+      try (injection Hres as <-; reflexivity).
+    discriminate.
+  - (* CCall_request — impossible: handle_SUBINT never returns CCall_request *)
+    unfold handle_SUBINT in Hres.
+    destruct (Machine.accu s), (Machine.stack s) as [|[] ?]; discriminate.
+Qed.
