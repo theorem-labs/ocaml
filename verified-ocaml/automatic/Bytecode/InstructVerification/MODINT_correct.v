@@ -755,3 +755,39 @@ Proof.
     destruct Hdm as (a & b & rest & Ha & Hs & Hbne & Hra & Hrb & Hva & Hvb).
     rewrite Ha, Hs. exact (conj Hbne (conj Hra (conj Hrb (conj Hva Hvb)))).
 Qed.
+
+(* ================================================================== *)
+(* Wrapper with canonical InstructSpec predicates                       *)
+(* ================================================================== *)
+
+Import Bytecode.AST.
+
+Theorem correct_MODINT :
+    handler_correct (handle_instr MODINT) (clight_of MODINT)
+      (pre_of MODINT)
+      (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT).
+Proof.
+  intros e le m s.
+  pose proof (verify_MODINT_handler_correct e le m s) as Hold.
+  unfold handler_correct.
+  cbv [handle_instr Dispatch.handle_instr handle_MODINT
+       P_error_of error_message_of P_halt_of P_ccall_of instr_wfb
+       clight_of pre_of arith_safe].
+  unfold handler_correct in Hold.
+  cbv [handle_MODINT] in Hold.
+  destruct (Machine.accu s) as [a| | |];
+    [destruct (Machine.stack s) as [|[b| | |] tl] | | |];
+    try exact Hold;
+    try reflexivity.
+  (* Val_int a, Val_int b :: tl — need to case-split on Z.eqb b 0 *)
+  destruct (Z.eqb b 0) eqn:Hb0.
+  - (* b = 0: do_raise path *)
+    cbv [do_raise div_by_zero_exn error_message_of_raise] in *.
+    destruct (Nat.eqb (Machine.trap_sp s) 0).
+    + reflexivity.
+    + destruct (skipn _ _) as [|[?|?|?|?] [|[?|?|?|?] [? [|[?|?|?|?] ?]]]];
+        try reflexivity;
+        try exact Hold.
+  - (* b <> 0: Step case *)
+    exact Hold.
+Qed.

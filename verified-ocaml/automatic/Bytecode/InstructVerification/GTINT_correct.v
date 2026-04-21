@@ -255,3 +255,26 @@ Proof.
     destruct Hsio as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
     unfold gtint_range_pre. rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.
+
+(* ================================================================== *)
+(* Wrapper with canonical InstructSpec predicates                       *)
+(* ================================================================== *)
+
+Theorem correct_GTINT :
+    handler_correct (handle_instr Bytecode.AST.GTINT) (clight_of Bytecode.AST.GTINT)
+      (pre_of Bytecode.AST.GTINT)
+      (P_error_of Bytecode.AST.GTINT) (P_halt_of Bytecode.AST.GTINT) (P_ccall_of Bytecode.AST.GTINT).
+Proof.
+  intros e le m s.
+  pose proof (verify_GTINT_handler_correct e le m s) as H.
+  unfold handler_correct.
+  cbv [handle_instr Dispatch.handle_instr handle_GTINT
+       P_error_of error_message_of P_halt_of P_ccall_of instr_wfb
+       clight_of].
+  unfold handler_correct in H.
+  cbv [handle_GTINT] in H.
+  destruct (Machine.accu s) as [a| | |];
+    [destruct (Machine.stack s) as [|[b| | |] tl] | | |];
+    try exact H;
+    try reflexivity.
+Qed.

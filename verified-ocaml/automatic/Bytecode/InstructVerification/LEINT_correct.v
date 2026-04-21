@@ -232,3 +232,28 @@ Proof.
     destruct Hsio as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
     unfold le_int_range_pre. rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.
+
+(* ================================================================== *)
+(* Wrapper with canonical InstructSpec predicates                       *)
+(* ================================================================== *)
+
+Import Bytecode.AST.
+
+Theorem correct_LEINT :
+    handler_correct (handle_instr LEINT) (clight_of LEINT)
+      (pre_of LEINT)
+      (P_error_of LEINT) (P_halt_of LEINT) (P_ccall_of LEINT).
+Proof.
+  intros e le m s.
+  pose proof (verify_LEINT_handler_correct e le m s) as Hold.
+  unfold handler_correct.
+  cbv [handle_instr Dispatch.handle_instr handle_LEINT
+       P_error_of error_message_of P_halt_of P_ccall_of instr_wfb
+       clight_of].
+  unfold handler_correct in Hold.
+  cbv [handle_LEINT] in Hold.
+  destruct (Machine.accu s) as [a| | |];
+    [destruct (Machine.stack s) as [|[b| | |] tl] | | |];
+    try exact Hold;
+    try reflexivity.
+Qed.

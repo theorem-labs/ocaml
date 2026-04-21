@@ -33,6 +33,11 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ULTINT_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSH_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GEINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import UGEINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LEINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MODINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHCONSTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETREF_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -389,8 +394,8 @@ Admitted.
 Definition correct_PUSHCONSTINT : forall z,
   handler_correct (handle_instr (PUSHCONSTINT z)) (clight_of (PUSHCONSTINT z))
     (pre_of (PUSHCONSTINT z))
-    (P_error_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)).
-Admitted.
+    (P_error_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z))
+  := PUSHCONSTINT_correct.correct_PUSHCONSTINT.
 
 Definition correct_NEGINT :
   handler_correct (handle_instr NEGINT) (clight_of NEGINT)
@@ -425,8 +430,8 @@ Admitted.
 Definition correct_MODINT :
   handler_correct (handle_instr MODINT) (clight_of MODINT)
     (pre_of MODINT)
-    (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT).
-Admitted.
+    (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT)
+  := MODINT_correct.correct_MODINT.
 
 Definition correct_ANDINT :
   handler_correct (handle_instr ANDINT) (clight_of ANDINT)
@@ -485,14 +490,14 @@ Definition correct_LTINT :
 Definition correct_LEINT :
   handler_correct (handle_instr LEINT) (clight_of LEINT)
     (pre_of LEINT)
-    (P_error_of LEINT) (P_halt_of LEINT) (P_ccall_of LEINT).
-Admitted.
+    (P_error_of LEINT) (P_halt_of LEINT) (P_ccall_of LEINT)
+  := LEINT_correct.correct_LEINT.
 
 Definition correct_GTINT :
   handler_correct (handle_instr GTINT) (clight_of GTINT)
     (pre_of GTINT)
-    (P_error_of GTINT) (P_halt_of GTINT) (P_ccall_of GTINT).
-Admitted.
+    (P_error_of GTINT) (P_halt_of GTINT) (P_ccall_of GTINT)
+  := GTINT_correct.correct_GTINT.
 
 Definition correct_GEINT :
   handler_correct (handle_instr GEINT) (clight_of GEINT)
@@ -509,8 +514,8 @@ Admitted.
 Definition correct_OFFSETREF : forall z,
   handler_correct (handle_instr (OFFSETREF z)) (clight_of (OFFSETREF z))
     (pre_of (OFFSETREF z))
-    (P_error_of (OFFSETREF z)) (P_halt_of (OFFSETREF z)) (P_ccall_of (OFFSETREF z)).
-Admitted.
+    (P_error_of (OFFSETREF z)) (P_halt_of (OFFSETREF z)) (P_ccall_of (OFFSETREF z))
+  := OFFSETREF_correct.correct_OFFSETREF.
 
 Definition correct_ISINT :
   handler_correct (handle_instr ISINT) (clight_of ISINT)

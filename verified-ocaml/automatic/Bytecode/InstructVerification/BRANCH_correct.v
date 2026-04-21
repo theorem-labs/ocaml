@@ -320,3 +320,17 @@ Proof.
   - exact (verify_BRANCH_correct target).
   - intros e le m s ard _ Hcl. exact Hcl.
 Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (BRANCH z) = fun _ s => handle_BRANCH z s and
+   clight_of (BRANCH z) = f_instr_BRANCH by computation.
+   pre_of (BRANCH z) = code_loadable by computation.
+   Since handle_BRANCH always returns Step, the P_error/P_halt/P_ccall
+   predicates are in dead match branches and thus irrelevant. *)
+Definition correct_BRANCH : forall z,
+  handler_correct (handle_instr (Bytecode.AST.BRANCH z)) (clight_of (Bytecode.AST.BRANCH z))
+    (pre_of (Bytecode.AST.BRANCH z))
+    (P_error_of (Bytecode.AST.BRANCH z)) (P_halt_of (Bytecode.AST.BRANCH z)) (P_ccall_of (Bytecode.AST.BRANCH z)).
+Proof.
+  exact verify_BRANCH_handler_correct.
+Qed.
