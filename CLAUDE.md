@@ -49,6 +49,13 @@ every `.v` listed in `_CoqProject` (hundreds of files, including ~10k-line
 `instruct_handlers.v` and 151 per-handler proofs) and will time out the
 tool call. Same rule applies to the per-tier variants.
 
+To cap per-file compilation time (useful when iterating on proofs), pass
+timeout wrappers:
+
+```bash
+make -f Makefile.coq ROCQ="timeout 30s rocq" COQC="timeout 30s coqc" path/to/File.vo
+```
+
 Per-tier cumulative variants exist (generated from `_CoqProject.<tier>`):
 `Makefile.coq.manual`, `Makefile.coq.semi-auto`, `Makefile.coq.automatic`,
 `Makefile.coq.checker`. Each tier's makefile knows about its tier and the
