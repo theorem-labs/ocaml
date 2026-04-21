@@ -76,6 +76,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETFLOAT
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIFNOT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import C_CALL_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHGETGLOBALFIELD_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -240,8 +241,8 @@ Definition correct_GETGLOBALFIELD : forall n p,
 Definition correct_PUSHGETGLOBALFIELD : forall n p,
   handler_correct (handle_instr (PUSHGETGLOBALFIELD n p)) (clight_of (PUSHGETGLOBALFIELD n p))
     (pre_of (PUSHGETGLOBALFIELD n p))
-    (P_error_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p)).
-Admitted.
+    (P_error_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p))
+  := PUSHGETGLOBALFIELD_correct.correct_PUSHGETGLOBALFIELD.
 
 Definition correct_SETGLOBAL : forall n,
   handler_correct (handle_instr (SETGLOBAL n)) (clight_of (SETGLOBAL n))
