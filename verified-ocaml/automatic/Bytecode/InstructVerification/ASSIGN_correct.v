@@ -37,7 +37,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -272,38 +272,27 @@ Qed.
 (* val_repr_co_shift, stack_repr_co_shift, global_repr_co_shift
    are imported from HandlerLemmas. *)
 
-Theorem verify_ASSIGN_correct : forall n,
-    handler_correct (handle_ASSIGN n) f_instr_ASSIGN
-      (fun _ m s ard =>
-         (* Code buffer contains n at current PC *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         (* Code block is separate from struct block *)
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (* n fits in signed int32 range *)
-         (0 <= Z.of_nat n <= Int.max_signed)%Z /\
-         (* Stack store at sp[n] succeeds after pc store *)
-         (forall m1 sp_b sp_ofs accu_v,
-           stack_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) m1 (Machine.stack s) sp_b sp_ofs ->
-           val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) accu_v ->
-           Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n < Ptrofs.modulus ->
-           exists m_sw,
-             Mem.store Mint64 m1 sp_b
-               (Ptrofs.unsigned sp_ofs + 8 * Z.of_nat n) accu_v = Some m_sw))
-      (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
+Theorem correct_ASSIGN : forall n,
+    handler_correct (handle_instr (ASSIGN n)) (clight_of (ASSIGN n))
+      (pre_of (ASSIGN n))
+      (P_error_of (ASSIGN n)) (P_halt_of (ASSIGN n)) (P_ccall_of (ASSIGN n)).
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_ASSIGN.
+  unfold handler_correct.
+  change (handle_instr (ASSIGN n)) with (handle_ASSIGN n).
+  change (clight_of (ASSIGN n)) with f_instr_ASSIGN.
+  unfold handle_ASSIGN.
 
   (* Case split on set_nth *)
   destruct (set_nth (Machine.stack s) n (Machine.accu s)) as [new_stack |] eqn:Hset.
 
-  2: { (* Error case: set_nth returned None *) reflexivity. }
+  2: { (* Error case: set_nth returned None *)
+       unfold P_error_of, error_message_of. rewrite Hset. reflexivity. }
 
   (* Step case *)
+  change (pre_of (ASSIGN n)) with (assign_step_pre n).
+  unfold assign_step_pre.
   intros ard Hpre Hstep_pre.
 
   (* Unpack abs_rel_with_ard *)

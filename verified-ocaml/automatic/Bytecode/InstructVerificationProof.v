@@ -13,6 +13,7 @@ From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ASSIGN_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -45,8 +46,8 @@ Admitted.
 Definition correct_ASSIGN : forall n,
   handler_correct (handle_instr (ASSIGN n)) (clight_of (ASSIGN n))
     (pre_of (ASSIGN n))
-    (P_error_of (ASSIGN n)) (P_halt_of (ASSIGN n)) (P_ccall_of (ASSIGN n)).
-Admitted.
+    (P_error_of (ASSIGN n)) (P_halt_of (ASSIGN n)) (P_ccall_of (ASSIGN n))
+  := ASSIGN_correct.correct_ASSIGN.
 
 Definition correct_ENVACC : forall n,
   handler_correct (handle_instr (ENVACC n)) (clight_of (ENVACC n))
