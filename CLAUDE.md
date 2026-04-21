@@ -193,7 +193,7 @@ Pretty-printers go in the reverse direction (AST -> source string, bytecode AST 
 
 - **Trusted**: Must be correct for verification to hold. Kept maximally simple. Includes `interpret-bytecode`, bytecode encoder, observable behavior type, IO axioms.
 - **Untrusted**: Validated by PBT and eventually formal proofs. Includes `compile`, `lex-parse`, `interpret`, source interpreter, loader, correctness proofs.
-- **Checker**: Thin modules that verify proofs satisfy interface specs.
+- **Checker**: Thin modules that verify proofs satisfy interface specs. **`checker/` `.v` files must never contain `Admitted`.** They are pure `Module Check <: Spec` ascriptions whose Definitions delegate to `automatic/` (e.g. `Definition x := Automatic.Module.x`). Any proof work — even placeholder `Admitted` — belongs in `automatic/`, not `checker/`.
 - **Trusted-ish**: Ongoing PBT/proof obligations that grow as scope expands (cross-validation of `ocamlc` vs `compile`, bootstrapping proofs, Rocq self-verification).
 
 **`manual/` must never depend on `automatic/`, `semi-auto/`, or `checker/`.** This is a hard, one-directional dependency rule — violating it collapses the trust hierarchy. `manual/` may only import from `manual/` and external libraries. If a manual file is reaching for a definition outside manual/, the answer is either (a) move the definition into manual/, (b) restructure so the manual file doesn't need it, or (c) parameterize manual over the missing piece via a Module Type.
