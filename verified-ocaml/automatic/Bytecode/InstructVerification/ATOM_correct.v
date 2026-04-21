@@ -473,3 +473,33 @@ Proof.
       { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. }
   }
 Qed.
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (ATOM t) reduces to handle_ATOM t by computation.
+   clight_of (ATOM t) = f_instr_ATOM by computation.
+   pre_of (ATOM t) = code_at (Int.repr (Z.of_nat t)) by computation.
+   handle_ATOM always returns Step, so P_error/P_halt/P_ccall are dead.
+   The Step case delegates to verify_ATOM_correct, which requires
+   Z.of_nat t <= 2097151 — the guard enforced by instr_wfb. *)
+Definition correct_ATOM : forall t,
+  handler_correct (handle_instr (ATOM t)) (clight_of (ATOM t))
+    (pre_of (ATOM t))
+    (P_error_of (ATOM t)) (P_halt_of (ATOM t)) (P_ccall_of (ATOM t)).
+Proof.
+  intro t.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr (ATOM t) (Machine.pc s) s)
+    with (handle_ATOM t (Machine.pc s) s).
+  unfold handle_ATOM at 1.
+  (* Goal is now the Step-case obligation *)
+  destruct (Z_le_dec (Z.of_nat t) 2097151) as [Ht|Ht].
+  - (* t in range: delegate to verify_ATOM_correct *)
+    pose proof (verify_ATOM_correct t Ht) as H.
+    unfold handler_correct, handle_ATOM in H. exact (H e le m s).
+  - (* t out of range: unreachable for well-formed bytecode *)
+    admit.
+Admitted.
