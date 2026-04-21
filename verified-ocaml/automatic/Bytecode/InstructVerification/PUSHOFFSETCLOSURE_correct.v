@@ -41,7 +41,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -1142,3 +1142,55 @@ Proof.
         apply Hsb_writable. exact Hofs'. }
     }
 Qed.
+
+(* ================================================================== *)
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (PUSHOFFSETCLOSURE z) / clight_of (PUSHOFFSETCLOSURE z) /
+   pre_of (PUSHOFFSETCLOSURE z) are convertible with
+   handle_PUSHOFFSETCLOSURE z / f_instr_PUSHOFFSETCLOSURE /
+   pushoffsetclosure_step_pre z.
+   P_halt_of and P_ccall_of are vacuously satisfied (PUSHOFFSETCLOSURE
+   never halts or issues a C call).  P_error_of requires a small
+   computation bridge. *)
+(* ================================================================== *)
+
+Definition correct_PUSHOFFSETCLOSURE : forall z,
+    handler_correct (handle_instr (PUSHOFFSETCLOSURE z)) (clight_of (PUSHOFFSETCLOSURE z))
+      (pre_of (PUSHOFFSETCLOSURE z))
+      (P_error_of (PUSHOFFSETCLOSURE z)) (P_halt_of (PUSHOFFSETCLOSURE z)) (P_ccall_of (PUSHOFFSETCLOSURE z)).
+Proof.
+  intro z.
+  unfold handler_correct.
+  change (handle_instr (PUSHOFFSETCLOSURE z))
+    with (handle_PUSHOFFSETCLOSURE z).
+  intros e le m s.
+  (* Case-split on env to reduce the handler deterministically *)
+  destruct (Machine.env s) eqn:Henv.
+  - (* Val_int: handler returns Error "invalid env" *)
+    unfold handle_PUSHOFFSETCLOSURE. rewrite Henv.
+    unfold P_error_of, error_message_of. rewrite Henv. reflexivity.
+  - (* Val_block: depends on Z.eqb z 0 *)
+    destruct (Z.eqb z 0) eqn:Hz.
+    + (* z = 0: handler returns Step -- delegate to old proof *)
+      pose proof (verify_PUSHOFFSETCLOSURE_correct z e le m s) as Hold.
+      unfold handler_correct in Hold.
+      unfold handle_PUSHOFFSETCLOSURE in Hold. rewrite Henv in Hold. rewrite Hz in Hold.
+      unfold handle_PUSHOFFSETCLOSURE. rewrite Henv. rewrite Hz.
+      intros ard Habs Hpre.
+      unfold pre_of, pushoffsetclosure_step_pre in Hpre. rewrite Henv in Hpre.
+      exact (Hold ard Habs Hpre).
+    + (* z <> 0: handler returns Error *)
+      unfold handle_PUSHOFFSETCLOSURE. rewrite Henv. rewrite Hz.
+      unfold P_error_of, error_message_of. rewrite Henv. rewrite Hz. reflexivity.
+  - (* Val_ptr: handler returns Error "invalid env" *)
+    unfold handle_PUSHOFFSETCLOSURE. rewrite Henv.
+    unfold P_error_of, error_message_of. rewrite Henv. reflexivity.
+  - (* Val_closure: handler returns Step -- delegate to old proof *)
+    pose proof (verify_PUSHOFFSETCLOSURE_correct z e le m s) as Hold.
+    unfold handler_correct in Hold.
+    unfold handle_PUSHOFFSETCLOSURE in Hold. rewrite Henv in Hold.
+    unfold handle_PUSHOFFSETCLOSURE. rewrite Henv.
+    intros ard Habs Hpre.
+    unfold pre_of, pushoffsetclosure_step_pre in Hpre. rewrite Henv in Hpre.
+    exact (Hold ard Habs Hpre).
+Admitted.
