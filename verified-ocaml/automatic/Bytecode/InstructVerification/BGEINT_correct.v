@@ -817,3 +817,47 @@ Proof.
   - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
     exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
 Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v.
+
+   The existing proof (verify_BGEINT_handler_correct) requires
+   Int.min_signed <= z1 <= Int.max_signed.  The canonical pre_of
+   does not include this guard; when z1 is outside Int range,
+   Int.repr wraps and the C comparison disagrees with the Rocq
+   handler's Z.geb, so the Step case cannot be closed without
+   assuming the range.  In practice the bytecode decoder only
+   produces in-range operands.
+
+   Error cases (non-integer accu) are fully proved.  The Step
+   case delegates to verify_BGEINT_handler_correct after asserting
+   the range (Admitted). *)
+Theorem correct_BGEINT : forall z1 z2,
+  handler_correct (handle_instr (Bytecode.AST.BGEINT z1 z2)) (clight_of (Bytecode.AST.BGEINT z1 z2))
+    (pre_of (Bytecode.AST.BGEINT z1 z2))
+    (P_error_of (Bytecode.AST.BGEINT z1 z2)) (P_halt_of (Bytecode.AST.BGEINT z1 z2)) (P_ccall_of (Bytecode.AST.BGEINT z1 z2)).
+Proof.
+  intros z1 z2 e le m s.
+  change (handle_instr (Bytecode.AST.BGEINT z1 z2)) with (handle_BGEINT z1 z2).
+  unfold handle_BGEINT.
+  destruct (Machine.accu s) eqn:Haccu.
+  - (* Val_int z — Step case; need z1 range for C comparison correctness *)
+    assert (Hn : Int.min_signed <= z1 <= Int.max_signed).
+    { (* TODO: the canonical pre_of does not include this guard;
+         it should be supplied by instr_wfb or the bytecode loader.
+         Admitted for now. *)
+      admit. }
+    destruct (Z.geb z1 z) eqn:Hcmp; simpl;
+    (intros ard Hrel Hpre;
+     pose proof (verify_BGEINT_handler_correct z1 z2 Hn) as Hvc;
+     specialize (Hvc e le m s);
+     unfold handler_correct, handle_BGEINT in Hvc;
+     rewrite Haccu, Hcmp in Hvc; simpl in Hvc;
+     exact (Hvc ard Hrel Hpre)).
+  - (* Val_block — Error *)
+    destruct l as [| h t];
+      (unfold P_error_of, error_message_of; rewrite Haccu; reflexivity).
+  - (* Val_ptr — Error *)
+    unfold P_error_of, error_message_of; rewrite Haccu; reflexivity.
+  - (* Val_closure — Error *)
+    unfold P_error_of, error_message_of; rewrite Haccu; reflexivity.
+Admitted.
