@@ -58,6 +58,8 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BGEINT_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLTINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BGTINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BNEQ_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BEQ_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BUGEINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -568,8 +570,8 @@ Admitted.
 Definition correct_BEQ : forall z1 z2,
   handler_correct (handle_instr (BEQ z1 z2)) (clight_of (BEQ z1 z2))
     (pre_of (BEQ z1 z2))
-    (P_error_of (BEQ z1 z2)) (P_halt_of (BEQ z1 z2)) (P_ccall_of (BEQ z1 z2)).
-Admitted.
+    (P_error_of (BEQ z1 z2)) (P_halt_of (BEQ z1 z2)) (P_ccall_of (BEQ z1 z2))
+  := BEQ_correct.correct_BEQ.
 
 Definition correct_BNEQ : forall z1 z2,
   handler_correct (handle_instr (BNEQ z1 z2)) (clight_of (BNEQ z1 z2))
@@ -622,8 +624,8 @@ Definition correct_BULTINT : forall z1 z2,
 Definition correct_BUGEINT : forall z1 z2,
   handler_correct (handle_instr (BUGEINT z1 z2)) (clight_of (BUGEINT z1 z2))
     (pre_of (BUGEINT z1 z2))
-    (P_error_of (BUGEINT z1 z2)) (P_halt_of (BUGEINT z1 z2)) (P_ccall_of (BUGEINT z1 z2)).
-Admitted.
+    (P_error_of (BUGEINT z1 z2)) (P_halt_of (BUGEINT z1 z2)) (P_ccall_of (BUGEINT z1 z2))
+  := BUGEINT_correct.correct_BUGEINT.
 
 Definition correct_STOP :
   handler_correct (handle_instr STOP) (clight_of STOP)
