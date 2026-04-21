@@ -1,4 +1,5 @@
-(* InstructVerification.v — Instantiation of InstructVerificationSpec. *)
+(* InstructChecker.v — Instantiation of InstructVerificationFineGrainedSpec
+   and the unified InstructVerificationSpec via the functor. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -157,7 +158,7 @@ From OCamlInterp.Automatic Require Bytecode.InstructVerification.VECTLENGTH_corr
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.XORINT_correct.
 
 
-Module InstructVerification <: InstructVerificationSpec.
+Module InstructVerification <: InstructVerificationFineGrainedSpec.
 
   Definition correct_ACC0 := ACC0_correct.verify_ACC0_compl_comp.
   Definition correct_ACC1 := ACC1_correct.verify_ACC1.
@@ -1421,3 +1422,20 @@ Module InstructVerification <: InstructVerificationSpec.
   Abort.
   End __.
 End InstructVerification.
+
+Module InstructVerificationUnified :=
+  InstructVerificationFromFineGrained InstructVerification.
+
+Section __.
+Set Printing All.
+Set Printing Fully Qualified.
+Set Printing Depth 10000000000.
+Set Printing Width 2000.
+Goal True.
+  idtac "<handler_correct_all>".
+  idtac "<PrintAssumptions>".
+  Print Assumptions InstructVerificationUnified.handler_correct_all.
+  idtac "</PrintAssumptions>".
+  idtac "</handler_correct_all>".
+Abort.
+End __.

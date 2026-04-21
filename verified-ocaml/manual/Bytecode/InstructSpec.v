@@ -2830,49 +2830,119 @@ Definition switch_step_pre (_nc _nb : nat) (const_targets block_targets : list Z
 (* ================================================================== *)
 (* Per-instruction spec dispatch functions                              *)
 (*                                                                      *)
-(* Five functions mapping each instruction to the corresponding         *)
-(* argument of [handler_correct].  Together they state:                 *)
-(*   forall i, handler_correct (handle_instr i) (clight_of i)          *)
-(*               (pre_of i) (P_error_of i) (P_halt_of i) (P_ccall_of i)*)
+(* Six definitions mapping each instruction to the corresponding        *)
+(* argument of [handler_correct]:                                       *)
+(*   instr_wfb   — bool well-formedness guard on operands               *)
+(*   clight_of   — Clight function                                      *)
+(*   pre_of      — step precondition (inner, without WF conjunction)    *)
+(*   P_error_of  — tautological: handler s.(pc) s = Error msg           *)
+(*   P_halt_of   — if wfb then (STOP -> True | _ -> False) else True    *)
+(*   P_ccall_of  — if wfb then (C_CALL -> True | _ -> False) else True  *)
 (*                                                                      *)
-(* For instructions whose [InstructVerificationSpec] parameter has a    *)
-(* side condition [WF] (e.g. operand representability), [pre_of]        *)
-(* conjoins [WF] and [P_error_of]/[P_halt_of]/[P_ccall_of] wrap the   *)
-(* original predicate under [WF -> _].  For PUSHACC 0/>=8 and          *)
-(* CLOSUREREC off the 1-0-[ofs] shape, [pre_of] gives [False]          *)
-(* (vacuous correctness) and the other predicates give [True].          *)
+(* The bridge lemma [handler_correct_of_parameters] proves:             *)
+(*   forall i, handler_correct (handle_instr i) (clight_of i)          *)
+(*     (fun e m s ard => instr_wfb i = true /\ pre_of i e m s ard)     *)
+(*     (P_error_of i) (P_halt_of i) (P_ccall_of i)                     *)
 (* ================================================================== *)
 
-Lemma handler_correct_absorb_WF :
-  forall WF handler f pre P_err P_halt P_ccall,
-    (WF -> handler_correct handler f pre P_err P_halt P_ccall) ->
+Lemma handler_correct_absorb_wfb :
+  forall (wfb : bool) handler f pre P_err P_halt P_ccall,
+    (wfb = true -> handler_correct handler f pre P_err P_halt P_ccall) ->
     handler_correct handler f
-      (fun e m s ard => WF /\ pre e m s ard)
-      (fun msg s => WF -> P_err msg s)
-      (fun v => WF -> P_halt v)
-      (fun n args s => WF -> P_ccall n args s).
+      (fun e m s ard => wfb = true /\ pre e m s ard)
+      (fun msg s => handler s.(Machine.pc) s = Error msg)
+      (fun v => if wfb then P_halt v else True)
+      (fun n args s => if wfb then P_ccall n args s else True).
 Proof.
-  intros WF handler f pre P_err P_halt P_ccall H.
+  intros wfb handler f pre P_err P_halt P_ccall H.
   unfold handler_correct.
   intros e le m s.
   destruct (handler s.(Machine.pc) s) eqn:Heq.
-  - intros ard Habs [HWF Hpre].
-    specialize (H HWF e le m s). rewrite Heq in H.
+  - intros ard Habs [Hwfb Hpre].
+    specialize (H Hwfb e le m s). rewrite Heq in H.
     exact (H ard Habs Hpre).
-  - intros HWF. specialize (H HWF e le m s). rewrite Heq in H. exact H.
-  - intros HWF. specialize (H HWF e le m s). rewrite Heq in H. exact H.
-  - intros HWF. specialize (H HWF e le m s). rewrite Heq in H. exact H.
+  - exact Heq.
+  - destruct wfb.
+    + specialize (H eq_refl e le m s). rewrite Heq in H. exact H.
+    + exact I.
+  - destruct wfb.
+    + specialize (H eq_refl e le m s). rewrite Heq in H. exact H.
+    + exact I.
 Qed.
 
-Lemma handler_correct_vacuous : forall handler f,
-  handler_correct handler f
-    (fun _ _ _ _ => False) (fun _ _ => True) (fun _ => True) (fun _ _ _ => True).
-Proof.
-  intros handler f.
-  unfold handler_correct.
-  intros e le m s. destruct (handler s.(Machine.pc) s); auto.
-  intros ard _ HF. exfalso; exact HF.
-Qed.
+Definition instr_wfb (i : instruction) : bool :=
+  match i with
+  | ACC n => (Z.of_nat n <? Int.half_modulus)%Z
+  | PUSH => true
+  | PUSHACC n => match n with 1%nat|2%nat|3%nat|4%nat|5%nat|6%nat|7%nat => true | _ => false end
+  | POP n => (Z.of_nat n <? Int.half_modulus)%Z
+  | ASSIGN _ => true
+  | ENVACC n => (Z.of_nat n <? Int.half_modulus)%Z
+  | PUSHENVACC _ => true
+  | PUSH_RETADDR _ => true
+  | APPLY _ => true
+  | APPLY1 => true | APPLY2 => true | APPLY3 => true
+  | APPTERM _ _ => true
+  | APPTERM1 _ => true | APPTERM2 _ => true | APPTERM3 _ => true
+  | RETURN _ => true
+  | RESTART => true
+  | GRAB _ => true
+  | CLOSURE nvars code_ofs =>
+      ((0 <=? Z.of_nat (2 + nvars)) && (Z.of_nat (2 + nvars) <=? Int.max_signed) &&
+       (Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
+  | CLOSUREREC nf nv co =>
+      match nf, nv, co with
+      | 1%nat, 0%nat, (code_ofs :: nil)%list =>
+          ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
+      | _, _, _ => false
+      end
+  | OFFSETCLOSURE _ => true | PUSHOFFSETCLOSURE _ => true
+  | GETGLOBAL n => ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z
+  | PUSHGETGLOBAL n => ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z
+  | GETGLOBALFIELD _ _ => true | PUSHGETGLOBALFIELD _ _ => true
+  | SETGLOBAL _ => true
+  | ATOM t => (Z.of_nat t <=? 2097151)%Z
+  | PUSHATOM t => (Z.of_nat t <=? 2097151)%Z
+  | MAKEBLOCK _ size => (1 <=? size)%nat
+  | MAKEBLOCK1 t => ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z
+  | MAKEBLOCK2 t => ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z
+  | MAKEBLOCK3 t => ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z
+  | MAKEFLOATBLOCK n => (1 <=? n)%nat
+  | GETFIELD n => ((Int.min_signed <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z
+  | GETFLOATFIELD _ => true
+  | SETFIELD _ => true | SETFLOATFIELD _ => true
+  | VECTLENGTH => true | GETVECTITEM => true | SETVECTITEM => true
+  | GETBYTESCHAR => true | SETBYTESCHAR => true | GETSTRINGCHAR => true
+  | BRANCH _ => true | BRANCHIF _ => true | BRANCHIFNOT _ => true
+  | SWITCH _ _ _ _ => true
+  | BOOLNOT => true
+  | PUSHTRAP _ => true | POPTRAP => true
+  | RAISE => true | RERAISE => true | RAISE_NOTRACE => true
+  | CHECK_SIGNALS => true
+  | C_CALL _ _ => true
+  | CONSTINT n => ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | PUSHCONSTINT _ => true
+  | NEGINT => true | ADDINT => true | SUBINT => true
+  | MULINT => true | DIVINT => true | MODINT => true
+  | ANDINT => true | ORINT => true | XORINT => true
+  | LSLINT => true | LSRINT => true | ASRINT => true
+  | EQ => true | NEQ => true
+  | LTINT => true | LEINT => true | GTINT => true | GEINT => true
+  | OFFSETINT ofs => ((Int.min_signed <=? ofs * 2) && (ofs * 2 <=? Int.max_signed))%Z
+  | OFFSETREF _ => true
+  | ISINT => true
+  | GETMETHOD => true | GETPUBMET _ => true | GETDYNMET => true
+  | BEQ n _ => ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | BNEQ n _ => ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | BLTINT n _ => ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | BLEINT n _ => ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | BGTINT n _ => ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | BGEINT n _ => ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | ULTINT => true | UGEINT => true
+  | BULTINT n _ => ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | BUGEINT n _ => ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z
+  | STOP => true
+  end.
 
 Definition clight_of (i : instruction) : function :=
   match i with
@@ -2978,84 +3048,27 @@ Definition clight_of (i : instruction) : function :=
   | STOP => f_instr_STOP
   end.
 
-Definition P_halt_of (i : instruction) : value -> Prop :=
-  match i with
-  | STOP => fun _ => True
-  | PUSHACC n => match n with 1%nat|2%nat|3%nat|4%nat|5%nat|6%nat|7%nat => fun _ => False | _ => fun _ => True end
-  | CLOSUREREC nf nv co => match nf, nv, co with 1%nat, 0%nat, (_::nil)%list => fun _ => Int.min_signed <= hd 0 co <= Int.max_signed -> False | _, _, _ => fun _ => True end
-  | ACC n => fun _ => Z.of_nat n < Int.half_modulus -> False
-  | POP n => fun _ => Z.of_nat n < Int.half_modulus -> False
-  | ENVACC n => fun _ => Z.of_nat n < Int.half_modulus -> False
-  | GETGLOBAL n => fun _ => 0 <= Z.of_nat n <= Int.max_signed -> False
-  | PUSHGETGLOBAL n => fun _ => 0 <= Z.of_nat n <= Int.max_signed -> False
-  | ATOM t => fun _ => Z.of_nat t <= 2097151 -> False
-  | PUSHATOM t => fun _ => Z.of_nat t <= 2097151 -> False
-  | MAKEBLOCK _ size => fun _ => (size >= 1)%nat -> False
-  | MAKEBLOCK1 t => fun _ => 0 <= Z.of_nat t <= 255 -> False
-  | MAKEBLOCK2 t => fun _ => 0 <= Z.of_nat t <= 255 -> False
-  | MAKEBLOCK3 t => fun _ => 0 <= Z.of_nat t <= 255 -> False
-  | MAKEFLOATBLOCK n => fun _ => (n >= 1)%nat -> False
-  | GETFIELD n => fun _ => Int.min_signed <= Z.of_nat n <= Int.max_signed -> False
-  | CLOSURE nvars code_ofs => fun _ => (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) /\ (Int.min_signed <= code_ofs <= Int.max_signed) -> False
-  | CONSTINT n => fun _ => Int.min_signed <= n <= Int.max_signed -> False
-  | OFFSETINT ofs => fun _ => Int.min_signed <= ofs * 2 <= Int.max_signed -> False
-  | BEQ n _ => fun _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BNEQ n _ => fun _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BLTINT n _ => fun _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BLEINT n _ => fun _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BGTINT n _ => fun _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BGEINT n _ => fun _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BULTINT n _ => fun _ => (0 <= n) /\ (Int.min_signed <= n <= Int.max_signed) -> False
-  | BUGEINT n _ => fun _ => (0 <= n) /\ (Int.min_signed <= n <= Int.max_signed) -> False
-  | _ => fun _ => False
-  end.
+Definition P_halt_of (i : instruction) (v : value) : Prop :=
+  if instr_wfb i then match i with STOP => True | _ => False end else True.
 
-Definition P_ccall_of (i : instruction) : nat -> list value -> state -> Prop :=
-  match i with
-  | C_CALL _ _ => fun _ _ _ => True
-  | PUSHACC n => match n with 1%nat|2%nat|3%nat|4%nat|5%nat|6%nat|7%nat => fun _ _ _ => False | _ => fun _ _ _ => True end
-  | CLOSUREREC nf nv co => match nf, nv, co with 1%nat, 0%nat, (_::nil)%list => fun _ _ _ => Int.min_signed <= hd 0 co <= Int.max_signed -> False | _, _, _ => fun _ _ _ => True end
-  | ACC n => fun _ _ _ => Z.of_nat n < Int.half_modulus -> False
-  | POP n => fun _ _ _ => Z.of_nat n < Int.half_modulus -> False
-  | ENVACC n => fun _ _ _ => Z.of_nat n < Int.half_modulus -> False
-  | GETGLOBAL n => fun _ _ _ => 0 <= Z.of_nat n <= Int.max_signed -> False
-  | PUSHGETGLOBAL n => fun _ _ _ => 0 <= Z.of_nat n <= Int.max_signed -> False
-  | ATOM t => fun _ _ _ => Z.of_nat t <= 2097151 -> False
-  | PUSHATOM t => fun _ _ _ => Z.of_nat t <= 2097151 -> False
-  | MAKEBLOCK _ size => fun _ _ _ => (size >= 1)%nat -> False
-  | MAKEBLOCK1 t => fun _ _ _ => 0 <= Z.of_nat t <= 255 -> False
-  | MAKEBLOCK2 t => fun _ _ _ => 0 <= Z.of_nat t <= 255 -> False
-  | MAKEBLOCK3 t => fun _ _ _ => 0 <= Z.of_nat t <= 255 -> False
-  | MAKEFLOATBLOCK n => fun _ _ _ => (n >= 1)%nat -> False
-  | GETFIELD n => fun _ _ _ => Int.min_signed <= Z.of_nat n <= Int.max_signed -> False
-  | CLOSURE nvars code_ofs => fun _ _ _ => (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) /\ (Int.min_signed <= code_ofs <= Int.max_signed) -> False
-  | CONSTINT n => fun _ _ _ => Int.min_signed <= n <= Int.max_signed -> False
-  | OFFSETINT ofs => fun _ _ _ => Int.min_signed <= ofs * 2 <= Int.max_signed -> False
-  | BEQ n _ => fun _ _ _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BNEQ n _ => fun _ _ _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BLTINT n _ => fun _ _ _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BLEINT n _ => fun _ _ _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BGTINT n _ => fun _ _ _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BGEINT n _ => fun _ _ _ => Int.min_signed <= n <= Int.max_signed -> False
-  | BULTINT n _ => fun _ _ _ => (0 <= n) /\ (Int.min_signed <= n <= Int.max_signed) -> False
-  | BUGEINT n _ => fun _ _ _ => (0 <= n) /\ (Int.min_signed <= n <= Int.max_signed) -> False
-  | _ => fun _ _ _ => False
-  end.
+Definition P_ccall_of (i : instruction) (n : nat) (args : list value) (s : state) : Prop :=
+  if instr_wfb i then match i with C_CALL _ _ => True | _ => False end else True.
+
+Definition P_error_of (i : instruction) (msg : string) (s : state) : Prop :=
+  handle_instr i s.(Machine.pc) s = Error msg.
 
 Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
   match i with
-  | ACC n => fun e m s ard => Z.of_nat n < Int.half_modulus /\ code_at (Int.repr (Z.of_nat n)) e m s ard
+  | ACC n => code_at (Int.repr (Z.of_nat n))
   | PUSH => sp_at_least 16
   | PUSHACC n =>
       match n with
-      | 1%nat => sp_at_least 16 | 2%nat => sp_at_least 16
-      | 3%nat => sp_at_least 16 | 4%nat => sp_at_least 16
-      | 5%nat => sp_at_least 16 | 6%nat => sp_at_least 16
-      | 7%nat => sp_at_least 16 | _ => fun _ _ _ _ => False
+      | 1%nat|2%nat|3%nat|4%nat|5%nat|6%nat|7%nat => sp_at_least 16
+      | _ => fun _ _ _ _ => True
       end
-  | POP n => fun e m s ard => Z.of_nat n < Int.half_modulus /\ ((code_at (Int.repr (Z.of_nat n)) /\p code_ne_struct) /\p stack_length_ge n) e m s ard
+  | POP n => (code_at (Int.repr (Z.of_nat n)) /\p code_ne_struct) /\p stack_length_ge n
   | ASSIGN n => assign_step_pre n
-  | ENVACC n => fun e m s ard => Z.of_nat n < Int.half_modulus /\ (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n) e m s ard
+  | ENVACC n => code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n
   | PUSHENVACC n => pushenvacc_generic_step_pre n
   | PUSH_RETADDR ret_addr => push_retaddr_step_pre ret_addr
   | APPLY n => apply_n_step_pre n
@@ -3085,34 +3098,32 @@ Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data
   | RETURN stacksize => return_step_pre stacksize
   | RESTART => restart_step_pre
   | GRAB required => grab_step_pre required
-  | CLOSURE nvars code_ofs =>
-      fun e m s ard => ((0 <= Z.of_nat (2 + nvars) <= Int.max_signed) /\ (Int.min_signed <= code_ofs <= Int.max_signed)) /\ closure_general_step_pre nvars code_ofs e m s ard
+  | CLOSURE nvars code_ofs => closure_general_step_pre nvars code_ofs
   | CLOSUREREC nf nv co =>
       match nf, nv, co with
       | 1%nat, 0%nat, (code_ofs :: nil)%list =>
-          fun e m s ard => (Int.min_signed <= code_ofs <= Int.max_signed) /\
-            (heap_alloc_with_stores 2 247 alloc_store_2
-             /\p code_at (Int.repr 1)
-             /\p code_arg_at 1 (Int.repr 0)
-             /\p code_arg_at 2 (Int.repr code_ofs)
-             /\p sp_at_least 16) e m s ard
-      | _, _, _ => fun _ _ _ _ => False
+          heap_alloc_with_stores 2 247 alloc_store_2
+          /\p code_at (Int.repr 1)
+          /\p code_arg_at 1 (Int.repr 0)
+          /\p code_arg_at 2 (Int.repr code_ofs)
+          /\p sp_at_least 16
+      | _, _, _ => fun _ _ _ _ => True
       end
   | OFFSETCLOSURE ofs => offsetclosure_pre ofs
   | PUSHOFFSETCLOSURE ofs => pushoffsetclosure_step_pre ofs
-  | GETGLOBAL n => fun e m s ard => (0 <= Z.of_nat n <= Int.max_signed) /\ (code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) e m s ard
-  | PUSHGETGLOBAL n => fun e m s ard => (0 <= Z.of_nat n <= Int.max_signed) /\ ((code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) /\p sp_at_least 16) e m s ard
+  | GETGLOBAL n => code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n
+  | PUSHGETGLOBAL n => (code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) /\p sp_at_least 16
   | GETGLOBALFIELD n p => getglobalfield_step_pre n p
   | PUSHGETGLOBALFIELD n p => pushgetglobalfield_step_pre n p
   | SETGLOBAL n => setglobal_step_pre n
-  | ATOM t => fun e m s ard => (Z.of_nat t <= 2097151) /\ code_at (Int.repr (Z.of_nat t)) e m s ard
-  | PUSHATOM t => fun e m s ard => (Z.of_nat t <= 2097151) /\ (sp_at_least 16 /\p code_at (Int.repr (Z.of_nat t))) e m s ard
-  | MAKEBLOCK t size => fun e m s ard => ((size >= 1)%nat) /\ makeblock_step_pre t size e m s ard
-  | MAKEBLOCK1 t => fun e m s ard => (0 <= Z.of_nat t <= 255) /\ (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1 /\p code_at (Int.repr (Z.of_nat t))) e m s ard
-  | MAKEBLOCK2 t => fun e m s ard => (0 <= Z.of_nat t <= 255) /\ (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2 /\p code_at (Int.repr (Z.of_nat t))) e m s ard
-  | MAKEBLOCK3 t => fun e m s ard => (0 <= Z.of_nat t <= 255) /\ (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3 /\p code_at (Int.repr (Z.of_nat t))) e m s ard
-  | MAKEFLOATBLOCK n => fun e m s ard => ((n >= 1)%nat) /\ makefloatblock_step_pre n e m s ard
-  | GETFIELD n => fun e m s ard => (Int.min_signed <= Z.of_nat n <= Int.max_signed) /\ (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n))) e m s ard
+  | ATOM t => code_at (Int.repr (Z.of_nat t))
+  | PUSHATOM t => sp_at_least 16 /\p code_at (Int.repr (Z.of_nat t))
+  | MAKEBLOCK t size => makeblock_step_pre t size
+  | MAKEBLOCK1 t => heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1 /\p code_at (Int.repr (Z.of_nat t))
+  | MAKEBLOCK2 t => heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2 /\p code_at (Int.repr (Z.of_nat t))
+  | MAKEBLOCK3 t => heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3 /\p code_at (Int.repr (Z.of_nat t))
+  | MAKEFLOATBLOCK n => makefloatblock_step_pre n
+  | GETFIELD n => heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n))
   | GETFLOATFIELD n => getfloatfield_step_pre n
   | SETFIELD n => setfield_step_pre n
   | SETFLOATFIELD n => setfloatfield_step_pre n
@@ -3134,7 +3145,7 @@ Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data
   | RAISE_NOTRACE => raise_step_pre
   | CHECK_SIGNALS => no_pre
   | C_CALL _ _ => no_pre
-  | CONSTINT n => fun e m s ard => (Int.min_signed <= n <= Int.max_signed) /\ code_at (Int.repr n) e m s ard
+  | CONSTINT n => code_at (Int.repr n)
   | PUSHCONSTINT n => pushconstint_step_pre n
   | NEGINT => accu_check ak_long
   | ADDINT => accu_check ak_long /\p stack_head_is_long
@@ -3154,326 +3165,23 @@ Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data
   | LEINT => arith_safe arith_signed
   | GTINT => arith_safe arith_signed
   | GEINT => arith_safe arith_signed
-  | OFFSETINT ofs => fun e m s ard => (Int.min_signed <= ofs * 2 <= Int.max_signed) /\ (code_at (Int.repr ofs) /\p accu_check ak_long) e m s ard
+  | OFFSETINT ofs => code_at (Int.repr ofs) /\p accu_check ak_long
   | OFFSETREF n => fun _ => offsetref_heap_pre n
   | ISINT => accu_check ak_immediate
   | GETMETHOD => getmethod_step_pre
   | GETPUBMET tag => getpubmet_pre tag
   | GETDYNMET => getdynmet_pre
-  | BEQ n target => fun e m s ard => (Int.min_signed <= n <= Int.max_signed) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))) e m s ard
-  | BNEQ n target => fun e m s ard => (Int.min_signed <= n <= Int.max_signed) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))) e m s ard
-  | BLTINT n target => fun e m s ard => (Int.min_signed <= n <= Int.max_signed) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))) e m s ard
-  | BLEINT n target => fun e m s ard => (Int.min_signed <= n <= Int.max_signed) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))) e m s ard
-  | BGTINT n target => fun e m s ard => (Int.min_signed <= n <= Int.max_signed) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))) e m s ard
-  | BGEINT n target => fun e m s ard => (Int.min_signed <= n <= Int.max_signed) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))) e m s ard
+  | BEQ n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
+  | BNEQ n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
+  | BLTINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
+  | BLEINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
+  | BGTINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
+  | BGEINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
   | ULTINT => arith_safe arith_ucompare
   | UGEINT => arith_safe arith_ucompare
-  | BULTINT n target => fun e m s ard => ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed)) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long) e m s ard
-  | BUGEINT n target => fun e m s ard => ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed)) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long) e m s ard
+  | BULTINT n target => (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long
+  | BUGEINT n target => (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long
   | STOP => no_pre
-  end.
-
-Definition P_error_of (i : instruction) : string -> state -> Prop :=
-  match i with
-  | ACC n => fun _ s => Z.of_nat n < Int.half_modulus -> nth_error s.(Machine.stack) n = None
-  | PUSH => fun _ _ => False
-  | PUSHACC n =>
-      match n with
-      | 1%nat => fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 1 = None
-      | 2%nat => fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 2 = None
-      | 3%nat => fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 3 = None
-      | 4%nat => fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 4 = None
-      | 5%nat => fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 5 = None
-      | 6%nat => fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 6 = None
-      | 7%nat => fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 7 = None
-      | _ => fun _ _ => True
-      end
-  | POP n => fun _ _ => Z.of_nat n < Int.half_modulus -> False
-  | ASSIGN n => fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None
-  | ENVACC n => fun _ s => Z.of_nat n < Int.half_modulus -> field_or_heap s s.(Machine.env) n = None
-  | PUSHENVACC n => fun _ s => field_or_heap s s.(Machine.env) n = None
-  | PUSH_RETADDR _ => fun _ _ => False
-  | APPLY _ => fun _ s => get_code_ptr_s s s.(Machine.accu) = None
-  | APPLY1 =>
-      fun msg s =>
-        (msg = "APPLY1: accu is not a closure"%string /\
-         get_code_ptr_s s s.(Machine.accu) = None) \/
-        (msg = "APPLY1: stack underflow"%string)
-  | APPLY2 =>
-      fun msg s =>
-        (msg = "APPLY2: accu is not a closure"%string /\
-         get_code_ptr_s s s.(Machine.accu) = None) \/
-        (msg = "APPLY2: stack underflow"%string)
-  | APPLY3 =>
-      fun _ s => match s.(Machine.stack) with
-                 | _ :: _ :: _ :: _ => get_code_ptr_s s s.(Machine.accu) = None
-                 | _ => True
-                 end
-  | APPTERM _ _ => fun _ s => get_code_ptr_s s s.(Machine.accu) = None
-  | APPTERM1 _ => fun _ s => s.(Machine.stack) = nil \/ get_code_ptr_s s s.(Machine.accu) = None
-  | APPTERM2 _ =>
-      fun _ s => s.(Machine.stack) = nil \/
-                 (exists a, s.(Machine.stack) = a :: nil) \/
-                 get_code_ptr_s s s.(Machine.accu) = None
-  | APPTERM3 _ =>
-      fun _ s => match s.(Machine.stack) with
-                 | _ :: _ :: _ :: _ => False
-                 | _ => True
-                 end \/ get_code_ptr_s s s.(Machine.accu) = None
-  | RETURN _ =>
-      fun msg _ => msg = "RETURN: accu is not a closure"%string \/
-                   msg = "RETURN: malformed return frame"%string
-  | RESTART =>
-      fun msg s =>
-        (msg = "RESTART: env is not a block"%string /\
-         match Machine.env s with | Val_int _ | Val_ptr _ => True | _ => False end) \/
-        (msg = "RESTART: dangling pointer"%string /\
-         exists addr ofs, Machine.env s = Val_closure addr ofs /\
-                          heap_lookup s.(Machine.hp) addr = None) \/
-        (msg = "RESTART: env is not a closure"%string /\
-         ((exists addr ofs t fs, Machine.env s = Val_closure addr ofs /\
-                                 heap_lookup s.(Machine.hp) addr = Some (t, fs) /\
-                                 Nat.eqb t Closure_tag = false) \/
-          (exists t fs, Machine.env s = Val_block t fs /\
-                        Nat.eqb t Closure_tag = false))) \/
-        (msg = "RESTART: malformed closure"%string /\
-         ((exists addr ofs t all_fields, Machine.env s = Val_closure addr ofs /\
-                                         heap_lookup s.(Machine.hp) addr = Some (t, all_fields) /\
-                                         Nat.eqb t Closure_tag = true /\
-                                         nth_error (skipn ofs all_fields) 2 = None) \/
-          (exists t fs, Machine.env s = Val_block t fs /\
-                        Nat.eqb t Closure_tag = true /\
-                        nth_error fs 2 = None)))
-  | GRAB required =>
-      fun msg s => msg = "GRAB: malformed return frame"%string /\
-                   Nat.leb required (extra_args s) = false /\
-                   match skipn (S (extra_args s)) (Machine.stack s) with
-                   | Val_int _ :: _ :: Val_int _ :: _ => False
-                   | _ => True
-                   end
-  | CLOSURE nvars code_ofs => fun _ _ => ((0 <= Z.of_nat (2 + nvars) <= Int.max_signed) /\ (Int.min_signed <= code_ofs <= Int.max_signed)) -> False
-  | CLOSUREREC nf nv co =>
-      match nf, nv, co with
-      | 1%nat, 0%nat, (code_ofs :: nil)%list =>
-          fun msg _ => Int.min_signed <= code_ofs <= Int.max_signed -> msg = "CLOSUREREC: no code offsets"%string -> False
-      | _, _, _ => fun _ _ => True
-      end
-  | OFFSETCLOSURE _ =>
-      fun msg s =>
-        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "OFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
-  | PUSHOFFSETCLOSURE _ =>
-      fun msg s =>
-        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
-  | GETGLOBAL n => fun _ s => 0 <= Z.of_nat n <= Int.max_signed -> nth_error s.(Machine.global) n = None
-  | PUSHGETGLOBAL n => fun _ s => 0 <= Z.of_nat n <= Int.max_signed -> nth_error s.(Machine.global) n = None
-  | GETGLOBALFIELD n p =>
-      fun msg s =>
-        (nth_error s.(Machine.global) n = None /\
-         msg = "GETGLOBALFIELD: index out of bounds"%string) \/
-        (exists glob, nth_error s.(Machine.global) n = Some glob /\
-                      field_or_heap s glob p = None /\
-                      msg = "GETGLOBALFIELD: field access failed"%string)
-  | PUSHGETGLOBALFIELD n p =>
-      fun _ s =>
-        nth_error s.(Machine.global) n = None \/
-        (exists glob, nth_error s.(Machine.global) n = Some glob /\
-                      field_or_heap s glob p = None)
-  | SETGLOBAL _ => fun _ _ => False
-  | ATOM t => fun _ _ => (Z.of_nat t <= 2097151) -> False
-  | PUSHATOM t => fun _ _ => (Z.of_nat t <= 2097151) -> False
-  | MAKEBLOCK _ size => fun _ _ => ((size >= 1)%nat) -> False
-  | MAKEBLOCK1 t => fun _ _ => (0 <= Z.of_nat t <= 255) -> False
-  | MAKEBLOCK2 t =>
-      fun _ s => (0 <= Z.of_nat t <= 255) -> match s.(Machine.stack) with _ :: _ => False | _ => True end
-  | MAKEBLOCK3 t =>
-      fun _ s => (0 <= Z.of_nat t <= 255) -> match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end
-  | MAKEFLOATBLOCK n => fun _ _ => ((n >= 1)%nat) -> False
-  | GETFIELD n => fun _ s => (Int.min_signed <= Z.of_nat n <= Int.max_signed) -> field_or_heap s s.(Machine.accu) n = None
-  | GETFLOATFIELD n => fun _ s => field_or_heap s s.(Machine.accu) n = None
-  | SETFIELD n =>
-      fun _ s => match s.(Machine.stack) with
-                 | newval :: _ =>
-                   match s.(Machine.accu) with
-                   | Val_ptr addr =>
-                     match heap_lookup s.(Machine.hp) addr with
-                     | Some (_, fields) => set_nth fields n newval = None
-                     | None => True
-                     end
-                   | _ => True
-                   end
-                 | _ => True
-                 end
-  | SETFLOATFIELD n =>
-      fun _ s => match s.(Machine.stack) with
-                 | _ :: _ =>
-                   match s.(Machine.accu) with
-                   | Val_ptr addr =>
-                     match heap_lookup s.(Machine.hp) addr with
-                     | Some (_, fields) =>
-                         set_nth fields n (hd (Val_int 0) s.(Machine.stack)) = None
-                     | None => True
-                     end
-                   | _ => True
-                   end
-                 | _ => True
-                 end
-  | VECTLENGTH => fun _ s => size_or_heap s s.(Machine.accu) = None
-  | GETVECTITEM =>
-      fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                 | _, Val_int idx :: _ =>
-                   field_or_heap s s.(Machine.accu) (Z.to_nat idx) = None
-                 | _, _ => True
-                 end
-  | SETVECTITEM =>
-      fun _ s => match s.(Machine.stack) with
-                 | Val_int idx :: newval :: _ =>
-                   match s.(Machine.accu) with
-                   | Val_ptr addr =>
-                     match heap_lookup s.(Machine.hp) addr with
-                     | Some (_, fields) =>
-                         set_nth fields (Z.to_nat idx) newval = None
-                     | None => True
-                     end
-                   | _ => True
-                   end
-                 | _ => True
-                 end
-  | GETBYTESCHAR =>
-      fun _ s => match s.(Machine.stack) with
-                 | Val_int idx :: _ =>
-                   match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
-                   | Some (Val_int _) => False
-                   | _ => True
-                   end
-                 | _ => True
-                 end
-  | SETBYTESCHAR =>
-      fun _ s =>
-        match s.(Machine.stack) with
-        | Val_int idx :: Val_int newchar :: _ =>
-          match s.(Machine.accu) with
-          | Val_ptr addr =>
-            match heap_lookup s.(Machine.hp) addr with
-            | Some (_, fields) =>
-                set_nth fields (Z.to_nat idx) (Val_int newchar) = None
-            | None => True
-            end
-          | _ => True
-          end
-        | _ => True
-        end
-  | GETSTRINGCHAR =>
-      fun _ s =>
-        match s.(Machine.stack) with
-        | Val_int idx :: _ =>
-          match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
-          | Some (Val_int _) => False
-          | _ => True
-          end
-        | _ => True
-        end
-  | BRANCH _ => fun _ _ => False
-  | BRANCHIF _ => fun _ _ => False
-  | BRANCHIFNOT _ => fun _ _ => False
-  | SWITCH _ _ _ _ =>
-      fun msg s =>
-        (msg = "SWITCH: constant index out of range"%string /\
-         match Machine.accu s with Val_int _ => True | _ => False end) \/
-        (msg = "SWITCH: block tag out of range"%string) \/
-        (msg = "SWITCH: dangling pointer"%string /\
-         match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end)
-  | BOOLNOT => fun _ _ => False
-  | PUSHTRAP _ => fun _ _ => False
-  | POPTRAP => fun msg _ => msg = "POPTRAP: malformed trap frame"%string
-  | RAISE =>
-      fun msg _ => msg = "unhandled exception"%string \/
-                   msg = "RAISE: malformed trap frame"%string
-  | RERAISE =>
-      fun msg _ => msg = "unhandled exception"%string \/
-                   msg = "RAISE: malformed trap frame"%string
-  | RAISE_NOTRACE =>
-      fun msg _ => msg = "unhandled exception"%string \/
-                   msg = "RAISE: malformed trap frame"%string
-  | CHECK_SIGNALS => fun _ _ => False
-  | C_CALL _ _ => fun _ _ => False
-  | CONSTINT n => fun _ _ => (Int.min_signed <= n <= Int.max_signed) -> False
-  | PUSHCONSTINT _ => fun _ _ => False
-  | NEGINT => fun _ s => forall n, s.(Machine.accu) <> Val_int n
-  | ADDINT => fun _ s => forall a b rest, s.(Machine.accu) = Val_int a -> s.(Machine.stack) = Val_int b :: rest -> False
-  | SUBINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | MULINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | DIVINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int b :: _ => Z.eqb b 0 = true | _, _ => True end
-  | MODINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int b :: _ => Z.eqb b 0 = true | _, _ => True end
-  | ANDINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | ORINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | XORINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | LSLINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | LSRINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | ASRINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | EQ => fun _ s => s.(Machine.stack) = nil
-  | NEQ => fun _ s => s.(Machine.stack) = nil
-  | LTINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | LEINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | GTINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | GEINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | OFFSETINT ofs => fun _ s => (Int.min_signed <= ofs * 2 <= Int.max_signed) -> match s.(Machine.accu) with Val_int _ => False | _ => True end
-  | OFFSETREF n =>
-      fun _ s => match s.(Machine.accu) with
-                 | Val_ptr addr =>
-                   match heap_lookup s.(Machine.hp) addr with
-                   | Some (_, Val_int _ :: _) => False
-                   | _ => True
-                   end
-                 | _ => True
-                 end
-  | ISINT => fun _ _ => False
-  | GETMETHOD =>
-      fun msg _ => msg = "GETMETHOD: stack underflow"%string \/
-                   msg = "GETMETHOD: no class table"%string \/
-                   msg = "GETMETHOD: not an integer index"%string \/
-                   msg = "GETMETHOD: method not found"%string
-  | GETPUBMET _ =>
-      fun msg _ => msg = "GETPUBMET: no class table"%string \/
-                   msg = "GETPUBMET: method not found"%string
-  | GETDYNMET =>
-      fun msg _ => msg = "GETDYNMET: stack underflow"%string \/
-                   msg = "GETDYNMET: no class table"%string \/
-                   msg = "GETDYNMET: method not found"%string
-  | BEQ n _ => fun _ _ => (Int.min_signed <= n <= Int.max_signed) -> False
-  | BNEQ n _ => fun _ _ => (Int.min_signed <= n <= Int.max_signed) -> False
-  | BLTINT n target =>
-      fun msg s => (Int.min_signed <= n <= Int.max_signed) ->
-                   msg = "BLTINT: not an integer"%string /\
-                   match Machine.accu s with Val_int _ => False | _ => True end
-  | BLEINT n target =>
-      fun msg s => (Int.min_signed <= n <= Int.max_signed) ->
-                   msg = "BLEINT: not an integer"%string /\
-                   match Machine.accu s with Val_int _ => False | _ => True end
-  | BGTINT n target =>
-      fun msg s => (Int.min_signed <= n <= Int.max_signed) ->
-                   msg = "BGTINT: not an integer"%string /\
-                   match Machine.accu s with Val_int _ => False | _ => True end
-  | BGEINT n target =>
-      fun msg s => (Int.min_signed <= n <= Int.max_signed) ->
-                   msg = "BGEINT: not an integer"%string /\
-                   match Machine.accu s with Val_int _ => False | _ => True end
-  | ULTINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | UGEINT => fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end
-  | BULTINT n target =>
-      fun msg s => ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed)) ->
-                   msg = "BULTINT: not an integer"%string /\
-                   match Machine.accu s with Val_int _ => False | _ => True end
-  | BUGEINT n target =>
-      fun msg s => ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed)) ->
-                   msg = "BUGEINT: not an integer"%string /\
-                   match Machine.accu s with Val_int _ => False | _ => True end
-  | STOP => fun _ _ => False
   end.
 
 (* ================================================================== *)
@@ -3513,7 +3221,7 @@ Definition P_error_of (i : instruction) : string -> state -> Prop :=
 (* 0 Admitted, 0 Axioms across all 151 proofs and bridges.              *)
 (* ================================================================== *)
 
-Module Type InstructVerificationSpec.
+Module Type InstructVerificationFineGrainedSpec.
 
   Parameter correct_ACC0 :
     handler_correct (handle_ACC 0) f_instr_ACC0
@@ -4429,125 +4137,207 @@ Module Type InstructVerificationSpec.
 
   Lemma handler_correct_of_parameters :
     forall i, handler_correct (handle_instr i) (clight_of i)
-                (pre_of i) (P_error_of i) (P_halt_of i) (P_ccall_of i).
+                (fun e m s ard => instr_wfb i = true /\ pre_of i e m s ard)
+                (P_error_of i) (P_halt_of i) (P_ccall_of i).
   Proof.
-    intros i; destruct i; cbn [handle_instr clight_of pre_of P_error_of P_halt_of P_ccall_of].
-    - (* ACC n *) apply handler_correct_absorb_WF; intros H; apply correct_ACC; exact H.
-    - (* PUSH *) apply correct_PUSH.
-    - (* PUSHACC n *)
-      destruct n as [|[|[|[|[|[|[|[|n']]]]]]]].
-      + apply handler_correct_vacuous.
-      + apply correct_PUSHACC1.
-      + apply correct_PUSHACC2.
-      + apply correct_PUSHACC3.
-      + apply correct_PUSHACC4.
-      + apply correct_PUSHACC5.
-      + apply correct_PUSHACC6.
+    intro i; destruct i;
+      cbn [handle_instr Dispatch.handle_instr clight_of instr_wfb pre_of P_error_of P_halt_of P_ccall_of].
+    - (* ACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ACC; apply Z.ltb_lt; exact H.
+    - (* PUSH *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH.
+    - (* PUSHACC *)
+      destruct n as [|[|[|[|[|[|[|[|n']]]]]]]];
+        apply handler_correct_absorb_wfb; intro H; try discriminate H.
+      + apply correct_PUSHACC1. + apply correct_PUSHACC2.
+      + apply correct_PUSHACC3. + apply correct_PUSHACC4.
+      + apply correct_PUSHACC5. + apply correct_PUSHACC6.
       + apply correct_PUSHACC7.
-      + apply handler_correct_vacuous.
-    - (* POP n *) apply handler_correct_absorb_WF; intros H; apply correct_POP; exact H.
-    - (* ASSIGN n *) apply correct_ASSIGN.
-    - (* ENVACC n *) apply handler_correct_absorb_WF; intros H; apply correct_ENVACC; exact H.
-    - (* PUSHENVACC n *) apply correct_PUSHENVACC.
-    - (* PUSH_RETADDR *) apply correct_PUSH_RETADDR.
-    - (* APPLY n *) apply correct_APPLY.
-    - (* APPLY1 *) apply correct_APPLY1.
-    - (* APPLY2 *) apply correct_APPLY2.
-    - (* APPLY3 *) apply correct_APPLY3.
-    - (* APPTERM *) apply correct_APPTERM.
-    - (* APPTERM1 *) apply correct_APPTERM1.
-    - (* APPTERM2 *) apply correct_APPTERM2.
-    - (* APPTERM3 *) apply correct_APPTERM3.
-    - (* RETURN *) apply correct_RETURN.
-    - (* RESTART *) apply correct_RESTART.
-    - (* GRAB *) apply correct_GRAB.
-    - (* CLOSURE nvars code_ofs *)
-      apply handler_correct_absorb_WF; intros [H1 H2]; apply correct_CLOSURE; assumption.
-    - (* CLOSUREREC nfuncs nvars code_offsets — default names: n n0 l *)
+    - (* POP *) apply handler_correct_absorb_wfb; intro H; apply correct_POP; apply Z.ltb_lt; exact H.
+    - (* ASSIGN *) apply handler_correct_absorb_wfb; intro; apply correct_ASSIGN.
+    - (* ENVACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ENVACC; apply Z.ltb_lt; exact H.
+    - (* PUSHENVACC *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHENVACC.
+    - (* PUSH_RETADDR *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH_RETADDR.
+    - (* APPLY *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY.
+    - (* APPLY1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY1.
+    - (* APPLY2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY2.
+    - (* APPLY3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY3.
+    - (* APPTERM *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM.
+    - (* APPTERM1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM1.
+    - (* APPTERM2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM2.
+    - (* APPTERM3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM3.
+    - (* RETURN *) apply handler_correct_absorb_wfb; intro; apply correct_RETURN.
+    - (* RESTART *) apply handler_correct_absorb_wfb; intro; apply correct_RESTART.
+    - (* GRAB *) apply handler_correct_absorb_wfb; intro; apply correct_GRAB.
+    - (* CLOSURE *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply andb_prop in H1; destruct H1 as [H1 H3].
+      apply andb_prop in H1; destruct H1 as [H1 H4].
+      apply Z.leb_le in H2; apply Z.leb_le in H3; apply Z.leb_le in H4; apply Z.leb_le in H1.
+      apply correct_CLOSURE; lia.
+    - (* CLOSUREREC *)
       destruct n as [|[|nfuncs']].
-      + apply handler_correct_vacuous.
+      + apply handler_correct_absorb_wfb; intro H; discriminate.
       + destruct n0 as [|nvars'].
         * destruct l as [|code_ofs [|rest_ofs]].
-          -- apply handler_correct_vacuous.
-          -- apply handler_correct_absorb_WF; intros H; apply correct_CLOSUREREC; exact H.
-          -- apply handler_correct_vacuous.
-        * apply handler_correct_vacuous.
-      + apply handler_correct_vacuous.
-    - (* OFFSETCLOSURE *) apply correct_OFFSETCLOSURE.
-    - (* PUSHOFFSETCLOSURE *) apply correct_PUSHOFFSETCLOSURE.
-    - (* GETGLOBAL *) apply handler_correct_absorb_WF; intros H; apply correct_GETGLOBAL; exact H.
-    - (* PUSHGETGLOBAL *) apply handler_correct_absorb_WF; intros H; apply correct_PUSHGETGLOBAL; exact H.
-    - (* GETGLOBALFIELD *) apply correct_GETGLOBALFIELD.
-    - (* PUSHGETGLOBALFIELD *) apply correct_PUSHGETGLOBALFIELD.
-    - (* SETGLOBAL *) apply correct_SETGLOBAL.
-    - (* ATOM *) apply handler_correct_absorb_WF; intros H; apply correct_ATOM; exact H.
-    - (* PUSHATOM *) apply handler_correct_absorb_WF; intros H; apply correct_PUSHATOM; exact H.
-    - (* MAKEBLOCK *) apply handler_correct_absorb_WF; intros H; apply correct_MAKEBLOCK; exact H.
-    - (* MAKEBLOCK1 *) apply handler_correct_absorb_WF; intros H; apply correct_MAKEBLOCK1; exact H.
-    - (* MAKEBLOCK2 *) apply handler_correct_absorb_WF; intros H; apply correct_MAKEBLOCK2; exact H.
-    - (* MAKEBLOCK3 *) apply handler_correct_absorb_WF; intros H; apply correct_MAKEBLOCK3; exact H.
-    - (* MAKEFLOATBLOCK *) apply handler_correct_absorb_WF; intros H; apply correct_MAKEFLOATBLOCK; exact H.
-    - (* GETFIELD *) apply handler_correct_absorb_WF; intros H; apply correct_GETFIELD; exact H.
-    - (* GETFLOATFIELD *) apply correct_GETFLOATFIELD.
-    - (* SETFIELD *) apply correct_SETFIELD.
-    - (* SETFLOATFIELD *) apply correct_SETFLOATFIELD.
-    - (* VECTLENGTH *) apply correct_VECTLENGTH.
-    - (* GETVECTITEM *) apply correct_GETVECTITEM.
-    - (* SETVECTITEM *) apply correct_SETVECTITEM.
-    - (* GETBYTESCHAR *) apply correct_GETBYTESCHAR.
-    - (* SETBYTESCHAR *) apply correct_SETBYTESCHAR.
-    - (* GETSTRINGCHAR *) apply correct_GETSTRINGCHAR.
-    - (* BRANCH *) apply correct_BRANCH.
-    - (* BRANCHIF *) apply correct_BRANCHIF.
-    - (* BRANCHIFNOT *) apply correct_BRANCHIFNOT.
-    - (* SWITCH *) apply correct_SWITCH.
-    - (* BOOLNOT *) apply correct_BOOLNOT.
-    - (* PUSHTRAP *) apply correct_PUSHTRAP.
-    - (* POPTRAP *) apply correct_POPTRAP.
-    - (* RAISE *) apply correct_RAISE.
-    - (* RERAISE *) apply correct_RERAISE.
-    - (* RAISE_NOTRACE *) apply correct_RAISE_NOTRACE.
-    - (* CHECK_SIGNALS *) apply correct_CHECK_SIGNALS.
-    - (* C_CALL *) apply correct_C_CALLN.
-    - (* CONSTINT *) apply handler_correct_absorb_WF; intros H; apply correct_CONSTINT; exact H.
-    - (* PUSHCONSTINT *) apply correct_PUSHCONSTINT.
-    - (* NEGINT *) apply correct_NEGINT.
-    - (* ADDINT *) apply correct_ADDINT.
-    - (* SUBINT *) apply correct_SUBINT.
-    - (* MULINT *) apply correct_MULINT.
-    - (* DIVINT *) apply correct_DIVINT.
-    - (* MODINT *) apply correct_MODINT.
-    - (* ANDINT *) apply correct_ANDINT.
-    - (* ORINT *) apply correct_ORINT.
-    - (* XORINT *) apply correct_XORINT.
-    - (* LSLINT *) apply correct_LSLINT.
-    - (* LSRINT *) apply correct_LSRINT.
-    - (* ASRINT *) apply correct_ASRINT.
-    - (* EQ *) apply correct_EQ.
-    - (* NEQ *) apply correct_NEQ.
-    - (* LTINT *) apply correct_LTINT.
-    - (* LEINT *) apply correct_LEINT.
-    - (* GTINT *) apply correct_GTINT.
-    - (* GEINT *) apply correct_GEINT.
-    - (* OFFSETINT *) apply handler_correct_absorb_WF; intros H; apply correct_OFFSETINT; exact H.
-    - (* OFFSETREF *) apply correct_OFFSETREF.
-    - (* ISINT *) apply correct_ISINT.
-    - (* GETMETHOD *) apply correct_GETMETHOD.
-    - (* GETPUBMET *) apply correct_GETPUBMET.
-    - (* GETDYNMET *) apply correct_GETDYNMET.
-    - (* BEQ *) apply handler_correct_absorb_WF; intros H; apply correct_BEQ; exact H.
-    - (* BNEQ *) apply handler_correct_absorb_WF; intros H; apply correct_BNEQ; exact H.
-    - (* BLTINT *) apply handler_correct_absorb_WF; intros H; apply correct_BLTINT; exact H.
-    - (* BLEINT *) apply handler_correct_absorb_WF; intros H; apply correct_BLEINT; exact H.
-    - (* BGTINT *) apply handler_correct_absorb_WF; intros H; apply correct_BGTINT; exact H.
-    - (* BGEINT *) apply handler_correct_absorb_WF; intros H; apply correct_BGEINT; exact H.
-    - (* ULTINT *) apply correct_ULTINT.
-    - (* UGEINT *) apply correct_UGEINT.
+          -- apply handler_correct_absorb_wfb; intro H; discriminate.
+          -- apply handler_correct_absorb_wfb; intro H.
+             apply andb_prop in H; destruct H as [H1 H2].
+             apply Z.leb_le in H1; apply Z.leb_le in H2.
+             apply correct_CLOSUREREC; lia.
+          -- apply handler_correct_absorb_wfb; intro H; discriminate.
+        * apply handler_correct_absorb_wfb; intro H; discriminate.
+      + apply handler_correct_absorb_wfb; intro H; discriminate.
+    - (* OFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETCLOSURE.
+    - (* PUSHOFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHOFFSETCLOSURE.
+    - (* GETGLOBAL *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_GETGLOBAL; lia.
+    - (* PUSHGETGLOBAL *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_PUSHGETGLOBAL; lia.
+    - (* GETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETGLOBALFIELD.
+    - (* PUSHGETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHGETGLOBALFIELD.
+    - (* SETGLOBAL *) apply handler_correct_absorb_wfb; intro; apply correct_SETGLOBAL.
+    - (* ATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_ATOM; apply Z.leb_le; exact H.
+    - (* PUSHATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_PUSHATOM; apply Z.leb_le; exact H.
+    - (* MAKEBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEBLOCK; apply Nat.leb_le; exact H.
+    - (* MAKEBLOCK1 *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_MAKEBLOCK1; lia.
+    - (* MAKEBLOCK2 *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_MAKEBLOCK2; lia.
+    - (* MAKEBLOCK3 *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_MAKEBLOCK3; lia.
+    - (* MAKEFLOATBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEFLOATBLOCK; apply Nat.leb_le; exact H.
+    - (* GETFIELD *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_GETFIELD; lia.
+    - (* GETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETFLOATFIELD.
+    - (* SETFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFIELD.
+    - (* SETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFLOATFIELD.
+    - (* VECTLENGTH *) apply handler_correct_absorb_wfb; intro; apply correct_VECTLENGTH.
+    - (* GETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_GETVECTITEM.
+    - (* SETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_SETVECTITEM.
+    - (* GETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETBYTESCHAR.
+    - (* SETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_SETBYTESCHAR.
+    - (* GETSTRINGCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETSTRINGCHAR.
+    - (* BRANCH *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCH.
+    - (* BRANCHIF *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIF.
+    - (* BRANCHIFNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIFNOT.
+    - (* SWITCH *) apply handler_correct_absorb_wfb; intro; apply correct_SWITCH.
+    - (* BOOLNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BOOLNOT.
+    - (* PUSHTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHTRAP.
+    - (* POPTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_POPTRAP.
+    - (* RAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE.
+    - (* RERAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RERAISE.
+    - (* RAISE_NOTRACE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE_NOTRACE.
+    - (* CHECK_SIGNALS *) apply handler_correct_absorb_wfb; intro; apply correct_CHECK_SIGNALS.
+    - (* C_CALL *) apply handler_correct_absorb_wfb; intro; apply correct_C_CALLN.
+    - (* CONSTINT *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_CONSTINT; lia.
+    - (* PUSHCONSTINT *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHCONSTINT.
+    - (* NEGINT *) apply handler_correct_absorb_wfb; intro; apply correct_NEGINT.
+    - (* ADDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ADDINT.
+    - (* SUBINT *) apply handler_correct_absorb_wfb; intro; apply correct_SUBINT.
+    - (* MULINT *) apply handler_correct_absorb_wfb; intro; apply correct_MULINT.
+    - (* DIVINT *) apply handler_correct_absorb_wfb; intro; apply correct_DIVINT.
+    - (* MODINT *) apply handler_correct_absorb_wfb; intro; apply correct_MODINT.
+    - (* ANDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ANDINT.
+    - (* ORINT *) apply handler_correct_absorb_wfb; intro; apply correct_ORINT.
+    - (* XORINT *) apply handler_correct_absorb_wfb; intro; apply correct_XORINT.
+    - (* LSLINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSLINT.
+    - (* LSRINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSRINT.
+    - (* ASRINT *) apply handler_correct_absorb_wfb; intro; apply correct_ASRINT.
+    - (* EQ *) apply handler_correct_absorb_wfb; intro; apply correct_EQ.
+    - (* NEQ *) apply handler_correct_absorb_wfb; intro; apply correct_NEQ.
+    - (* LTINT *) apply handler_correct_absorb_wfb; intro; apply correct_LTINT.
+    - (* LEINT *) apply handler_correct_absorb_wfb; intro; apply correct_LEINT.
+    - (* GTINT *) apply handler_correct_absorb_wfb; intro; apply correct_GTINT.
+    - (* GEINT *) apply handler_correct_absorb_wfb; intro; apply correct_GEINT.
+    - (* OFFSETINT *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_OFFSETINT; lia.
+    - (* OFFSETREF *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETREF.
+    - (* ISINT *) apply handler_correct_absorb_wfb; intro; apply correct_ISINT.
+    - (* GETMETHOD *) apply handler_correct_absorb_wfb; intro; apply correct_GETMETHOD.
+    - (* GETPUBMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETPUBMET.
+    - (* GETDYNMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETDYNMET.
+    - (* BEQ *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_BEQ; lia.
+    - (* BNEQ *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_BNEQ; lia.
+    - (* BLTINT *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_BLTINT; lia.
+    - (* BLEINT *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_BLEINT; lia.
+    - (* BGTINT *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_BGTINT; lia.
+    - (* BGEINT *)
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply Z.leb_le in H1; apply Z.leb_le in H2.
+      apply correct_BGEINT; lia.
+    - (* ULTINT *) apply handler_correct_absorb_wfb; intro; apply correct_ULTINT.
+    - (* UGEINT *) apply handler_correct_absorb_wfb; intro; apply correct_UGEINT.
     - (* BULTINT *)
-      apply handler_correct_absorb_WF; intros [H1 H2]; apply correct_BULTINT; assumption.
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply andb_prop in H1; destruct H1 as [H1 H3].
+      apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
+      apply correct_BULTINT; lia.
     - (* BUGEINT *)
-      apply handler_correct_absorb_WF; intros [H1 H2]; apply correct_BUGEINT; assumption.
-    - (* STOP *) apply correct_STOP.
+      apply handler_correct_absorb_wfb; intro H.
+      apply andb_prop in H; destruct H as [H1 H2].
+      apply andb_prop in H1; destruct H1 as [H1 H3].
+      apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
+      apply correct_BUGEINT; lia.
+    - (* STOP *) apply handler_correct_absorb_wfb; intro; apply correct_STOP.
   Qed.
 
+End InstructVerificationFineGrainedSpec.
+
+Module Type InstructVerificationSpec.
+  Parameter handler_correct_all :
+    forall i, handler_correct (handle_instr i) (clight_of i)
+                (fun e m s ard => instr_wfb i = true /\ pre_of i e m s ard)
+                (P_error_of i) (P_halt_of i) (P_ccall_of i).
 End InstructVerificationSpec.
+
+Module InstructVerificationFromFineGrained
+       (FG : InstructVerificationFineGrainedSpec) <: InstructVerificationSpec.
+  Definition handler_correct_all := FG.handler_correct_of_parameters.
+End InstructVerificationFromFineGrained.
