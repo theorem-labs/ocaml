@@ -48,6 +48,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETIN
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import POP_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import STOP_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RERAISE_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RAISE_NOTRACE_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ATOM_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CHECK_SIGNALS_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETGLOBAL_correct.
