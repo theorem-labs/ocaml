@@ -106,6 +106,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RAISE_NO
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEBLOCK_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEFLOATBLOCK_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CLOSURE_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RETURN_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -210,8 +211,8 @@ Definition correct_APPTERM3 : forall n,
 Definition correct_RETURN : forall n,
   handler_correct (handle_instr (RETURN n)) (clight_of (RETURN n))
     (pre_of (RETURN n))
-    (P_error_of (RETURN n)) (P_halt_of (RETURN n)) (P_ccall_of (RETURN n)).
-Admitted.
+    (P_error_of (RETURN n)) (P_halt_of (RETURN n)) (P_ccall_of (RETURN n))
+  := RETURN_correct.correct_RETURN.
 
 Definition correct_RESTART :
   handler_correct (handle_instr RESTART) (clight_of RESTART)
