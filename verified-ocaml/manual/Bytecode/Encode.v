@@ -121,12 +121,6 @@ Definition instr_word_size (i : instruction) : nat :=
   | BULTINT _ _      => 3
   | BUGEINT _ _      => 3
   | STOP             => 1
-  | EVENT            => 1
-  | BREAK            => 1
-  | PERFORM          => 1
-  | RESUME           => 1
-  | RESUMETERM _     => 2
-  | REPERFORMTERM _  => 2
   end.
 
 (* ------------------------------------------------------------------ *)
@@ -296,14 +290,8 @@ Definition encode_instr (omap : list nat) (idx : nat) (i : instruction) : list Z
   | GETPUBMET t      => emit_words [141; t; 0]
   | GETDYNMET        => emit_words [142]
   | STOP             => emit_words [143]
-  | EVENT            => emit_words [144]
-  | BREAK            => emit_words [145]
   | RERAISE          => emit_words [146]
   | RAISE_NOTRACE    => emit_words [147]
-  | PERFORM          => emit_words [149]
-  | RESUME           => emit_words [150]
-  | RESUMETERM n     => emit_words [151; Z.of_nat n]
-  | REPERFORMTERM n  => emit_words [152; Z.of_nat n]
   end.
 
 (* ------------------------------------------------------------------ *)

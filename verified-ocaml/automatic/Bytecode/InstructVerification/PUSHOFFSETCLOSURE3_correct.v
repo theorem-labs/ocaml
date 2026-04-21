@@ -1,6 +1,6 @@
-(* PUSHOFFSETCLOSURE2_correct.v -- PUSHOFFSETCLOSURE2 = PUSH then OFFSETCLOSURE2.
+(* PUSHOFFSETCLOSURE3_correct.v -- PUSHOFFSETCLOSURE3 = PUSH then OFFSETCLOSURE3.
 
-   C handler (f_instr_PUSHOFFSETCLOSURE2):
+   C handler (f_instr_PUSHOFFSETCLOSURE3):
      _t'4 = s->sp;                    // load sp
      _t'1 = (tptr tlong)(_t'4 - 1);   // new_sp = sp - 1
      s->sp = _t'1;                     // store 1: update sp field
@@ -84,8 +84,8 @@ Proof. intros. reflexivity. Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_PUSHOFFSETCLOSURE2_correct :
-    handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE2
+Theorem verify_PUSHOFFSETCLOSURE3_correct :
+    handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE3
       (sp_at_least 16 /\p closure_offset_pre 2 24)
       (fun msg s =>
         (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\

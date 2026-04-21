@@ -39,8 +39,18 @@
 #define Alloc_small(x, n, t) (x) = heap_alloc(s, (n), (t))
 #define Alloc_small_origin
 
+/* Write-barrier and major-heap allocation: our model uses direct stores
+   and routes all allocation through heap_alloc (no minor/major split). */
+#define caml_modify(fp, val) (*(fp) = (val))
+#define caml_initialize(fp, val) (*(fp) = (val))
+#define caml_alloc_shr(n, t) heap_alloc(s, (n), (t))
+
 /* Runtime assertion macros: erase. Our model doesn't carry their checks. */
 #define CAMLassert(x)
+
+/* Signal/event handling: erase. Our model abstracts signals. */
+#define caml_something_to_do 0
+#define caml_process_pending_actions()
 
 /* Caml_state access. The input is pre-rewritten so Caml_state->trapsp
    becomes Caml_state_trapsp (a bare identifier cpp can expand). */

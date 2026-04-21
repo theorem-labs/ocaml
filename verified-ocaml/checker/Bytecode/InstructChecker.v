@@ -43,7 +43,6 @@ From OCamlInterp.Automatic Require Bytecode.InstructVerification.BOOLNOT_correct
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.BRANCHIFNOT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.BRANCHIF_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.BRANCH_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BREAK_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.BUGEINT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.BULTINT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.CHECK_SIGNALS_correct.
@@ -67,7 +66,6 @@ From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC3_correct
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC4_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.EQ_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.EVENT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.GEINT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETBYTESCHAR_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETDYNMET_correct.
@@ -100,13 +98,12 @@ From OCamlInterp.Automatic Require Bytecode.InstructVerification.MULINT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.NEGINT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.NEQ_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSURE0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSURE2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSUREM2_correct.
+From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSURE3_correct.
+From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSUREM3_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSURE_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETINT_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETREF_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.ORINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PERFORM_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.POPTRAP_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.POP_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC1_correct.
@@ -131,19 +128,16 @@ From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHENVACC_corr
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHGETGLOBALFIELD_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHGETGLOBAL_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSURE0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSURE2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSUREM2_correct.
+From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSURE3_correct.
+From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSUREM3_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSURE_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHTRAP_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSH_RETADDR_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSH_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.RAISE_NOTRACE_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.RAISE_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.REPERFORMTERM_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.RERAISE_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.RESTART_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.RESUMETERM_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.RESUME_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.RETURN_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETBYTESCHAR_correct.
 From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETFIELD0_correct.
@@ -245,7 +239,6 @@ Module InstructVerification <: InstructVerificationSpec.
       code_loadable
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
     := BRANCH_correct.verify_BRANCH_handler_correct.
-  Definition correct_BREAK := BREAK_correct.verify_BREAK_correct.
   Definition correct_BUGEINT :
     forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
@@ -281,7 +274,6 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_ENVACC4 := ENVACC4_correct.verify_ENVACC4_with_pre.
   Definition correct_ENVACC := ENVACC_correct.ENVACC_correct_for_spec.
   Definition correct_EQ := EQ_correct.verify_EQ_handler_correct.
-  Definition correct_EVENT := EVENT_correct.verify_EVENT_correct.
   Definition correct_GEINT := GEINT_correct.verify_GEINT_handler_correct.
   Definition correct_GETBYTESCHAR := GETBYTESCHAR_correct.verify_GETBYTESCHAR_correct.
   Definition correct_GETDYNMET := GETDYNMET_correct.verify_GETDYNMET_correct.
@@ -320,13 +312,12 @@ Module InstructVerification <: InstructVerificationSpec.
   Definition correct_NEGINT := NEGINT_correct.verify_NEGINT_compl_comp.
   Definition correct_NEQ := NEQ_correct.verify_NEQ_handler_correct.
   Definition correct_OFFSETCLOSURE0 := OFFSETCLOSURE0_correct.verify_OFFSETCLOSURE0_compl_comp.
-  Definition correct_OFFSETCLOSURE2 := OFFSETCLOSURE2_correct.verify_OFFSETCLOSURE2_compl_comp.
-  Definition correct_OFFSETCLOSUREM2 := OFFSETCLOSUREM2_correct.verify_OFFSETCLOSUREM2_compl_comp.
+  Definition correct_OFFSETCLOSURE3 := OFFSETCLOSURE3_correct.verify_OFFSETCLOSURE3_compl_comp.
+  Definition correct_OFFSETCLOSUREM3 := OFFSETCLOSUREM3_correct.verify_OFFSETCLOSUREM3_compl_comp.
   Definition correct_OFFSETCLOSURE := OFFSETCLOSURE_correct.verify_OFFSETCLOSURE_correct.
   Definition correct_OFFSETINT := OFFSETINT_correct.verify_OFFSETINT_handler_correct.
   Definition correct_OFFSETREF := OFFSETREF_correct.verify_OFFSETREF_correct.
   Definition correct_ORINT := ORINT_correct.verify_ORINT_correct.
-  Definition correct_PERFORM := PERFORM_correct.verify_PERFORM_correct.
   Definition correct_POPTRAP := POPTRAP_correct.verify_POPTRAP_correct.
   Definition correct_POP :
     forall n,
@@ -368,19 +359,16 @@ Module InstructVerification <: InstructVerificationSpec.
       (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False)
     := PUSHGETGLOBAL_correct.verify_PUSHGETGLOBAL_handler_correct.
   Definition correct_PUSHOFFSETCLOSURE0 := PUSHOFFSETCLOSURE0_correct.verify_PUSHOFFSETCLOSURE0_correct.
-  Definition correct_PUSHOFFSETCLOSURE2 := PUSHOFFSETCLOSURE2_correct.verify_PUSHOFFSETCLOSURE2_correct.
-  Definition correct_PUSHOFFSETCLOSUREM2 := PUSHOFFSETCLOSUREM2_correct.verify_PUSHOFFSETCLOSUREM2_correct.
+  Definition correct_PUSHOFFSETCLOSURE3 := PUSHOFFSETCLOSURE3_correct.verify_PUSHOFFSETCLOSURE3_correct.
+  Definition correct_PUSHOFFSETCLOSUREM3 := PUSHOFFSETCLOSUREM3_correct.verify_PUSHOFFSETCLOSUREM3_correct.
   Definition correct_PUSHOFFSETCLOSURE := PUSHOFFSETCLOSURE_correct.verify_PUSHOFFSETCLOSURE_correct.
   Definition correct_PUSHTRAP := PUSHTRAP_correct.verify_PUSHTRAP_correct.
   Definition correct_PUSH_RETADDR := PUSH_RETADDR_correct.verify_PUSH_RETADDR_correct.
   Definition correct_PUSH := PUSH_correct.verify_PUSH_correct.
   Definition correct_RAISE_NOTRACE := RAISE_NOTRACE_correct.verify_RAISE_NOTRACE_correct.
   Definition correct_RAISE := RAISE_correct.verify_RAISE_correct.
-  Definition correct_REPERFORMTERM := REPERFORMTERM_correct.verify_REPERFORMTERM_correct.
   Definition correct_RERAISE := RERAISE_correct.verify_RERAISE_correct.
   Definition correct_RESTART := RESTART_correct.verify_RESTART_correct.
-  Definition correct_RESUMETERM := RESUMETERM_correct.verify_RESUMETERM_correct.
-  Definition correct_RESUME := RESUME_correct.verify_RESUME_correct.
   Definition correct_RETURN := RETURN_correct.verify_RETURN_correct.
   Definition correct_SETBYTESCHAR := SETBYTESCHAR_correct.verify_SETBYTESCHAR_correct.
   Definition correct_SETFIELD0 := SETFIELD0_correct.verify_SETFIELD0_correct.
@@ -636,11 +624,6 @@ Module InstructVerification <: InstructVerificationSpec.
     idtac "</correct_BRANCH>".
   Abort.
   Goal True.
-    idtac "<correct_BREAK>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BREAK.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BREAK>".
   Abort.
   Goal True.
     idtac "<correct_BUGEINT>".
@@ -804,11 +787,6 @@ Module InstructVerification <: InstructVerificationSpec.
     idtac "</correct_EQ>".
   Abort.
   Goal True.
-    idtac "<correct_EVENT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_EVENT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_EVENT>".
   Abort.
   Goal True.
     idtac "<correct_GEINT>".
@@ -1035,18 +1013,18 @@ Module InstructVerification <: InstructVerificationSpec.
     idtac "</correct_OFFSETCLOSURE0>".
   Abort.
   Goal True.
-    idtac "<correct_OFFSETCLOSURE2>".
+    idtac "<correct_OFFSETCLOSURE3>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETCLOSURE2.
+    Print Assumptions correct_OFFSETCLOSURE3.
     idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETCLOSURE2>".
+    idtac "</correct_OFFSETCLOSURE3>".
   Abort.
   Goal True.
-    idtac "<correct_OFFSETCLOSUREM2>".
+    idtac "<correct_OFFSETCLOSUREM3>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETCLOSUREM2.
+    Print Assumptions correct_OFFSETCLOSUREM3.
     idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETCLOSUREM2>".
+    idtac "</correct_OFFSETCLOSUREM3>".
   Abort.
   Goal True.
     idtac "<correct_OFFSETCLOSURE>".
@@ -1077,11 +1055,6 @@ Module InstructVerification <: InstructVerificationSpec.
     idtac "</correct_ORINT>".
   Abort.
   Goal True.
-    idtac "<correct_PERFORM>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PERFORM.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PERFORM>".
   Abort.
   Goal True.
     idtac "<correct_POPTRAP>".
@@ -1252,18 +1225,18 @@ Module InstructVerification <: InstructVerificationSpec.
     idtac "</correct_PUSHOFFSETCLOSURE0>".
   Abort.
   Goal True.
-    idtac "<correct_PUSHOFFSETCLOSURE2>".
+    idtac "<correct_PUSHOFFSETCLOSURE3>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHOFFSETCLOSURE2.
+    Print Assumptions correct_PUSHOFFSETCLOSURE3.
     idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHOFFSETCLOSURE2>".
+    idtac "</correct_PUSHOFFSETCLOSURE3>".
   Abort.
   Goal True.
-    idtac "<correct_PUSHOFFSETCLOSUREM2>".
+    idtac "<correct_PUSHOFFSETCLOSUREM3>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHOFFSETCLOSUREM2.
+    Print Assumptions correct_PUSHOFFSETCLOSUREM3.
     idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHOFFSETCLOSUREM2>".
+    idtac "</correct_PUSHOFFSETCLOSUREM3>".
   Abort.
   Goal True.
     idtac "<correct_PUSHOFFSETCLOSURE>".
@@ -1308,11 +1281,6 @@ Module InstructVerification <: InstructVerificationSpec.
     idtac "</correct_RAISE>".
   Abort.
   Goal True.
-    idtac "<correct_REPERFORMTERM>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_REPERFORMTERM.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_REPERFORMTERM>".
   Abort.
   Goal True.
     idtac "<correct_RERAISE>".
@@ -1329,18 +1297,8 @@ Module InstructVerification <: InstructVerificationSpec.
     idtac "</correct_RESTART>".
   Abort.
   Goal True.
-    idtac "<correct_RESUMETERM>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_RESUMETERM.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_RESUMETERM>".
   Abort.
   Goal True.
-    idtac "<correct_RESUME>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_RESUME.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_RESUME>".
   Abort.
   Goal True.
     idtac "<correct_RETURN>".

@@ -1,24 +1,25 @@
-(* OFFSETCLOSUREM2_correct.v -- OFFSETCLOSUREM2 completeness proof.
+(* OFFSETCLOSURE3_correct.v -- OFFSETCLOSURE3 completeness proof.
 
-   Proves that the C handler f_instr_OFFSETCLOSUREM2 computes the same state
-   transition as the Rocq handle_OFFSETCLOSURE (-2) handler.
+   Proves that the C handler f_instr_OFFSETCLOSURE3 computes the same state
+   transition as the Rocq handle_OFFSETCLOSURE 2 handler.
 
-   OFFSETCLOSUREM2 C code:
+   OFFSETCLOSURE3 C code:
      _t'1 = s->env;
-     s->accu = _t'1 - 3 * sizeof(long);   // env - 24 bytes
+     s->accu = _t'1 + 3 * sizeof(long);   // env + 24 bytes
      return 0
 
-   Rocq: handle_OFFSETCLOSURE (-2) pc' s matches on s.(env):
+   Rocq: handle_OFFSETCLOSURE 2 pc' s matches on s.(env):
      - Val_int z => Error
-     - Val_block t _ => Error  (Z.eqb (-2) 0 = false)
+     - Val_block t _ => Error  (Z.eqb 2 0 = false)
      - Val_ptr n => Error
-     - Val_closure addr base_ofs =>
-         Step (accu := Val_closure addr (Z.to_nat (Z.of_nat base_ofs + (-2))))
+     - Val_closure addr base_ofs => Step (accu := Val_closure addr (base_ofs + 2))
 
-   Same CompCert gap as OFFSETCLOSURE2: the C code performs integer
-   subtraction (tlong - tulong) which CompCert's sem_binarith cannot
-   evaluate on Vptr values.  The step_pre asserts the env is stored
-   as Vlong and the subtraction result has valid val_repr.
+   The C code performs integer addition (tlong + tulong) on the env value.
+   CompCert's sem_binarith does not support Vptr for integer addition, so
+   we require a step_pre asserting the env value is represented as Vlong
+   (a flat integer encoding of the closure pointer) rather than Vptr.
+   The precondition also requires that the result of addition gives a
+   valid val_repr for the new closure.
 
    No Axioms, no Admitted. *)
 
@@ -51,7 +52,7 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 (* ================================================================== *)
-(* Semantic lemmas for the OFFSETCLOSUREM2 body                        *)
+(* Semantic lemmas for the OFFSETCLOSURE3 body                         *)
 (* ================================================================== *)
 
 (* Inner Omul: 3 * sizeof(long) = 24, using Vptrofs form *)
@@ -62,11 +63,11 @@ Local Lemma sem_mul_3_sizeof : forall m,
   = Some (Vlong (Int64.repr 24)).
 Proof. intros. reflexivity. Qed.
 
-(* Outer Osub: Vlong - Vlong(24) *)
-Local Lemma sem_sub_long_24 : forall n m,
-  sem_binary_operation (genv_cenv ge) Osub
+(* Outer Oadd: Vlong + Vlong(24) *)
+Local Lemma sem_add_long_24 : forall n m,
+  sem_binary_operation (genv_cenv ge) Oadd
     (Vlong n) tlong (Vlong (Int64.repr 24)) tulong m
-  = Some (Vlong (Int64.sub n (Int64.repr 24))).
+  = Some (Vlong (Int64.add n (Int64.repr 24))).
 Proof. intros. reflexivity. Qed.
 
 (* Cast: tulong -> tlong for Vlong *)
@@ -74,20 +75,13 @@ Local Lemma sem_cast_tulong_tlong : forall n m,
   sem_cast (Vlong n) tulong tlong m = Some (Vlong n).
 Proof. intros. reflexivity. Qed.
 
-(* Bridge: Int64.sub x (repr 24) = Int64.add x (repr (-24)) *)
-Local Lemma sub_24_eq_add_neg24 : forall x,
-  Int64.sub x (Int64.repr 24) = Int64.add x (Int64.repr (-24)).
-Proof.
-  intros. rewrite Int64.sub_add_opp. f_equal.
-Qed.
-
 (* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_OFFSETCLOSUREM2_compl_comp :
-    handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM2
-      (closure_offset_pre (-2) (-24))
+Theorem verify_OFFSETCLOSURE3_compl_comp :
+    handler_correct (handle_OFFSETCLOSURE 2) f_instr_OFFSETCLOSURE3
+      (closure_offset_pre 2 24)
       (fun msg s =>
         (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
          match Machine.env s with Val_block _ _ => True | _ => False end) \/
@@ -108,7 +102,7 @@ Proof.
   - right; exact (conj eq_refl I).
 
   (* ================================================================ *)
-  (* Case 2: env = Val_block n l => Error "non-zero offset" (Z.eqb (-2) 0 = false) *)
+  (* Case 2: env = Val_block n l => Error "non-zero offset" (Z.eqb 2 0 = false) *)
   (* ================================================================ *)
   - left; exact (conj eq_refl I).
 
@@ -145,10 +139,6 @@ Proof.
       fold sb so hm in Hstep_pre.
       destruct Hstep_pre as [env_long [Henv_long_load Hresult_repr]].
 
-      (* Bridge: the generic precondition uses Int64.add with (-24),
-         but C semantics produce Int64.sub with 24. *)
-      rewrite <- sub_24_eq_add_neg24 in Hresult_repr.
-
       (* env_v = Vlong env_long (both load from same offset) *)
       assert (Henv_v_long : env_v = Vlong env_long).
       { rewrite Henv_long_load in Henv_load. congruence. }
@@ -165,7 +155,7 @@ Proof.
       destruct interp_state_co_env as [co_is [Hco [Henv_offset Haccu_offset]]].
 
       (* Compute result value *)
-      set (result_v := Vlong (Int64.sub env_long (Int64.repr 24))).
+      set (result_v := Vlong (Int64.add env_long (Int64.repr 24))).
 
       (* Accu store must succeed *)
       destruct (store_succeeds_sb m sb so 8 accu_v Hsb_writable Haccu_load ltac:(lia) ltac:(lia) result_v)
@@ -199,14 +189,14 @@ Proof.
         rewrite Hle_s; eval_cbn.
         rewrite Haccu_offset; eval_cbn.
 
-        (* === Sassign rvalue: _t'1 - 3*sizeof(long) === *)
+        (* === Sassign rvalue: _t'1 + 3*sizeof(long) === *)
         rewrite PTree.gss; eval_cbn.
 
         (* Inner mul: 3 * sizeof(long) = 24 *)
         rewrite sem_mul_3_sizeof; eval_cbn.
 
-        (* Outer sub: env_long - 24 *)
-        rewrite sem_sub_long_24; eval_cbn.
+        (* Outer add: env_long + 24 *)
+        rewrite sem_add_long_24; eval_cbn.
 
         (* Cast: tulong -> tlong *)
         rewrite sem_cast_tulong_tlong; eval_cbn.
@@ -255,8 +245,8 @@ Proof.
         assert (Haccu_load' : Mem.load Mint64 m' sb (uso + 8) = Some result_v).
         { pose proof (load_after_store_same m m' sb (uso + 8) result_v Hstore) as Htmp.
           unfold result_v in Htmp |- *.
-          change (Val.load_result Mint64 (Vlong (Int64.sub env_long (Int64.repr 24))))
-            with (Vlong (Int64.sub env_long (Int64.repr 24))) in Htmp.
+          change (Val.load_result Mint64 (Vlong (Int64.add env_long (Int64.repr 24))))
+            with (Vlong (Int64.add env_long (Int64.repr 24))) in Htmp.
           exact Htmp. }
 
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].

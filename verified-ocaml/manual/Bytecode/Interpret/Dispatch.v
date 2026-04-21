@@ -104,11 +104,5 @@ Definition handle_instr (instr : instruction) (pc' : Z) (s : state) : step_resul
   | BULTINT n target => handle_BULTINT n target pc' s
   | BUGEINT n target => handle_BUGEINT n target pc' s
   | STOP => handle_STOP s
-  | EVENT => handle_EVENT pc' s
-  | BREAK => handle_BREAK pc' s
-  | PERFORM => handle_PERFORM pc' s
-  | RESUME => handle_RESUME pc' s
-  | RESUMETERM _ => handle_RESUMETERM pc' s
-  | REPERFORMTERM _ => handle_REPERFORMTERM pc' s
 
   end.

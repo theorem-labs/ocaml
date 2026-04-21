@@ -4,10 +4,15 @@
 #
 # Usage: ./extract_handlers.sh path/to/interp.c > gen/instruct_handlers.c
 #
-# Section 2 handlers are produced by a cpp shim (gen/extract_shim.h) that
-# redefines interp.c's dispatch macros; see EXTRACT_SIMPLIFICATION_PLAN.md.
-# Section 1 handlers are hand-written because they diverge semantically
-# from interp.c (simplified RAISE, C_CALL stubs, debugger no-ops, etc.).
+# To regenerate the Clight AST used by the Rocq build:
+#   cd verified-ocaml/manual/Bytecode/generator
+#   make ../Generated/instruct_handlers.v
+#
+# Most handlers are produced by a cpp shim (extract_shim.h) that redefines
+# interp.c's dispatch macros so each handler becomes a standalone function.
+# A small number remain hand-written because they diverge semantically from
+# interp.c (RAISE skips backtrace, C_CALL returns STATUS_CCALL, POPTRAP
+# omits signal restart, STOP returns STATUS_HALT).
 
 set -euo pipefail
 
@@ -95,11 +100,8 @@ struct interp_state {
     value  *trap_sp;
 };
 
-/* External functions for heap allocation, C calls, modification, exceptions */
+/* External functions for heap allocation and exceptions */
 extern value heap_alloc(struct interp_state *s, intptr_t nfields, intptr_t tag);
-extern void caml_modify(value *fp, value val);
-extern void caml_initialize(value *fp, value val);
-extern value caml_alloc_shr(mlsize_t wosize, tag_t tag);
 extern void caml_raise_zero_divide(void);
 
 HEADER
@@ -143,7 +145,10 @@ sed -i -e 's/Caml_state->trapsp/Caml_state_trapsp/g' \
        -e 'ta' \
        -e '/^#define Integer_comparison(/,/Next;$/d' \
        -e '/^#define Integer_branch_comparison(/,/Next;$/d' \
-       -e 's/goto check_stacks;/Next;/g' "$TMP/dispatch.c"
+       -e 's/goto check_stacks;/Next;/g' \
+       -e 's/goto process_actions;/Next;/g' \
+       -e '/^[[:space:]]*process_actions:/d' \
+       -e '/^#define CAML_METHOD_CACHE$/d' "$TMP/dispatch.c"
 
 # Inline `/* Fallthrough */` bodies and flatten block-form handlers.
 awk -f "$INLINE_AWK" "$TMP/dispatch.c" > "$TMP/dispatch_norm.c"
@@ -174,15 +179,22 @@ emit_cpp() {
     echo ""
 }
 
+# Emit a cpp-extracted handler but replace its return code.
+emit_cpp_ret() {
+    local NAME="$1" RET="$2"
+    emit_cpp "$NAME" | sed "s/return STATUS_STEP;/return ${RET};/"
+}
+
 # ===================================================================
-# SECTION 1: Manually defined simple/specialized handlers
-# These are one-liners, have fallthroughs, or use macros that
-# the sed approach can't handle cleanly.
+# SECTION 1: Handlers extracted from interp.c via the cpp shim.
+# The shim rewrites Alloc_small→heap_alloc, caml_modify→direct store,
+# caml_alloc_shr→heap_alloc, caml_initialize→direct store, erases GC
+# and debugger boundaries, and expands Integer_{,branch_}comparison.
 # ===================================================================
 
 # --- Basic stack operations ---
 for i in 0 1 2 3 4 5 6 7; do emit_cpp "ACC${i}";       done
-emit_cpp "PUSH"                                  # PUSHACC0 shares this label
+emit_cpp "PUSH"
 for i in 1 2 3 4 5 6 7;   do emit_cpp "PUSHACC${i}";   done
 
 # --- Environment access ---
@@ -195,500 +207,82 @@ for i in 0 1 2 3; do emit_cpp "PUSHCONST${i}";  done
 
 # --- Block field access ---
 for i in 0 1 2 3; do emit_cpp "GETFIELD${i}";   done
+for i in 0 1 2 3; do emit_cpp "SETFIELD${i}";   done
 
-# SETFIELD0-3: interp.c uses caml_modify; our model uses direct assignment.
-for i in 0 1 2 3; do
-    emit_raw "SETFIELD${i}" "    Field(s->accu, ${i}) = *s->sp++;
-    s->accu = Val_unit;"
-done
+# --- Offset closures (fallthroughs inlined by awk) ---
+emit_cpp "OFFSETCLOSURE"
+emit_cpp "OFFSETCLOSUREM3"
+emit_cpp "OFFSETCLOSURE0"
+emit_cpp "OFFSETCLOSURE3"
+emit_cpp "PUSHOFFSETCLOSURE"
+emit_cpp "PUSHOFFSETCLOSUREM3"
+emit_cpp "PUSHOFFSETCLOSURE0"
+emit_cpp "PUSHOFFSETCLOSURE3"
 
-# --- Offset closures (fallthroughs in interp.c) ---
-
-# OFFSETCLOSURE: accu = env + *pc * sizeof(value)
-emit_raw "OFFSETCLOSURE" "    s->accu = s->env + *s->pc++ * sizeof(value);"
-
-# OFFSETCLOSUREM2 (interp.c calls it OFFSETCLOSUREM3: env - 3*sizeof(value))
-emit_raw "OFFSETCLOSUREM2" "    s->accu = s->env - 3 * sizeof(value);"
-
-# OFFSETCLOSURE0: accu = env
-emit_raw "OFFSETCLOSURE0" "    s->accu = s->env;"
-
-# OFFSETCLOSURE2 (interp.c calls it OFFSETCLOSURE3: env + 3*sizeof(value))
-emit_raw "OFFSETCLOSURE2" "    s->accu = s->env + 3 * sizeof(value);"
-
-# PUSHOFFSETCLOSURE variants: push then offset closure
-emit_raw "PUSHOFFSETCLOSURE" "    *--s->sp = s->accu;
-    s->accu = s->env + *s->pc++ * sizeof(value);"
-
-emit_raw "PUSHOFFSETCLOSUREM2" "    *--s->sp = s->accu;
-    s->accu = s->env - 3 * sizeof(value);"
-
-emit_raw "PUSHOFFSETCLOSURE0" "    *--s->sp = s->accu;
-    s->accu = s->env;"
-
-emit_raw "PUSHOFFSETCLOSURE2" "    *--s->sp = s->accu;
-    s->accu = s->env + 3 * sizeof(value);"
-
-# --- Control: STOP and CHECK_SIGNALS ---
-
-emit_raw "STOP" "    /* Halt execution */"
-emit_raw "CHECK_SIGNALS" "    /* Signal check abstracted */"
+# --- Control ---
+emit_cpp "CHECK_SIGNALS"
 
 # --- Integer comparisons and branch comparisons ---
-# Macro-generated in interp.c via Integer_{,branch_}comparison; the interp.c
-# #define blocks are stripped from the slice above so the shim's colon-free
-# versions expand for each invocation.
 for OP in EQ NEQ LTINT LEINT GTINT GEINT ULTINT UGEINT \
           BEQ BNEQ BLTINT BLEINT BGTINT BGEINT BULTINT BUGEINT; do
     emit_cpp "$OP"
 done
 
-# --- String/Bytes operations (GETSTRINGCHAR/GETBYTESCHAR stacked) ---
+# --- String/Bytes operations ---
 emit_cpp "GETSTRINGCHAR"
 emit_cpp "GETBYTESCHAR"
 emit_cpp "SETBYTESCHAR"
 
-# --- Function application ---
-
-# PUSH_RETADDR: set up return frame
+# --- Function application (goto check_stacks → Next via sed) ---
 emit_cpp "PUSH_RETADDR"
-
-# APPLY: generic apply (reads nargs from pc). interp.c's `goto check_stacks`
-# is rewritten to `Next;` in the sed preprocessor above so the trailing jump
-# drops out.
 emit_cpp "APPLY"
+emit_cpp "APPLY1"
+emit_cpp "APPLY2"
+emit_cpp "APPLY3"
+emit_cpp "APPTERM"
+emit_cpp "APPTERM1"
+emit_cpp "APPTERM2"
+emit_cpp "APPTERM3"
+emit_cpp "RETURN"
+emit_cpp "RESTART"
+emit_cpp "GRAB"
 
-# APPLY1: apply with 1 argument
-emit_raw "APPLY1" "    {
-    value arg1 = s->sp[0];
-    s->sp -= 3;
-    s->sp[0] = arg1;
-    s->sp[1] = (value)s->pc;
-    s->sp[2] = s->env;
-    s->sp[3] = Val_long(s->extra_args);
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;
-    s->extra_args = 0;
-    }"
+# --- Closures (Alloc_small→heap_alloc, caml_alloc_shr→heap_alloc via shim) ---
+emit_cpp "CLOSURE"
+emit_cpp "CLOSUREREC"
 
-# APPLY2: apply with 2 arguments
-emit_raw "APPLY2" "    {
-    value arg1 = s->sp[0];
-    value arg2 = s->sp[1];
-    s->sp -= 3;
-    s->sp[0] = arg1;
-    s->sp[1] = arg2;
-    s->sp[2] = (value)s->pc;
-    s->sp[3] = s->env;
-    s->sp[4] = Val_long(s->extra_args);
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;
-    s->extra_args = 1;
-    }"
-
-# APPLY3: apply with 3 arguments
-emit_raw "APPLY3" "    {
-    value arg1 = s->sp[0];
-    value arg2 = s->sp[1];
-    value arg3 = s->sp[2];
-    s->sp -= 3;
-    s->sp[0] = arg1;
-    s->sp[1] = arg2;
-    s->sp[2] = arg3;
-    s->sp[3] = (value)s->pc;
-    s->sp[4] = s->env;
-    s->sp[5] = Val_long(s->extra_args);
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;
-    s->extra_args = 2;
-    }"
-
-# APPTERM: tail apply with nargs and slotsize
-emit_raw "APPTERM" "    {
-    int nargs = *s->pc++;
-    int slotsize = *s->pc;
-    value *newsp;
-    int i;
-    newsp = s->sp + slotsize - nargs;
-    for (i = nargs - 1; i >= 0; i--) newsp[i] = s->sp[i];
-    s->sp = newsp;
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;
-    s->extra_args += nargs - 1;
-    }"
-
-# APPTERM1: tail apply with 1 argument
-emit_raw "APPTERM1" "    {
-    value arg1 = s->sp[0];
-    s->sp = s->sp + *s->pc - 1;
-    s->sp[0] = arg1;
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;
-    }"
-
-# APPTERM2: tail apply with 2 arguments
-emit_raw "APPTERM2" "    {
-    value arg1 = s->sp[0];
-    value arg2 = s->sp[1];
-    s->sp = s->sp + *s->pc - 2;
-    s->sp[0] = arg1;
-    s->sp[1] = arg2;
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;
-    s->extra_args += 1;
-    }"
-
-# APPTERM3: tail apply with 3 arguments
-emit_raw "APPTERM3" "    {
-    value arg1 = s->sp[0];
-    value arg2 = s->sp[1];
-    value arg3 = s->sp[2];
-    s->sp = s->sp + *s->pc - 3;
-    s->sp[0] = arg1;
-    s->sp[1] = arg2;
-    s->sp[2] = arg3;
-    s->pc = Code_val(s->accu);
-    s->env = s->accu;
-    s->extra_args += 2;
-    }"
-
-# RETURN: return from function
-emit_raw "RETURN" "    s->sp += *s->pc++;
-    if (s->extra_args > 0) {
-        s->extra_args--;
-        s->pc = Code_val(s->accu);
-        s->env = s->accu;
-    } else {
-        s->pc = (code_t*)(s->sp[0]);
-        s->env = s->sp[1];
-        s->extra_args = Long_val(s->sp[2]);
-        s->sp += 3;
-    }"
-
-# RESTART: restart a closure application (copies env fields to stack)
-emit_raw "RESTART" "    {
-    int num_args = Wosize_val(s->env) - 3;
-    int i;
-    s->sp -= num_args;
-    for (i = 0; i < num_args; i++) s->sp[i] = Field(s->env, i + 3);
-    s->env = Field(s->env, 2);
-    s->extra_args += num_args;
-    }"
-
-# GRAB: grab required number of arguments, or build a partial closure
-# Simplified: allocation uses heap_alloc instead of Alloc_small
-emit_raw "GRAB" "    {
-    int required = *s->pc++;
-    if (s->extra_args >= required) {
-        s->extra_args -= required;
-    } else {
-        /* Build partial application closure */
-        mlsize_t num_args, i;
-        value block;
-        num_args = 1 + s->extra_args;
-        block = heap_alloc(s, num_args + 3, Closure_tag);
-        Field(block, 2) = s->env;
-        for (i = 0; i < num_args; i++) Field(block, i + 3) = s->sp[i];
-        Code_val(block) = s->pc - 3;
-        Closinfo_val(block) = Make_closinfo(0, 2);
-        s->accu = block;
-        s->sp += num_args;
-        s->pc = (code_t*)(s->sp[0]);
-        s->env = s->sp[1];
-        s->extra_args = Long_val(s->sp[2]);
-        s->sp += 3;
-    }
-    }"
-
-# --- Closures ---
-
-# CLOSURE: create a closure with nvars captured variables
-# Simplified: uses heap_alloc for allocation
-emit_raw "CLOSURE" "    {
-    int nvars = *s->pc++;
-    int i;
-    value block;
-    if (nvars > 0) *--s->sp = s->accu;
-    block = heap_alloc(s, 2 + nvars, Closure_tag);
-    for (i = 0; i < nvars; i++) Field(block, i + 2) = s->sp[i];
-    Code_val(block) = s->pc + *s->pc;
-    Closinfo_val(block) = Make_closinfo(0, 2);
-    s->pc++;
-    s->sp += nvars;
-    s->accu = block;
-    }"
-
-# CLOSUREREC: create mutually recursive closures
-# Simplified: uses heap_alloc for allocation, omits major-heap path
-emit_raw "CLOSUREREC" "    {
-    int nfuncs = *s->pc++;
-    int nvars = *s->pc++;
-    mlsize_t envofs = nfuncs * 3 - 1;
-    mlsize_t blksize = envofs + nvars;
-    int i;
-    value *p;
-    value block;
-    if (nvars > 0) *--s->sp = s->accu;
-    block = heap_alloc(s, blksize, Closure_tag);
-    p = &Field(block, envofs);
-    for (i = 0; i < nvars; i++) { *p = s->sp[i]; p++; }
-    s->sp += nvars;
-    *--s->sp = block;
-    s->accu = block;
-    p = &Field(block, 0);
-    *p++ = (value) (s->pc + s->pc[0]);
-    *p++ = Make_closinfo(0, envofs);
-    for (i = 1; i < nfuncs; i++) {
-        *p++ = Make_header(i * 3, Infix_tag, Caml_white);
-        *--s->sp = (value) p;
-        *p++ = (value) (s->pc + s->pc[i]);
-        envofs -= 3;
-        *p++ = Make_closinfo(0, envofs);
-    }
-    s->pc += nfuncs;
-    }"
-
-# --- Global variable access (with field) ---
-# PUSHGETGLOBALFIELD falls through to GETGLOBALFIELD in interp.c.
+# --- Global variable access ---
 emit_cpp "GETGLOBALFIELD"
 emit_cpp "PUSHGETGLOBALFIELD"
 
-# --- Block allocation ---
-
-# MAKEBLOCK: generic block allocation (wosize from pc, tag from pc)
-# Simplified: uses heap_alloc
-emit_raw "MAKEBLOCK" "    {
-    mlsize_t wosize = *s->pc++;
-    tag_t tag = *s->pc++;
-    mlsize_t i;
-    value block;
-    block = heap_alloc(s, wosize, tag);
-    Field(block, 0) = s->accu;
-    for (i = 1; i < wosize; i++) Field(block, i) = *s->sp++;
-    s->accu = block;
-    }"
-
-# MAKEBLOCK1: allocate 1-field block
-emit_raw "MAKEBLOCK1" "    {
-    tag_t tag = *s->pc++;
-    value block;
-    block = heap_alloc(s, 1, tag);
-    Field(block, 0) = s->accu;
-    s->accu = block;
-    }"
-
-# MAKEBLOCK2: allocate 2-field block
-emit_raw "MAKEBLOCK2" "    {
-    tag_t tag = *s->pc++;
-    value block;
-    block = heap_alloc(s, 2, tag);
-    Field(block, 0) = s->accu;
-    Field(block, 1) = s->sp[0];
-    s->sp += 1;
-    s->accu = block;
-    }"
-
-# MAKEBLOCK3: allocate 3-field block
-emit_raw "MAKEBLOCK3" "    {
-    tag_t tag = *s->pc++;
-    value block;
-    block = heap_alloc(s, 3, tag);
-    Field(block, 0) = s->accu;
-    Field(block, 1) = s->sp[0];
-    Field(block, 2) = s->sp[1];
-    s->sp += 2;
-    s->accu = block;
-    }"
-
-# MAKEFLOATBLOCK: allocate float array block
-# Simplified: uses heap_alloc, treats doubles as value-sized words
-emit_raw "MAKEFLOATBLOCK" "    {
-    mlsize_t size = *s->pc++;
-    mlsize_t i;
-    value block;
-    block = heap_alloc(s, size * Double_wosize, Double_array_tag);
-    Store_double_flat_field(block, 0, Double_val(s->accu));
-    for (i = 1; i < size; i++) {
-        Store_double_flat_field(block, i, Double_val(*s->sp));
-        ++s->sp;
-    }
-    s->accu = block;
-    }"
+# --- Block allocation (Alloc_small→heap_alloc, caml_alloc_shr→heap_alloc) ---
+emit_cpp "MAKEBLOCK"
+emit_cpp "MAKEBLOCK1"
+emit_cpp "MAKEBLOCK2"
+emit_cpp "MAKEBLOCK3"
+emit_cpp "MAKEFLOATBLOCK"
 
 # --- Float field access ---
-
-# GETFLOATFIELD: extract a float field, box it
-# Simplified: uses heap_alloc for boxing
-emit_raw "GETFLOATFIELD" "    {
-    double d = Double_flat_field(s->accu, *s->pc++);
-    value block = heap_alloc(s, Double_wosize, Double_tag);
-    Store_double_val(block, d);
-    s->accu = block;
-    }"
-
-# SETFLOATFIELD: store a float into a float field
+emit_cpp "GETFLOATFIELD"
 emit_cpp "SETFLOATFIELD"
 
 # --- Exception handling ---
-
-# PUSHTRAP: push a trap frame
 emit_cpp "PUSHTRAP"
 
-# POPTRAP: pop the current trap frame
-# Simplified: omits signal check (handled abstractly)
-emit_raw "POPTRAP" "    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->sp += 4;"
-
-# RAISE: raise an exception (with backtrace)
-# Simplified: skips backtrace, just does the trap unwind
-emit_raw "RAISE" "    /* Simplified: skip backtrace, unwind to trap frame */
-    s->sp = s->trap_sp;
-    s->pc = Trap_pc(s->sp);
-    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->env = s->sp[2];
-    s->extra_args = Long_val(s->sp[3]);
-    s->sp += 4;"
-
-# RERAISE: re-raise (same semantics as RAISE for verification purposes)
-# Simplified: same trap unwind as RAISE
-emit_raw "RERAISE" "    /* Simplified: same as RAISE — skip backtrace, unwind to trap frame */
-    s->sp = s->trap_sp;
-    s->pc = Trap_pc(s->sp);
-    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->env = s->sp[2];
-    s->extra_args = Long_val(s->sp[3]);
-    s->sp += 4;"
-
-# RAISE_NOTRACE: raise without backtrace (same unwind)
-emit_raw "RAISE_NOTRACE" "    /* Unwind to trap frame, no backtrace */
-    s->sp = s->trap_sp;
-    s->pc = Trap_pc(s->sp);
-    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->env = s->sp[2];
-    s->extra_args = Long_val(s->sp[3]);
-    s->sp += 4;"
-
-# --- C calls ---
-# All C_CALL variants return STATUS_CCALL to signal the caller should
-# handle the external call. The primitive index is in *pc.
-# Simplified: we don't actually call the primitive; we signal STATUS_CCALL.
-
-cat << 'CCALLS'
-int instr_C_CALL1(struct interp_state *s) {
-    /* Primitive index at *s->pc; 1 argument in accu */
-    s->pc++;
-    return STATUS_CCALL;
-}
-
-int instr_C_CALL2(struct interp_state *s) {
-    /* Primitive index at *s->pc; 2 arguments: accu and sp[0] */
-    s->pc++;
-    return STATUS_CCALL;
-}
-
-int instr_C_CALL3(struct interp_state *s) {
-    /* Primitive index at *s->pc; 3 arguments: accu, sp[0], sp[1] */
-    s->pc++;
-    return STATUS_CCALL;
-}
-
-int instr_C_CALL4(struct interp_state *s) {
-    /* Primitive index at *s->pc; 4 arguments */
-    s->pc++;
-    return STATUS_CCALL;
-}
-
-int instr_C_CALL5(struct interp_state *s) {
-    /* Primitive index at *s->pc; 5 arguments */
-    s->pc++;
-    return STATUS_CCALL;
-}
-
-int instr_C_CALLN(struct interp_state *s) {
-    /* nargs at *s->pc, primitive index at pc[1] */
-    int nargs = *s->pc++;
-    (void)nargs;
-    s->pc++;
-    return STATUS_CCALL;
-}
-
-CCALLS
-
-# --- SWITCH ---
-# Simplified: reads the sizes word, dispatches on integer or block tag.
-# The jump table offsets follow the sizes word in the code stream.
-emit_raw "SWITCH" "    {
-    uint32_t sizes = *s->pc++;
-    if (Is_block(s->accu)) {
-        intnat index = Tag_val(s->accu);
-        s->pc += s->pc[(sizes & 0xFFFF) + index];
-    } else {
-        intnat index = Long_val(s->accu);
-        s->pc += s->pc[index];
-    }
-    }"
-
-# --- ATOM0 / PUSHATOM0 (have fallthroughs in interp.c) ---
+# --- Atoms ---
 emit_cpp "ATOM0"
 emit_cpp "PUSHATOM0"
 
 # --- Object-oriented operations ---
-# GETMETHOD: accu = Lookup(sp[0], accu) where Lookup is #defined in the slice.
 emit_cpp "GETMETHOD"
+# GETPUBMET: the #else path (no CAML_TEST_CACHE) falls through to GETDYNMET.
+emit_cpp "GETPUBMET"
+emit_cpp "GETDYNMET"
 
-# GETPUBMET: method lookup with cache
-# Simplified: does a binary search (skips cache optimization for verification)
-emit_raw "GETPUBMET" "    {
-    /* accu == object, pc[0] == tag, pc[1] == cache */
-    value meths = Field(s->accu, 0);
-    int li, hi, mi;
-    *--s->sp = s->accu;
-    s->accu = Val_int(*s->pc++);
-    /* Skip cache slot */
-    s->pc++;
-    /* Binary search for the method */
-    li = 3;
-    hi = Field(meths, 0);
-    while (li < hi) {
-        mi = ((li + hi) >> 1) | 1;
-        if (s->accu < Field(meths, mi)) hi = mi - 2;
-        else li = mi;
-    }
-    s->accu = Field(meths, li - 1);
-    }"
+# --- SWITCH (CAMLassert erased by shim) ---
+emit_cpp "SWITCH"
 
-# GETDYNMET: dynamic method lookup (binary search)
-emit_raw "GETDYNMET" "    {
-    /* accu == tag, sp[0] == object */
-    value meths = Field(s->sp[0], 0);
-    int li = 3, hi = Field(meths, 0), mi;
-    while (li < hi) {
-        mi = ((li + hi) >> 1) | 1;
-        if (s->accu < Field(meths, mi)) hi = mi - 2;
-        else li = mi;
-    }
-    s->accu = Field(meths, li - 1);
-    }"
-
-# --- Debug instructions ---
-# EVENT and BREAK are debugger-only; simplified to no-ops for verification.
-emit_raw "EVENT" "    /* Debugger event — no-op for verification */"
-emit_raw "BREAK" "    /* Debugger breakpoint — no-op for verification */"
-
-# --- Effect handlers (OCaml 5.x placeholders, present in AST.v) ---
-# These are no-ops / stubs since OCaml 4.14 does not have them.
-emit_raw "PERFORM"       "    /* Effect handler (OCaml 5.x) — not in 4.14, no-op */"
-emit_raw "RESUME"        "    /* Effect handler (OCaml 5.x) — not in 4.14, no-op */"
-emit_raw "RESUMETERM"    "    s->pc++; /* skip nargs operand */
-    /* Effect handler (OCaml 5.x) — not in 4.14, no-op */"
-emit_raw "REPERFORMTERM" "    s->pc++; /* skip nargs operand */
-    /* Effect handler (OCaml 5.x) — not in 4.14, no-op */"
-
-# ===================================================================
-# SECTION 2: Handlers whose interp.c body matches our model — emitted
-# straight from the cpp shim output (see extract_shim.h).
-# ===================================================================
-
+# --- Bulk extraction: general-form opcodes ---
 EXTRACT="ACC POP ASSIGN CONSTINT PUSHCONSTINT
 NEGINT ADDINT SUBINT MULINT DIVINT MODINT
 ANDINT ORINT XORINT LSLINT LSRINT ASRINT
@@ -704,3 +298,74 @@ ENVACC PUSHENVACC
 for INSTR in $EXTRACT; do
     emit_cpp "$INSTR"
 done
+
+# ===================================================================
+# SECTION 2: Handlers that must stay hand-written because they diverge
+# semantically from interp.c (different return codes, backtrace
+# skipping, signal-restart omission, C-call stubs).
+# ===================================================================
+
+# --- STOP: returns STATUS_HALT; interp.c does callback bookkeeping we skip ---
+emit_raw "STOP" "    /* Halt execution */"
+
+# --- POPTRAP: omits signal-check restart ---
+emit_raw "POPTRAP" "    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
+    s->sp += 4;"
+
+# --- RAISE family: skip backtrace, skip callback-boundary check ---
+emit_raw "RAISE" "    s->sp = s->trap_sp;
+    s->pc = Trap_pc(s->sp);
+    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
+    s->env = s->sp[2];
+    s->extra_args = Long_val(s->sp[3]);
+    s->sp += 4;"
+
+emit_raw "RERAISE" "    s->sp = s->trap_sp;
+    s->pc = Trap_pc(s->sp);
+    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
+    s->env = s->sp[2];
+    s->extra_args = Long_val(s->sp[3]);
+    s->sp += 4;"
+
+emit_raw "RAISE_NOTRACE" "    s->sp = s->trap_sp;
+    s->pc = Trap_pc(s->sp);
+    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
+    s->env = s->sp[2];
+    s->extra_args = Long_val(s->sp[3]);
+    s->sp += 4;"
+
+# --- C calls: return STATUS_CCALL instead of invoking primitives ---
+cat << 'CCALLS'
+int instr_C_CALL1(struct interp_state *s) {
+    s->pc++;
+    return STATUS_CCALL;
+}
+
+int instr_C_CALL2(struct interp_state *s) {
+    s->pc++;
+    return STATUS_CCALL;
+}
+
+int instr_C_CALL3(struct interp_state *s) {
+    s->pc++;
+    return STATUS_CCALL;
+}
+
+int instr_C_CALL4(struct interp_state *s) {
+    s->pc++;
+    return STATUS_CCALL;
+}
+
+int instr_C_CALL5(struct interp_state *s) {
+    s->pc++;
+    return STATUS_CCALL;
+}
+
+int instr_C_CALLN(struct interp_state *s) {
+    int nargs = *s->pc++;
+    (void)nargs;
+    s->pc++;
+    return STATUS_CCALL;
+}
+
+CCALLS

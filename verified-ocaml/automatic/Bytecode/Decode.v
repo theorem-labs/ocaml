@@ -508,19 +508,15 @@ Definition resolve_one (omap : list (nat * nat)) (ri : raw_instr) : instruction 
   if Z.eqb op 142 then GETDYNMET else
   (* STOP=143 *)
   if Z.eqb op 143 then STOP else
-  (* EVENT=144, BREAK=145 *)
-  if Z.eqb op 144 then EVENT else
-  if Z.eqb op 145 then BREAK else
+  (* EVENT=144, BREAK=145: not modeled (debugger-only), decode as STOP *)
+  if Z.eqb op 144 then STOP else
+  if Z.eqb op 145 then STOP else
   (* RERAISE=146, RAISE_NOTRACE=147 *)
   if Z.eqb op 146 then RERAISE else
   if Z.eqb op 147 then RAISE_NOTRACE else
   (* GETSTRINGCHAR=148 *)
   if Z.eqb op 148 then GETSTRINGCHAR else
-  (* PERFORM=149, RESUME=150, RESUMETERM=151, REPERFORMTERM=152 *)
-  if Z.eqb op 149 then PERFORM else
-  if Z.eqb op 150 then RESUME else
-  if Z.eqb op 151 then RESUMETERM (nat_of_z (znth 0%nat ops)) else
-  if Z.eqb op 152 then REPERFORMTERM (nat_of_z (znth 0%nat ops)) else
+  (* 149-152: OCaml 5.x effect handlers, not modeled, decode as STOP *)
   (* Unknown opcode *)
   STOP.
 

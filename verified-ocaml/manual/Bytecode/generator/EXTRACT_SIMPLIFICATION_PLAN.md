@@ -159,10 +159,10 @@ Renames in `manual/Bytecode/Machine.v` and downstream:
 |---------------------|---------------------|----------------------------------|
 | `Machine.trap_sp`   | `Machine.trapsp`    | matches `Caml_state->trapsp`     |
 | `Machine.global_data` | `Machine.caml_global_data` | matches interp.c global name |
-| `OFFSETCLOSURE2`    | `OFFSETCLOSURE3`    | matches interp.c opcode name     |
-| `OFFSETCLOSUREM2`   | `OFFSETCLOSUREM3`   | matches interp.c opcode name     |
-| `PUSHOFFSETCLOSURE2` | `PUSHOFFSETCLOSURE3` | matches interp.c opcode name |
-| `PUSHOFFSETCLOSUREM2` | `PUSHOFFSETCLOSUREM3` | matches interp.c opcode name |
+| `OFFSETCLOSURE3`    | `OFFSETCLOSURE3`    | matches interp.c opcode name     |
+| `OFFSETCLOSUREM3`   | `OFFSETCLOSUREM3`   | matches interp.c opcode name     |
+| `PUSHOFFSETCLOSURE3` | `PUSHOFFSETCLOSURE3` | matches interp.c opcode name |
+| `PUSHOFFSETCLOSUREM3` | `PUSHOFFSETCLOSUREM3` | matches interp.c opcode name |
 
 Affected files (mechanical rename):
 

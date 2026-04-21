@@ -1,6 +1,6 @@
-(* PUSHOFFSETCLOSUREM2_correct.v -- PUSHOFFSETCLOSUREM2 = PUSH then OFFSETCLOSUREM2.
+(* PUSHOFFSETCLOSUREM3_correct.v -- PUSHOFFSETCLOSUREM3 = PUSH then OFFSETCLOSUREM3.
 
-   C handler (f_instr_PUSHOFFSETCLOSUREM2):
+   C handler (f_instr_PUSHOFFSETCLOSUREM3):
      _t'4 = s->sp;                    // load sp
      _t'1 = (tptr tlong)(_t'4 - 1);   // new_sp = sp - 1
      s->sp = _t'1;                     // store 1: update sp field
@@ -91,8 +91,8 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_PUSHOFFSETCLOSUREM2_correct :
-    handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM2
+Theorem verify_PUSHOFFSETCLOSUREM3_correct :
+    handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM3
       (sp_at_least 16 /\p closure_offset_pre (-2) (-24))
       (fun msg s =>
         (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\

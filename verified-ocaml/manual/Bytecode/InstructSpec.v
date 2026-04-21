@@ -2976,12 +2976,6 @@ Definition clight_of (i : instruction) : function :=
   | BULTINT _ _ => f_instr_BULTINT
   | BUGEINT _ _ => f_instr_BUGEINT
   | STOP => f_instr_STOP
-  | EVENT => f_instr_EVENT
-  | BREAK => f_instr_BREAK
-  | PERFORM => f_instr_PERFORM
-  | RESUME => f_instr_RESUME
-  | RESUMETERM _ => f_instr_RESUMETERM
-  | REPERFORMTERM _ => f_instr_REPERFORMTERM
   end.
 
 Definition P_halt_of (i : instruction) : value -> Prop :=
@@ -3177,12 +3171,6 @@ Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data
   | BULTINT n target => fun e m s ard => ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed)) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long) e m s ard
   | BUGEINT n target => fun e m s ard => ((0 <= n) /\ (Int.min_signed <= n <= Int.max_signed)) /\ ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long) e m s ard
   | STOP => no_pre
-  | EVENT => no_pre
-  | BREAK => no_pre
-  | PERFORM => no_pre
-  | RESUME => no_pre
-  | RESUMETERM _ => no_pre
-  | REPERFORMTERM _ => no_pre
   end.
 
 Definition P_error_of (i : instruction) : string -> state -> Prop :=
@@ -3486,12 +3474,6 @@ Definition P_error_of (i : instruction) : string -> state -> Prop :=
                    msg = "BUGEINT: not an integer"%string /\
                    match Machine.accu s with Val_int _ => False | _ => True end
   | STOP => fun _ _ => False
-  | EVENT => fun _ _ => False
-  | BREAK => fun _ _ => False
-  | PERFORM => fun _ _ => False
-  | RESUME => fun _ _ => False
-  | RESUMETERM _ => fun _ _ => False
-  | REPERFORMTERM _ => fun _ _ => False
   end.
 
 (* ================================================================== *)
@@ -3737,10 +3719,6 @@ Module Type InstructVerificationSpec.
       code_loadable
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_BREAK :
-    handler_correct handle_BREAK f_instr_BREAK
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_BUGEINT :
     forall n target,
@@ -3877,10 +3855,6 @@ Module Type InstructVerificationSpec.
       (arith_safe arith_unsigned)
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_EVENT :
-    handler_correct handle_EVENT f_instr_EVENT
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_GEINT :
     handler_correct handle_GEINT f_instr_GEINT
@@ -4081,8 +4055,8 @@ Module Type InstructVerificationSpec.
         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_OFFSETCLOSURE2 :
-    handler_correct (handle_OFFSETCLOSURE 2) f_instr_OFFSETCLOSURE2
+  Parameter correct_OFFSETCLOSURE3 :
+    handler_correct (handle_OFFSETCLOSURE 2) f_instr_OFFSETCLOSURE3
       (closure_offset_pre 2 24)
       (fun msg s =>
         (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -4091,8 +4065,8 @@ Module Type InstructVerificationSpec.
          match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
       (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_OFFSETCLOSUREM2 :
-    handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM2
+  Parameter correct_OFFSETCLOSUREM3 :
+    handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM3
       (closure_offset_pre (-2) (-24))
       (fun msg s =>
         (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -4137,10 +4111,6 @@ Module Type InstructVerificationSpec.
       (accu_check ak_long /\p stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_PERFORM :
-    handler_correct handle_PERFORM f_instr_PERFORM
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_POPTRAP :
     handler_correct (handle_POPTRAP) f_instr_POPTRAP
@@ -4277,8 +4247,8 @@ Module Type InstructVerificationSpec.
         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_PUSHOFFSETCLOSURE2 :
-    handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE2
+  Parameter correct_PUSHOFFSETCLOSURE3 :
+    handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE3
       (sp_at_least 16 /\p closure_offset_pre 2 24)
       (fun msg s =>
         (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -4287,8 +4257,8 @@ Module Type InstructVerificationSpec.
          match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
       (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_PUSHOFFSETCLOSUREM2 :
-    handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM2
+  Parameter correct_PUSHOFFSETCLOSUREM3 :
+    handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM3
       (sp_at_least 16 /\p closure_offset_pre (-2) (-24))
       (fun msg s =>
         (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -4335,10 +4305,6 @@ Module Type InstructVerificationSpec.
       raise_step_pre
       (fun msg _ => msg = "unhandled exception"%string \/ msg = "RAISE: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_REPERFORMTERM :
-    handler_correct handle_REPERFORMTERM f_instr_REPERFORMTERM
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_RERAISE :
     handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RERAISE
@@ -4350,15 +4316,6 @@ Module Type InstructVerificationSpec.
       restart_step_pre
       (fun msg s => (msg = "RESTART: env is not a block"%string /\ match Machine.env s with | Val_int _ | Val_ptr _ => True | _ => False end) \/ (msg = "RESTART: dangling pointer"%string /\ exists addr ofs, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = None) \/ (msg = "RESTART: env is not a closure"%string /\ ((exists addr ofs t fs, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = Some (t, fs) /\ Nat.eqb t Closure_tag = false) \/ (exists t fs, Machine.env s = Val_block t fs /\ Nat.eqb t Closure_tag = false))) \/ (msg = "RESTART: malformed closure"%string /\ ((exists addr ofs t all_fields, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = Some (t, all_fields) /\ Nat.eqb t Closure_tag = true /\ nth_error (skipn ofs all_fields) 2 = None) \/ (exists t fs, Machine.env s = Val_block t fs /\ Nat.eqb t Closure_tag = true /\ nth_error fs 2 = None)))) (fun _ => False) (fun _ _ _ => False).
 
-  Parameter correct_RESUMETERM :
-    handler_correct handle_RESUMETERM f_instr_RESUMETERM
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_RESUME :
-    handler_correct handle_RESUME f_instr_RESUME
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 
   Parameter correct_RETURN :
     forall stacksize,
@@ -4591,12 +4548,6 @@ Module Type InstructVerificationSpec.
     - (* BUGEINT *)
       apply handler_correct_absorb_WF; intros [H1 H2]; apply correct_BUGEINT; assumption.
     - (* STOP *) apply correct_STOP.
-    - (* EVENT *) apply correct_EVENT.
-    - (* BREAK *) apply correct_BREAK.
-    - (* PERFORM *) apply correct_PERFORM.
-    - (* RESUME *) apply correct_RESUME.
-    - (* RESUMETERM *) apply correct_RESUMETERM.
-    - (* REPERFORMTERM *) apply correct_REPERFORMTERM.
   Qed.
 
 End InstructVerificationSpec.

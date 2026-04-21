@@ -40,7 +40,6 @@ Definition wf_instrb (n : nat) (i : instruction) : bool :=
   | MAKEBLOCK1 k | MAKEBLOCK2 k | MAKEBLOCK3 k
   | MAKEFLOATBLOCK k
   | GETFIELD k | GETFLOATFIELD k | SETFIELD k | SETFLOATFIELD k
-  | RESUMETERM k | REPERFORMTERM k
     => nat_fits_i32b k
   | APPTERM a b | GETGLOBALFIELD a b | PUSHGETGLOBALFIELD a b
   | MAKEBLOCK a b | C_CALL a b

@@ -1188,12 +1188,6 @@ Definition expected_raw (omap : list nat) (idx : nat)
   | GETPUBMET t => mk_raw woff 141 [t]
   | GETDYNMET => mk_raw woff 142 []
   | STOP => mk_raw woff 143 []
-  | EVENT => mk_raw woff 144 []
-  | BREAK => mk_raw woff 145 []
-  | PERFORM => mk_raw woff 149 []
-  | RESUME => mk_raw woff 150 []
-  | RESUMETERM n => mk_raw woff 151 [Z.of_nat n]
-  | REPERFORMTERM n => mk_raw woff 152 [Z.of_nat n]
   end.
 
 Local Close Scope Z_scope.

@@ -28,12 +28,12 @@ Affected handlers (13 can actually error, 2 never error):
 | BOOLNOT | **No** (always Step) | `(fun _ _ => False)` |
 | ISINT | **No** (always Step) | `(fun _ _ => False)` |
 | OFFSETCLOSURE0 | Yes (invalid env) | Characterize env conditions |
-| OFFSETCLOSURE2 | Yes (invalid env) | Characterize env conditions |
-| OFFSETCLOSUREM2 | Yes (invalid env) | Characterize env conditions |
+| OFFSETCLOSURE3 | Yes (invalid env) | Characterize env conditions |
+| OFFSETCLOSUREM3 | Yes (invalid env) | Characterize env conditions |
 | OFFSETCLOSURE | Yes (invalid env) | Characterize env conditions |
 | PUSHOFFSETCLOSURE0 | Yes (invalid env) | Characterize env conditions |
-| PUSHOFFSETCLOSURE2 | Yes (invalid env) | Characterize env conditions |
-| PUSHOFFSETCLOSUREM2 | Yes (invalid env) | Characterize env conditions |
+| PUSHOFFSETCLOSURE3 | Yes (invalid env) | Characterize env conditions |
+| PUSHOFFSETCLOSUREM3 | Yes (invalid env) | Characterize env conditions |
 | PUSHOFFSETCLOSURE | Yes (invalid env) | Characterize env conditions |
 | GETDYNMET | Yes (3 paths) | Characterize each |
 | GETPUBMET | Yes (2 paths) | Characterize each |
@@ -192,7 +192,7 @@ For fixed-offset variants, specialize:
   (fun msg s => msg = "OFFSETCLOSURE: invalid env"%string /\
     match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
   ```
-- **OFFSETCLOSURE2, OFFSETCLOSUREM2** (ofs!=0): Both error paths possible.
+- **OFFSETCLOSURE3, OFFSETCLOSUREM3** (ofs!=0): Both error paths possible.
   ```coq
   (fun msg s =>
     (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -202,7 +202,7 @@ For fixed-offset variants, specialize:
   ```
 - **OFFSETCLOSURE** (generic ofs): General form with both paths.
 
-Same pattern for **PUSHOFFSETCLOSURE0, PUSHOFFSETCLOSURE2, PUSHOFFSETCLOSUREM2, PUSHOFFSETCLOSURE** — push happens before the env check, doesn't affect error conditions. Use `"PUSHOFFSETCLOSURE: ..."` messages.
+Same pattern for **PUSHOFFSETCLOSURE0, PUSHOFFSETCLOSURE3, PUSHOFFSETCLOSUREM3, PUSHOFFSETCLOSURE** — push happens before the env check, doesn't affect error conditions. Use `"PUSHOFFSETCLOSURE: ..."` messages.
 
 **Group D — Method lookup (3 handlers): GETMETHOD, GETPUBMET, GETDYNMET**
 
@@ -275,12 +275,12 @@ Source locations after the instruct-verification reorganization:
 | `BOOLNOT_correct.v` | Update Error branch proof for `False` predicate |
 | `ISINT_correct.v` | Update Error branch proof for `False` predicate |
 | `OFFSETCLOSURE0_correct.v` | Update Error branch proof |
-| `OFFSETCLOSURE2_correct.v` | Update Error branch proof |
-| `OFFSETCLOSUREM2_correct.v` | Update Error branch proof |
+| `OFFSETCLOSURE3_correct.v` | Update Error branch proof |
+| `OFFSETCLOSUREM3_correct.v` | Update Error branch proof |
 | `OFFSETCLOSURE_correct.v` | Update Error branch proof |
 | `PUSHOFFSETCLOSURE0_correct.v` | Update Error branch proof |
-| `PUSHOFFSETCLOSURE2_correct.v` | Update Error branch proof |
-| `PUSHOFFSETCLOSUREM2_correct.v` | Update Error branch proof |
+| `PUSHOFFSETCLOSURE3_correct.v` | Update Error branch proof |
+| `PUSHOFFSETCLOSUREM3_correct.v` | Update Error branch proof |
 | `PUSHOFFSETCLOSURE_correct.v` | Update Error branch proof |
 | `GETDYNMET_correct.v` | Update Error branch proof |
 | `GETPUBMET_correct.v` | Update Error branch proof |

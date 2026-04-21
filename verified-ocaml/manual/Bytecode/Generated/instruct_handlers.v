@@ -81,7 +81,6 @@ Definition _arg2 : ident := $"arg2".
 Definition _arg3 : ident := $"arg3".
 Definition _blksize : ident := $"blksize".
 Definition _block : ident := $"block".
-Definition _caml_modify : ident := $"caml_modify".
 Definition _caml_raise_zero_divide : ident := $"caml_raise_zero_divide".
 Definition _d : ident := $"d".
 Definition _divisor : ident := $"divisor".
@@ -127,7 +126,6 @@ Definition _instr_BOOLNOT : ident := $"instr_BOOLNOT".
 Definition _instr_BRANCH : ident := $"instr_BRANCH".
 Definition _instr_BRANCHIF : ident := $"instr_BRANCHIF".
 Definition _instr_BRANCHIFNOT : ident := $"instr_BRANCHIFNOT".
-Definition _instr_BREAK : ident := $"instr_BREAK".
 Definition _instr_BUGEINT : ident := $"instr_BUGEINT".
 Definition _instr_BULTINT : ident := $"instr_BULTINT".
 Definition _instr_CHECK_SIGNALS : ident := $"instr_CHECK_SIGNALS".
@@ -151,7 +149,6 @@ Definition _instr_ENVACC2 : ident := $"instr_ENVACC2".
 Definition _instr_ENVACC3 : ident := $"instr_ENVACC3".
 Definition _instr_ENVACC4 : ident := $"instr_ENVACC4".
 Definition _instr_EQ : ident := $"instr_EQ".
-Definition _instr_EVENT : ident := $"instr_EVENT".
 Definition _instr_GEINT : ident := $"instr_GEINT".
 Definition _instr_GETBYTESCHAR : ident := $"instr_GETBYTESCHAR".
 Definition _instr_GETDYNMET : ident := $"instr_GETDYNMET".
@@ -185,12 +182,11 @@ Definition _instr_NEGINT : ident := $"instr_NEGINT".
 Definition _instr_NEQ : ident := $"instr_NEQ".
 Definition _instr_OFFSETCLOSURE : ident := $"instr_OFFSETCLOSURE".
 Definition _instr_OFFSETCLOSURE0 : ident := $"instr_OFFSETCLOSURE0".
-Definition _instr_OFFSETCLOSURE2 : ident := $"instr_OFFSETCLOSURE2".
-Definition _instr_OFFSETCLOSUREM2 : ident := $"instr_OFFSETCLOSUREM2".
+Definition _instr_OFFSETCLOSURE3 : ident := $"instr_OFFSETCLOSURE3".
+Definition _instr_OFFSETCLOSUREM3 : ident := $"instr_OFFSETCLOSUREM3".
 Definition _instr_OFFSETINT : ident := $"instr_OFFSETINT".
 Definition _instr_OFFSETREF : ident := $"instr_OFFSETREF".
 Definition _instr_ORINT : ident := $"instr_ORINT".
-Definition _instr_PERFORM : ident := $"instr_PERFORM".
 Definition _instr_POP : ident := $"instr_POP".
 Definition _instr_POPTRAP : ident := $"instr_POPTRAP".
 Definition _instr_PUSH : ident := $"instr_PUSH".
@@ -217,17 +213,14 @@ Definition _instr_PUSHGETGLOBAL : ident := $"instr_PUSHGETGLOBAL".
 Definition _instr_PUSHGETGLOBALFIELD : ident := $"instr_PUSHGETGLOBALFIELD".
 Definition _instr_PUSHOFFSETCLOSURE : ident := $"instr_PUSHOFFSETCLOSURE".
 Definition _instr_PUSHOFFSETCLOSURE0 : ident := $"instr_PUSHOFFSETCLOSURE0".
-Definition _instr_PUSHOFFSETCLOSURE2 : ident := $"instr_PUSHOFFSETCLOSURE2".
-Definition _instr_PUSHOFFSETCLOSUREM2 : ident := $"instr_PUSHOFFSETCLOSUREM2".
+Definition _instr_PUSHOFFSETCLOSURE3 : ident := $"instr_PUSHOFFSETCLOSURE3".
+Definition _instr_PUSHOFFSETCLOSUREM3 : ident := $"instr_PUSHOFFSETCLOSUREM3".
 Definition _instr_PUSHTRAP : ident := $"instr_PUSHTRAP".
 Definition _instr_PUSH_RETADDR : ident := $"instr_PUSH_RETADDR".
 Definition _instr_RAISE : ident := $"instr_RAISE".
 Definition _instr_RAISE_NOTRACE : ident := $"instr_RAISE_NOTRACE".
-Definition _instr_REPERFORMTERM : ident := $"instr_REPERFORMTERM".
 Definition _instr_RERAISE : ident := $"instr_RERAISE".
 Definition _instr_RESTART : ident := $"instr_RESTART".
-Definition _instr_RESUME : ident := $"instr_RESUME".
-Definition _instr_RESUMETERM : ident := $"instr_RESUMETERM".
 Definition _instr_RETURN : ident := $"instr_RETURN".
 Definition _instr_SETBYTESCHAR : ident := $"instr_SETBYTESCHAR".
 Definition _instr_SETFIELD : ident := $"instr_SETFIELD".
@@ -284,7 +277,14 @@ Definition _t'22 : ident := 149%positive.
 Definition _t'23 : ident := 150%positive.
 Definition _t'24 : ident := 151%positive.
 Definition _t'25 : ident := 152%positive.
+Definition _t'26 : ident := 153%positive.
+Definition _t'27 : ident := 154%positive.
+Definition _t'28 : ident := 155%positive.
+Definition _t'29 : ident := 156%positive.
 Definition _t'3 : ident := 130%positive.
+Definition _t'30 : ident := 157%positive.
+Definition _t'31 : ident := 158%positive.
+Definition _t'32 : ident := 159%positive.
 Definition _t'4 : ident := 131%positive.
 Definition _t'5 : ident := 132%positive.
 Definition _t'6 : ident := 133%positive.
@@ -1769,7 +1769,7 @@ Definition f_instr_OFFSETCLOSURE := {|
   (Sreturn (Some (Econst_int (Int.repr 0) tint))))
 |}.
 
-Definition f_instr_OFFSETCLOSUREM2 := {|
+Definition f_instr_OFFSETCLOSUREM3 := {|
   fn_return := tint;
   fn_callconv := cc_default;
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
@@ -1812,7 +1812,7 @@ Definition f_instr_OFFSETCLOSURE0 := {|
   (Sreturn (Some (Econst_int (Int.repr 0) tint))))
 |}.
 
-Definition f_instr_OFFSETCLOSURE2 := {|
+Definition f_instr_OFFSETCLOSURE3 := {|
   fn_return := tint;
   fn_callconv := cc_default;
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
@@ -1898,7 +1898,7 @@ Definition f_instr_PUSHOFFSETCLOSURE := {|
     (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
 |}.
 
-Definition f_instr_PUSHOFFSETCLOSUREM2 := {|
+Definition f_instr_PUSHOFFSETCLOSUREM3 := {|
   fn_return := tint;
   fn_callconv := cc_default;
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
@@ -1992,7 +1992,7 @@ Definition f_instr_PUSHOFFSETCLOSURE0 := {|
     (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
 |}.
 
-Definition f_instr_PUSHOFFSETCLOSURE2 := {|
+Definition f_instr_PUSHOFFSETCLOSURE3 := {|
   fn_return := tint;
   fn_callconv := cc_default;
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
@@ -2040,16 +2040,6 @@ Definition f_instr_PUSHOFFSETCLOSURE2 := {|
     (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
 |}.
 
-Definition f_instr_STOP := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := nil;
-  fn_body :=
-(Sreturn (Some (Econst_int (Int.repr 1) tint)))
-|}.
-
 Definition f_instr_CHECK_SIGNALS := {|
   fn_return := tint;
   fn_callconv := cc_default;
@@ -2057,7 +2047,7 @@ Definition f_instr_CHECK_SIGNALS := {|
   fn_vars := nil;
   fn_temps := nil;
   fn_body :=
-(Sreturn (Some (Econst_int (Int.repr 0) tint)))
+(Ssequence Sskip (Sreturn (Some (Econst_int (Int.repr 0) tint))))
 |}.
 
 Definition f_instr_EQ := {|
@@ -3257,132 +3247,130 @@ Definition f_instr_APPLY1 := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'12
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+    (Sset _arg1
+      (Ederef
+        (Ebinop Oadd (Etempvar _t'12 (tptr tlong))
+          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+  (Ssequence
     (Ssequence
-      (Sset _t'12
+      (Sset _t'11
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Sset _arg1
-        (Ederef
-          (Ebinop Oadd (Etempvar _t'12 (tptr tlong))
-            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong))
+        (Ebinop Osub (Etempvar _t'11 (tptr tlong))
+          (Econst_int (Int.repr 3) tint) (tptr tlong))))
     (Ssequence
       (Ssequence
-        (Sset _t'11
+        (Sset _t'10
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _sp (tptr tlong)))
         (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong))
-          (Ebinop Osub (Etempvar _t'11 (tptr tlong))
-            (Econst_int (Int.repr 3) tint) (tptr tlong))))
+          (Ederef
+            (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
+              (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+          (Etempvar _arg1 tlong)))
       (Ssequence
         (Ssequence
-          (Sset _t'10
+          (Sset _t'8
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Sassign
-            (Ederef
-              (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
-                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-            (Etempvar _arg1 tlong)))
+          (Ssequence
+            (Sset _t'9
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            (Sassign
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+              (Ecast (Etempvar _t'9 (tptr tint)) tlong))))
         (Ssequence
           (Ssequence
-            (Sset _t'8
+            (Sset _t'6
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _sp (tptr tlong)))
             (Ssequence
-              (Sset _t'9
+              (Sset _t'7
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                    (Tstruct _interp_state noattr)) _env tlong))
               (Sassign
                 (Ederef
-                  (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
-                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                (Ecast (Etempvar _t'9 (tptr tint)) tlong))))
+                  (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                    (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
+                (Etempvar _t'7 tlong))))
           (Ssequence
             (Ssequence
-              (Sset _t'6
+              (Sset _t'4
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _sp (tptr tlong)))
               (Ssequence
-                (Sset _t'7
+                (Sset _t'5
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _env tlong))
+                      (Tstruct _interp_state noattr)) _extra_args tlong))
                 (Sassign
                   (Ederef
-                    (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                      (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
-                  (Etempvar _t'7 tlong))))
+                    (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                      (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong)
+                  (Ebinop Oadd
+                    (Ebinop Oshl (Ecast (Etempvar _t'5 tlong) tlong)
+                      (Econst_int (Int.repr 1) tint) tlong)
+                    (Econst_int (Int.repr 1) tint) tlong))))
             (Ssequence
               (Ssequence
-                (Sset _t'4
+                (Sset _t'2
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                      (Tstruct _interp_state noattr)) _accu tlong))
                 (Ssequence
-                  (Sset _t'5
+                  (Sset _t'3
+                    (Ederef
+                      (Ebinop Oadd
+                        (Ecast (Etempvar _t'2 tlong) (tptr (tptr tint)))
+                        (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
+                      (tptr tint)))
+                  (Sassign
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _extra_args tlong))
-                  (Sassign
-                    (Ederef
-                      (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                        (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong)
-                    (Ebinop Oadd
-                      (Ebinop Oshl (Ecast (Etempvar _t'5 tlong) tlong)
-                        (Econst_int (Int.repr 1) tint) tlong)
-                      (Econst_int (Int.repr 1) tint) tlong))))
+                        (Tstruct _interp_state noattr)) _pc (tptr tint))
+                    (Etempvar _t'3 (tptr tint)))))
               (Ssequence
                 (Ssequence
-                  (Sset _t'2
+                  (Sset _t'1
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                         (Tstruct _interp_state noattr)) _accu tlong))
-                  (Ssequence
-                    (Sset _t'3
+                  (Sassign
+                    (Efield
                       (Ederef
-                        (Ebinop Oadd
-                          (Ecast (Etempvar _t'2 tlong) (tptr (tptr tint)))
-                          (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
-                        (tptr tint)))
-                    (Sassign
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _pc (tptr tint))
-                      (Etempvar _t'3 (tptr tint)))))
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _env tlong)
+                    (Etempvar _t'1 tlong)))
                 (Ssequence
-                  (Ssequence
-                    (Sset _t'1
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _accu tlong))
-                    (Sassign
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _env tlong)
-                      (Etempvar _t'1 tlong)))
                   (Sassign
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                         (Tstruct _interp_state noattr)) _extra_args tlong)
-                    (Econst_int (Int.repr 0) tint))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                    (Econst_int (Int.repr 0) tint))
+                  (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))))
 |}.
 
 Definition f_instr_APPLY2 := {|
@@ -3400,159 +3388,155 @@ Definition f_instr_APPLY2 := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'14
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+    (Sset _arg1
+      (Ederef
+        (Ebinop Oadd (Etempvar _t'14 (tptr tlong))
+          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+  (Ssequence
     (Ssequence
-      (Sset _t'14
+      (Sset _t'13
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Sset _arg1
+      (Sset _arg2
         (Ederef
-          (Ebinop Oadd (Etempvar _t'14 (tptr tlong))
-            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+          (Ebinop Oadd (Etempvar _t'13 (tptr tlong))
+            (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
     (Ssequence
       (Ssequence
-        (Sset _t'13
+        (Sset _t'12
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sset _arg2
-          (Ederef
-            (Ebinop Oadd (Etempvar _t'13 (tptr tlong))
-              (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong))
+          (Ebinop Osub (Etempvar _t'12 (tptr tlong))
+            (Econst_int (Int.repr 3) tint) (tptr tlong))))
       (Ssequence
         (Ssequence
-          (Sset _t'12
+          (Sset _t'11
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _sp (tptr tlong)))
           (Sassign
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong))
-            (Ebinop Osub (Etempvar _t'12 (tptr tlong))
-              (Econst_int (Int.repr 3) tint) (tptr tlong))))
+            (Ederef
+              (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
+                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+            (Etempvar _arg1 tlong)))
         (Ssequence
           (Ssequence
-            (Sset _t'11
+            (Sset _t'10
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _sp (tptr tlong)))
             (Sassign
               (Ederef
-                (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
-                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-              (Etempvar _arg1 tlong)))
+                (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+              (Etempvar _arg2 tlong)))
           (Ssequence
             (Ssequence
-              (Sset _t'10
+              (Sset _t'8
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Sassign
-                (Ederef
-                  (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
-                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                (Etempvar _arg2 tlong)))
+              (Ssequence
+                (Sset _t'9
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                (Sassign
+                  (Ederef
+                    (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
+                      (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
+                  (Ecast (Etempvar _t'9 (tptr tint)) tlong))))
             (Ssequence
               (Ssequence
-                (Sset _t'8
+                (Sset _t'6
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                       (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                 (Ssequence
-                  (Sset _t'9
+                  (Sset _t'7
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                        (Tstruct _interp_state noattr)) _env tlong))
                   (Sassign
                     (Ederef
-                      (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
-                        (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
-                    (Ecast (Etempvar _t'9 (tptr tint)) tlong))))
+                      (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                        (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong)
+                    (Etempvar _t'7 tlong))))
               (Ssequence
                 (Ssequence
-                  (Sset _t'6
+                  (Sset _t'4
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                         (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                   (Ssequence
-                    (Sset _t'7
+                    (Sset _t'5
                       (Efield
                         (Ederef
                           (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _env tlong))
+                          (Tstruct _interp_state noattr)) _extra_args tlong))
                     (Sassign
                       (Ederef
-                        (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                          (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong)
-                      (Etempvar _t'7 tlong))))
+                        (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                          (Econst_int (Int.repr 4) tint) (tptr tlong)) tlong)
+                      (Ebinop Oadd
+                        (Ebinop Oshl (Ecast (Etempvar _t'5 tlong) tlong)
+                          (Econst_int (Int.repr 1) tint) tlong)
+                        (Econst_int (Int.repr 1) tint) tlong))))
                 (Ssequence
                   (Ssequence
-                    (Sset _t'4
+                    (Sset _t'2
                       (Efield
                         (Ederef
                           (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
                     (Ssequence
-                      (Sset _t'5
+                      (Sset _t'3
+                        (Ederef
+                          (Ebinop Oadd
+                            (Ecast (Etempvar _t'2 tlong) (tptr (tptr tint)))
+                            (Econst_int (Int.repr 0) tint)
+                            (tptr (tptr tint))) (tptr tint)))
+                      (Sassign
                         (Efield
                           (Ederef
                             (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _extra_args
-                          tlong))
-                      (Sassign
-                        (Ederef
-                          (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                            (Econst_int (Int.repr 4) tint) (tptr tlong))
-                          tlong)
-                        (Ebinop Oadd
-                          (Ebinop Oshl (Ecast (Etempvar _t'5 tlong) tlong)
-                            (Econst_int (Int.repr 1) tint) tlong)
-                          (Econst_int (Int.repr 1) tint) tlong))))
+                            (Tstruct _interp_state noattr)) _pc (tptr tint))
+                        (Etempvar _t'3 (tptr tint)))))
                   (Ssequence
                     (Ssequence
-                      (Sset _t'2
+                      (Sset _t'1
                         (Efield
                           (Ederef
                             (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                             (Tstruct _interp_state noattr)) _accu tlong))
-                      (Ssequence
-                        (Sset _t'3
+                      (Sassign
+                        (Efield
                           (Ederef
-                            (Ebinop Oadd
-                              (Ecast (Etempvar _t'2 tlong)
-                                (tptr (tptr tint)))
-                              (Econst_int (Int.repr 0) tint)
-                              (tptr (tptr tint))) (tptr tint)))
-                        (Sassign
-                          (Efield
-                            (Ederef
-                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                              (Tstruct _interp_state noattr)) _pc
-                            (tptr tint)) (Etempvar _t'3 (tptr tint)))))
+                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _env tlong)
+                        (Etempvar _t'1 tlong)))
                     (Ssequence
-                      (Ssequence
-                        (Sset _t'1
-                          (Efield
-                            (Ederef
-                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                              (Tstruct _interp_state noattr)) _accu tlong))
-                        (Sassign
-                          (Efield
-                            (Ederef
-                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                              (Tstruct _interp_state noattr)) _env tlong)
-                          (Etempvar _t'1 tlong)))
                       (Sassign
                         (Efield
                           (Ederef
                             (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                             (Tstruct _interp_state noattr)) _extra_args
-                          tlong) (Econst_int (Int.repr 1) tint))))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                          tlong) (Econst_int (Int.repr 1) tint))
+                      (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))))))
 |}.
 
 Definition f_instr_APPLY3 := {|
@@ -3572,185 +3556,181 @@ Definition f_instr_APPLY3 := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'16
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+    (Sset _arg1
+      (Ederef
+        (Ebinop Oadd (Etempvar _t'16 (tptr tlong))
+          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+  (Ssequence
     (Ssequence
-      (Sset _t'16
+      (Sset _t'15
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Sset _arg1
+      (Sset _arg2
         (Ederef
-          (Ebinop Oadd (Etempvar _t'16 (tptr tlong))
-            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+          (Ebinop Oadd (Etempvar _t'15 (tptr tlong))
+            (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
     (Ssequence
       (Ssequence
-        (Sset _t'15
+        (Sset _t'14
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sset _arg2
+        (Sset _arg3
           (Ederef
-            (Ebinop Oadd (Etempvar _t'15 (tptr tlong))
-              (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
+            (Ebinop Oadd (Etempvar _t'14 (tptr tlong))
+              (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)))
       (Ssequence
         (Ssequence
-          (Sset _t'14
+          (Sset _t'13
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Sset _arg3
-            (Ederef
-              (Ebinop Oadd (Etempvar _t'14 (tptr tlong))
-                (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)))
+          (Sassign
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong))
+            (Ebinop Osub (Etempvar _t'13 (tptr tlong))
+              (Econst_int (Int.repr 3) tint) (tptr tlong))))
         (Ssequence
           (Ssequence
-            (Sset _t'13
+            (Sset _t'12
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _sp (tptr tlong)))
             (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong))
-              (Ebinop Osub (Etempvar _t'13 (tptr tlong))
-                (Econst_int (Int.repr 3) tint) (tptr tlong))))
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'12 (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+              (Etempvar _arg1 tlong)))
           (Ssequence
             (Ssequence
-              (Sset _t'12
+              (Sset _t'11
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _sp (tptr tlong)))
               (Sassign
                 (Ederef
-                  (Ebinop Oadd (Etempvar _t'12 (tptr tlong))
-                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-                (Etempvar _arg1 tlong)))
+                  (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
+                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+                (Etempvar _arg2 tlong)))
             (Ssequence
               (Ssequence
-                (Sset _t'11
+                (Sset _t'10
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                       (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                 (Sassign
                   (Ederef
-                    (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
-                      (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                  (Etempvar _arg2 tlong)))
+                    (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
+                      (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
+                  (Etempvar _arg3 tlong)))
               (Ssequence
                 (Ssequence
-                  (Sset _t'10
+                  (Sset _t'8
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                         (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                  (Sassign
-                    (Ederef
-                      (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
-                        (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
-                    (Etempvar _arg3 tlong)))
+                  (Ssequence
+                    (Sset _t'9
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                    (Sassign
+                      (Ederef
+                        (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
+                          (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong)
+                      (Ecast (Etempvar _t'9 (tptr tint)) tlong))))
                 (Ssequence
                   (Ssequence
-                    (Sset _t'8
+                    (Sset _t'6
                       (Efield
                         (Ederef
                           (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                           (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                     (Ssequence
-                      (Sset _t'9
+                      (Sset _t'7
                         (Efield
                           (Ederef
                             (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                            (Tstruct _interp_state noattr)) _env tlong))
                       (Sassign
                         (Ederef
-                          (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
-                            (Econst_int (Int.repr 3) tint) (tptr tlong))
-                          tlong) (Ecast (Etempvar _t'9 (tptr tint)) tlong))))
+                          (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                            (Econst_int (Int.repr 4) tint) (tptr tlong))
+                          tlong) (Etempvar _t'7 tlong))))
                   (Ssequence
                     (Ssequence
-                      (Sset _t'6
+                      (Sset _t'4
                         (Efield
                           (Ederef
                             (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                       (Ssequence
-                        (Sset _t'7
+                        (Sset _t'5
                           (Efield
                             (Ederef
                               (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                              (Tstruct _interp_state noattr)) _env tlong))
+                              (Tstruct _interp_state noattr)) _extra_args
+                            tlong))
                         (Sassign
                           (Ederef
-                            (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                              (Econst_int (Int.repr 4) tint) (tptr tlong))
-                            tlong) (Etempvar _t'7 tlong))))
+                            (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                              (Econst_int (Int.repr 5) tint) (tptr tlong))
+                            tlong)
+                          (Ebinop Oadd
+                            (Ebinop Oshl (Ecast (Etempvar _t'5 tlong) tlong)
+                              (Econst_int (Int.repr 1) tint) tlong)
+                            (Econst_int (Int.repr 1) tint) tlong))))
                     (Ssequence
                       (Ssequence
-                        (Sset _t'4
+                        (Sset _t'2
                           (Efield
                             (Ederef
                               (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                              (Tstruct _interp_state noattr)) _sp
-                            (tptr tlong)))
+                              (Tstruct _interp_state noattr)) _accu tlong))
                         (Ssequence
-                          (Sset _t'5
+                          (Sset _t'3
+                            (Ederef
+                              (Ebinop Oadd
+                                (Ecast (Etempvar _t'2 tlong)
+                                  (tptr (tptr tint)))
+                                (Econst_int (Int.repr 0) tint)
+                                (tptr (tptr tint))) (tptr tint)))
+                          (Sassign
                             (Efield
                               (Ederef
                                 (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                (Tstruct _interp_state noattr)) _extra_args
-                              tlong))
-                          (Sassign
-                            (Ederef
-                              (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                                (Econst_int (Int.repr 5) tint) (tptr tlong))
-                              tlong)
-                            (Ebinop Oadd
-                              (Ebinop Oshl
-                                (Ecast (Etempvar _t'5 tlong) tlong)
-                                (Econst_int (Int.repr 1) tint) tlong)
-                              (Econst_int (Int.repr 1) tint) tlong))))
+                                (Tstruct _interp_state noattr)) _pc
+                              (tptr tint)) (Etempvar _t'3 (tptr tint)))))
                       (Ssequence
                         (Ssequence
-                          (Sset _t'2
+                          (Sset _t'1
                             (Efield
                               (Ederef
                                 (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                 (Tstruct _interp_state noattr)) _accu tlong))
-                          (Ssequence
-                            (Sset _t'3
+                          (Sassign
+                            (Efield
                               (Ederef
-                                (Ebinop Oadd
-                                  (Ecast (Etempvar _t'2 tlong)
-                                    (tptr (tptr tint)))
-                                  (Econst_int (Int.repr 0) tint)
-                                  (tptr (tptr tint))) (tptr tint)))
-                            (Sassign
-                              (Efield
-                                (Ederef
-                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                  (Tstruct _interp_state noattr)) _pc
-                                (tptr tint)) (Etempvar _t'3 (tptr tint)))))
+                                (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                (Tstruct _interp_state noattr)) _env tlong)
+                            (Etempvar _t'1 tlong)))
                         (Ssequence
-                          (Ssequence
-                            (Sset _t'1
-                              (Efield
-                                (Ederef
-                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                  (Tstruct _interp_state noattr)) _accu
-                                tlong))
-                            (Sassign
-                              (Efield
-                                (Ederef
-                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                  (Tstruct _interp_state noattr)) _env tlong)
-                              (Etempvar _t'1 tlong)))
                           (Sassign
                             (Efield
                               (Ederef
                                 (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                 (Tstruct _interp_state noattr)) _extra_args
-                              tlong) (Econst_int (Int.repr 2) tint))))))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                              tlong) (Econst_int (Int.repr 2) tint))
+                          (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))))))))
 |}.
 
 Definition f_instr_APPTERM := {|
@@ -3768,105 +3748,104 @@ Definition f_instr_APPTERM := {|
 (Ssequence
   (Ssequence
     (Ssequence
-      (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Sset _nargs (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Sset _nargs (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+  (Ssequence
+    (Ssequence
+      (Sset _t'9
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sset _slotsize (Ederef (Etempvar _t'9 (tptr tint)) tint)))
     (Ssequence
       (Ssequence
-        (Sset _t'9
+        (Sset _t'8
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sset _slotsize (Ederef (Etempvar _t'9 (tptr tint)) tint)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Sset _newsp
+          (Ebinop Osub
+            (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
+              (Etempvar _slotsize tint) (tptr tlong)) (Etempvar _nargs tint)
+            (tptr tlong))))
       (Ssequence
         (Ssequence
-          (Sset _t'8
+          (Sset _i
+            (Ebinop Osub (Etempvar _nargs tint)
+              (Econst_int (Int.repr 1) tint) tint))
+          (Sloop
+            (Ssequence
+              (Sifthenelse (Ebinop Oge (Etempvar _i tint)
+                             (Econst_int (Int.repr 0) tint) tint)
+                Sskip
+                Sbreak)
+              (Ssequence
+                (Sset _t'6
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                (Ssequence
+                  (Sset _t'7
+                    (Ederef
+                      (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                        (Etempvar _i tint) (tptr tlong)) tlong))
+                  (Sassign
+                    (Ederef
+                      (Ebinop Oadd (Etempvar _newsp (tptr tlong))
+                        (Etempvar _i tint) (tptr tlong)) tlong)
+                    (Etempvar _t'7 tlong)))))
+            (Sset _i
+              (Ebinop Osub (Etempvar _i tint) (Econst_int (Int.repr 1) tint)
+                tint))))
+        (Ssequence
+          (Sassign
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Sset _newsp
-            (Ebinop Osub
-              (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
-                (Etempvar _slotsize tint) (tptr tlong))
-              (Etempvar _nargs tint) (tptr tlong))))
-        (Ssequence
+                (Tstruct _interp_state noattr)) _sp (tptr tlong))
+            (Etempvar _newsp (tptr tlong)))
           (Ssequence
-            (Sset _i
-              (Ebinop Osub (Etempvar _nargs tint)
-                (Econst_int (Int.repr 1) tint) tint))
-            (Sloop
+            (Ssequence
+              (Sset _t'4
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _accu tlong))
               (Ssequence
-                (Sifthenelse (Ebinop Oge (Etempvar _i tint)
-                               (Econst_int (Int.repr 0) tint) tint)
-                  Sskip
-                  Sbreak)
-                (Ssequence
-                  (Sset _t'6
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                  (Ssequence
-                    (Sset _t'7
-                      (Ederef
-                        (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                          (Etempvar _i tint) (tptr tlong)) tlong))
-                    (Sassign
-                      (Ederef
-                        (Ebinop Oadd (Etempvar _newsp (tptr tlong))
-                          (Etempvar _i tint) (tptr tlong)) tlong)
-                      (Etempvar _t'7 tlong)))))
-              (Sset _i
-                (Ebinop Osub (Etempvar _i tint)
-                  (Econst_int (Int.repr 1) tint) tint))))
-          (Ssequence
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong))
-              (Etempvar _newsp (tptr tlong)))
+                (Sset _t'5
+                  (Ederef
+                    (Ebinop Oadd
+                      (Ecast (Etempvar _t'4 tlong) (tptr (tptr tint)))
+                      (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
+                    (tptr tint)))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Etempvar _t'5 (tptr tint)))))
             (Ssequence
               (Ssequence
-                (Sset _t'4
+                (Sset _t'3
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                       (Tstruct _interp_state noattr)) _accu tlong))
-                (Ssequence
-                  (Sset _t'5
+                (Sassign
+                  (Efield
                     (Ederef
-                      (Ebinop Oadd
-                        (Ecast (Etempvar _t'4 tlong) (tptr (tptr tint)))
-                        (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
-                      (tptr tint)))
-                  (Sassign
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _pc (tptr tint))
-                    (Etempvar _t'5 (tptr tint)))))
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _env tlong)
+                  (Etempvar _t'3 tlong)))
               (Ssequence
-                (Ssequence
-                  (Sset _t'3
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _accu tlong))
-                  (Sassign
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _env tlong)
-                    (Etempvar _t'3 tlong)))
                 (Ssequence
                   (Sset _t'2
                     (Efield
@@ -3880,8 +3859,8 @@ Definition f_instr_APPTERM := {|
                         (Tstruct _interp_state noattr)) _extra_args tlong)
                     (Ebinop Oadd (Etempvar _t'2 tlong)
                       (Ebinop Osub (Etempvar _nargs tint)
-                        (Econst_int (Int.repr 1) tint) tint) tlong))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                        (Econst_int (Int.repr 1) tint) tint) tlong)))
+                (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))))
 |}.
 
 Definition f_instr_APPTERM1 := {|
@@ -3896,65 +3875,63 @@ Definition f_instr_APPTERM1 := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'8
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+    (Sset _arg1
+      (Ederef
+        (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
+          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+  (Ssequence
     (Ssequence
-      (Sset _t'8
+      (Sset _t'5
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Sset _arg1
-        (Ederef
-          (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
-            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+      (Ssequence
+        (Sset _t'6
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint)))
+        (Ssequence
+          (Sset _t'7 (Ederef (Etempvar _t'6 (tptr tint)) tint))
+          (Sassign
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong))
+            (Ebinop Osub
+              (Ebinop Oadd (Etempvar _t'5 (tptr tlong)) (Etempvar _t'7 tint)
+                (tptr tlong)) (Econst_int (Int.repr 1) tint) (tptr tlong))))))
     (Ssequence
       (Ssequence
-        (Sset _t'5
+        (Sset _t'4
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Sassign
+          (Ederef
+            (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+              (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+          (Etempvar _arg1 tlong)))
+      (Ssequence
         (Ssequence
-          (Sset _t'6
+          (Sset _t'2
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                (Tstruct _interp_state noattr)) _accu tlong))
           (Ssequence
-            (Sset _t'7 (Ederef (Etempvar _t'6 (tptr tint)) tint))
+            (Sset _t'3
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _t'2 tlong) (tptr (tptr tint)))
+                  (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
+                (tptr tint)))
             (Sassign
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong))
-              (Ebinop Osub
-                (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
-                  (Etempvar _t'7 tint) (tptr tlong))
-                (Econst_int (Int.repr 1) tint) (tptr tlong))))))
-      (Ssequence
+                  (Tstruct _interp_state noattr)) _pc (tptr tint))
+              (Etempvar _t'3 (tptr tint)))))
         (Ssequence
-          (Sset _t'4
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Sassign
-            (Ederef
-              (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-            (Etempvar _arg1 tlong)))
-        (Ssequence
-          (Ssequence
-            (Sset _t'2
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _accu tlong))
-            (Ssequence
-              (Sset _t'3
-                (Ederef
-                  (Ebinop Oadd
-                    (Ecast (Etempvar _t'2 tlong) (tptr (tptr tint)))
-                    (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
-                  (tptr tint)))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint))
-                (Etempvar _t'3 (tptr tint)))))
           (Ssequence
             (Sset _t'1
               (Efield
@@ -3964,8 +3941,8 @@ Definition f_instr_APPTERM1 := {|
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _env tlong)
-              (Etempvar _t'1 tlong)))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+              (Etempvar _t'1 tlong)))
+          (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))
 |}.
 
 Definition f_instr_APPTERM2 := {|
@@ -3982,101 +3959,100 @@ Definition f_instr_APPTERM2 := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'11
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+    (Sset _arg1
+      (Ederef
+        (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
+          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+  (Ssequence
     (Ssequence
-      (Sset _t'11
+      (Sset _t'10
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Sset _arg1
+      (Sset _arg2
         (Ederef
-          (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
-            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+          (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
+            (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
     (Ssequence
       (Ssequence
-        (Sset _t'10
+        (Sset _t'7
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sset _arg2
-          (Ederef
-            (Ebinop Oadd (Etempvar _t'10 (tptr tlong))
-              (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
+        (Ssequence
+          (Sset _t'8
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _pc (tptr tint)))
+          (Ssequence
+            (Sset _t'9 (Ederef (Etempvar _t'8 (tptr tint)) tint))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _sp (tptr tlong))
+              (Ebinop Osub
+                (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
+                  (Etempvar _t'9 tint) (tptr tlong))
+                (Econst_int (Int.repr 2) tint) (tptr tlong))))))
       (Ssequence
         (Ssequence
-          (Sset _t'7
+          (Sset _t'6
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Ssequence
-            (Sset _t'8
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
-            (Ssequence
-              (Sset _t'9 (Ederef (Etempvar _t'8 (tptr tint)) tint))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                (Ebinop Osub
-                  (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
-                    (Etempvar _t'9 tint) (tptr tlong))
-                  (Econst_int (Int.repr 2) tint) (tptr tlong))))))
+          (Sassign
+            (Ederef
+              (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+            (Etempvar _arg1 tlong)))
         (Ssequence
           (Ssequence
-            (Sset _t'6
+            (Sset _t'5
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _sp (tptr tlong)))
             (Sassign
               (Ederef
-                (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-              (Etempvar _arg1 tlong)))
+                (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+              (Etempvar _arg2 tlong)))
           (Ssequence
             (Ssequence
-              (Sset _t'5
+              (Sset _t'3
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Sassign
-                (Ederef
-                  (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
-                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                (Etempvar _arg2 tlong)))
+                    (Tstruct _interp_state noattr)) _accu tlong))
+              (Ssequence
+                (Sset _t'4
+                  (Ederef
+                    (Ebinop Oadd
+                      (Ecast (Etempvar _t'3 tlong) (tptr (tptr tint)))
+                      (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
+                    (tptr tint)))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Etempvar _t'4 (tptr tint)))))
             (Ssequence
               (Ssequence
-                (Sset _t'3
+                (Sset _t'2
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                       (Tstruct _interp_state noattr)) _accu tlong))
-                (Ssequence
-                  (Sset _t'4
+                (Sassign
+                  (Efield
                     (Ederef
-                      (Ebinop Oadd
-                        (Ecast (Etempvar _t'3 tlong) (tptr (tptr tint)))
-                        (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
-                      (tptr tint)))
-                  (Sassign
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _pc (tptr tint))
-                    (Etempvar _t'4 (tptr tint)))))
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _env tlong)
+                  (Etempvar _t'2 tlong)))
               (Ssequence
-                (Ssequence
-                  (Sset _t'2
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _accu tlong))
-                  (Sassign
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _env tlong)
-                    (Etempvar _t'2 tlong)))
                 (Ssequence
                   (Sset _t'1
                     (Efield
@@ -4089,8 +4065,8 @@ Definition f_instr_APPTERM2 := {|
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                         (Tstruct _interp_state noattr)) _extra_args tlong)
                     (Ebinop Oadd (Etempvar _t'1 tlong)
-                      (Econst_int (Int.repr 1) tint) tlong))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                      (Econst_int (Int.repr 1) tint) tlong)))
+                (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))))
 |}.
 
 Definition f_instr_APPTERM3 := {|
@@ -4108,125 +4084,123 @@ Definition f_instr_APPTERM3 := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'13
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+    (Sset _arg1
+      (Ederef
+        (Ebinop Oadd (Etempvar _t'13 (tptr tlong))
+          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+  (Ssequence
     (Ssequence
-      (Sset _t'13
+      (Sset _t'12
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Sset _arg1
+      (Sset _arg2
         (Ederef
-          (Ebinop Oadd (Etempvar _t'13 (tptr tlong))
-            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+          (Ebinop Oadd (Etempvar _t'12 (tptr tlong))
+            (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
     (Ssequence
       (Ssequence
-        (Sset _t'12
+        (Sset _t'11
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sset _arg2
+        (Sset _arg3
           (Ederef
-            (Ebinop Oadd (Etempvar _t'12 (tptr tlong))
-              (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)))
+            (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
+              (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)))
       (Ssequence
         (Ssequence
-          (Sset _t'11
+          (Sset _t'8
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Sset _arg3
-            (Ederef
-              (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
-                (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)))
+          (Ssequence
+            (Sset _t'9
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            (Ssequence
+              (Sset _t'10 (Ederef (Etempvar _t'9 (tptr tint)) tint))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                (Ebinop Osub
+                  (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
+                    (Etempvar _t'10 tint) (tptr tlong))
+                  (Econst_int (Int.repr 3) tint) (tptr tlong))))))
         (Ssequence
           (Ssequence
-            (Sset _t'8
+            (Sset _t'7
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-            (Ssequence
-              (Sset _t'9
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
-              (Ssequence
-                (Sset _t'10 (Ederef (Etempvar _t'9 (tptr tint)) tint))
-                (Sassign
-                  (Efield
-                    (Ederef
-                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                  (Ebinop Osub
-                    (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
-                      (Etempvar _t'10 tint) (tptr tlong))
-                    (Econst_int (Int.repr 3) tint) (tptr tlong))))))
+            (Sassign
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+              (Etempvar _arg1 tlong)))
           (Ssequence
             (Ssequence
-              (Sset _t'7
+              (Sset _t'6
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _sp (tptr tlong)))
               (Sassign
                 (Ederef
-                  (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
-                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-                (Etempvar _arg1 tlong)))
+                  (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+                (Etempvar _arg2 tlong)))
             (Ssequence
               (Ssequence
-                (Sset _t'6
+                (Sset _t'5
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                       (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                 (Sassign
                   (Ederef
-                    (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                      (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                  (Etempvar _arg2 tlong)))
+                    (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+                      (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
+                  (Etempvar _arg3 tlong)))
               (Ssequence
                 (Ssequence
-                  (Sset _t'5
+                  (Sset _t'3
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                  (Sassign
-                    (Ederef
-                      (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
-                        (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
-                    (Etempvar _arg3 tlong)))
+                        (Tstruct _interp_state noattr)) _accu tlong))
+                  (Ssequence
+                    (Sset _t'4
+                      (Ederef
+                        (Ebinop Oadd
+                          (Ecast (Etempvar _t'3 tlong) (tptr (tptr tint)))
+                          (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
+                        (tptr tint)))
+                    (Sassign
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _pc (tptr tint))
+                      (Etempvar _t'4 (tptr tint)))))
                 (Ssequence
                   (Ssequence
-                    (Sset _t'3
+                    (Sset _t'2
                       (Efield
                         (Ederef
                           (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                           (Tstruct _interp_state noattr)) _accu tlong))
-                    (Ssequence
-                      (Sset _t'4
+                    (Sassign
+                      (Efield
                         (Ederef
-                          (Ebinop Oadd
-                            (Ecast (Etempvar _t'3 tlong) (tptr (tptr tint)))
-                            (Econst_int (Int.repr 0) tint)
-                            (tptr (tptr tint))) (tptr tint)))
-                      (Sassign
-                        (Efield
-                          (Ederef
-                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _pc (tptr tint))
-                        (Etempvar _t'4 (tptr tint)))))
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _env tlong)
+                      (Etempvar _t'2 tlong)))
                   (Ssequence
-                    (Ssequence
-                      (Sset _t'2
-                        (Efield
-                          (Ederef
-                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _accu tlong))
-                      (Sassign
-                        (Efield
-                          (Ederef
-                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _env tlong)
-                        (Etempvar _t'2 tlong)))
                     (Ssequence
                       (Sset _t'1
                         (Efield
@@ -4241,8 +4215,8 @@ Definition f_instr_APPTERM3 := {|
                             (Tstruct _interp_state noattr)) _extra_args
                           tlong)
                         (Ebinop Oadd (Etempvar _t'1 tlong)
-                          (Econst_int (Int.repr 2) tint) tlong))))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                          (Econst_int (Int.repr 2) tint) tlong)))
+                    (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))))))
 |}.
 
 Definition f_instr_RETURN := {|
@@ -4348,7 +4322,7 @@ Definition f_instr_RETURN := {|
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _pc (tptr tint))
-                (Ecast (Etempvar _t'9 tlong) (tptr tint)))))
+                (Ecast (Etempvar _t'9 tlong) tint))))
           (Ssequence
             (Ssequence
               (Sset _t'6
@@ -4413,88 +4387,86 @@ Definition f_instr_RESTART := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'8
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _env tlong))
     (Ssequence
-      (Sset _t'8
+      (Sset _t'9
+        (Ederef
+          (Ebinop Oadd (Ecast (Etempvar _t'8 tlong) (tptr tlong))
+            (Eunop Oneg (Econst_int (Int.repr 1) tint) tint) (tptr tlong))
+          tlong))
+      (Sset _num_args
+        (Ecast
+          (Ebinop Osub
+            (Ebinop Oshr (Etempvar _t'9 tlong)
+              (Econst_int (Int.repr 10) tint) tlong)
+            (Econst_int (Int.repr 3) tint) tlong) tint))))
+  (Ssequence
+    (Ssequence
+      (Sset _t'7
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _env tlong))
-      (Ssequence
-        (Sset _t'9
-          (Ederef
-            (Ebinop Oadd (Ecast (Etempvar _t'8 tlong) (tptr tlong))
-              (Eunop Oneg (Econst_int (Int.repr 1) tint) tint) (tptr tlong))
-            tlong))
-        (Sset _num_args
-          (Ecast
-            (Ebinop Osub
-              (Ebinop Oshr (Etempvar _t'9 tlong)
-                (Econst_int (Int.repr 10) tint) tlong)
-              (Econst_int (Int.repr 3) tint) tlong) tint))))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong))
+        (Ebinop Osub (Etempvar _t'7 (tptr tlong)) (Etempvar _num_args tint)
+          (tptr tlong))))
     (Ssequence
       (Ssequence
-        (Sset _t'7
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong))
-          (Ebinop Osub (Etempvar _t'7 (tptr tlong)) (Etempvar _num_args tint)
-            (tptr tlong))))
-      (Ssequence
-        (Ssequence
-          (Sset _i (Econst_int (Int.repr 0) tint))
-          (Sloop
+        (Sset _i (Econst_int (Int.repr 0) tint))
+        (Sloop
+          (Ssequence
+            (Sifthenelse (Ebinop Olt (Etempvar _i tint)
+                           (Etempvar _num_args tint) tint)
+              Sskip
+              Sbreak)
             (Ssequence
-              (Sifthenelse (Ebinop Olt (Etempvar _i tint)
-                             (Etempvar _num_args tint) tint)
-                Sskip
-                Sbreak)
+              (Sset _t'4
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
               (Ssequence
-                (Sset _t'4
+                (Sset _t'5
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                      (Tstruct _interp_state noattr)) _env tlong))
                 (Ssequence
-                  (Sset _t'5
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _env tlong))
-                  (Ssequence
-                    (Sset _t'6
-                      (Ederef
-                        (Ebinop Oadd
-                          (Ecast (Etempvar _t'5 tlong) (tptr tlong))
-                          (Ebinop Oadd (Etempvar _i tint)
-                            (Econst_int (Int.repr 3) tint) tint)
-                          (tptr tlong)) tlong))
-                    (Sassign
-                      (Ederef
-                        (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                          (Etempvar _i tint) (tptr tlong)) tlong)
-                      (Etempvar _t'6 tlong))))))
-            (Sset _i
-              (Ebinop Oadd (Etempvar _i tint) (Econst_int (Int.repr 1) tint)
-                tint))))
+                  (Sset _t'6
+                    (Ederef
+                      (Ebinop Oadd (Ecast (Etempvar _t'5 tlong) (tptr tlong))
+                        (Ebinop Oadd (Etempvar _i tint)
+                          (Econst_int (Int.repr 3) tint) tint) (tptr tlong))
+                      tlong))
+                  (Sassign
+                    (Ederef
+                      (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                        (Etempvar _i tint) (tptr tlong)) tlong)
+                    (Etempvar _t'6 tlong))))))
+          (Sset _i
+            (Ebinop Oadd (Etempvar _i tint) (Econst_int (Int.repr 1) tint)
+              tint))))
+      (Ssequence
         (Ssequence
+          (Sset _t'2
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _env tlong))
           (Ssequence
-            (Sset _t'2
+            (Sset _t'3
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _t'2 tlong) (tptr tlong))
+                  (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
+            (Sassign
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _env tlong))
-            (Ssequence
-              (Sset _t'3
-                (Ederef
-                  (Ebinop Oadd (Ecast (Etempvar _t'2 tlong) (tptr tlong))
-                    (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _env tlong)
-                (Etempvar _t'3 tlong))))
+                  (Tstruct _interp_state noattr)) _env tlong)
+              (Etempvar _t'3 tlong))))
+        (Ssequence
           (Ssequence
             (Sset _t'1
               (Efield
@@ -4505,8 +4477,8 @@ Definition f_instr_RESTART := {|
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _extra_args tlong)
               (Ebinop Oadd (Etempvar _t'1 tlong) (Etempvar _num_args tint)
-                tlong)))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                tlong)))
+          (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))
 |}.
 
 Definition f_instr_GRAB := {|
@@ -4515,11 +4487,12 @@ Definition f_instr_GRAB := {|
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
   fn_vars := nil;
   fn_temps := ((_required, tint) :: (_num_args, tulong) :: (_i, tulong) ::
-               (_block, tlong) :: (_t'2, tlong) :: (_t'1, (tptr tint)) ::
-               (_t'17, tlong) :: (_t'16, tlong) :: (_t'15, tlong) ::
-               (_t'14, tlong) :: (_t'13, (tptr tlong)) ::
-               (_t'12, (tptr tint)) :: (_t'11, (tptr tlong)) ::
-               (_t'10, tlong) :: (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
+               (_t'2, tlong) :: (_t'1, (tptr tint)) :: (_t'21, tlong) ::
+               (_t'20, tlong) :: (_t'19, tlong) :: (_t'18, tlong) ::
+               (_t'17, tlong) :: (_t'16, (tptr tlong)) :: (_t'15, tlong) ::
+               (_t'14, (tptr tint)) :: (_t'13, tlong) :: (_t'12, tlong) ::
+               (_t'11, (tptr tlong)) :: (_t'10, tlong) ::
+               (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
                (_t'7, (tptr tlong)) :: (_t'6, tlong) ::
                (_t'5, (tptr tlong)) :: (_t'4, (tptr tlong)) ::
                (_t'3, tlong) :: nil);
@@ -4527,18 +4500,18 @@ Definition f_instr_GRAB := {|
 (Ssequence
   (Ssequence
     (Ssequence
-      (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Sset _required (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Sset _required (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+  (Ssequence
     (Ssequence
       (Sset _t'3
         (Efield
@@ -4547,7 +4520,7 @@ Definition f_instr_GRAB := {|
       (Sifthenelse (Ebinop Oge (Etempvar _t'3 tlong)
                      (Etempvar _required tint) tint)
         (Ssequence
-          (Sset _t'17
+          (Sset _t'21
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _extra_args tlong))
@@ -4555,17 +4528,17 @@ Definition f_instr_GRAB := {|
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _extra_args tlong)
-            (Ebinop Osub (Etempvar _t'17 tlong) (Etempvar _required tint)
+            (Ebinop Osub (Etempvar _t'21 tlong) (Etempvar _required tint)
               tlong)))
         (Ssequence
           (Ssequence
-            (Sset _t'16
+            (Sset _t'20
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _extra_args tlong))
             (Sset _num_args
               (Ebinop Oadd (Econst_int (Int.repr 1) tint)
-                (Etempvar _t'16 tlong) tlong)))
+                (Etempvar _t'20 tlong) tlong)))
           (Ssequence
             (Ssequence
               (Scall (Some _t'2)
@@ -4576,19 +4549,30 @@ Definition f_instr_GRAB := {|
                  (Ebinop Oadd (Etempvar _num_args tulong)
                    (Econst_int (Int.repr 3) tint) tulong) ::
                  (Econst_int (Int.repr 247) tint) :: nil))
-              (Sset _block (Etempvar _t'2 tlong)))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _accu tlong)
+                (Etempvar _t'2 tlong)))
             (Ssequence
               (Ssequence
-                (Sset _t'15
+                (Sset _t'18
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _env tlong))
-                (Sassign
-                  (Ederef
-                    (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                      (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
-                  (Etempvar _t'15 tlong)))
+                      (Tstruct _interp_state noattr)) _accu tlong))
+                (Ssequence
+                  (Sset _t'19
+                    (Efield
+                      (Ederef
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _env tlong))
+                  (Sassign
+                    (Ederef
+                      (Ebinop Oadd
+                        (Ecast (Etempvar _t'18 tlong) (tptr tlong))
+                        (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
+                    (Etempvar _t'19 tlong))))
               (Ssequence
                 (Ssequence
                   (Sset _i (Ecast (Econst_int (Int.repr 0) tint) tulong))
@@ -4599,158 +4583,170 @@ Definition f_instr_GRAB := {|
                         Sskip
                         Sbreak)
                       (Ssequence
-                        (Sset _t'13
+                        (Sset _t'15
                           (Efield
                             (Ederef
                               (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                              (Tstruct _interp_state noattr)) _sp
-                            (tptr tlong)))
+                              (Tstruct _interp_state noattr)) _accu tlong))
                         (Ssequence
-                          (Sset _t'14
-                            (Ederef
-                              (Ebinop Oadd (Etempvar _t'13 (tptr tlong))
-                                (Etempvar _i tulong) (tptr tlong)) tlong))
-                          (Sassign
-                            (Ederef
-                              (Ebinop Oadd
-                                (Ecast (Etempvar _block tlong) (tptr tlong))
-                                (Ebinop Oadd (Etempvar _i tulong)
-                                  (Econst_int (Int.repr 3) tint) tulong)
-                                (tptr tlong)) tlong) (Etempvar _t'14 tlong)))))
-                    (Sset _i
-                      (Ebinop Oadd (Etempvar _i tulong)
-                        (Econst_int (Int.repr 1) tint) tulong))))
-                (Ssequence
-                  (Ssequence
-                    (Sset _t'12
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-                    (Sassign
-                      (Ederef
-                        (Ebinop Oadd
-                          (Ecast (Etempvar _block tlong) (tptr (tptr tint)))
-                          (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
-                        (tptr tint))
-                      (Ebinop Osub (Etempvar _t'12 (tptr tint))
-                        (Econst_int (Int.repr 3) tint) (tptr tint))))
-                  (Ssequence
-                    (Sassign
-                      (Ederef
-                        (Ebinop Oadd
-                          (Ecast (Etempvar _block tlong) (tptr tlong))
-                          (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                      (Ebinop Oor
-                        (Ecast
-                          (Ebinop Oshl (Econst_int (Int.repr 2) tint)
-                            (Econst_int (Int.repr 1) tint) tint) tlong)
-                        (Econst_int (Int.repr 1) tint) tlong))
-                    (Ssequence
-                      (Sassign
-                        (Efield
-                          (Ederef
-                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _accu tlong)
-                        (Etempvar _block tlong))
-                      (Ssequence
-                        (Ssequence
-                          (Sset _t'11
+                          (Sset _t'16
                             (Efield
                               (Ederef
                                 (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                 (Tstruct _interp_state noattr)) _sp
                               (tptr tlong)))
-                          (Sassign
+                          (Ssequence
+                            (Sset _t'17
+                              (Ederef
+                                (Ebinop Oadd (Etempvar _t'16 (tptr tlong))
+                                  (Etempvar _i tulong) (tptr tlong)) tlong))
+                            (Sassign
+                              (Ederef
+                                (Ebinop Oadd
+                                  (Ecast (Etempvar _t'15 tlong) (tptr tlong))
+                                  (Ebinop Oadd (Etempvar _i tulong)
+                                    (Econst_int (Int.repr 3) tint) tulong)
+                                  (tptr tlong)) tlong)
+                              (Etempvar _t'17 tlong))))))
+                    (Sset _i
+                      (Ebinop Oadd (Etempvar _i tulong)
+                        (Econst_int (Int.repr 1) tint) tulong))))
+                (Ssequence
+                  (Ssequence
+                    (Sset _t'13
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
+                    (Ssequence
+                      (Sset _t'14
+                        (Efield
+                          (Ederef
+                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+                      (Sassign
+                        (Ederef
+                          (Ebinop Oadd
+                            (Ecast (Etempvar _t'13 tlong) (tptr (tptr tint)))
+                            (Econst_int (Int.repr 0) tint)
+                            (tptr (tptr tint))) (tptr tint))
+                        (Ebinop Osub (Etempvar _t'14 (tptr tint))
+                          (Econst_int (Int.repr 3) tint) (tptr tint)))))
+                  (Ssequence
+                    (Ssequence
+                      (Sset _t'12
+                        (Efield
+                          (Ederef
+                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _accu tlong))
+                      (Sassign
+                        (Ederef
+                          (Ebinop Oadd
+                            (Ecast (Etempvar _t'12 tlong) (tptr tlong))
+                            (Econst_int (Int.repr 1) tint) (tptr tlong))
+                          tlong)
+                        (Ebinop Oor
+                          (Ecast
+                            (Ebinop Oshl (Econst_int (Int.repr 2) tint)
+                              (Econst_int (Int.repr 1) tint) tint) tlong)
+                          (Econst_int (Int.repr 1) tint) tlong)))
+                    (Ssequence
+                      (Ssequence
+                        (Sset _t'11
+                          (Efield
+                            (Ederef
+                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                              (Tstruct _interp_state noattr)) _sp
+                            (tptr tlong)))
+                        (Sassign
+                          (Efield
+                            (Ederef
+                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                              (Tstruct _interp_state noattr)) _sp
+                            (tptr tlong))
+                          (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
+                            (Etempvar _num_args tulong) (tptr tlong))))
+                      (Ssequence
+                        (Ssequence
+                          (Sset _t'9
                             (Efield
                               (Ederef
                                 (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                 (Tstruct _interp_state noattr)) _sp
-                              (tptr tlong))
-                            (Ebinop Oadd (Etempvar _t'11 (tptr tlong))
-                              (Etempvar _num_args tulong) (tptr tlong))))
+                              (tptr tlong)))
+                          (Ssequence
+                            (Sset _t'10
+                              (Ederef
+                                (Ebinop Oadd (Etempvar _t'9 (tptr tlong))
+                                  (Econst_int (Int.repr 0) tint)
+                                  (tptr tlong)) tlong))
+                            (Sassign
+                              (Efield
+                                (Ederef
+                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                  (Tstruct _interp_state noattr)) _pc
+                                (tptr tint))
+                              (Ecast (Etempvar _t'10 tlong) tint))))
                         (Ssequence
                           (Ssequence
-                            (Sset _t'9
+                            (Sset _t'7
                               (Efield
                                 (Ederef
                                   (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                   (Tstruct _interp_state noattr)) _sp
                                 (tptr tlong)))
                             (Ssequence
-                              (Sset _t'10
+                              (Sset _t'8
                                 (Ederef
-                                  (Ebinop Oadd (Etempvar _t'9 (tptr tlong))
-                                    (Econst_int (Int.repr 0) tint)
+                                  (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
+                                    (Econst_int (Int.repr 1) tint)
                                     (tptr tlong)) tlong))
                               (Sassign
                                 (Efield
                                   (Ederef
                                     (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                    (Tstruct _interp_state noattr)) _pc
-                                  (tptr tint))
-                                (Ecast (Etempvar _t'10 tlong) (tptr tint)))))
+                                    (Tstruct _interp_state noattr)) _env
+                                  tlong) (Etempvar _t'8 tlong))))
                           (Ssequence
                             (Ssequence
-                              (Sset _t'7
+                              (Sset _t'5
                                 (Efield
                                   (Ederef
                                     (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                     (Tstruct _interp_state noattr)) _sp
                                   (tptr tlong)))
                               (Ssequence
-                                (Sset _t'8
+                                (Sset _t'6
                                   (Ederef
-                                    (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
-                                      (Econst_int (Int.repr 1) tint)
+                                    (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+                                      (Econst_int (Int.repr 2) tint)
                                       (tptr tlong)) tlong))
                                 (Sassign
                                   (Efield
                                     (Ederef
                                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                      (Tstruct _interp_state noattr)) _env
-                                    tlong) (Etempvar _t'8 tlong))))
+                                      (Tstruct _interp_state noattr))
+                                    _extra_args tlong)
+                                  (Ebinop Oshr
+                                    (Ecast (Etempvar _t'6 tlong) tlong)
+                                    (Econst_int (Int.repr 1) tint) tlong))))
                             (Ssequence
-                              (Ssequence
-                                (Sset _t'5
-                                  (Efield
-                                    (Ederef
-                                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                      (Tstruct _interp_state noattr)) _sp
-                                    (tptr tlong)))
-                                (Ssequence
-                                  (Sset _t'6
-                                    (Ederef
-                                      (Ebinop Oadd
-                                        (Etempvar _t'5 (tptr tlong))
-                                        (Econst_int (Int.repr 2) tint)
-                                        (tptr tlong)) tlong))
-                                  (Sassign
-                                    (Efield
-                                      (Ederef
-                                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                        (Tstruct _interp_state noattr))
-                                      _extra_args tlong)
-                                    (Ebinop Oshr
-                                      (Ecast (Etempvar _t'6 tlong) tlong)
-                                      (Econst_int (Int.repr 1) tint) tlong))))
-                              (Ssequence
-                                (Sset _t'4
-                                  (Efield
-                                    (Ederef
-                                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                      (Tstruct _interp_state noattr)) _sp
-                                    (tptr tlong)))
-                                (Sassign
-                                  (Efield
-                                    (Ederef
-                                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                      (Tstruct _interp_state noattr)) _sp
-                                    (tptr tlong))
-                                  (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                                    (Econst_int (Int.repr 3) tint)
-                                    (tptr tlong))))))))))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                              (Sset _t'4
+                                (Efield
+                                  (Ederef
+                                    (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                    (Tstruct _interp_state noattr)) _sp
+                                  (tptr tlong)))
+                              (Sassign
+                                (Efield
+                                  (Ederef
+                                    (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                    (Tstruct _interp_state noattr)) _sp
+                                  (tptr tlong))
+                                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                                  (Econst_int (Int.repr 3) tint)
+                                  (tptr tlong))))))))))))))))
+    (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
 |}.
 
 Definition f_instr_CLOSURE := {|
@@ -4758,68 +4754,75 @@ Definition f_instr_CLOSURE := {|
   fn_callconv := cc_default;
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
   fn_vars := nil;
-  fn_temps := ((_nvars, tint) :: (_i, tint) :: (_block, tlong) ::
+  fn_temps := ((_nvars, tint) :: (_i, tint) :: (_t'4, tlong) ::
                (_t'3, tlong) :: (_t'2, (tptr tlong)) ::
-               (_t'1, (tptr tint)) :: (_t'12, (tptr tlong)) ::
-               (_t'11, tlong) :: (_t'10, tlong) :: (_t'9, (tptr tlong)) ::
-               (_t'8, tint) :: (_t'7, (tptr tint)) :: (_t'6, (tptr tint)) ::
-               (_t'5, (tptr tint)) :: (_t'4, (tptr tlong)) :: nil);
+               (_t'1, (tptr tint)) :: (_t'19, (tptr tlong)) ::
+               (_t'18, tlong) :: (_t'17, tlong) :: (_t'16, (tptr tlong)) ::
+               (_t'15, tlong) :: (_t'14, tlong) :: (_t'13, (tptr tlong)) ::
+               (_t'12, tlong) :: (_t'11, tint) :: (_t'10, (tptr tint)) ::
+               (_t'9, (tptr tint)) :: (_t'8, tlong) :: (_t'7, tlong) ::
+               (_t'6, (tptr tint)) :: (_t'5, (tptr tlong)) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
     (Ssequence
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Sset _nvars (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+  (Ssequence
+    (Sifthenelse (Ebinop Ogt (Etempvar _nvars tint)
+                   (Econst_int (Int.repr 0) tint) tint)
       (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Sset _nvars (Ederef (Etempvar _t'1 (tptr tint)) tint)))
-    (Ssequence
-      (Sifthenelse (Ebinop Ogt (Etempvar _nvars tint)
-                     (Econst_int (Int.repr 0) tint) tint)
         (Ssequence
           (Ssequence
-            (Ssequence
-              (Sset _t'12
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Sset _t'2
-                (Ecast
-                  (Ebinop Osub (Etempvar _t'12 (tptr tlong))
-                    (Econst_int (Int.repr 1) tint) (tptr tlong))
-                  (tptr tlong))))
+            (Sset _t'19
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+            (Sset _t'2
+              (Ecast
+                (Ebinop Osub (Etempvar _t'19 (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) (tptr tlong))))
+          (Sassign
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong))
+            (Etempvar _t'2 (tptr tlong))))
+        (Ssequence
+          (Sset _t'18
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _accu tlong))
+          (Sassign (Ederef (Etempvar _t'2 (tptr tlong)) tlong)
+            (Etempvar _t'18 tlong))))
+      Sskip)
+    (Ssequence
+      (Sifthenelse (Ebinop Ole (Etempvar _nvars tint)
+                     (Ebinop Osub (Econst_int (Int.repr 256) tint)
+                       (Econst_int (Int.repr 2) tint) tint) tint)
+        (Ssequence
+          (Ssequence
+            (Scall (Some _t'3)
+              (Evar _heap_alloc (Tfunction
+                                  ((tptr (Tstruct _interp_state noattr)) ::
+                                   tlong :: tlong :: nil) tlong cc_default))
+              ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+               (Ebinop Oadd (Econst_int (Int.repr 2) tint)
+                 (Etempvar _nvars tint) tint) ::
+               (Econst_int (Int.repr 247) tint) :: nil))
             (Sassign
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong))
-              (Etempvar _t'2 (tptr tlong))))
-          (Ssequence
-            (Sset _t'11
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _accu tlong))
-            (Sassign (Ederef (Etempvar _t'2 (tptr tlong)) tlong)
-              (Etempvar _t'11 tlong))))
-        Sskip)
-      (Ssequence
-        (Ssequence
-          (Scall (Some _t'3)
-            (Evar _heap_alloc (Tfunction
-                                ((tptr (Tstruct _interp_state noattr)) ::
-                                 tlong :: tlong :: nil) tlong cc_default))
-            ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-             (Ebinop Oadd (Econst_int (Int.repr 2) tint)
-               (Etempvar _nvars tint) tint) ::
-             (Econst_int (Int.repr 247) tint) :: nil))
-          (Sset _block (Etempvar _t'3 tlong)))
-        (Ssequence
+                  (Tstruct _interp_state noattr)) _accu tlong)
+              (Etempvar _t'3 tlong)))
           (Ssequence
             (Sset _i (Econst_int (Int.repr 0) tint))
             (Sloop
@@ -4829,93 +4832,150 @@ Definition f_instr_CLOSURE := {|
                   Sskip
                   Sbreak)
                 (Ssequence
-                  (Sset _t'9
+                  (Sset _t'15
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                        (Tstruct _interp_state noattr)) _accu tlong))
                   (Ssequence
-                    (Sset _t'10
-                      (Ederef
-                        (Ebinop Oadd (Etempvar _t'9 (tptr tlong))
-                          (Etempvar _i tint) (tptr tlong)) tlong))
-                    (Sassign
-                      (Ederef
-                        (Ebinop Oadd
-                          (Ecast (Etempvar _block tlong) (tptr tlong))
-                          (Ebinop Oadd (Etempvar _i tint)
-                            (Econst_int (Int.repr 2) tint) tint)
-                          (tptr tlong)) tlong) (Etempvar _t'10 tlong)))))
+                    (Sset _t'16
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                    (Ssequence
+                      (Sset _t'17
+                        (Ederef
+                          (Ebinop Oadd (Etempvar _t'16 (tptr tlong))
+                            (Etempvar _i tint) (tptr tlong)) tlong))
+                      (Sassign
+                        (Ederef
+                          (Ebinop Oadd
+                            (Ecast (Etempvar _t'15 tlong) (tptr tlong))
+                            (Ebinop Oadd (Etempvar _i tint)
+                              (Econst_int (Int.repr 2) tint) tint)
+                            (tptr tlong)) tlong) (Etempvar _t'17 tlong))))))
               (Sset _i
                 (Ebinop Oadd (Etempvar _i tint)
-                  (Econst_int (Int.repr 1) tint) tint))))
+                  (Econst_int (Int.repr 1) tint) tint)))))
+        (Ssequence
+          (Ssequence
+            (Scall (Some _t'4)
+              (Evar _heap_alloc (Tfunction
+                                  ((tptr (Tstruct _interp_state noattr)) ::
+                                   tlong :: tlong :: nil) tlong cc_default))
+              ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+               (Ebinop Oadd (Econst_int (Int.repr 2) tint)
+                 (Etempvar _nvars tint) tint) ::
+               (Econst_int (Int.repr 247) tint) :: nil))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong)
+              (Etempvar _t'4 tlong)))
+          (Ssequence
+            (Sset _i (Econst_int (Int.repr 0) tint))
+            (Sloop
+              (Ssequence
+                (Sifthenelse (Ebinop Olt (Etempvar _i tint)
+                               (Etempvar _nvars tint) tint)
+                  Sskip
+                  Sbreak)
+                (Ssequence
+                  (Sset _t'12
+                    (Efield
+                      (Ederef
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _accu tlong))
+                  (Ssequence
+                    (Sset _t'13
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                    (Ssequence
+                      (Sset _t'14
+                        (Ederef
+                          (Ebinop Oadd (Etempvar _t'13 (tptr tlong))
+                            (Etempvar _i tint) (tptr tlong)) tlong))
+                      (Sassign
+                        (Ederef
+                          (Ebinop Oadd
+                            (Ecast (Etempvar _t'12 tlong) (tptr tlong))
+                            (Ebinop Oadd (Etempvar _i tint)
+                              (Econst_int (Int.repr 2) tint) tint)
+                            (tptr tlong)) tlong) (Etempvar _t'14 tlong))))))
+              (Sset _i
+                (Ebinop Oadd (Etempvar _i tint)
+                  (Econst_int (Int.repr 1) tint) tint))))))
+      (Ssequence
+        (Ssequence
+          (Sset _t'8
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _accu tlong))
+          (Ssequence
+            (Sset _t'9
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            (Ssequence
+              (Sset _t'10
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Ssequence
+                (Sset _t'11 (Ederef (Etempvar _t'10 (tptr tint)) tint))
+                (Sassign
+                  (Ederef
+                    (Ebinop Oadd
+                      (Ecast (Etempvar _t'8 tlong) (tptr (tptr tint)))
+                      (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
+                    (tptr tint))
+                  (Ebinop Oadd (Etempvar _t'9 (tptr tint))
+                    (Etempvar _t'11 tint) (tptr tint)))))))
+        (Ssequence
+          (Ssequence
+            (Sset _t'7
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
+            (Sassign
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _t'7 tlong) (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+              (Ebinop Oor
+                (Ecast
+                  (Ebinop Oshl (Econst_int (Int.repr 2) tint)
+                    (Econst_int (Int.repr 1) tint) tint) tlong)
+                (Econst_int (Int.repr 1) tint) tlong)))
           (Ssequence
             (Ssequence
               (Sset _t'6
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint))
+                (Ebinop Oadd (Etempvar _t'6 (tptr tint))
+                  (Econst_int (Int.repr 1) tint) (tptr tint))))
+            (Ssequence
               (Ssequence
-                (Sset _t'7
+                (Sset _t'5
                   (Efield
                     (Ederef
                       (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _pc (tptr tint)))
-                (Ssequence
-                  (Sset _t'8 (Ederef (Etempvar _t'7 (tptr tint)) tint))
-                  (Sassign
+                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                (Sassign
+                  (Efield
                     (Ederef
-                      (Ebinop Oadd
-                        (Ecast (Etempvar _block tlong) (tptr (tptr tint)))
-                        (Econst_int (Int.repr 0) tint) (tptr (tptr tint)))
-                      (tptr tint))
-                    (Ebinop Oadd (Etempvar _t'6 (tptr tint))
-                      (Etempvar _t'8 tint) (tptr tint))))))
-            (Ssequence
-              (Sassign
-                (Ederef
-                  (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                (Ebinop Oor
-                  (Ecast
-                    (Ebinop Oshl (Econst_int (Int.repr 2) tint)
-                      (Econst_int (Int.repr 1) tint) tint) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong))
-              (Ssequence
-                (Ssequence
-                  (Sset _t'5
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _pc (tptr tint)))
-                  (Sassign
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _pc (tptr tint))
-                    (Ebinop Oadd (Etempvar _t'5 (tptr tint))
-                      (Econst_int (Int.repr 1) tint) (tptr tint))))
-                (Ssequence
-                  (Ssequence
-                    (Sset _t'4
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                    (Sassign
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                      (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                        (Etempvar _nvars tint) (tptr tlong))))
-                  (Sassign
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _accu tlong)
-                    (Etempvar _block tlong))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                  (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+                    (Etempvar _nvars tint) (tptr tlong))))
+              (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))
 |}.
 
 Definition f_instr_CLOSUREREC := {|
@@ -4925,25 +4985,39 @@ Definition f_instr_CLOSUREREC := {|
   fn_vars := nil;
   fn_temps := ((_nfuncs, tint) :: (_nvars, tint) :: (_envofs, tulong) ::
                (_blksize, tulong) :: (_i, tint) :: (_p, (tptr tlong)) ::
-               (_block, tlong) :: (_t'11, (tptr tlong)) ::
+               (_t'12, (tptr tlong)) :: (_t'11, (tptr tlong)) ::
                (_t'10, (tptr tlong)) :: (_t'9, (tptr tlong)) ::
                (_t'8, (tptr tlong)) :: (_t'7, (tptr tlong)) ::
-               (_t'6, (tptr tlong)) :: (_t'5, (tptr tlong)) ::
-               (_t'4, tlong) :: (_t'3, (tptr tlong)) ::
-               (_t'2, (tptr tint)) :: (_t'1, (tptr tint)) ::
-               (_t'25, (tptr tlong)) :: (_t'24, tlong) :: (_t'23, tlong) ::
-               (_t'22, (tptr tlong)) :: (_t'21, (tptr tlong)) ::
-               (_t'20, (tptr tlong)) :: (_t'19, tint) ::
-               (_t'18, (tptr tint)) :: (_t'17, (tptr tint)) ::
-               (_t'16, (tptr tlong)) :: (_t'15, tint) ::
-               (_t'14, (tptr tint)) :: (_t'13, (tptr tint)) ::
-               (_t'12, (tptr tint)) :: nil);
+               (_t'6, (tptr tlong)) :: (_t'5, tlong) :: (_t'4, tlong) ::
+               (_t'3, (tptr tlong)) :: (_t'2, (tptr tint)) ::
+               (_t'1, (tptr tint)) :: (_t'32, (tptr tlong)) ::
+               (_t'31, tlong) :: (_t'30, tlong) :: (_t'29, tlong) ::
+               (_t'28, (tptr tlong)) :: (_t'27, tlong) :: (_t'26, tlong) ::
+               (_t'25, (tptr tlong)) :: (_t'24, (tptr tlong)) ::
+               (_t'23, (tptr tlong)) :: (_t'22, tlong) :: (_t'21, tlong) ::
+               (_t'20, tint) :: (_t'19, (tptr tint)) ::
+               (_t'18, (tptr tint)) :: (_t'17, (tptr tlong)) ::
+               (_t'16, tint) :: (_t'15, (tptr tint)) ::
+               (_t'14, (tptr tint)) :: (_t'13, (tptr tint)) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
     (Ssequence
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Sset _nfuncs (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+  (Ssequence
+    (Ssequence
       (Ssequence
-        (Sset _t'1
+        (Sset _t'2
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _pc (tptr tint)))
@@ -4951,81 +5025,81 @@ Definition f_instr_CLOSUREREC := {|
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Ebinop Oadd (Etempvar _t'2 (tptr tint))
             (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Sset _nfuncs (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+      (Sset _nvars (Ederef (Etempvar _t'2 (tptr tint)) tint)))
     (Ssequence
+      (Sset _envofs
+        (Ecast
+          (Ebinop Osub
+            (Ebinop Omul (Etempvar _nfuncs tint)
+              (Econst_int (Int.repr 3) tint) tint)
+            (Econst_int (Int.repr 1) tint) tint) tulong))
       (Ssequence
+        (Sset _blksize
+          (Ebinop Oadd (Etempvar _envofs tulong) (Etempvar _nvars tint)
+            tulong))
         (Ssequence
-          (Sset _t'2
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _pc (tptr tint)))
-          (Sassign
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _pc (tptr tint))
-            (Ebinop Oadd (Etempvar _t'2 (tptr tint))
-              (Econst_int (Int.repr 1) tint) (tptr tint))))
-        (Sset _nvars (Ederef (Etempvar _t'2 (tptr tint)) tint)))
-      (Ssequence
-        (Sset _envofs
-          (Ecast
-            (Ebinop Osub
-              (Ebinop Omul (Etempvar _nfuncs tint)
-                (Econst_int (Int.repr 3) tint) tint)
-              (Econst_int (Int.repr 1) tint) tint) tulong))
-        (Ssequence
-          (Sset _blksize
-            (Ebinop Oadd (Etempvar _envofs tulong) (Etempvar _nvars tint)
-              tulong))
-          (Ssequence
-            (Sifthenelse (Ebinop Ogt (Etempvar _nvars tint)
-                           (Econst_int (Int.repr 0) tint) tint)
+          (Sifthenelse (Ebinop Ogt (Etempvar _nvars tint)
+                         (Econst_int (Int.repr 0) tint) tint)
+            (Ssequence
               (Ssequence
                 (Ssequence
-                  (Ssequence
-                    (Sset _t'25
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                    (Sset _t'3
-                      (Ecast
-                        (Ebinop Osub (Etempvar _t'25 (tptr tlong))
-                          (Econst_int (Int.repr 1) tint) (tptr tlong))
-                        (tptr tlong))))
+                  (Sset _t'32
+                    (Efield
+                      (Ederef
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                  (Sset _t'3
+                    (Ecast
+                      (Ebinop Osub (Etempvar _t'32 (tptr tlong))
+                        (Econst_int (Int.repr 1) tint) (tptr tlong))
+                      (tptr tlong))))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                  (Etempvar _t'3 (tptr tlong))))
+              (Ssequence
+                (Sset _t'31
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _accu tlong))
+                (Sassign (Ederef (Etempvar _t'3 (tptr tlong)) tlong)
+                  (Etempvar _t'31 tlong))))
+            Sskip)
+          (Ssequence
+            (Sifthenelse (Ebinop Ole (Etempvar _blksize tulong)
+                           (Econst_int (Int.repr 256) tint) tint)
+              (Ssequence
+                (Ssequence
+                  (Scall (Some _t'4)
+                    (Evar _heap_alloc (Tfunction
+                                        ((tptr (Tstruct _interp_state noattr)) ::
+                                         tlong :: tlong :: nil) tlong
+                                        cc_default))
+                    ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+                     (Etempvar _blksize tulong) ::
+                     (Econst_int (Int.repr 247) tint) :: nil))
                   (Sassign
                     (Efield
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                    (Etempvar _t'3 (tptr tlong))))
+                        (Tstruct _interp_state noattr)) _accu tlong)
+                    (Etempvar _t'4 tlong)))
                 (Ssequence
-                  (Sset _t'24
-                    (Efield
-                      (Ederef
-                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                        (Tstruct _interp_state noattr)) _accu tlong))
-                  (Sassign (Ederef (Etempvar _t'3 (tptr tlong)) tlong)
-                    (Etempvar _t'24 tlong))))
-              Sskip)
-            (Ssequence
-              (Ssequence
-                (Scall (Some _t'4)
-                  (Evar _heap_alloc (Tfunction
-                                      ((tptr (Tstruct _interp_state noattr)) ::
-                                       tlong :: tlong :: nil) tlong
-                                      cc_default))
-                  ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-                   (Etempvar _blksize tulong) ::
-                   (Econst_int (Int.repr 247) tint) :: nil))
-                (Sset _block (Etempvar _t'4 tlong)))
-              (Ssequence
-                (Sset _p
-                  (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                    (Etempvar _envofs tulong) (tptr tlong)))
-                (Ssequence
+                  (Ssequence
+                    (Sset _t'30
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
+                    (Sset _p
+                      (Ebinop Oadd
+                        (Ecast (Etempvar _t'30 tlong) (tptr tlong))
+                        (Etempvar _envofs tulong) (tptr tlong))))
                   (Ssequence
                     (Sset _i (Econst_int (Int.repr 0) tint))
                     (Sloop
@@ -5035,282 +5109,328 @@ Definition f_instr_CLOSUREREC := {|
                           Sskip
                           Sbreak)
                         (Ssequence
-                          (Ssequence
-                            (Sset _t'22
-                              (Efield
-                                (Ederef
-                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                  (Tstruct _interp_state noattr)) _sp
-                                (tptr tlong)))
-                            (Ssequence
-                              (Sset _t'23
-                                (Ederef
-                                  (Ebinop Oadd (Etempvar _t'22 (tptr tlong))
-                                    (Etempvar _i tint) (tptr tlong)) tlong))
-                              (Sassign
-                                (Ederef (Etempvar _p (tptr tlong)) tlong)
-                                (Etempvar _t'23 tlong))))
-                          (Sset _p
-                            (Ebinop Oadd (Etempvar _p (tptr tlong))
-                              (Econst_int (Int.repr 1) tint) (tptr tlong)))))
-                      (Sset _i
-                        (Ebinop Oadd (Etempvar _i tint)
-                          (Econst_int (Int.repr 1) tint) tint))))
-                  (Ssequence
-                    (Ssequence
-                      (Sset _t'21
-                        (Efield
-                          (Ederef
-                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                      (Sassign
-                        (Efield
-                          (Ederef
-                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                        (Ebinop Oadd (Etempvar _t'21 (tptr tlong))
-                          (Etempvar _nvars tint) (tptr tlong))))
-                    (Ssequence
-                      (Ssequence
-                        (Ssequence
-                          (Ssequence
-                            (Sset _t'20
-                              (Efield
-                                (Ederef
-                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                  (Tstruct _interp_state noattr)) _sp
-                                (tptr tlong)))
-                            (Sset _t'5
-                              (Ecast
-                                (Ebinop Osub (Etempvar _t'20 (tptr tlong))
-                                  (Econst_int (Int.repr 1) tint)
-                                  (tptr tlong)) (tptr tlong))))
-                          (Sassign
+                          (Sset _t'28
                             (Efield
                               (Ederef
                                 (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                 (Tstruct _interp_state noattr)) _sp
-                              (tptr tlong)) (Etempvar _t'5 (tptr tlong))))
-                        (Sassign (Ederef (Etempvar _t'5 (tptr tlong)) tlong)
-                          (Etempvar _block tlong)))
+                              (tptr tlong)))
+                          (Ssequence
+                            (Sset _t'29
+                              (Ederef
+                                (Ebinop Oadd (Etempvar _t'28 (tptr tlong))
+                                  (Etempvar _i tint) (tptr tlong)) tlong))
+                            (Sassign
+                              (Ederef (Etempvar _p (tptr tlong)) tlong)
+                              (Etempvar _t'29 tlong)))))
                       (Ssequence
-                        (Sassign
+                        (Sset _i
+                          (Ebinop Oadd (Etempvar _i tint)
+                            (Econst_int (Int.repr 1) tint) tint))
+                        (Sset _p
+                          (Ebinop Oadd (Etempvar _p (tptr tlong))
+                            (Econst_int (Int.repr 1) tint) (tptr tlong))))))))
+              (Ssequence
+                (Ssequence
+                  (Scall (Some _t'5)
+                    (Evar _heap_alloc (Tfunction
+                                        ((tptr (Tstruct _interp_state noattr)) ::
+                                         tlong :: tlong :: nil) tlong
+                                        cc_default))
+                    ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+                     (Etempvar _blksize tulong) ::
+                     (Econst_int (Int.repr 247) tint) :: nil))
+                  (Sassign
+                    (Efield
+                      (Ederef
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _accu tlong)
+                    (Etempvar _t'5 tlong)))
+                (Ssequence
+                  (Ssequence
+                    (Sset _t'27
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
+                    (Sset _p
+                      (Ebinop Oadd
+                        (Ecast (Etempvar _t'27 tlong) (tptr tlong))
+                        (Etempvar _envofs tulong) (tptr tlong))))
+                  (Ssequence
+                    (Sset _i (Econst_int (Int.repr 0) tint))
+                    (Sloop
+                      (Ssequence
+                        (Sifthenelse (Ebinop Olt (Etempvar _i tint)
+                                       (Etempvar _nvars tint) tint)
+                          Sskip
+                          Sbreak)
+                        (Ssequence
+                          (Sset _t'25
+                            (Efield
+                              (Ederef
+                                (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                (Tstruct _interp_state noattr)) _sp
+                              (tptr tlong)))
+                          (Ssequence
+                            (Sset _t'26
+                              (Ederef
+                                (Ebinop Oadd (Etempvar _t'25 (tptr tlong))
+                                  (Etempvar _i tint) (tptr tlong)) tlong))
+                            (Sassign
+                              (Ederef (Etempvar _p (tptr tlong)) tlong)
+                              (Etempvar _t'26 tlong)))))
+                      (Ssequence
+                        (Sset _i
+                          (Ebinop Oadd (Etempvar _i tint)
+                            (Econst_int (Int.repr 1) tint) tint))
+                        (Sset _p
+                          (Ebinop Oadd (Etempvar _p (tptr tlong))
+                            (Econst_int (Int.repr 1) tint) (tptr tlong)))))))))
+            (Ssequence
+              (Ssequence
+                (Sset _t'24
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                  (Ebinop Oadd (Etempvar _t'24 (tptr tlong))
+                    (Etempvar _nvars tint) (tptr tlong))))
+              (Ssequence
+                (Ssequence
+                  (Ssequence
+                    (Ssequence
+                      (Sset _t'23
+                        (Efield
+                          (Ederef
+                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                      (Sset _t'6
+                        (Ecast
+                          (Ebinop Osub (Etempvar _t'23 (tptr tlong))
+                            (Econst_int (Int.repr 1) tint) (tptr tlong))
+                          (tptr tlong))))
+                    (Sassign
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                      (Etempvar _t'6 (tptr tlong))))
+                  (Ssequence
+                    (Sset _t'22
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
+                    (Sassign (Ederef (Etempvar _t'6 (tptr tlong)) tlong)
+                      (Etempvar _t'22 tlong))))
+                (Ssequence
+                  (Ssequence
+                    (Sset _t'21
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
+                    (Sset _p
+                      (Ebinop Oadd
+                        (Ecast (Etempvar _t'21 tlong) (tptr tlong))
+                        (Econst_int (Int.repr 0) tint) (tptr tlong))))
+                  (Ssequence
+                    (Ssequence
+                      (Ssequence
+                        (Sset _t'7 (Etempvar _p (tptr tlong)))
+                        (Sset _p
+                          (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
+                            (Econst_int (Int.repr 1) tint) (tptr tlong))))
+                      (Ssequence
+                        (Sset _t'18
                           (Efield
                             (Ederef
                               (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                              (Tstruct _interp_state noattr)) _accu tlong)
-                          (Etempvar _block tlong))
+                              (Tstruct _interp_state noattr)) _pc
+                            (tptr tint)))
                         (Ssequence
-                          (Sset _p
-                            (Ebinop Oadd
-                              (Ecast (Etempvar _block tlong) (tptr tlong))
-                              (Econst_int (Int.repr 0) tint) (tptr tlong)))
+                          (Sset _t'19
+                            (Efield
+                              (Ederef
+                                (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                (Tstruct _interp_state noattr)) _pc
+                              (tptr tint)))
                           (Ssequence
+                            (Sset _t'20
+                              (Ederef
+                                (Ebinop Oadd (Etempvar _t'19 (tptr tint))
+                                  (Econst_int (Int.repr 0) tint) (tptr tint))
+                                tint))
+                            (Sassign
+                              (Ederef (Etempvar _t'7 (tptr tlong)) tlong)
+                              (Ecast
+                                (Ebinop Oadd (Etempvar _t'18 (tptr tint))
+                                  (Etempvar _t'20 tint) (tptr tint)) tlong))))))
+                    (Ssequence
+                      (Ssequence
+                        (Ssequence
+                          (Sset _t'8 (Etempvar _p (tptr tlong)))
+                          (Sset _p
+                            (Ebinop Oadd (Etempvar _t'8 (tptr tlong))
+                              (Econst_int (Int.repr 1) tint) (tptr tlong))))
+                        (Sassign (Ederef (Etempvar _t'8 (tptr tlong)) tlong)
+                          (Ebinop Oor
+                            (Ecast
+                              (Ebinop Oshl (Etempvar _envofs tulong)
+                                (Econst_int (Int.repr 1) tint) tulong) tlong)
+                            (Econst_int (Int.repr 1) tint) tlong)))
+                      (Ssequence
+                        (Ssequence
+                          (Sset _i (Econst_int (Int.repr 1) tint))
+                          (Sloop
                             (Ssequence
+                              (Sifthenelse (Ebinop Olt (Etempvar _i tint)
+                                             (Etempvar _nfuncs tint) tint)
+                                Sskip
+                                Sbreak)
                               (Ssequence
-                                (Sset _t'6 (Etempvar _p (tptr tlong)))
-                                (Sset _p
-                                  (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                                    (Econst_int (Int.repr 1) tint)
-                                    (tptr tlong))))
-                              (Ssequence
-                                (Sset _t'17
-                                  (Efield
-                                    (Ederef
-                                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                      (Tstruct _interp_state noattr)) _pc
-                                    (tptr tint)))
                                 (Ssequence
-                                  (Sset _t'18
-                                    (Efield
-                                      (Ederef
-                                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                        (Tstruct _interp_state noattr)) _pc
-                                      (tptr tint)))
                                   (Ssequence
-                                    (Sset _t'19
-                                      (Ederef
-                                        (Ebinop Oadd
-                                          (Etempvar _t'18 (tptr tint))
-                                          (Econst_int (Int.repr 0) tint)
-                                          (tptr tint)) tint))
-                                    (Sassign
-                                      (Ederef (Etempvar _t'6 (tptr tlong))
-                                        tlong)
-                                      (Ecast
-                                        (Ebinop Oadd
-                                          (Etempvar _t'17 (tptr tint))
-                                          (Etempvar _t'19 tint) (tptr tint))
-                                        tlong))))))
-                            (Ssequence
-                              (Ssequence
-                                (Ssequence
-                                  (Sset _t'7 (Etempvar _p (tptr tlong)))
-                                  (Sset _p
-                                    (Ebinop Oadd (Etempvar _t'7 (tptr tlong))
-                                      (Econst_int (Int.repr 1) tint)
-                                      (tptr tlong))))
-                                (Sassign
-                                  (Ederef (Etempvar _t'7 (tptr tlong)) tlong)
-                                  (Ebinop Oor
-                                    (Ecast
-                                      (Ebinop Oshl (Etempvar _envofs tulong)
+                                    (Sset _t'9 (Etempvar _p (tptr tlong)))
+                                    (Sset _p
+                                      (Ebinop Oadd
+                                        (Etempvar _t'9 (tptr tlong))
                                         (Econst_int (Int.repr 1) tint)
-                                        tulong) tlong)
-                                    (Econst_int (Int.repr 1) tint) tlong)))
-                              (Ssequence
+                                        (tptr tlong))))
+                                  (Sassign
+                                    (Ederef (Etempvar _t'9 (tptr tlong))
+                                      tlong)
+                                    (Ecast
+                                      (Ebinop Oor
+                                        (Ebinop Oshl
+                                          (Ebinop Omul (Etempvar _i tint)
+                                            (Econst_int (Int.repr 3) tint)
+                                            tint)
+                                          (Econst_int (Int.repr 10) tint)
+                                          tint)
+                                        (Econst_int (Int.repr 249) tint)
+                                        tint) tlong)))
                                 (Ssequence
-                                  (Sset _i (Econst_int (Int.repr 1) tint))
-                                  (Sloop
+                                  (Ssequence
                                     (Ssequence
-                                      (Sifthenelse (Ebinop Olt
-                                                     (Etempvar _i tint)
-                                                     (Etempvar _nfuncs tint)
-                                                     tint)
-                                        Sskip
-                                        Sbreak)
                                       (Ssequence
-                                        (Ssequence
-                                          (Ssequence
-                                            (Sset _t'8
-                                              (Etempvar _p (tptr tlong)))
-                                            (Sset _p
-                                              (Ebinop Oadd
-                                                (Etempvar _t'8 (tptr tlong))
-                                                (Econst_int (Int.repr 1) tint)
-                                                (tptr tlong))))
-                                          (Sassign
+                                        (Sset _t'17
+                                          (Efield
                                             (Ederef
-                                              (Etempvar _t'8 (tptr tlong))
-                                              tlong)
-                                            (Ecast
-                                              (Ebinop Oor
-                                                (Ebinop Oshl
-                                                  (Ebinop Omul
-                                                    (Etempvar _i tint)
-                                                    (Econst_int (Int.repr 3) tint)
-                                                    tint)
-                                                  (Econst_int (Int.repr 10) tint)
-                                                  tint)
-                                                (Econst_int (Int.repr 249) tint)
-                                                tint) tlong)))
+                                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                              (Tstruct _interp_state noattr))
+                                            _sp (tptr tlong)))
+                                        (Sset _t'10
+                                          (Ecast
+                                            (Ebinop Osub
+                                              (Etempvar _t'17 (tptr tlong))
+                                              (Econst_int (Int.repr 1) tint)
+                                              (tptr tlong)) (tptr tlong))))
+                                      (Sassign
+                                        (Efield
+                                          (Ederef
+                                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                            (Tstruct _interp_state noattr))
+                                          _sp (tptr tlong))
+                                        (Etempvar _t'10 (tptr tlong))))
+                                    (Sassign
+                                      (Ederef (Etempvar _t'10 (tptr tlong))
+                                        tlong)
+                                      (Ecast (Etempvar _p (tptr tlong))
+                                        tlong)))
+                                  (Ssequence
+                                    (Ssequence
+                                      (Ssequence
+                                        (Sset _t'11
+                                          (Etempvar _p (tptr tlong)))
+                                        (Sset _p
+                                          (Ebinop Oadd
+                                            (Etempvar _t'11 (tptr tlong))
+                                            (Econst_int (Int.repr 1) tint)
+                                            (tptr tlong))))
+                                      (Ssequence
+                                        (Sset _t'14
+                                          (Efield
+                                            (Ederef
+                                              (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                              (Tstruct _interp_state noattr))
+                                            _pc (tptr tint)))
                                         (Ssequence
+                                          (Sset _t'15
+                                            (Efield
+                                              (Ederef
+                                                (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                                (Tstruct _interp_state noattr))
+                                              _pc (tptr tint)))
                                           (Ssequence
-                                            (Ssequence
-                                              (Ssequence
-                                                (Sset _t'16
-                                                  (Efield
-                                                    (Ederef
-                                                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                                      (Tstruct _interp_state noattr))
-                                                    _sp (tptr tlong)))
-                                                (Sset _t'9
-                                                  (Ecast
-                                                    (Ebinop Osub
-                                                      (Etempvar _t'16 (tptr tlong))
-                                                      (Econst_int (Int.repr 1) tint)
-                                                      (tptr tlong))
-                                                    (tptr tlong))))
-                                              (Sassign
-                                                (Efield
-                                                  (Ederef
-                                                    (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                                    (Tstruct _interp_state noattr))
-                                                  _sp (tptr tlong))
-                                                (Etempvar _t'9 (tptr tlong))))
+                                            (Sset _t'16
+                                              (Ederef
+                                                (Ebinop Oadd
+                                                  (Etempvar _t'15 (tptr tint))
+                                                  (Etempvar _i tint)
+                                                  (tptr tint)) tint))
                                             (Sassign
                                               (Ederef
-                                                (Etempvar _t'9 (tptr tlong))
+                                                (Etempvar _t'11 (tptr tlong))
                                                 tlong)
                                               (Ecast
-                                                (Etempvar _p (tptr tlong))
-                                                tlong)))
-                                          (Ssequence
-                                            (Ssequence
-                                              (Ssequence
-                                                (Sset _t'10
-                                                  (Etempvar _p (tptr tlong)))
-                                                (Sset _p
-                                                  (Ebinop Oadd
-                                                    (Etempvar _t'10 (tptr tlong))
-                                                    (Econst_int (Int.repr 1) tint)
-                                                    (tptr tlong))))
-                                              (Ssequence
-                                                (Sset _t'13
-                                                  (Efield
-                                                    (Ederef
-                                                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                                      (Tstruct _interp_state noattr))
-                                                    _pc (tptr tint)))
-                                                (Ssequence
-                                                  (Sset _t'14
-                                                    (Efield
-                                                      (Ederef
-                                                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                                        (Tstruct _interp_state noattr))
-                                                      _pc (tptr tint)))
-                                                  (Ssequence
-                                                    (Sset _t'15
-                                                      (Ederef
-                                                        (Ebinop Oadd
-                                                          (Etempvar _t'14 (tptr tint))
-                                                          (Etempvar _i tint)
-                                                          (tptr tint)) tint))
-                                                    (Sassign
-                                                      (Ederef
-                                                        (Etempvar _t'10 (tptr tlong))
-                                                        tlong)
-                                                      (Ecast
-                                                        (Ebinop Oadd
-                                                          (Etempvar _t'13 (tptr tint))
-                                                          (Etempvar _t'15 tint)
-                                                          (tptr tint)) tlong))))))
-                                            (Ssequence
-                                              (Sset _envofs
-                                                (Ebinop Osub
-                                                  (Etempvar _envofs tulong)
-                                                  (Econst_int (Int.repr 3) tint)
-                                                  tulong))
-                                              (Ssequence
-                                                (Ssequence
-                                                  (Sset _t'11
-                                                    (Etempvar _p (tptr tlong)))
-                                                  (Sset _p
-                                                    (Ebinop Oadd
-                                                      (Etempvar _t'11 (tptr tlong))
-                                                      (Econst_int (Int.repr 1) tint)
-                                                      (tptr tlong))))
-                                                (Sassign
-                                                  (Ederef
-                                                    (Etempvar _t'11 (tptr tlong))
-                                                    tlong)
-                                                  (Ebinop Oor
-                                                    (Ecast
-                                                      (Ebinop Oshl
-                                                        (Etempvar _envofs tulong)
-                                                        (Econst_int (Int.repr 1) tint)
-                                                        tulong) tlong)
-                                                    (Econst_int (Int.repr 1) tint)
-                                                    tlong))))))))
-                                    (Sset _i
-                                      (Ebinop Oadd (Etempvar _i tint)
-                                        (Econst_int (Int.repr 1) tint) tint))))
-                                (Ssequence
-                                  (Sset _t'12
-                                    (Efield
-                                      (Ederef
-                                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                        (Tstruct _interp_state noattr)) _pc
-                                      (tptr tint)))
-                                  (Sassign
-                                    (Efield
-                                      (Ederef
-                                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                        (Tstruct _interp_state noattr)) _pc
-                                      (tptr tint))
-                                    (Ebinop Oadd (Etempvar _t'12 (tptr tint))
-                                      (Etempvar _nfuncs tint) (tptr tint)))))))))))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                                                (Ebinop Oadd
+                                                  (Etempvar _t'14 (tptr tint))
+                                                  (Etempvar _t'16 tint)
+                                                  (tptr tint)) tlong))))))
+                                    (Ssequence
+                                      (Sset _envofs
+                                        (Ebinop Osub
+                                          (Etempvar _envofs tulong)
+                                          (Econst_int (Int.repr 3) tint)
+                                          tulong))
+                                      (Ssequence
+                                        (Ssequence
+                                          (Sset _t'12
+                                            (Etempvar _p (tptr tlong)))
+                                          (Sset _p
+                                            (Ebinop Oadd
+                                              (Etempvar _t'12 (tptr tlong))
+                                              (Econst_int (Int.repr 1) tint)
+                                              (tptr tlong))))
+                                        (Sassign
+                                          (Ederef
+                                            (Etempvar _t'12 (tptr tlong))
+                                            tlong)
+                                          (Ebinop Oor
+                                            (Ecast
+                                              (Ebinop Oshl
+                                                (Etempvar _envofs tulong)
+                                                (Econst_int (Int.repr 1) tint)
+                                                tulong) tlong)
+                                            (Econst_int (Int.repr 1) tint)
+                                            tlong))))))))
+                            (Sset _i
+                              (Ebinop Oadd (Etempvar _i tint)
+                                (Econst_int (Int.repr 1) tint) tint))))
+                        (Ssequence
+                          (Ssequence
+                            (Sset _t'13
+                              (Efield
+                                (Ederef
+                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                  (Tstruct _interp_state noattr)) _pc
+                                (tptr tint)))
+                            (Sassign
+                              (Efield
+                                (Ederef
+                                  (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                                  (Tstruct _interp_state noattr)) _pc
+                                (tptr tint))
+                              (Ebinop Oadd (Etempvar _t'13 (tptr tint))
+                                (Etempvar _nfuncs tint) (tptr tint))))
+                          (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))))))))
 |}.
 
 Definition f_instr_GETGLOBALFIELD := {|
@@ -5513,15 +5633,32 @@ Definition f_instr_MAKEBLOCK := {|
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
   fn_vars := nil;
   fn_temps := ((_wosize, tulong) :: (_tag, tuchar) :: (_i, tulong) ::
-               (_block, tlong) :: (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
-               (_t'2, (tptr tint)) :: (_t'1, (tptr tint)) :: (_t'8, tint) ::
-               (_t'7, tint) :: (_t'6, tlong) :: (_t'5, tlong) :: nil);
+               (_block, tlong) :: (_t'6, (tptr tlong)) :: (_t'5, tlong) ::
+               (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
+               (_t'2, (tptr tint)) :: (_t'1, (tptr tint)) :: (_t'12, tint) ::
+               (_t'11, tint) :: (_t'10, tlong) :: (_t'9, tlong) ::
+               (_t'8, tlong) :: (_t'7, tlong) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
     (Ssequence
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Ssequence
+      (Sset _t'12 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+      (Sset _wosize (Ecast (Etempvar _t'12 tint) tulong))))
+  (Ssequence
+    (Ssequence
       (Ssequence
-        (Sset _t'1
+        (Sset _t'2
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _pc (tptr tint)))
@@ -5529,48 +5666,34 @@ Definition f_instr_MAKEBLOCK := {|
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Ebinop Oadd (Etempvar _t'2 (tptr tint))
             (Econst_int (Int.repr 1) tint) (tptr tint))))
       (Ssequence
-        (Sset _t'8 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-        (Sset _wosize (Ecast (Etempvar _t'8 tint) tulong))))
+        (Sset _t'11 (Ederef (Etempvar _t'2 (tptr tint)) tint))
+        (Sset _tag (Ecast (Etempvar _t'11 tint) tuchar))))
     (Ssequence
-      (Ssequence
-        (Ssequence
-          (Sset _t'2
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _pc (tptr tint)))
-          (Sassign
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _pc (tptr tint))
-            (Ebinop Oadd (Etempvar _t'2 (tptr tint))
-              (Econst_int (Int.repr 1) tint) (tptr tint))))
-        (Ssequence
-          (Sset _t'7 (Ederef (Etempvar _t'2 (tptr tint)) tint))
-          (Sset _tag (Ecast (Etempvar _t'7 tint) tuchar))))
-      (Ssequence
-        (Ssequence
-          (Scall (Some _t'3)
-            (Evar _heap_alloc (Tfunction
-                                ((tptr (Tstruct _interp_state noattr)) ::
-                                 tlong :: tlong :: nil) tlong cc_default))
-            ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-             (Etempvar _wosize tulong) :: (Etempvar _tag tuchar) :: nil))
-          (Sset _block (Etempvar _t'3 tlong)))
+      (Sifthenelse (Ebinop Ole (Etempvar _wosize tulong)
+                     (Econst_int (Int.repr 256) tint) tint)
         (Ssequence
           (Ssequence
-            (Sset _t'6
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _accu tlong))
-            (Sassign
-              (Ederef
-                (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-              (Etempvar _t'6 tlong)))
+            (Scall (Some _t'3)
+              (Evar _heap_alloc (Tfunction
+                                  ((tptr (Tstruct _interp_state noattr)) ::
+                                   tlong :: tlong :: nil) tlong cc_default))
+              ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+               (Etempvar _wosize tulong) :: (Etempvar _tag tuchar) :: nil))
+            (Sset _block (Etempvar _t'3 tlong)))
           (Ssequence
+            (Ssequence
+              (Sset _t'10
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _accu tlong))
+              (Sassign
+                (Ederef
+                  (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+                (Etempvar _t'10 tlong)))
             (Ssequence
               (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
               (Sloop
@@ -5594,22 +5717,76 @@ Definition f_instr_MAKEBLOCK := {|
                         (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
                           (Econst_int (Int.repr 1) tint) (tptr tlong))))
                     (Ssequence
-                      (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
+                      (Sset _t'9 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
                       (Sassign
                         (Ederef
                           (Ebinop Oadd
                             (Ecast (Etempvar _block tlong) (tptr tlong))
                             (Etempvar _i tulong) (tptr tlong)) tlong)
-                        (Etempvar _t'5 tlong)))))
+                        (Etempvar _t'9 tlong)))))
                 (Sset _i
                   (Ebinop Oadd (Etempvar _i tulong)
-                    (Econst_int (Int.repr 1) tint) tulong))))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _accu tlong)
-              (Etempvar _block tlong)))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                    (Econst_int (Int.repr 1) tint) tulong))))))
+        (Ssequence
+          (Ssequence
+            (Scall (Some _t'5)
+              (Evar _heap_alloc (Tfunction
+                                  ((tptr (Tstruct _interp_state noattr)) ::
+                                   tlong :: tlong :: nil) tlong cc_default))
+              ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+               (Etempvar _wosize tulong) :: (Etempvar _tag tuchar) :: nil))
+            (Sset _block (Etempvar _t'5 tlong)))
+          (Ssequence
+            (Ssequence
+              (Sset _t'8
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _accu tlong))
+              (Sassign
+                (Ederef
+                  (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+                (Etempvar _t'8 tlong)))
+            (Ssequence
+              (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
+              (Sloop
+                (Ssequence
+                  (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
+                                 (Etempvar _wosize tulong) tint)
+                    Sskip
+                    Sbreak)
+                  (Ssequence
+                    (Ssequence
+                      (Sset _t'6
+                        (Efield
+                          (Ederef
+                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                      (Sassign
+                        (Efield
+                          (Ederef
+                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                            (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                        (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                          (Econst_int (Int.repr 1) tint) (tptr tlong))))
+                    (Ssequence
+                      (Sset _t'7 (Ederef (Etempvar _t'6 (tptr tlong)) tlong))
+                      (Sassign
+                        (Ederef
+                          (Ebinop Oadd
+                            (Ecast (Etempvar _block tlong) (tptr tlong))
+                            (Etempvar _i tulong) (tptr tlong)) tlong)
+                        (Etempvar _t'7 tlong)))))
+                (Sset _i
+                  (Ebinop Oadd (Etempvar _i tulong)
+                    (Econst_int (Int.repr 1) tint) tulong)))))))
+      (Ssequence
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _accu tlong)
+          (Etempvar _block tlong))
+        (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))
 |}.
 
 Definition f_instr_MAKEBLOCK1 := {|
@@ -5623,46 +5800,46 @@ Definition f_instr_MAKEBLOCK1 := {|
 (Ssequence
   (Ssequence
     (Ssequence
-      (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Ssequence
-        (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-        (Sset _tag (Ecast (Etempvar _t'4 tint) tuchar))))
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Ssequence
+      (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+      (Sset _tag (Ecast (Etempvar _t'4 tint) tuchar))))
+  (Ssequence
+    (Ssequence
+      (Scall (Some _t'2)
+        (Evar _heap_alloc (Tfunction
+                            ((tptr (Tstruct _interp_state noattr)) ::
+                             tlong :: tlong :: nil) tlong cc_default))
+        ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+         (Econst_int (Int.repr 1) tint) :: (Etempvar _tag tuchar) :: nil))
+      (Sset _block (Etempvar _t'2 tlong)))
     (Ssequence
       (Ssequence
-        (Scall (Some _t'2)
-          (Evar _heap_alloc (Tfunction
-                              ((tptr (Tstruct _interp_state noattr)) ::
-                               tlong :: tlong :: nil) tlong cc_default))
-          ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-           (Econst_int (Int.repr 1) tint) :: (Etempvar _tag tuchar) :: nil))
-        (Sset _block (Etempvar _t'2 tlong)))
+        (Sset _t'3
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _accu tlong))
+        (Sassign
+          (Ederef
+            (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+              (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+          (Etempvar _t'3 tlong)))
       (Ssequence
-        (Ssequence
-          (Sset _t'3
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _accu tlong))
-          (Sassign
-            (Ederef
-              (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-            (Etempvar _t'3 tlong)))
         (Sassign
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _accu tlong)
-          (Etempvar _block tlong)))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+          (Etempvar _block tlong))
+        (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))
 |}.
 
 Definition f_instr_MAKEBLOCK2 := {|
@@ -5678,74 +5855,74 @@ Definition f_instr_MAKEBLOCK2 := {|
 (Ssequence
   (Ssequence
     (Ssequence
-      (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Ssequence
-        (Sset _t'7 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-        (Sset _tag (Ecast (Etempvar _t'7 tint) tuchar))))
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Ssequence
+      (Sset _t'7 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+      (Sset _tag (Ecast (Etempvar _t'7 tint) tuchar))))
+  (Ssequence
+    (Ssequence
+      (Scall (Some _t'2)
+        (Evar _heap_alloc (Tfunction
+                            ((tptr (Tstruct _interp_state noattr)) ::
+                             tlong :: tlong :: nil) tlong cc_default))
+        ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+         (Econst_int (Int.repr 2) tint) :: (Etempvar _tag tuchar) :: nil))
+      (Sset _block (Etempvar _t'2 tlong)))
     (Ssequence
       (Ssequence
-        (Scall (Some _t'2)
-          (Evar _heap_alloc (Tfunction
-                              ((tptr (Tstruct _interp_state noattr)) ::
-                               tlong :: tlong :: nil) tlong cc_default))
-          ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-           (Econst_int (Int.repr 2) tint) :: (Etempvar _tag tuchar) :: nil))
-        (Sset _block (Etempvar _t'2 tlong)))
+        (Sset _t'6
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _accu tlong))
+        (Sassign
+          (Ederef
+            (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+              (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+          (Etempvar _t'6 tlong)))
       (Ssequence
         (Ssequence
-          (Sset _t'6
+          (Sset _t'4
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _accu tlong))
-          (Sassign
-            (Ederef
-              (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-            (Etempvar _t'6 tlong)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'5
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+              (Etempvar _t'5 tlong))))
         (Ssequence
           (Ssequence
-            (Sset _t'4
+            (Sset _t'3
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-            (Ssequence
-              (Sset _t'5
-                (Ederef
-                  (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-              (Sassign
-                (Ederef
-                  (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                (Etempvar _t'5 tlong))))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _sp (tptr tlong))
+              (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
+                (Econst_int (Int.repr 1) tint) (tptr tlong))))
           (Ssequence
-            (Ssequence
-              (Sset _t'3
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
-                  (Econst_int (Int.repr 1) tint) (tptr tlong))))
             (Sassign
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _accu tlong)
-              (Etempvar _block tlong)))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+              (Etempvar _block tlong))
+            (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))
 |}.
 
 Definition f_instr_MAKEBLOCK3 := {|
@@ -5761,92 +5938,90 @@ Definition f_instr_MAKEBLOCK3 := {|
 (Ssequence
   (Ssequence
     (Ssequence
-      (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Ssequence
-        (Sset _t'9 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-        (Sset _tag (Ecast (Etempvar _t'9 tint) tuchar))))
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Ssequence
+      (Sset _t'9 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+      (Sset _tag (Ecast (Etempvar _t'9 tint) tuchar))))
+  (Ssequence
+    (Ssequence
+      (Scall (Some _t'2)
+        (Evar _heap_alloc (Tfunction
+                            ((tptr (Tstruct _interp_state noattr)) ::
+                             tlong :: tlong :: nil) tlong cc_default))
+        ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+         (Econst_int (Int.repr 3) tint) :: (Etempvar _tag tuchar) :: nil))
+      (Sset _block (Etempvar _t'2 tlong)))
     (Ssequence
       (Ssequence
-        (Scall (Some _t'2)
-          (Evar _heap_alloc (Tfunction
-                              ((tptr (Tstruct _interp_state noattr)) ::
-                               tlong :: tlong :: nil) tlong cc_default))
-          ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-           (Econst_int (Int.repr 3) tint) :: (Etempvar _tag tuchar) :: nil))
-        (Sset _block (Etempvar _t'2 tlong)))
+        (Sset _t'8
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _accu tlong))
+        (Sassign
+          (Ederef
+            (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+              (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+          (Etempvar _t'8 tlong)))
       (Ssequence
         (Ssequence
-          (Sset _t'8
+          (Sset _t'6
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _accu tlong))
-          (Sassign
-            (Ederef
-              (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-            (Etempvar _t'8 tlong)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'7
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+              (Etempvar _t'7 tlong))))
         (Ssequence
           (Ssequence
-            (Sset _t'6
+            (Sset _t'4
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _sp (tptr tlong)))
             (Ssequence
-              (Sset _t'7
+              (Sset _t'5
                 (Ederef
-                  (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+                  (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
               (Sassign
                 (Ederef
                   (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                    (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                (Etempvar _t'7 tlong))))
+                    (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
+                (Etempvar _t'5 tlong))))
           (Ssequence
             (Ssequence
-              (Sset _t'4
+              (Sset _t'3
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Ssequence
-                (Sset _t'5
-                  (Ederef
-                    (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                      (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
-                (Sassign
-                  (Ederef
-                    (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                      (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong)
-                  (Etempvar _t'5 tlong))))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
+                  (Econst_int (Int.repr 2) tint) (tptr tlong))))
             (Ssequence
-              (Ssequence
-                (Sset _t'3
-                  (Efield
-                    (Ederef
-                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                (Sassign
-                  (Efield
-                    (Ederef
-                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                  (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
-                    (Econst_int (Int.repr 2) tint) (tptr tlong))))
               (Sassign
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _accu tlong)
-                (Etempvar _block tlong))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                (Etempvar _block tlong))
+              (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))
 |}.
 
 Definition f_instr_MAKEFLOATBLOCK := {|
@@ -5855,29 +6030,32 @@ Definition f_instr_MAKEFLOATBLOCK := {|
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
   fn_vars := nil;
   fn_temps := ((_size, tulong) :: (_i, tulong) :: (_block, tlong) ::
-               (_t'2, tlong) :: (_t'1, (tptr tint)) :: (_t'9, tint) ::
-               (_t'8, tdouble) :: (_t'7, tlong) :: (_t'6, tdouble) ::
-               (_t'5, tlong) :: (_t'4, (tptr tlong)) ::
-               (_t'3, (tptr tlong)) :: nil);
+               (_t'3, tlong) :: (_t'2, tlong) :: (_t'1, (tptr tint)) ::
+               (_t'10, tint) :: (_t'9, tdouble) :: (_t'8, tlong) ::
+               (_t'7, tdouble) :: (_t'6, tlong) :: (_t'5, (tptr tlong)) ::
+               (_t'4, (tptr tlong)) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
     (Ssequence
-      (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Ssequence
-        (Sset _t'9 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-        (Sset _size (Ecast (Etempvar _t'9 tint) tulong))))
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
     (Ssequence
+      (Sset _t'10 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+      (Sset _size (Ecast (Etempvar _t'10 tint) tulong))))
+  (Ssequence
+    (Sifthenelse (Ebinop Ole (Etempvar _size tulong)
+                   (Ebinop Odiv (Econst_int (Int.repr 256) tint)
+                     (Ebinop Odiv (Esizeof tdouble tulong)
+                       (Esizeof tlong tulong) tulong) tulong) tint)
       (Ssequence
         (Scall (Some _t'2)
           (Evar _heap_alloc (Tfunction
@@ -5889,77 +6067,87 @@ Definition f_instr_MAKEFLOATBLOCK := {|
                tulong) tulong) :: (Econst_int (Int.repr 254) tint) :: nil))
         (Sset _block (Etempvar _t'2 tlong)))
       (Ssequence
+        (Scall (Some _t'3)
+          (Evar _heap_alloc (Tfunction
+                              ((tptr (Tstruct _interp_state noattr)) ::
+                               tlong :: tlong :: nil) tlong cc_default))
+          ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+           (Ebinop Omul (Etempvar _size tulong)
+             (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong)
+               tulong) tulong) :: (Econst_int (Int.repr 254) tint) :: nil))
+        (Sset _block (Etempvar _t'3 tlong))))
+    (Ssequence
+      (Ssequence
+        (Sset _t'8
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _accu tlong))
         (Ssequence
-          (Sset _t'7
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _accu tlong))
-          (Ssequence
-            (Sset _t'8
-              (Ederef (Ecast (Etempvar _t'7 tlong) (tptr tdouble)) tdouble))
-            (Sassign
-              (Ederef
-                (Ecast
-                  (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                    (Ebinop Omul (Econst_int (Int.repr 0) tint)
-                      (Ebinop Odiv (Esizeof tdouble tulong)
-                        (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
-                  (tptr tdouble)) tdouble) (Etempvar _t'8 tdouble))))
+          (Sset _t'9
+            (Ederef (Ecast (Etempvar _t'8 tlong) (tptr tdouble)) tdouble))
+          (Sassign
+            (Ederef
+              (Ecast
+                (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                  (Ebinop Omul (Econst_int (Int.repr 0) tint)
+                    (Ebinop Odiv (Esizeof tdouble tulong)
+                      (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
+                (tptr tdouble)) tdouble) (Etempvar _t'9 tdouble))))
+      (Ssequence
         (Ssequence
-          (Ssequence
-            (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
-            (Sloop
+          (Sset _i (Ecast (Econst_int (Int.repr 1) tint) tulong))
+          (Sloop
+            (Ssequence
+              (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
+                             (Etempvar _size tulong) tint)
+                Sskip
+                Sbreak)
               (Ssequence
-                (Sifthenelse (Ebinop Olt (Etempvar _i tulong)
-                               (Etempvar _size tulong) tint)
-                  Sskip
-                  Sbreak)
                 (Ssequence
+                  (Sset _t'5
+                    (Efield
+                      (Ederef
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _sp (tptr tlong)))
                   (Ssequence
-                    (Sset _t'4
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                    (Sset _t'6 (Ederef (Etempvar _t'5 (tptr tlong)) tlong))
                     (Ssequence
-                      (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tlong)) tlong))
-                      (Ssequence
-                        (Sset _t'6
-                          (Ederef
-                            (Ecast (Etempvar _t'5 tlong) (tptr tdouble))
-                            tdouble))
-                        (Sassign
-                          (Ederef
-                            (Ecast
-                              (Ebinop Oadd
-                                (Ecast (Etempvar _block tlong) (tptr tlong))
-                                (Ebinop Omul (Etempvar _i tulong)
-                                  (Ebinop Odiv (Esizeof tdouble tulong)
-                                    (Esizeof tlong tulong) tulong) tulong)
-                                (tptr tlong)) (tptr tdouble)) tdouble)
-                          (Etempvar _t'6 tdouble)))))
-                  (Ssequence
-                    (Sset _t'3
-                      (Efield
+                      (Sset _t'7
+                        (Ederef (Ecast (Etempvar _t'6 tlong) (tptr tdouble))
+                          tdouble))
+                      (Sassign
                         (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                    (Sassign
-                      (Efield
-                        (Ederef
-                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                          (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                      (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
-                        (Econst_int (Int.repr 1) tint) (tptr tlong))))))
-              (Sset _i
-                (Ebinop Oadd (Etempvar _i tulong)
-                  (Econst_int (Int.repr 1) tint) tulong))))
+                          (Ecast
+                            (Ebinop Oadd
+                              (Ecast (Etempvar _block tlong) (tptr tlong))
+                              (Ebinop Omul (Etempvar _i tulong)
+                                (Ebinop Odiv (Esizeof tdouble tulong)
+                                  (Esizeof tlong tulong) tulong) tulong)
+                              (tptr tlong)) (tptr tdouble)) tdouble)
+                        (Etempvar _t'7 tdouble)))))
+                (Ssequence
+                  (Sset _t'4
+                    (Efield
+                      (Ederef
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                  (Sassign
+                    (Efield
+                      (Ederef
+                        (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                    (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                      (Econst_int (Int.repr 1) tint) (tptr tlong))))))
+            (Sset _i
+              (Ebinop Oadd (Etempvar _i tulong)
+                (Econst_int (Int.repr 1) tint) tulong))))
+        (Ssequence
           (Sassign
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _accu tlong)
-            (Etempvar _block tlong))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+            (Etempvar _block tlong))
+          (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))
 |}.
 
 Definition f_instr_GETFLOATFIELD := {|
@@ -5967,58 +6155,61 @@ Definition f_instr_GETFLOATFIELD := {|
   fn_callconv := cc_default;
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
   fn_vars := nil;
-  fn_temps := ((_d, tdouble) :: (_block, tlong) :: (_t'2, tlong) ::
-               (_t'1, (tptr tint)) :: (_t'4, tint) :: (_t'3, tlong) :: nil);
+  fn_temps := ((_d, tdouble) :: (_t'2, tlong) :: (_t'1, (tptr tint)) ::
+               (_t'5, tint) :: (_t'4, tlong) :: (_t'3, tlong) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
     (Ssequence
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Ssequence
+      (Sset _t'4
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _accu tlong))
       (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
+        (Sset _t'5 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+        (Sset _d
+          (Ederef
+            (Ecast
+              (Ebinop Oadd (Ecast (Etempvar _t'4 tlong) (tptr tlong))
+                (Ebinop Omul (Etempvar _t'5 tint)
+                  (Ebinop Odiv (Esizeof tdouble tulong)
+                    (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
+              (tptr tdouble)) tdouble)))))
+  (Ssequence
+    (Ssequence
+      (Scall (Some _t'2)
+        (Evar _heap_alloc (Tfunction
+                            ((tptr (Tstruct _interp_state noattr)) ::
+                             tlong :: tlong :: nil) tlong cc_default))
+        ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+         (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong) tulong) ::
+         (Econst_int (Int.repr 253) tint) :: nil))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _accu tlong)
+        (Etempvar _t'2 tlong)))
+    (Ssequence
       (Ssequence
         (Sset _t'3
           (Efield
             (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
               (Tstruct _interp_state noattr)) _accu tlong))
-        (Ssequence
-          (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-          (Sset _d
-            (Ederef
-              (Ecast
-                (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                  (Ebinop Omul (Etempvar _t'4 tint)
-                    (Ebinop Odiv (Esizeof tdouble tulong)
-                      (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
-                (tptr tdouble)) tdouble)))))
-    (Ssequence
-      (Ssequence
-        (Scall (Some _t'2)
-          (Evar _heap_alloc (Tfunction
-                              ((tptr (Tstruct _interp_state noattr)) ::
-                               tlong :: tlong :: nil) tlong cc_default))
-          ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-           (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong)
-             tulong) :: (Econst_int (Int.repr 253) tint) :: nil))
-        (Sset _block (Etempvar _t'2 tlong)))
-      (Ssequence
         (Sassign
-          (Ederef (Ecast (Etempvar _block tlong) (tptr tdouble)) tdouble)
-          (Etempvar _d tdouble))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _accu tlong)
-          (Etempvar _block tlong)))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+          (Ederef (Ecast (Etempvar _t'3 tlong) (tptr tdouble)) tdouble)
+          (Etempvar _d tdouble)))
+      (Sreturn (Some (Econst_int (Int.repr 0) tint))))))
 |}.
 
 Definition f_instr_SETFLOATFIELD := {|
@@ -6240,642 +6431,6 @@ Definition f_instr_PUSHTRAP := {|
               (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))))
 |}.
 
-Definition f_instr_POPTRAP := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'4, tlong) :: (_t'3, (tptr tlong)) ::
-               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'2
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-    (Ssequence
-      (Sset _t'3
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Ssequence
-        (Sset _t'4
-          (Ederef
-            (Ebinop Oadd (Ecast (Etempvar _t'3 (tptr tlong)) (tptr tlong))
-              (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
-          (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
-            (Ebinop Oshr (Ecast (Etempvar _t'4 tlong) tlong)
-              (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
-  (Ssequence
-    (Ssequence
-      (Sset _t'1
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Sassign
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _sp (tptr tlong))
-        (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
-          (Econst_int (Int.repr 4) tint) (tptr tlong))))
-    (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
-|}.
-
-Definition f_instr_RAISE := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'11, (tptr tlong)) :: (_t'10, (tptr tint)) ::
-               (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
-               (_t'7, (tptr tlong)) :: (_t'6, (tptr tlong)) ::
-               (_t'5, tlong) :: (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
-               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'11
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _trap_sp (tptr tlong)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _sp (tptr tlong))
-      (Etempvar _t'11 (tptr tlong))))
-  (Ssequence
-    (Ssequence
-      (Sset _t'9
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Ssequence
-        (Sset _t'10
-          (Ederef
-            (Ebinop Oadd
-              (Ecast (Etempvar _t'9 (tptr tlong)) (tptr (tptr tint)))
-              (Econst_int (Int.repr 0) tint) (tptr (tptr tint))) (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Etempvar _t'10 (tptr tint)))))
-    (Ssequence
-      (Ssequence
-        (Sset _t'6
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Ssequence
-          (Sset _t'7
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Ssequence
-            (Sset _t'8
-              (Ederef
-                (Ebinop Oadd
-                  (Ecast (Etempvar _t'7 (tptr tlong)) (tptr tlong))
-                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
-              (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                (Ebinop Oshr (Ecast (Etempvar _t'8 tlong) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
-      (Ssequence
-        (Ssequence
-          (Sset _t'4
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Ssequence
-            (Sset _t'5
-              (Ederef
-                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                  (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _env tlong)
-              (Etempvar _t'5 tlong))))
-        (Ssequence
-          (Ssequence
-            (Sset _t'2
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-            (Ssequence
-              (Sset _t'3
-                (Ederef
-                  (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
-                    (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _extra_args tlong)
-                (Ebinop Oshr (Ecast (Etempvar _t'3 tlong) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong))))
-          (Ssequence
-            (Ssequence
-              (Sset _t'1
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
-                  (Econst_int (Int.repr 4) tint) (tptr tlong))))
-            (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))
-|}.
-
-Definition f_instr_RERAISE := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'11, (tptr tlong)) :: (_t'10, (tptr tint)) ::
-               (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
-               (_t'7, (tptr tlong)) :: (_t'6, (tptr tlong)) ::
-               (_t'5, tlong) :: (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
-               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'11
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _trap_sp (tptr tlong)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _sp (tptr tlong))
-      (Etempvar _t'11 (tptr tlong))))
-  (Ssequence
-    (Ssequence
-      (Sset _t'9
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Ssequence
-        (Sset _t'10
-          (Ederef
-            (Ebinop Oadd
-              (Ecast (Etempvar _t'9 (tptr tlong)) (tptr (tptr tint)))
-              (Econst_int (Int.repr 0) tint) (tptr (tptr tint))) (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Etempvar _t'10 (tptr tint)))))
-    (Ssequence
-      (Ssequence
-        (Sset _t'6
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Ssequence
-          (Sset _t'7
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Ssequence
-            (Sset _t'8
-              (Ederef
-                (Ebinop Oadd
-                  (Ecast (Etempvar _t'7 (tptr tlong)) (tptr tlong))
-                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
-              (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                (Ebinop Oshr (Ecast (Etempvar _t'8 tlong) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
-      (Ssequence
-        (Ssequence
-          (Sset _t'4
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Ssequence
-            (Sset _t'5
-              (Ederef
-                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                  (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _env tlong)
-              (Etempvar _t'5 tlong))))
-        (Ssequence
-          (Ssequence
-            (Sset _t'2
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-            (Ssequence
-              (Sset _t'3
-                (Ederef
-                  (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
-                    (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _extra_args tlong)
-                (Ebinop Oshr (Ecast (Etempvar _t'3 tlong) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong))))
-          (Ssequence
-            (Ssequence
-              (Sset _t'1
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
-                  (Econst_int (Int.repr 4) tint) (tptr tlong))))
-            (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))
-|}.
-
-Definition f_instr_RAISE_NOTRACE := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'11, (tptr tlong)) :: (_t'10, (tptr tint)) ::
-               (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
-               (_t'7, (tptr tlong)) :: (_t'6, (tptr tlong)) ::
-               (_t'5, tlong) :: (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
-               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'11
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _trap_sp (tptr tlong)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _sp (tptr tlong))
-      (Etempvar _t'11 (tptr tlong))))
-  (Ssequence
-    (Ssequence
-      (Sset _t'9
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-      (Ssequence
-        (Sset _t'10
-          (Ederef
-            (Ebinop Oadd
-              (Ecast (Etempvar _t'9 (tptr tlong)) (tptr (tptr tint)))
-              (Econst_int (Int.repr 0) tint) (tptr (tptr tint))) (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Etempvar _t'10 (tptr tint)))))
-    (Ssequence
-      (Ssequence
-        (Sset _t'6
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-        (Ssequence
-          (Sset _t'7
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Ssequence
-            (Sset _t'8
-              (Ederef
-                (Ebinop Oadd
-                  (Ecast (Etempvar _t'7 (tptr tlong)) (tptr tlong))
-                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
-              (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
-                (Ebinop Oshr (Ecast (Etempvar _t'8 tlong) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
-      (Ssequence
-        (Ssequence
-          (Sset _t'4
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-          (Ssequence
-            (Sset _t'5
-              (Ederef
-                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                  (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _env tlong)
-              (Etempvar _t'5 tlong))))
-        (Ssequence
-          (Ssequence
-            (Sset _t'2
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-            (Ssequence
-              (Sset _t'3
-                (Ederef
-                  (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
-                    (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _extra_args tlong)
-                (Ebinop Oshr (Ecast (Etempvar _t'3 tlong) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong))))
-          (Ssequence
-            (Ssequence
-              (Sset _t'1
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-              (Sassign
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
-                  (Econst_int (Int.repr 4) tint) (tptr tlong))))
-            (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))
-|}.
-
-Definition f_instr_C_CALL1 := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'1, (tptr tint)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'1
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint))
-      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
-        (tptr tint))))
-  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
-|}.
-
-Definition f_instr_C_CALL2 := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'1, (tptr tint)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'1
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint))
-      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
-        (tptr tint))))
-  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
-|}.
-
-Definition f_instr_C_CALL3 := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'1, (tptr tint)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'1
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint))
-      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
-        (tptr tint))))
-  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
-|}.
-
-Definition f_instr_C_CALL4 := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'1, (tptr tint)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'1
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint))
-      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
-        (tptr tint))))
-  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
-|}.
-
-Definition f_instr_C_CALL5 := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'1, (tptr tint)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Sset _t'1
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint))
-      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
-        (tptr tint))))
-  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
-|}.
-
-Definition f_instr_C_CALLN := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_nargs, tint) :: (_t'1, (tptr tint)) ::
-               (_t'2, (tptr tint)) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Ssequence
-      (Sset _t'1
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _pc (tptr tint)))
-      (Sassign
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _pc (tptr tint))
-        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-          (Econst_int (Int.repr 1) tint) (tptr tint))))
-    (Sset _nargs (Ederef (Etempvar _t'1 (tptr tint)) tint)))
-  (Ssequence
-    (Ssequence
-      (Sset _t'2
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _pc (tptr tint)))
-      (Sassign
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _pc (tptr tint))
-        (Ebinop Oadd (Etempvar _t'2 (tptr tint))
-          (Econst_int (Int.repr 1) tint) (tptr tint))))
-    (Sreturn (Some (Econst_int (Int.repr 3) tint)))))
-|}.
-
-Definition f_instr_SWITCH := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_sizes, tuint) :: (_index, tlong) :: (_index__1, tlong) ::
-               (_t'1, (tptr tint)) :: (_t'11, tuchar) :: (_t'10, tlong) ::
-               (_t'9, tint) :: (_t'8, (tptr tint)) :: (_t'7, (tptr tint)) ::
-               (_t'6, tlong) :: (_t'5, tint) :: (_t'4, (tptr tint)) ::
-               (_t'3, (tptr tint)) :: (_t'2, tlong) :: nil);
-  fn_body :=
-(Ssequence
-  (Ssequence
-    (Ssequence
-      (Ssequence
-        (Sset _t'1
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint)))
-        (Sassign
-          (Efield
-            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-              (Tstruct _interp_state noattr)) _pc (tptr tint))
-          (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-            (Econst_int (Int.repr 1) tint) (tptr tint))))
-      (Sset _sizes (Ederef (Etempvar _t'1 (tptr tint)) tint)))
-    (Ssequence
-      (Sset _t'2
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _accu tlong))
-      (Sifthenelse (Ebinop Oeq
-                     (Ebinop Oand (Etempvar _t'2 tlong)
-                       (Econst_int (Int.repr 1) tint) tlong)
-                     (Econst_int (Int.repr 0) tint) tint)
-        (Ssequence
-          (Ssequence
-            (Sset _t'10
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _accu tlong))
-            (Ssequence
-              (Sset _t'11
-                (Ederef
-                  (Ebinop Oadd (Ecast (Etempvar _t'10 tlong) (tptr tuchar))
-                    (Eunop Oneg (Esizeof tlong tulong) tulong) (tptr tuchar))
-                  tuchar))
-              (Sset _index
-                (Ecast
-                  (Ebinop Oand (Etempvar _t'11 tuchar)
-                    (Econst_int (Int.repr 255) tint) tint) tlong))))
-          (Ssequence
-            (Sset _t'7
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
-            (Ssequence
-              (Sset _t'8
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
-              (Ssequence
-                (Sset _t'9
-                  (Ederef
-                    (Ebinop Oadd (Etempvar _t'8 (tptr tint))
-                      (Ebinop Oadd
-                        (Ebinop Oand (Etempvar _sizes tuint)
-                          (Econst_int (Int.repr 65535) tint) tuint)
-                        (Etempvar _index tlong) tlong) (tptr tint)) tint))
-                (Sassign
-                  (Efield
-                    (Ederef
-                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _pc (tptr tint))
-                  (Ebinop Oadd (Etempvar _t'7 (tptr tint))
-                    (Etempvar _t'9 tint) (tptr tint)))))))
-        (Ssequence
-          (Ssequence
-            (Sset _t'6
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _accu tlong))
-            (Sset _index__1
-              (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
-                (Econst_int (Int.repr 1) tint) tlong)))
-          (Ssequence
-            (Sset _t'3
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
-            (Ssequence
-              (Sset _t'4
-                (Efield
-                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
-              (Ssequence
-                (Sset _t'5
-                  (Ederef
-                    (Ebinop Oadd (Etempvar _t'4 (tptr tint))
-                      (Etempvar _index__1 tlong) (tptr tint)) tint))
-                (Sassign
-                  (Efield
-                    (Ederef
-                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _pc (tptr tint))
-                  (Ebinop Oadd (Etempvar _t'3 (tptr tint))
-                    (Etempvar _t'5 tint) (tptr tint))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
-|}.
-
 Definition f_instr_ATOM0 := {|
   fn_return := tint;
   fn_callconv := cc_default;
@@ -6987,121 +6542,119 @@ Definition f_instr_GETPUBMET := {|
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
   fn_vars := nil;
   fn_temps := ((_meths, tlong) :: (_li, tint) :: (_hi, tint) ::
-               (_mi, tint) :: (_t'2, (tptr tint)) :: (_t'1, (tptr tlong)) ::
-               (_t'11, tlong) :: (_t'10, (tptr tlong)) :: (_t'9, tlong) ::
-               (_t'8, tint) :: (_t'7, (tptr tint)) :: (_t'6, tlong) ::
-               (_t'5, tlong) :: (_t'4, tlong) :: (_t'3, tlong) :: nil);
+               (_mi, tint) :: (_t'1, (tptr tlong)) ::
+               (_t'12, (tptr tlong)) :: (_t'11, tlong) :: (_t'10, tint) ::
+               (_t'9, (tptr tint)) :: (_t'8, (tptr tint)) :: (_t'7, tlong) ::
+               (_t'6, (tptr tlong)) :: (_t'5, tlong) :: (_t'4, tlong) ::
+               (_t'3, tlong) :: (_t'2, tlong) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
+    (Ssequence
+      (Ssequence
+        (Sset _t'12
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Sset _t'1
+          (Ecast
+            (Ebinop Osub (Etempvar _t'12 (tptr tlong))
+              (Econst_int (Int.repr 1) tint) (tptr tlong)) (tptr tlong))))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong))
+        (Etempvar _t'1 (tptr tlong))))
     (Ssequence
       (Sset _t'11
         (Efield
           (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
             (Tstruct _interp_state noattr)) _accu tlong))
-      (Sset _meths
-        (Ederef
-          (Ebinop Oadd (Ecast (Etempvar _t'11 tlong) (tptr tlong))
-            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)))
+      (Sassign (Ederef (Etempvar _t'1 (tptr tlong)) tlong)
+        (Etempvar _t'11 tlong))))
+  (Ssequence
+    (Ssequence
+      (Sset _t'9
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Ssequence
+        (Sset _t'10 (Ederef (Etempvar _t'9 (tptr tint)) tint))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _accu tlong)
+          (Ebinop Oadd
+            (Ebinop Oshl (Ecast (Etempvar _t'10 tint) tlong)
+              (Econst_int (Int.repr 1) tint) tlong)
+            (Econst_int (Int.repr 1) tint) tlong))))
     (Ssequence
       (Ssequence
-        (Ssequence
-          (Ssequence
-            (Sset _t'10
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-            (Sset _t'1
-              (Ecast
-                (Ebinop Osub (Etempvar _t'10 (tptr tlong))
-                  (Econst_int (Int.repr 1) tint) (tptr tlong)) (tptr tlong))))
-          (Sassign
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _sp (tptr tlong))
-            (Etempvar _t'1 (tptr tlong))))
-        (Ssequence
-          (Sset _t'9
-            (Efield
-              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                (Tstruct _interp_state noattr)) _accu tlong))
-          (Sassign (Ederef (Etempvar _t'1 (tptr tlong)) tlong)
-            (Etempvar _t'9 tlong))))
+        (Sset _t'8
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint)))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint))
+          (Ebinop Oadd (Etempvar _t'8 (tptr tint))
+            (Econst_int (Int.repr 2) tint) (tptr tint))))
       (Ssequence
         (Ssequence
-          (Ssequence
-            (Sset _t'2
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _pc (tptr tint))
-              (Ebinop Oadd (Etempvar _t'2 (tptr tint))
-                (Econst_int (Int.repr 1) tint) (tptr tint))))
-          (Ssequence
-            (Sset _t'8 (Ederef (Etempvar _t'2 (tptr tint)) tint))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _accu tlong)
-              (Ebinop Oadd
-                (Ebinop Oshl (Ecast (Etempvar _t'8 tint) tlong)
-                  (Econst_int (Int.repr 1) tint) tlong)
-                (Econst_int (Int.repr 1) tint) tlong))))
-        (Ssequence
+          (Sset _t'6
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
           (Ssequence
             (Sset _t'7
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
-            (Sassign
-              (Efield
-                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _pc (tptr tint))
-              (Ebinop Oadd (Etempvar _t'7 (tptr tint))
-                (Econst_int (Int.repr 1) tint) (tptr tint))))
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+            (Sset _meths
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _t'7 tlong) (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
+        (Ssequence
+          (Sset _li (Econst_int (Int.repr 3) tint))
           (Ssequence
-            (Sset _li (Econst_int (Int.repr 3) tint))
             (Ssequence
-              (Ssequence
-                (Sset _t'6
-                  (Ederef
-                    (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-                      (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                (Sset _hi (Ecast (Etempvar _t'6 tlong) tint)))
-              (Ssequence
-                (Swhile
-                  (Ebinop Olt (Etempvar _li tint) (Etempvar _hi tint) tint)
+              (Sset _t'5
+                (Ederef
+                  (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
+                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+              (Sset _hi (Ecast (Etempvar _t'5 tlong) tint)))
+            (Ssequence
+              (Swhile
+                (Ebinop Olt (Etempvar _li tint) (Etempvar _hi tint) tint)
+                (Ssequence
+                  (Sset _mi
+                    (Ebinop Oor
+                      (Ebinop Oshr
+                        (Ebinop Oadd (Etempvar _li tint) (Etempvar _hi tint)
+                          tint) (Econst_int (Int.repr 1) tint) tint)
+                      (Econst_int (Int.repr 1) tint) tint))
                   (Ssequence
-                    (Sset _mi
-                      (Ebinop Oor
-                        (Ebinop Oshr
-                          (Ebinop Oadd (Etempvar _li tint)
-                            (Etempvar _hi tint) tint)
-                          (Econst_int (Int.repr 1) tint) tint)
-                        (Econst_int (Int.repr 1) tint) tint))
+                    (Sset _t'3
+                      (Efield
+                        (Ederef
+                          (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                          (Tstruct _interp_state noattr)) _accu tlong))
                     (Ssequence
                       (Sset _t'4
-                        (Efield
-                          (Ederef
-                            (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _accu tlong))
-                      (Ssequence
-                        (Sset _t'5
-                          (Ederef
-                            (Ebinop Oadd
-                              (Ecast (Etempvar _meths tlong) (tptr tlong))
-                              (Etempvar _mi tint) (tptr tlong)) tlong))
-                        (Sifthenelse (Ebinop Olt (Etempvar _t'4 tlong)
-                                       (Etempvar _t'5 tlong) tint)
-                          (Sset _hi
-                            (Ebinop Osub (Etempvar _mi tint)
-                              (Econst_int (Int.repr 2) tint) tint))
-                          (Sset _li (Etempvar _mi tint)))))))
+                        (Ederef
+                          (Ebinop Oadd
+                            (Ecast (Etempvar _meths tlong) (tptr tlong))
+                            (Etempvar _mi tint) (tptr tlong)) tlong))
+                      (Sifthenelse (Ebinop Olt (Etempvar _t'3 tlong)
+                                     (Etempvar _t'4 tlong) tint)
+                        (Sset _hi
+                          (Ebinop Osub (Etempvar _mi tint)
+                            (Econst_int (Int.repr 2) tint) tint))
+                        (Sset _li (Etempvar _mi tint)))))))
+              (Ssequence
                 (Ssequence
-                  (Sset _t'3
+                  (Sset _t'2
                     (Ederef
                       (Ebinop Oadd
                         (Ecast (Etempvar _meths tlong) (tptr tlong))
@@ -7113,8 +6666,8 @@ Definition f_instr_GETPUBMET := {|
                       (Ederef
                         (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                         (Tstruct _interp_state noattr)) _accu tlong)
-                    (Etempvar _t'3 tlong))))))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+                    (Etempvar _t'2 tlong)))
+                (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))))
 |}.
 
 Definition f_instr_GETDYNMET := {|
@@ -7129,57 +6682,55 @@ Definition f_instr_GETDYNMET := {|
   fn_body :=
 (Ssequence
   (Ssequence
+    (Sset _t'5
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
     (Ssequence
-      (Sset _t'5
-        (Efield
-          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+      (Sset _t'6
+        (Ederef
+          (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+      (Sset _meths
+        (Ederef
+          (Ebinop Oadd (Ecast (Etempvar _t'6 tlong) (tptr tlong))
+            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
+  (Ssequence
+    (Sset _li (Econst_int (Int.repr 3) tint))
+    (Ssequence
       (Ssequence
-        (Sset _t'6
+        (Sset _t'4
           (Ederef
-            (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+            (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
               (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-        (Sset _meths
-          (Ederef
-            (Ebinop Oadd (Ecast (Etempvar _t'6 tlong) (tptr tlong))
-              (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
-    (Ssequence
-      (Sset _li (Econst_int (Int.repr 3) tint))
+        (Sset _hi (Ecast (Etempvar _t'4 tlong) tint)))
       (Ssequence
-        (Ssequence
-          (Sset _t'4
-            (Ederef
-              (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-                (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-          (Sset _hi (Ecast (Etempvar _t'4 tlong) tint)))
-        (Ssequence
-          (Swhile
-            (Ebinop Olt (Etempvar _li tint) (Etempvar _hi tint) tint)
+        (Swhile
+          (Ebinop Olt (Etempvar _li tint) (Etempvar _hi tint) tint)
+          (Ssequence
+            (Sset _mi
+              (Ebinop Oor
+                (Ebinop Oshr
+                  (Ebinop Oadd (Etempvar _li tint) (Etempvar _hi tint) tint)
+                  (Econst_int (Int.repr 1) tint) tint)
+                (Econst_int (Int.repr 1) tint) tint))
             (Ssequence
-              (Sset _mi
-                (Ebinop Oor
-                  (Ebinop Oshr
-                    (Ebinop Oadd (Etempvar _li tint) (Etempvar _hi tint)
-                      tint) (Econst_int (Int.repr 1) tint) tint)
-                  (Econst_int (Int.repr 1) tint) tint))
+              (Sset _t'2
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _accu tlong))
               (Ssequence
-                (Sset _t'2
-                  (Efield
-                    (Ederef
-                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _accu tlong))
-                (Ssequence
-                  (Sset _t'3
-                    (Ederef
-                      (Ebinop Oadd
-                        (Ecast (Etempvar _meths tlong) (tptr tlong))
-                        (Etempvar _mi tint) (tptr tlong)) tlong))
-                  (Sifthenelse (Ebinop Olt (Etempvar _t'2 tlong)
-                                 (Etempvar _t'3 tlong) tint)
-                    (Sset _hi
-                      (Ebinop Osub (Etempvar _mi tint)
-                        (Econst_int (Int.repr 2) tint) tint))
-                    (Sset _li (Etempvar _mi tint)))))))
+                (Sset _t'3
+                  (Ederef
+                    (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
+                      (Etempvar _mi tint) (tptr tlong)) tlong))
+                (Sifthenelse (Ebinop Olt (Etempvar _t'2 tlong)
+                               (Etempvar _t'3 tlong) tint)
+                  (Sset _hi
+                    (Ebinop Osub (Etempvar _mi tint)
+                      (Econst_int (Int.repr 2) tint) tint))
+                  (Sset _li (Etempvar _mi tint)))))))
+        (Ssequence
           (Ssequence
             (Sset _t'1
               (Ederef
@@ -7190,92 +6741,118 @@ Definition f_instr_GETDYNMET := {|
               (Efield
                 (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                   (Tstruct _interp_state noattr)) _accu tlong)
-              (Etempvar _t'1 tlong)))))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+              (Etempvar _t'1 tlong)))
+          (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))
 |}.
 
-Definition f_instr_EVENT := {|
+Definition f_instr_SWITCH := {|
   fn_return := tint;
   fn_callconv := cc_default;
   fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
   fn_vars := nil;
-  fn_temps := nil;
-  fn_body :=
-(Sreturn (Some (Econst_int (Int.repr 0) tint)))
-|}.
-
-Definition f_instr_BREAK := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := nil;
-  fn_body :=
-(Sreturn (Some (Econst_int (Int.repr 0) tint)))
-|}.
-
-Definition f_instr_PERFORM := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := nil;
-  fn_body :=
-(Sreturn (Some (Econst_int (Int.repr 0) tint)))
-|}.
-
-Definition f_instr_RESUME := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := nil;
-  fn_body :=
-(Sreturn (Some (Econst_int (Int.repr 0) tint)))
-|}.
-
-Definition f_instr_RESUMETERM := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'1, (tptr tint)) :: nil);
+  fn_temps := ((_sizes, tuint) :: (_index, tlong) :: (_index__1, tlong) ::
+               (_t'1, (tptr tint)) :: (_t'11, tuchar) :: (_t'10, tlong) ::
+               (_t'9, tint) :: (_t'8, (tptr tint)) :: (_t'7, (tptr tint)) ::
+               (_t'6, tlong) :: (_t'5, tint) :: (_t'4, (tptr tint)) ::
+               (_t'3, (tptr tint)) :: (_t'2, tlong) :: nil);
   fn_body :=
 (Ssequence
   (Ssequence
-    (Sset _t'1
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint))
-      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
-        (tptr tint))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
-|}.
-
-Definition f_instr_REPERFORMTERM := {|
-  fn_return := tint;
-  fn_callconv := cc_default;
-  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
-  fn_vars := nil;
-  fn_temps := ((_t'1, (tptr tint)) :: nil);
-  fn_body :=
-(Ssequence
+    (Ssequence
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Sset _sizes (Ederef (Etempvar _t'1 (tptr tint)) tint)))
   (Ssequence
-    (Sset _t'1
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint)))
-    (Sassign
-      (Efield
-        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-          (Tstruct _interp_state noattr)) _pc (tptr tint))
-      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
-        (tptr tint))))
-  (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+    (Ssequence
+      (Sset _t'2
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _accu tlong))
+      (Sifthenelse (Ebinop Oeq
+                     (Ebinop Oand (Etempvar _t'2 tlong)
+                       (Econst_int (Int.repr 1) tint) tlong)
+                     (Econst_int (Int.repr 0) tint) tint)
+        (Ssequence
+          (Ssequence
+            (Sset _t'10
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
+            (Ssequence
+              (Sset _t'11
+                (Ederef
+                  (Ebinop Oadd (Ecast (Etempvar _t'10 tlong) (tptr tuchar))
+                    (Eunop Oneg (Esizeof tlong tulong) tulong) (tptr tuchar))
+                  tuchar))
+              (Sset _index
+                (Ecast
+                  (Ebinop Oand (Etempvar _t'11 tuchar)
+                    (Econst_int (Int.repr 255) tint) tint) tlong))))
+          (Ssequence
+            (Sset _t'7
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            (Ssequence
+              (Sset _t'8
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Ssequence
+                (Sset _t'9
+                  (Ederef
+                    (Ebinop Oadd (Etempvar _t'8 (tptr tint))
+                      (Ebinop Oadd
+                        (Ebinop Oand (Etempvar _sizes tuint)
+                          (Econst_int (Int.repr 65535) tint) tuint)
+                        (Etempvar _index tlong) tlong) (tptr tint)) tint))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Ebinop Oadd (Etempvar _t'7 (tptr tint))
+                    (Etempvar _t'9 tint) (tptr tint)))))))
+        (Ssequence
+          (Ssequence
+            (Sset _t'6
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
+            (Sset _index__1
+              (Ebinop Oshr (Ecast (Etempvar _t'6 tlong) tlong)
+                (Econst_int (Int.repr 1) tint) tlong)))
+          (Ssequence
+            (Sset _t'3
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+            (Ssequence
+              (Sset _t'4
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Ssequence
+                (Sset _t'5
+                  (Ederef
+                    (Ebinop Oadd (Etempvar _t'4 (tptr tint))
+                      (Etempvar _index__1 tlong) (tptr tint)) tint))
+                (Sassign
+                  (Efield
+                    (Ederef
+                      (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                      (Tstruct _interp_state noattr)) _pc (tptr tint))
+                  (Ebinop Oadd (Etempvar _t'3 (tptr tint))
+                    (Etempvar _t'5 tint) (tptr tint)))))))))
+    (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
 |}.
 
 Definition f_instr_ACC := {|
@@ -8454,12 +8031,11 @@ Definition f_instr_SETFIELD := {|
           (Sset _t'5 (Ederef (Etempvar _t'4 (tptr tint)) tint))
           (Ssequence
             (Sset _t'6 (Ederef (Etempvar _t'1 (tptr tlong)) tlong))
-            (Scall None
-              (Evar _caml_modify (Tfunction ((tptr tlong) :: tlong :: nil)
-                                   tvoid cc_default))
-              ((Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                 (Etempvar _t'5 tint) (tptr tlong)) ::
-               (Etempvar _t'6 tlong) :: nil)))))))
+            (Sassign
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
+                  (Etempvar _t'5 tint) (tptr tlong)) tlong)
+              (Etempvar _t'6 tlong)))))))
   (Ssequence
     (Sassign
       (Efield
@@ -8625,13 +8201,12 @@ Definition f_instr_SETVECTITEM := {|
               (Ederef
                 (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
                   (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
-            (Scall None
-              (Evar _caml_modify (Tfunction ((tptr tlong) :: tlong :: nil)
-                                   tvoid cc_default))
-              ((Ebinop Oadd (Ecast (Etempvar _t'2 tlong) (tptr tlong))
-                 (Ebinop Oshr (Ecast (Etempvar _t'4 tlong) tlong)
-                   (Econst_int (Int.repr 1) tint) tlong) (tptr tlong)) ::
-               (Etempvar _t'6 tlong) :: nil)))))))
+            (Sassign
+              (Ederef
+                (Ebinop Oadd (Ecast (Etempvar _t'2 tlong) (tptr tlong))
+                  (Ebinop Oshr (Ecast (Etempvar _t'4 tlong) tlong)
+                    (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))
+                tlong) (Etempvar _t'6 tlong)))))))
   (Ssequence
     (Sassign
       (Efield
@@ -8801,12 +8376,11 @@ Definition f_instr_SETGLOBAL := {|
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _accu tlong))
-          (Scall None
-            (Evar _caml_modify (Tfunction ((tptr tlong) :: tlong :: nil)
-                                 tvoid cc_default))
-            ((Ebinop Oadd (Ecast (Etempvar _t'2 (tptr tlong)) (tptr tlong))
-               (Etempvar _t'4 tint) (tptr tlong)) :: (Etempvar _t'5 tlong) ::
-             nil))))))
+          (Sassign
+            (Ederef
+              (Ebinop Oadd (Ecast (Etempvar _t'2 (tptr tlong)) (tptr tlong))
+                (Etempvar _t'4 tint) (tptr tlong)) tlong)
+            (Etempvar _t'5 tlong))))))
   (Ssequence
     (Sassign
       (Efield
@@ -8936,6 +8510,542 @@ Definition f_instr_PUSHENVACC := {|
                   (Tstruct _interp_state noattr)) _accu tlong)
               (Etempvar _t'5 tlong))))))
     (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
+|}.
+
+Definition f_instr_STOP := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := nil;
+  fn_body :=
+(Sreturn (Some (Econst_int (Int.repr 1) tint)))
+|}.
+
+Definition f_instr_POPTRAP := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'4, tlong) :: (_t'3, (tptr tlong)) ::
+               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'2
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+    (Ssequence
+      (Sset _t'3
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+      (Ssequence
+        (Sset _t'4
+          (Ederef
+            (Ebinop Oadd (Ecast (Etempvar _t'3 (tptr tlong)) (tptr tlong))
+              (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
+          (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
+            (Ebinop Oshr (Ecast (Etempvar _t'4 tlong) tlong)
+              (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
+  (Ssequence
+    (Ssequence
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
+          (Econst_int (Int.repr 4) tint) (tptr tlong))))
+    (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
+|}.
+
+Definition f_instr_RAISE := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'11, (tptr tlong)) :: (_t'10, (tptr tint)) ::
+               (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
+               (_t'7, (tptr tlong)) :: (_t'6, (tptr tlong)) ::
+               (_t'5, tlong) :: (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
+               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'11
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _trap_sp (tptr tlong)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong))
+      (Etempvar _t'11 (tptr tlong))))
+  (Ssequence
+    (Ssequence
+      (Sset _t'9
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+      (Ssequence
+        (Sset _t'10
+          (Ederef
+            (Ebinop Oadd
+              (Ecast (Etempvar _t'9 (tptr tlong)) (tptr (tptr tint)))
+              (Econst_int (Int.repr 0) tint) (tptr (tptr tint))) (tptr tint)))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint))
+          (Etempvar _t'10 (tptr tint)))))
+    (Ssequence
+      (Ssequence
+        (Sset _t'6
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Ssequence
+          (Sset _t'7
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'8
+              (Ederef
+                (Ebinop Oadd
+                  (Ecast (Etempvar _t'7 (tptr tlong)) (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
+              (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                (Ebinop Oshr (Ecast (Etempvar _t'8 tlong) tlong)
+                  (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
+      (Ssequence
+        (Ssequence
+          (Sset _t'4
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'5
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                  (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _env tlong)
+              (Etempvar _t'5 tlong))))
+        (Ssequence
+          (Ssequence
+            (Sset _t'2
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+            (Ssequence
+              (Sset _t'3
+                (Ederef
+                  (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
+                    (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _extra_args tlong)
+                (Ebinop Oshr (Ecast (Etempvar _t'3 tlong) tlong)
+                  (Econst_int (Int.repr 1) tint) tlong))))
+          (Ssequence
+            (Ssequence
+              (Sset _t'1
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
+                  (Econst_int (Int.repr 4) tint) (tptr tlong))))
+            (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))
+|}.
+
+Definition f_instr_RERAISE := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'11, (tptr tlong)) :: (_t'10, (tptr tint)) ::
+               (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
+               (_t'7, (tptr tlong)) :: (_t'6, (tptr tlong)) ::
+               (_t'5, tlong) :: (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
+               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'11
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _trap_sp (tptr tlong)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong))
+      (Etempvar _t'11 (tptr tlong))))
+  (Ssequence
+    (Ssequence
+      (Sset _t'9
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+      (Ssequence
+        (Sset _t'10
+          (Ederef
+            (Ebinop Oadd
+              (Ecast (Etempvar _t'9 (tptr tlong)) (tptr (tptr tint)))
+              (Econst_int (Int.repr 0) tint) (tptr (tptr tint))) (tptr tint)))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint))
+          (Etempvar _t'10 (tptr tint)))))
+    (Ssequence
+      (Ssequence
+        (Sset _t'6
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Ssequence
+          (Sset _t'7
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'8
+              (Ederef
+                (Ebinop Oadd
+                  (Ecast (Etempvar _t'7 (tptr tlong)) (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
+              (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                (Ebinop Oshr (Ecast (Etempvar _t'8 tlong) tlong)
+                  (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
+      (Ssequence
+        (Ssequence
+          (Sset _t'4
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'5
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                  (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _env tlong)
+              (Etempvar _t'5 tlong))))
+        (Ssequence
+          (Ssequence
+            (Sset _t'2
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+            (Ssequence
+              (Sset _t'3
+                (Ederef
+                  (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
+                    (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _extra_args tlong)
+                (Ebinop Oshr (Ecast (Etempvar _t'3 tlong) tlong)
+                  (Econst_int (Int.repr 1) tint) tlong))))
+          (Ssequence
+            (Ssequence
+              (Sset _t'1
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
+                  (Econst_int (Int.repr 4) tint) (tptr tlong))))
+            (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))
+|}.
+
+Definition f_instr_RAISE_NOTRACE := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'11, (tptr tlong)) :: (_t'10, (tptr tint)) ::
+               (_t'9, (tptr tlong)) :: (_t'8, tlong) ::
+               (_t'7, (tptr tlong)) :: (_t'6, (tptr tlong)) ::
+               (_t'5, tlong) :: (_t'4, (tptr tlong)) :: (_t'3, tlong) ::
+               (_t'2, (tptr tlong)) :: (_t'1, (tptr tlong)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'11
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _trap_sp (tptr tlong)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _sp (tptr tlong))
+      (Etempvar _t'11 (tptr tlong))))
+  (Ssequence
+    (Ssequence
+      (Sset _t'9
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+      (Ssequence
+        (Sset _t'10
+          (Ederef
+            (Ebinop Oadd
+              (Ecast (Etempvar _t'9 (tptr tlong)) (tptr (tptr tint)))
+              (Econst_int (Int.repr 0) tint) (tptr (tptr tint))) (tptr tint)))
+        (Sassign
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _pc (tptr tint))
+          (Etempvar _t'10 (tptr tint)))))
+    (Ssequence
+      (Ssequence
+        (Sset _t'6
+          (Efield
+            (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+        (Ssequence
+          (Sset _t'7
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'8
+              (Ederef
+                (Ebinop Oadd
+                  (Ecast (Etempvar _t'7 (tptr tlong)) (tptr tlong))
+                  (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _trap_sp (tptr tlong))
+              (Ebinop Oadd (Etempvar _t'6 (tptr tlong))
+                (Ebinop Oshr (Ecast (Etempvar _t'8 tlong) tlong)
+                  (Econst_int (Int.repr 1) tint) tlong) (tptr tlong))))))
+      (Ssequence
+        (Ssequence
+          (Sset _t'4
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+          (Ssequence
+            (Sset _t'5
+              (Ederef
+                (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                  (Econst_int (Int.repr 2) tint) (tptr tlong)) tlong))
+            (Sassign
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _env tlong)
+              (Etempvar _t'5 tlong))))
+        (Ssequence
+          (Ssequence
+            (Sset _t'2
+              (Efield
+                (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+            (Ssequence
+              (Sset _t'3
+                (Ederef
+                  (Ebinop Oadd (Etempvar _t'2 (tptr tlong))
+                    (Econst_int (Int.repr 3) tint) (tptr tlong)) tlong))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _extra_args tlong)
+                (Ebinop Oshr (Ecast (Etempvar _t'3 tlong) tlong)
+                  (Econst_int (Int.repr 1) tint) tlong))))
+          (Ssequence
+            (Ssequence
+              (Sset _t'1
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+              (Sassign
+                (Efield
+                  (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                    (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                (Ebinop Oadd (Etempvar _t'1 (tptr tlong))
+                  (Econst_int (Int.repr 4) tint) (tptr tlong))))
+            (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))))
+|}.
+
+Definition f_instr_C_CALL1 := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'1, (tptr tint)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'1
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint))
+      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
+        (tptr tint))))
+  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
+|}.
+
+Definition f_instr_C_CALL2 := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'1, (tptr tint)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'1
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint))
+      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
+        (tptr tint))))
+  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
+|}.
+
+Definition f_instr_C_CALL3 := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'1, (tptr tint)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'1
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint))
+      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
+        (tptr tint))))
+  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
+|}.
+
+Definition f_instr_C_CALL4 := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'1, (tptr tint)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'1
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint))
+      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
+        (tptr tint))))
+  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
+|}.
+
+Definition f_instr_C_CALL5 := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_t'1, (tptr tint)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Sset _t'1
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint)))
+    (Sassign
+      (Efield
+        (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+          (Tstruct _interp_state noattr)) _pc (tptr tint))
+      (Ebinop Oadd (Etempvar _t'1 (tptr tint)) (Econst_int (Int.repr 1) tint)
+        (tptr tint))))
+  (Sreturn (Some (Econst_int (Int.repr 3) tint))))
+|}.
+
+Definition f_instr_C_CALLN := {|
+  fn_return := tint;
+  fn_callconv := cc_default;
+  fn_params := ((_s, (tptr (Tstruct _interp_state noattr))) :: nil);
+  fn_vars := nil;
+  fn_temps := ((_nargs, tint) :: (_t'1, (tptr tint)) ::
+               (_t'2, (tptr tint)) :: nil);
+  fn_body :=
+(Ssequence
+  (Ssequence
+    (Ssequence
+      (Sset _t'1
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Sset _nargs (Ederef (Etempvar _t'1 (tptr tint)) tint)))
+  (Ssequence
+    (Ssequence
+      (Sset _t'2
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint)))
+      (Sassign
+        (Efield
+          (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Tstruct _interp_state noattr)) _pc (tptr tint))
+        (Ebinop Oadd (Etempvar _t'2 (tptr tint))
+          (Econst_int (Int.repr 1) tint) (tptr tint))))
+    (Sreturn (Some (Econst_int (Int.repr 3) tint)))))
 |}.
 
 Definition composites : list composite_definition :=
@@ -9210,11 +9320,6 @@ Definition global_definitions : list (ident * globdef fundef type) :=
                      AST.Xlong cc_default))
      ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil) tlong
      cc_default)) ::
- (_caml_modify,
-   Gfun(External (EF_external "caml_modify"
-                   (mksignature (AST.Xptr :: AST.Xlong :: nil) AST.Xvoid
-                     cc_default)) ((tptr tlong) :: tlong :: nil) tvoid
-     cc_default)) ::
  (_caml_raise_zero_divide,
    Gfun(External (EF_external "caml_raise_zero_divide"
                    (mksignature nil AST.Xvoid cc_default)) nil tvoid
@@ -9259,14 +9364,13 @@ Definition global_definitions : list (ident * globdef fundef type) :=
  (_instr_SETFIELD2, Gfun(Internal f_instr_SETFIELD2)) ::
  (_instr_SETFIELD3, Gfun(Internal f_instr_SETFIELD3)) ::
  (_instr_OFFSETCLOSURE, Gfun(Internal f_instr_OFFSETCLOSURE)) ::
- (_instr_OFFSETCLOSUREM2, Gfun(Internal f_instr_OFFSETCLOSUREM2)) ::
+ (_instr_OFFSETCLOSUREM3, Gfun(Internal f_instr_OFFSETCLOSUREM3)) ::
  (_instr_OFFSETCLOSURE0, Gfun(Internal f_instr_OFFSETCLOSURE0)) ::
- (_instr_OFFSETCLOSURE2, Gfun(Internal f_instr_OFFSETCLOSURE2)) ::
+ (_instr_OFFSETCLOSURE3, Gfun(Internal f_instr_OFFSETCLOSURE3)) ::
  (_instr_PUSHOFFSETCLOSURE, Gfun(Internal f_instr_PUSHOFFSETCLOSURE)) ::
- (_instr_PUSHOFFSETCLOSUREM2, Gfun(Internal f_instr_PUSHOFFSETCLOSUREM2)) ::
+ (_instr_PUSHOFFSETCLOSUREM3, Gfun(Internal f_instr_PUSHOFFSETCLOSUREM3)) ::
  (_instr_PUSHOFFSETCLOSURE0, Gfun(Internal f_instr_PUSHOFFSETCLOSURE0)) ::
- (_instr_PUSHOFFSETCLOSURE2, Gfun(Internal f_instr_PUSHOFFSETCLOSURE2)) ::
- (_instr_STOP, Gfun(Internal f_instr_STOP)) ::
+ (_instr_PUSHOFFSETCLOSURE3, Gfun(Internal f_instr_PUSHOFFSETCLOSURE3)) ::
  (_instr_CHECK_SIGNALS, Gfun(Internal f_instr_CHECK_SIGNALS)) ::
  (_instr_EQ, Gfun(Internal f_instr_EQ)) ::
  (_instr_NEQ, Gfun(Internal f_instr_NEQ)) ::
@@ -9311,28 +9415,12 @@ Definition global_definitions : list (ident * globdef fundef type) :=
  (_instr_GETFLOATFIELD, Gfun(Internal f_instr_GETFLOATFIELD)) ::
  (_instr_SETFLOATFIELD, Gfun(Internal f_instr_SETFLOATFIELD)) ::
  (_instr_PUSHTRAP, Gfun(Internal f_instr_PUSHTRAP)) ::
- (_instr_POPTRAP, Gfun(Internal f_instr_POPTRAP)) ::
- (_instr_RAISE, Gfun(Internal f_instr_RAISE)) ::
- (_instr_RERAISE, Gfun(Internal f_instr_RERAISE)) ::
- (_instr_RAISE_NOTRACE, Gfun(Internal f_instr_RAISE_NOTRACE)) ::
- (_instr_C_CALL1, Gfun(Internal f_instr_C_CALL1)) ::
- (_instr_C_CALL2, Gfun(Internal f_instr_C_CALL2)) ::
- (_instr_C_CALL3, Gfun(Internal f_instr_C_CALL3)) ::
- (_instr_C_CALL4, Gfun(Internal f_instr_C_CALL4)) ::
- (_instr_C_CALL5, Gfun(Internal f_instr_C_CALL5)) ::
- (_instr_C_CALLN, Gfun(Internal f_instr_C_CALLN)) ::
- (_instr_SWITCH, Gfun(Internal f_instr_SWITCH)) ::
  (_instr_ATOM0, Gfun(Internal f_instr_ATOM0)) ::
  (_instr_PUSHATOM0, Gfun(Internal f_instr_PUSHATOM0)) ::
  (_instr_GETMETHOD, Gfun(Internal f_instr_GETMETHOD)) ::
  (_instr_GETPUBMET, Gfun(Internal f_instr_GETPUBMET)) ::
  (_instr_GETDYNMET, Gfun(Internal f_instr_GETDYNMET)) ::
- (_instr_EVENT, Gfun(Internal f_instr_EVENT)) ::
- (_instr_BREAK, Gfun(Internal f_instr_BREAK)) ::
- (_instr_PERFORM, Gfun(Internal f_instr_PERFORM)) ::
- (_instr_RESUME, Gfun(Internal f_instr_RESUME)) ::
- (_instr_RESUMETERM, Gfun(Internal f_instr_RESUMETERM)) ::
- (_instr_REPERFORMTERM, Gfun(Internal f_instr_REPERFORMTERM)) ::
+ (_instr_SWITCH, Gfun(Internal f_instr_SWITCH)) ::
  (_instr_ACC, Gfun(Internal f_instr_ACC)) ::
  (_instr_POP, Gfun(Internal f_instr_POP)) ::
  (_instr_ASSIGN, Gfun(Internal f_instr_ASSIGN)) ::
@@ -9368,10 +9456,24 @@ Definition global_definitions : list (ident * globdef fundef type) :=
  (_instr_PUSHGETGLOBAL, Gfun(Internal f_instr_PUSHGETGLOBAL)) ::
  (_instr_SETGLOBAL, Gfun(Internal f_instr_SETGLOBAL)) ::
  (_instr_ENVACC, Gfun(Internal f_instr_ENVACC)) ::
- (_instr_PUSHENVACC, Gfun(Internal f_instr_PUSHENVACC)) :: nil).
+ (_instr_PUSHENVACC, Gfun(Internal f_instr_PUSHENVACC)) ::
+ (_instr_STOP, Gfun(Internal f_instr_STOP)) ::
+ (_instr_POPTRAP, Gfun(Internal f_instr_POPTRAP)) ::
+ (_instr_RAISE, Gfun(Internal f_instr_RAISE)) ::
+ (_instr_RERAISE, Gfun(Internal f_instr_RERAISE)) ::
+ (_instr_RAISE_NOTRACE, Gfun(Internal f_instr_RAISE_NOTRACE)) ::
+ (_instr_C_CALL1, Gfun(Internal f_instr_C_CALL1)) ::
+ (_instr_C_CALL2, Gfun(Internal f_instr_C_CALL2)) ::
+ (_instr_C_CALL3, Gfun(Internal f_instr_C_CALL3)) ::
+ (_instr_C_CALL4, Gfun(Internal f_instr_C_CALL4)) ::
+ (_instr_C_CALL5, Gfun(Internal f_instr_C_CALL5)) ::
+ (_instr_C_CALLN, Gfun(Internal f_instr_C_CALLN)) :: nil).
 
 Definition public_idents : list ident :=
-(_instr_PUSHENVACC :: _instr_ENVACC :: _instr_SETGLOBAL ::
+(_instr_C_CALLN :: _instr_C_CALL5 :: _instr_C_CALL4 :: _instr_C_CALL3 ::
+ _instr_C_CALL2 :: _instr_C_CALL1 :: _instr_RAISE_NOTRACE ::
+ _instr_RERAISE :: _instr_RAISE :: _instr_POPTRAP :: _instr_STOP ::
+ _instr_PUSHENVACC :: _instr_ENVACC :: _instr_SETGLOBAL ::
  _instr_PUSHGETGLOBAL :: _instr_GETGLOBAL :: _instr_SETVECTITEM ::
  _instr_GETVECTITEM :: _instr_VECTLENGTH :: _instr_SETFIELD ::
  _instr_GETFIELD :: _instr_PUSHATOM :: _instr_ATOM :: _instr_BRANCHIFNOT ::
@@ -9380,40 +9482,36 @@ Definition public_idents : list ident :=
  _instr_LSLINT :: _instr_XORINT :: _instr_ORINT :: _instr_ANDINT ::
  _instr_MODINT :: _instr_DIVINT :: _instr_MULINT :: _instr_SUBINT ::
  _instr_ADDINT :: _instr_NEGINT :: _instr_PUSHCONSTINT :: _instr_CONSTINT ::
- _instr_ASSIGN :: _instr_POP :: _instr_ACC :: _instr_REPERFORMTERM ::
- _instr_RESUMETERM :: _instr_RESUME :: _instr_PERFORM :: _instr_BREAK ::
- _instr_EVENT :: _instr_GETDYNMET :: _instr_GETPUBMET :: _instr_GETMETHOD ::
- _instr_PUSHATOM0 :: _instr_ATOM0 :: _instr_SWITCH :: _instr_C_CALLN ::
- _instr_C_CALL5 :: _instr_C_CALL4 :: _instr_C_CALL3 :: _instr_C_CALL2 ::
- _instr_C_CALL1 :: _instr_RAISE_NOTRACE :: _instr_RERAISE :: _instr_RAISE ::
- _instr_POPTRAP :: _instr_PUSHTRAP :: _instr_SETFLOATFIELD ::
- _instr_GETFLOATFIELD :: _instr_MAKEFLOATBLOCK :: _instr_MAKEBLOCK3 ::
- _instr_MAKEBLOCK2 :: _instr_MAKEBLOCK1 :: _instr_MAKEBLOCK ::
- _instr_PUSHGETGLOBALFIELD :: _instr_GETGLOBALFIELD :: _instr_CLOSUREREC ::
- _instr_CLOSURE :: _instr_GRAB :: _instr_RESTART :: _instr_RETURN ::
- _instr_APPTERM3 :: _instr_APPTERM2 :: _instr_APPTERM1 :: _instr_APPTERM ::
- _instr_APPLY3 :: _instr_APPLY2 :: _instr_APPLY1 :: _instr_APPLY ::
- _instr_PUSH_RETADDR :: _instr_SETBYTESCHAR :: _instr_GETBYTESCHAR ::
- _instr_GETSTRINGCHAR :: _instr_BUGEINT :: _instr_BULTINT :: _instr_BGEINT ::
- _instr_BGTINT :: _instr_BLEINT :: _instr_BLTINT :: _instr_BNEQ ::
- _instr_BEQ :: _instr_UGEINT :: _instr_ULTINT :: _instr_GEINT ::
- _instr_GTINT :: _instr_LEINT :: _instr_LTINT :: _instr_NEQ :: _instr_EQ ::
- _instr_CHECK_SIGNALS :: _instr_STOP :: _instr_PUSHOFFSETCLOSURE2 ::
- _instr_PUSHOFFSETCLOSURE0 :: _instr_PUSHOFFSETCLOSUREM2 ::
- _instr_PUSHOFFSETCLOSURE :: _instr_OFFSETCLOSURE2 ::
- _instr_OFFSETCLOSURE0 :: _instr_OFFSETCLOSUREM2 :: _instr_OFFSETCLOSURE ::
- _instr_SETFIELD3 :: _instr_SETFIELD2 :: _instr_SETFIELD1 ::
- _instr_SETFIELD0 :: _instr_GETFIELD3 :: _instr_GETFIELD2 ::
- _instr_GETFIELD1 :: _instr_GETFIELD0 :: _instr_PUSHCONST3 ::
- _instr_PUSHCONST2 :: _instr_PUSHCONST1 :: _instr_PUSHCONST0 ::
- _instr_CONST3 :: _instr_CONST2 :: _instr_CONST1 :: _instr_CONST0 ::
- _instr_PUSHENVACC4 :: _instr_PUSHENVACC3 :: _instr_PUSHENVACC2 ::
- _instr_PUSHENVACC1 :: _instr_ENVACC4 :: _instr_ENVACC3 :: _instr_ENVACC2 ::
- _instr_ENVACC1 :: _instr_PUSHACC7 :: _instr_PUSHACC6 :: _instr_PUSHACC5 ::
- _instr_PUSHACC4 :: _instr_PUSHACC3 :: _instr_PUSHACC2 :: _instr_PUSHACC1 ::
- _instr_PUSH :: _instr_ACC7 :: _instr_ACC6 :: _instr_ACC5 :: _instr_ACC4 ::
- _instr_ACC3 :: _instr_ACC2 :: _instr_ACC1 :: _instr_ACC0 ::
- _caml_raise_zero_divide :: _caml_modify :: _heap_alloc ::
+ _instr_ASSIGN :: _instr_POP :: _instr_ACC :: _instr_SWITCH ::
+ _instr_GETDYNMET :: _instr_GETPUBMET :: _instr_GETMETHOD ::
+ _instr_PUSHATOM0 :: _instr_ATOM0 :: _instr_PUSHTRAP ::
+ _instr_SETFLOATFIELD :: _instr_GETFLOATFIELD :: _instr_MAKEFLOATBLOCK ::
+ _instr_MAKEBLOCK3 :: _instr_MAKEBLOCK2 :: _instr_MAKEBLOCK1 ::
+ _instr_MAKEBLOCK :: _instr_PUSHGETGLOBALFIELD :: _instr_GETGLOBALFIELD ::
+ _instr_CLOSUREREC :: _instr_CLOSURE :: _instr_GRAB :: _instr_RESTART ::
+ _instr_RETURN :: _instr_APPTERM3 :: _instr_APPTERM2 :: _instr_APPTERM1 ::
+ _instr_APPTERM :: _instr_APPLY3 :: _instr_APPLY2 :: _instr_APPLY1 ::
+ _instr_APPLY :: _instr_PUSH_RETADDR :: _instr_SETBYTESCHAR ::
+ _instr_GETBYTESCHAR :: _instr_GETSTRINGCHAR :: _instr_BUGEINT ::
+ _instr_BULTINT :: _instr_BGEINT :: _instr_BGTINT :: _instr_BLEINT ::
+ _instr_BLTINT :: _instr_BNEQ :: _instr_BEQ :: _instr_UGEINT ::
+ _instr_ULTINT :: _instr_GEINT :: _instr_GTINT :: _instr_LEINT ::
+ _instr_LTINT :: _instr_NEQ :: _instr_EQ :: _instr_CHECK_SIGNALS ::
+ _instr_PUSHOFFSETCLOSURE3 :: _instr_PUSHOFFSETCLOSURE0 ::
+ _instr_PUSHOFFSETCLOSUREM3 :: _instr_PUSHOFFSETCLOSURE ::
+ _instr_OFFSETCLOSURE3 :: _instr_OFFSETCLOSURE0 :: _instr_OFFSETCLOSUREM3 ::
+ _instr_OFFSETCLOSURE :: _instr_SETFIELD3 :: _instr_SETFIELD2 ::
+ _instr_SETFIELD1 :: _instr_SETFIELD0 :: _instr_GETFIELD3 ::
+ _instr_GETFIELD2 :: _instr_GETFIELD1 :: _instr_GETFIELD0 ::
+ _instr_PUSHCONST3 :: _instr_PUSHCONST2 :: _instr_PUSHCONST1 ::
+ _instr_PUSHCONST0 :: _instr_CONST3 :: _instr_CONST2 :: _instr_CONST1 ::
+ _instr_CONST0 :: _instr_PUSHENVACC4 :: _instr_PUSHENVACC3 ::
+ _instr_PUSHENVACC2 :: _instr_PUSHENVACC1 :: _instr_ENVACC4 ::
+ _instr_ENVACC3 :: _instr_ENVACC2 :: _instr_ENVACC1 :: _instr_PUSHACC7 ::
+ _instr_PUSHACC6 :: _instr_PUSHACC5 :: _instr_PUSHACC4 :: _instr_PUSHACC3 ::
+ _instr_PUSHACC2 :: _instr_PUSHACC1 :: _instr_PUSH :: _instr_ACC7 ::
+ _instr_ACC6 :: _instr_ACC5 :: _instr_ACC4 :: _instr_ACC3 :: _instr_ACC2 ::
+ _instr_ACC1 :: _instr_ACC0 :: _caml_raise_zero_divide :: _heap_alloc ::
  ___builtin_debug :: ___builtin_write32_reversed ::
  ___builtin_write16_reversed :: ___builtin_read32_reversed ::
  ___builtin_read16_reversed :: ___builtin_fnmsub :: ___builtin_fnmadd ::

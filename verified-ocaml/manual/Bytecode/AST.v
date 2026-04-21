@@ -98,10 +98,4 @@ Inductive instruction : Type :=
   | UGEINT : instruction
   | BULTINT : Z -> Z -> instruction
   | BUGEINT : Z -> Z -> instruction
-  | STOP   : instruction
-  | EVENT  : instruction
-  | BREAK  : instruction
-  | PERFORM       : instruction
-  | RESUME        : instruction
-  | RESUMETERM    : nat -> instruction
-  | REPERFORMTERM : nat -> instruction.
+  | STOP   : instruction.

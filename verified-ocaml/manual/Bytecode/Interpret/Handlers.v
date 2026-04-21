@@ -961,22 +961,3 @@ Definition handle_BUGEINT (n : Z) (target : Z) (pc' : Z) (s : state) : step_resu
 
 Definition handle_STOP (s : state) : step_result :=
   Halt s.(accu).
-
-Definition handle_EVENT (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|>).
-
-Definition handle_BREAK (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|>).
-
-(* Stub handlers for effect opcodes (OCaml 5 features, modelled as no-ops) *)
-Definition handle_PERFORM (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|>).
-
-Definition handle_RESUME (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|>).
-
-Definition handle_RESUMETERM (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc' + 1|>).
-
-Definition handle_REPERFORMTERM (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc' + 1|>).

@@ -62,6 +62,22 @@ targets you want to build.
 Prefer `make -f Makefile.coq <.vo targets>` over `dune build` when all you
 need is a compilation check on a subset of theories.
 
+### Regenerating the Clight handler AST
+
+`verified-ocaml/manual/Bytecode/Generated/instruct_handlers.v` is generated
+from `system-ocaml/runtime/interp.c` by the pipeline in
+`manual/Bytecode/generator/` (extract C handlers via cpp shim, then run
+clightgen). To regenerate after changing `extract_handlers.sh` or
+`extract_shim.h`:
+
+```bash
+cd verified-ocaml/manual/Bytecode/generator
+make ../Generated/instruct_handlers.v   # runs extract_handlers.sh + clightgen + copy
+```
+
+If the `system-ocaml` submodule isn't checked out in the worktree, pass its
+path explicitly: `make ../Generated/instruct_handlers.v SUBMODULE=/path/to/system-ocaml`.
+
 ### Running individual test suites
 
 All PBT suites use QCheck. Run from `verified-ocaml/`:
