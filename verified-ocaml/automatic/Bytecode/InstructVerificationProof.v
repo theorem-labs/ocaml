@@ -23,6 +23,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ADDINT_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MULINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ASRINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import XORINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ORINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -427,8 +428,8 @@ Definition correct_ANDINT :
 Definition correct_ORINT :
   handler_correct (handle_instr ORINT) (clight_of ORINT)
     (pre_of ORINT)
-    (P_error_of ORINT) (P_halt_of ORINT) (P_ccall_of ORINT).
-Admitted.
+    (P_error_of ORINT) (P_halt_of ORINT) (P_ccall_of ORINT)
+  := ORINT_correct.correct_ORINT.
 
 Definition correct_XORINT :
   handler_correct (handle_instr XORINT) (clight_of XORINT)
