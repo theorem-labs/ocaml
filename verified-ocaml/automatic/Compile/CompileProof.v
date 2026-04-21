@@ -17,6 +17,7 @@ From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
+From OCamlInterp.Manual.Compile Require Import CompileSpec.
 From OCamlInterp.SemiAutomatic.Interpret Require Import Interpret.
 From OCamlInterp.Automatic.Compile Require Import Compile.
 From RecordUpdate Require Import RecordUpdate.
@@ -242,25 +243,11 @@ Definition ccall_to_events (prim_idx : nat) (args : list value) : list event :=
   | _, _ => []
   end.
 
-Fixpoint run_collecting (fuel : nat) (code : list instruction) (s : state)
-    (out : list event) : behavior :=
-  match fuel with
-  | O => mk_behavior (rev out) Term_timeout
-  | S fuel' =>
-    match step_list code s with
-    | Step s' => run_collecting fuel' code s' out
-    | Halt v => mk_behavior (rev out) (Term_normal v)
-    | Error msg => mk_behavior (rev out) (Term_error msg)
-    | CCall_request prim_idx args cont =>
-      let new_events := ccall_to_events prim_idx args in
-      let out' := rev new_events ++ out in
-      run_collecting fuel' code (cont <|accu := Val_int 0|>) out'
-    end
-  end.
-
-Definition bytecode_behavior (fuel : nat) (code : list instruction)
-    (globals : list value) : behavior :=
-  run_collecting fuel code (initial_state globals) [].
+(* Use the parameterized run_collecting from CompileSpec, specialized to
+   our concrete step_list.  This ensures the final theorem type is
+   definitionally equal to what CompileSpec's Module Type expects. *)
+Notation run_collecting := (CompileSpec.run_collecting step_list) (only parsing).
+Notation bytecode_behavior := (CompileSpec.bytecode_behavior step_list) (only parsing).
 
 Definition behavior_equiv (b1 b2 : behavior) :=
   let t1 := b1.(trace)  in let t2 := b2.(trace)  in
@@ -5750,7 +5737,7 @@ Proof.
   (* STATUS: Admitted. The spec was strengthened from the existential form
      (forall src_fuel, ... exists bc_fuel ...) to the universal form
      (forall src_fuel bc_fuel, behavior_equiv ...). The per-program lemmas
-     above (compiler_correct_*) also need re-proving for the stronger spec.
+     above [compiler_correct_...] also need re-proving for the stronger spec.
 
      Completed infrastructure:
      1. [DONE] eval_fuel_monotone, eval_program_fuel_monotone.

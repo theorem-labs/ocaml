@@ -9,33 +9,24 @@
 
    This file has NO dependencies outside manual/ — it is fully self-contained.
    The concrete compile_program and interpret are supplied by the checker
-   module in automatic/Compile/CompileChecker.v. *)
+   module in checker/Compile/CompileChecker.v. *)
 
-From Stdlib Require Import ZArith PeanoNat.
+From Stdlib Require Import ZArith PeanoNat Strings.String.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Utils Require Import Value.
 From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
-From OCamlInterp.Manual.Bytecode.Interpret Require Import Handlers Dispatch Run HandleInstrSpec.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import Run HandleInstrSpec.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
-
-(* Instantiate the Run functor at the manual Dispatch to expose
-   step / run / run_micro / handle_bcmicro / run_pure at top level.
-   CompileSpec is in manual/ and cannot depend on automatic/, so it
-   cannot reuse automatic/Bytecode/Interpret.v; it builds its own copy
-   of the same instantiation here. *)
-Module DispatchImpl <: HandleInstrSpec.
-  Definition handle_instr := Dispatch.handle_instr.
-End DispatchImpl.
-Include Run.Make DispatchImpl.
+Open Scope list_scope.
 
 (* === Trusted definitions for running compiled bytecode === *)
 
 (* Convert a C call to output events.
    Primitive indices match Compile.v's is_builtin:
      0 = print_int, 1 = print_newline, 2 = print_string
-   Uses z_to_events from Interpret.v -- single source of truth. *)
+   Uses z_to_events from Observable.v -- single source of truth. *)
 Definition ccall_to_events (prim_idx : nat) (args : list value) : list event :=
   match prim_idx, args with
   | 0%nat, [Val_int n] => z_to_events n
@@ -43,32 +34,33 @@ Definition ccall_to_events (prim_idx : nat) (args : list value) : list event :=
   | _, _ => []
   end.
 
-(* List-based wrapper: compile_program produces list instruction,
-   but the trusted step function works on PrimArray.  Convert once. *)
-Definition step_list (code : list instruction) (s : state) : step_result :=
-  step (list_to_code_array code) s.
-
-(* Run bytecode collecting output events.
-   Output list accumulated in reverse order (newest first). *)
-Fixpoint run_collecting (fuel : nat) (code : list instruction) (s : state)
+(* List-based wrapper parameterized over a step function.
+   The step function takes a code array and a state, returning a step_result.
+   This allows run_collecting/bytecode_behavior to be used with any
+   HandleInstrSpec instantiation. *)
+Fixpoint run_collecting
+    (step_fn : list instruction -> state -> step_result)
+    (fuel : nat) (code : list instruction) (s : state)
     (out : list event) : behavior :=
   match fuel with
   | O => mk_behavior (rev out) Term_timeout
   | S fuel' =>
-    match step_list code s with
-    | Step s' => run_collecting fuel' code s' out
+    match step_fn code s with
+    | Step s' => run_collecting step_fn fuel' code s' out
     | Halt v => mk_behavior (rev out) (Term_normal v)
     | Error msg => mk_behavior (rev out) (Term_error msg)
     | CCall_request prim_idx args cont =>
       let new_events := ccall_to_events prim_idx args in
       let out' := rev new_events ++ out in
-      run_collecting fuel' code (cont <|accu := Val_int 0|>) out'
+      run_collecting step_fn fuel' code (cont <|accu := Val_int 0|>) out'
     end
   end.
 
-Definition bytecode_behavior (fuel : nat) (code : list instruction)
+Definition bytecode_behavior
+    (step_fn : list instruction -> state -> step_result)
+    (fuel : nat) (code : list instruction)
     (globals : list value) : behavior :=
-  run_collecting fuel code (initial_state globals) [].
+  run_collecting step_fn fuel code (initial_state globals) [].
 
 (* === The Spec === *)
 
@@ -86,7 +78,21 @@ Definition behavior_equiv (b1 b2 : behavior) :=
   | (Term_normal _ | Term_error _), _ => False
   end.
 
-Module Type CompileSpec.
+(* Build a list-based step function from a HandleInstrSpec instance.
+   Uses fetch_instr and list_to_code_array from Run.v. *)
+Definition step_list_of (handle_instr : instruction -> Z -> state -> step_result)
+    (code : list instruction) (s : state) : step_result :=
+  let code_arr := list_to_code_array code in
+  match fetch_instr code_arr s.(pc) with
+  | None => Error "pc out of bounds"
+  | Some instr => handle_instr instr (s.(pc) + 1) s
+  end.
+
+Module Type CompileSpec (Import HI : HandleInstrSpec).
+
+  (* The step function derived from this HandleInstrSpec instance *)
+  Definition step_fn : list instruction -> state -> step_result :=
+    step_list_of HI.handle_instr.
 
   (* Compiler (provided by Untrusted) *)
   Parameter compile_program : program -> list instruction.
@@ -102,6 +108,6 @@ Module Type CompileSpec.
   Axiom compiler_correctness :
     forall (prog : program) (src_fuel bc_fuel : nat),
       behavior_equiv (interpret src_fuel prog)
-                     (bytecode_behavior bc_fuel (compile_program prog) []).
+                     (bytecode_behavior step_fn bc_fuel (compile_program prog) []).
 
 End CompileSpec.

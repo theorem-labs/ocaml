@@ -4,11 +4,17 @@
    (from semi-auto/), and the correctness proof (from automatic/). *)
 
 From OCamlInterp.Manual.Compile Require Import CompileSpec.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec Dispatch.
 From OCamlInterp.SemiAutomatic.Interpret Require Interpret.
 From OCamlInterp.Automatic.Compile Require Compile.
 From OCamlInterp.Automatic.Compile Require CompileProof.
 
-Module Check <: CompileSpec.
+Module DispatchHI <: HandleInstrSpec.
+  Definition handle_instr := Dispatch.handle_instr.
+End DispatchHI.
+
+Module Check <: CompileSpec DispatchHI.
+  Definition step_fn := step_list_of DispatchHI.handle_instr.
   Definition compile_program := OCamlInterp.Automatic.Compile.Compile.compile_program.
   Definition interpret := OCamlInterp.SemiAutomatic.Interpret.Interpret.interpret.
   Definition compiler_correctness := OCamlInterp.Automatic.Compile.CompileProof.compiler_correctness.
