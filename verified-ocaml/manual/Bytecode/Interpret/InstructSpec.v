@@ -21,6 +21,14 @@ From OCamlInterp.Manual.Bytecode.Interpret Require Import Helpers Handlers Dispa
 From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 
+(* External function ident not produced by clightgen (caml_modify is a
+   runtime helper referenced by SETFIELD / SETVECTITEM specs but not
+   directly called from the extracted handler C code). *)
+Import Clightdefs.ClightNotations.
+Local Open Scope clight_scope.
+Definition _caml_modify : ident := $"caml_modify".
+Local Close Scope clight_scope.
+
 (* ================================================================== *)
 (* Clight environment                                                  *)
 (* ================================================================== *)
