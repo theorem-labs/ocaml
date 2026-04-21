@@ -9,7 +9,9 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.Manual Require Bytecode.AST.
+Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -40,4 +42,16 @@ Proof.
   - apply (eval_stmt_to_exec clight_ge 5).
     eval_cbn. reflexivity.
   - exists ard. exact Hpre.
+Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr CHECK_SIGNALS = handle_CHECK_SIGNALS and
+   clight_of CHECK_SIGNALS = f_instr_CHECK_SIGNALS by computation.
+   pre_of CHECK_SIGNALS = no_pre = fun _ _ _ _ => True. *)
+Definition correct_CHECK_SIGNALS :
+  handler_correct (handle_instr CHECK_SIGNALS) (clight_of CHECK_SIGNALS)
+    (pre_of CHECK_SIGNALS)
+    (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS).
+Proof.
+  exact verify_CHECK_SIGNALS_correct.
 Qed.
