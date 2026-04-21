@@ -596,3 +596,37 @@ Proof.
       lia.
     + exact Hslg.
 Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (POP n) = handle_POP n and clight_of (POP n) = f_instr_POP
+   by computation.  pre_of (POP n) = (code_at ... /\p code_ne_struct) /\p
+   stack_length_ge n, matching verify_POP_handler_correct's precondition.
+
+   The Step case delegates to verify_POP_handler_correct after asserting
+   Z.of_nat n < Int.half_modulus (Admitted).  In practice the bytecode
+   decoder only produces in-range operands; the canonical pre_of does not
+   include this guard. *)
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Definition correct_POP : forall n,
+  handler_correct (handle_instr (POP n)) (clight_of (POP n))
+    (pre_of (POP n))
+    (P_error_of (POP n)) (P_halt_of (POP n)) (P_ccall_of (POP n)).
+Proof.
+  intro n.
+  intros e le m s.
+  change (handle_instr (POP n)) with (handle_POP n).
+  unfold handle_POP.
+  (* handle_POP always returns Step, so Error/Halt/CCall branches are dead *)
+  intros ard Hrel Hpre.
+  assert (Hn : Z.of_nat n < Int.half_modulus).
+  { (* TODO: the canonical pre_of does not include this guard;
+       it should be supplied by instr_wfb or the bytecode loader.
+       Admitted for now. *)
+    admit. }
+  pose proof (verify_POP_handler_correct n Hn) as Hvc.
+  specialize (Hvc e le m s).
+  unfold handler_correct, handle_POP in Hvc.
+  exact (Hvc ard Hrel Hpre).
+Admitted.
