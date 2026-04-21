@@ -39,6 +39,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MODINT_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHCONSTINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETREF_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import DIVINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLEINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -567,8 +568,8 @@ Admitted.
 Definition correct_BLEINT : forall z1 z2,
   handler_correct (handle_instr (BLEINT z1 z2)) (clight_of (BLEINT z1 z2))
     (pre_of (BLEINT z1 z2))
-    (P_error_of (BLEINT z1 z2)) (P_halt_of (BLEINT z1 z2)) (P_ccall_of (BLEINT z1 z2)).
-Admitted.
+    (P_error_of (BLEINT z1 z2)) (P_halt_of (BLEINT z1 z2)) (P_ccall_of (BLEINT z1 z2))
+  := BLEINT_correct.correct_BLEINT.
 
 Definition correct_BGTINT : forall z1 z2,
   handler_correct (handle_instr (BGTINT z1 z2)) (clight_of (BGTINT z1 z2))
