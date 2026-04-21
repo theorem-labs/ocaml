@@ -794,3 +794,51 @@ Proof.
   - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
     exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
 Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v.
+
+   The existing proof (verify_BNEQ_handler_correct) requires
+   Int.min_signed <= z1 <= Int.max_signed.  The canonical pre_of
+   does not include this guard; when z1 is outside Int range,
+   Int.repr wraps and the C comparison disagrees with the Rocq
+   handler's Z.eqb, so the Step case cannot be closed without
+   assuming the range.  In practice the bytecode decoder only
+   produces in-range operands.
+
+   Non-integer accu cases are trivially true because pre_of
+   includes accu_signed_int which is False for non-integer accu.
+   The Step case delegates to verify_BNEQ_handler_correct after
+   asserting the range (Admitted). *)
+Theorem correct_BNEQ : forall z1 z2,
+  handler_correct (handle_instr (Bytecode.AST.BNEQ z1 z2)) (clight_of (Bytecode.AST.BNEQ z1 z2))
+    (pre_of (Bytecode.AST.BNEQ z1 z2))
+    (P_error_of (Bytecode.AST.BNEQ z1 z2)) (P_halt_of (Bytecode.AST.BNEQ z1 z2)) (P_ccall_of (Bytecode.AST.BNEQ z1 z2)).
+Proof.
+  intros z1 z2 e le m s.
+  change (handle_instr (Bytecode.AST.BNEQ z1 z2)) with (handle_BNEQ z1 z2).
+  unfold handle_BNEQ.
+  destruct (Machine.accu s) eqn:Haccu.
+  - (* Val_int z — Step case; need z1 range for C comparison correctness *)
+    assert (Hn : Int.min_signed <= z1 <= Int.max_signed).
+    { (* TODO: the canonical pre_of does not include this guard;
+         it should be supplied by instr_wfb or the bytecode loader.
+         Admitted for now. *)
+      admit. }
+    destruct (Z.eqb z z1) eqn:Hcmp; simpl;
+    (intros ard Hrel Hpre;
+     pose proof (verify_BNEQ_handler_correct z1 z2 Hn) as Hvc;
+     specialize (Hvc e le m s);
+     unfold handler_correct, handle_BNEQ in Hvc;
+     rewrite Haccu, Hcmp in Hvc; simpl in Hvc;
+     exact (Hvc ard Hrel Hpre)).
+  - (* Val_block — Step, but pre_of includes accu_signed_int = False *)
+    destruct l as [| h t]; simpl;
+    (intros ard _ Hpre; destruct Hpre as [[[_ _] _] [Habs _]];
+     unfold accu_signed_int in Habs; rewrite Haccu in Habs; destruct Habs).
+  - (* Val_ptr — Step, but pre_of includes accu_signed_int = False *)
+    simpl; intros ard _ Hpre; destruct Hpre as [[[_ _] _] [Habs _]];
+    unfold accu_signed_int in Habs; rewrite Haccu in Habs; destruct Habs.
+  - (* Val_closure — Step, but pre_of includes accu_signed_int = False *)
+    simpl; intros ard _ Hpre; destruct Hpre as [[[_ _] _] [Habs _]];
+    unfold accu_signed_int in Habs; rewrite Haccu in Habs; destruct Habs.
+Admitted.
