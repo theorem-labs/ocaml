@@ -1516,6 +1516,30 @@ Inductive method_search_trace (m : mem) (accu_v : val)
       mi hi final ->
     method_search_trace m accu_v meths_b meths_ofs li hi final.
 
+(* Extract all fields from a value, using the machine heap for pointers. *)
+Definition value_all_fields (s : Machine.state) (v : value) : list value :=
+  match v with
+  | Val_block _ fs => fs
+  | Val_ptr addr =>
+    match heap_lookup s.(Machine.hp) addr with
+    | Some (_, fs) => fs
+    | None => nil
+    end
+  | _ => nil
+  end.
+
+(* Linear scan of method table pairs: fields are laid out as
+     [method0, tag0, method1, tag1, ...]
+   Scan returns the first method_fn whose paired tag matches. *)
+Fixpoint method_scan (fields : list value) (tag : value) : option value :=
+  match fields with
+  | nil => None
+  | _ :: nil => None
+  | method_fn :: tag_val :: rest =>
+    if value_eqb tag_val tag then Some method_fn
+    else method_scan rest tag
+  end.
+
 Definition getdynmet_pre
     (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   let hm := ar_heap_map ard in
@@ -1525,11 +1549,10 @@ Definition getdynmet_pre
   let so := ar_sptr_ofs ard in
   forall obj rest,
     s.(Machine.stack) = obj :: rest ->
-    forall method_fn,
-    handle_GETDYNMET (Machine.pc s) s =
-      Step (mk_state (Machine.pc s) method_fn (Machine.stack s)
-              (Machine.env s) (Machine.extra_args s) (Machine.global s)
-              (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s)) ->
+    forall class_tbl,
+      field_or_heap s obj 0 = Some class_tbl ->
+      forall method_fn,
+        method_scan (skipn 2 (value_all_fields s class_tbl)) s.(Machine.accu) = Some method_fn ->
     forall obj_cv,
       val_repr hm cb co obj obj_cv ->
       exists obj_b obj_ofs meths_v meths_b meths_ofs hi_v
@@ -1567,12 +1590,10 @@ Definition getpubmet_pre
   (exists sp_b sp_ofs,
     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
     Ptrofs.unsigned sp_ofs >= 16) /\
-  (forall method_fn,
-    handle_GETPUBMET tag (Machine.pc s) s =
-      Step (mk_state (Machine.pc s) method_fn
-              (s.(Machine.accu) :: s.(Machine.stack))
-              (Machine.env s) (Machine.extra_args s) (Machine.global s)
-              (Machine.trap_sp s) (Machine.hp s) (Machine.next_addr s)) ->
+  (forall class_tbl,
+    field_or_heap s s.(Machine.accu) 0 = Some class_tbl ->
+    forall method_fn,
+      method_scan (skipn 2 (value_all_fields s class_tbl)) (Val_int tag) = Some method_fn ->
     forall accu_cv,
       val_repr hm cb co s.(Machine.accu) accu_cv ->
       exists accu_b accu_ofs meths_b meths_ofs hi_v
