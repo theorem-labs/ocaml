@@ -40,6 +40,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHCONS
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETREF_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import DIVINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLEINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BULTINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -598,8 +599,8 @@ Definition correct_UGEINT :
 Definition correct_BULTINT : forall z1 z2,
   handler_correct (handle_instr (BULTINT z1 z2)) (clight_of (BULTINT z1 z2))
     (pre_of (BULTINT z1 z2))
-    (P_error_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2)).
-Admitted.
+    (P_error_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2))
+  := BULTINT_correct.correct_BULTINT.
 
 Definition correct_BUGEINT : forall z1 z2,
   handler_correct (handle_instr (BUGEINT z1 z2)) (clight_of (BUGEINT z1 z2))

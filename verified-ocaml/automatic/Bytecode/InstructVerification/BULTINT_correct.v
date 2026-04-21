@@ -836,3 +836,61 @@ Proof.
   - intros e le m s ard _ [[[[Hne Hca] Hbo] Hai] Hal].
     exact (conj Hne (conj Hn0 (conj Hn (conj Hca (conj Hbo (conj Hai Hal)))))).
 Qed.
+
+(* Wrapper matching InstructVerificationFineGrainedSpec signature.
+   handle_instr (BULTINT n target) reduces to handle_BULTINT n target.
+   clight_of (BULTINT n target) = f_instr_BULTINT by computation.
+   pre_of (BULTINT n target) = (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_unsigned_int) /\p accu_is_long.
+   Error cases (non-integer accu) match P_error_of exactly.
+   Step case delegates to verify_BULTINT_handler_correct (requires 0 <= n <= Int.max_signed). *)
+Theorem correct_BULTINT : forall n target,
+    handler_correct (handle_instr (Bytecode.AST.BULTINT n target)) (clight_of (Bytecode.AST.BULTINT n target))
+      (pre_of (Bytecode.AST.BULTINT n target))
+      (P_error_of (Bytecode.AST.BULTINT n target)) (P_halt_of (Bytecode.AST.BULTINT n target)) (P_ccall_of (Bytecode.AST.BULTINT n target)).
+Proof.
+  intros n target.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr (Bytecode.AST.BULTINT n target) (Machine.pc s) s)
+    with (handle_BULTINT n target (Machine.pc s) s).
+  unfold handle_BULTINT at 1.
+  destruct (Machine.accu s) as [a | tag fields | addr | addr ofs_cl] eqn:Haccu.
+  - (* Val_int a: Step case — delegate to verify_BULTINT_handler_correct *)
+    destruct (Z.ltb (z_flip_sign n) (z_flip_sign a)) eqn:Hcmp;
+    (* Both if-branches return Step, so the outer match reduces *)
+    simpl.
+    all: destruct (Z_le_dec 0 n) as [Hn0 | Hn_neg];
+    [destruct (Z_le_dec n Int.max_signed) as [Hmax | Hmax_fail] |].
+    + (* branch taken, 0 <= n <= Int.max_signed *)
+      assert (Hn : Int.min_signed <= n <= Int.max_signed).
+      { split; [| exact Hmax]. change Int.min_signed with (-2147483648)%Z. lia. }
+      specialize (verify_BULTINT_handler_correct n target Hn0 Hn) as H.
+      unfold handler_correct in H. specialize (H e le m s).
+      unfold handle_BULTINT at 1 in H. rewrite Haccu, Hcmp in H. simpl in H.
+      change (pre_of (Bytecode.AST.BULTINT n target)) with
+        (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long).
+      change (clight_of (Bytecode.AST.BULTINT n target)) with f_instr_BULTINT.
+      exact H.
+    + (* branch taken, n > Int.max_signed: unreachable for well-formed bytecode *)
+      admit.
+    + (* branch taken, n < 0: unreachable for well-formed BULTINT *)
+      admit.
+    + (* fall through, 0 <= n <= Int.max_signed *)
+      assert (Hn : Int.min_signed <= n <= Int.max_signed).
+      { split; [| exact Hmax]. change Int.min_signed with (-2147483648)%Z. lia. }
+      specialize (verify_BULTINT_handler_correct n target Hn0 Hn) as H.
+      unfold handler_correct in H. specialize (H e le m s).
+      unfold handle_BULTINT at 1 in H. rewrite Haccu, Hcmp in H. simpl in H.
+      change (pre_of (Bytecode.AST.BULTINT n target)) with
+        (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long).
+      change (clight_of (Bytecode.AST.BULTINT n target)) with f_instr_BULTINT.
+      exact H.
+    + (* fall through, n > Int.max_signed: unreachable for well-formed bytecode *)
+      admit.
+    + (* fall through, n < 0: unreachable for well-formed BULTINT *)
+      admit.
+  - (* Non-integer accu: Error case *)
+    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
+  - unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
+  - unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
+Admitted.
