@@ -13,6 +13,7 @@ From Stdlib Require Import Strings.String.
 From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
+From OCamlInterp.Manual.Bytecode.Interpret Require Export Helpers.
 From RecordUpdate Require Import RecordUpdate.
 Open Scope string_scope.
 Open Scope Z_scope.
@@ -33,36 +34,6 @@ Definition z_lsr (a b : Z) : Z := Z.shiftr (z_unsigned a) b.
    in OCaml, (1 lsl 62) = min_int, and (a lxor min_int) gives the unsigned comparison trick.
    Used to implement BULTINT/BUGEINT/ULTINT/UGEINT with correct unsigned semantics. *)
 Definition z_flip_sign (a : Z) : Z := Z.lxor a (Z.shiftl 1 (word_bits - 1)).
-
-Definition get_code_ptr_from (fields : list value) (ofs : nat) : option Z :=
-  match nth_error fields ofs with
-  | Some (Val_int pc) => Some pc
-  | _ => None
-  end.
-
-Definition get_code_ptr_s (s : state) (v : value) : option Z :=
-  match v with
-  | Val_block t fields =>
-    if Nat.eqb t Closure_tag then
-      match fields with Val_int pc :: _ => Some pc | _ => None end
-    else None
-  | Val_closure addr ofs =>
-    match heap_lookup s.(hp) addr with
-    | Some (t, fields) =>
-      if Nat.eqb t Closure_tag then get_code_ptr_from fields ofs
-      else None
-    | None => None
-    end
-  | Val_ptr addr =>
-    match heap_lookup s.(hp) addr with
-    | Some (t, fields) =>
-      if Nat.eqb t Closure_tag then
-        match fields with Val_int pc :: _ => Some pc | _ => None end
-      else None
-    | None => None
-    end
-  | _ => None
-  end.
 
 (* Predefined exception values (tag=248, fields=[name_string, unique_id]).
    Ids match OCaml runtime: Division_by_zero=-6. *)

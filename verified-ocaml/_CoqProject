@@ -11,6 +11,7 @@ manual/Bytecode/IO.v
 manual/Bytecode/Interpret/InstructSpec.v
 manual/Bytecode/Interpret/Dispatch.v
 manual/Bytecode/Interpret/HandleInstrSpec.v
+manual/Bytecode/Interpret/Helpers.v
 manual/Bytecode/Interpret/Handlers.v
 manual/Bytecode/Interpret/MetaSpec.v
 manual/Bytecode/Interpret/Run.v
