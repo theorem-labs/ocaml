@@ -72,6 +72,20 @@ Definition bytecode_behavior (fuel : nat) (code : list instruction)
 
 (* === The Spec === *)
 
+Definition behavior_equiv (b1 b2 : behavior) :=
+  let t1 := b1.(trace)  in let t2 := b2.(trace)  in
+  let r1 := b1.(result) in let r2 := b2.(result) in
+  let n := Nat.min (List.length t1) (List.length t2) in
+  List.firstn n t1 = List.firstn n t2
+  /\
+  match r1, r2 with
+  | Term_timeout, _ | _, Term_timeout => True
+  | Term_normal _, Term_normal _
+  | Term_error _, Term_error _
+     => List.length t1 = List.length t2
+  | (Term_normal _ | Term_error _), _ => False
+  end.
+
 Module Type CompileSpec.
 
   (* Compiler (provided by Untrusted) *)
@@ -80,21 +94,14 @@ Module Type CompileSpec.
   (* Source interpreter (provided by semi-auto, checked by Untrusted) *)
   Parameter interpret : nat -> program -> behavior.
 
-  (* Correctness: if the source interpreter terminates normally with some
-     output trace, then there exists enough bytecode fuel such that the
-     compiled code also terminates normally with the same trace. *)
+  (* Correctness: the traces always match up to the end of the shortest
+     trace; the interpreter terminates if and only if the compiled bytecode
+     terminates, in which case the length of the traces match as well and
+     the interpreter errors if and only if the compiled bytecode also
+     errors. *)
   Axiom compiler_correctness :
-    forall (prog : program) (src_fuel : nat),
-      match interpret src_fuel prog with
-      | {| trace := src_trace; result := Term_normal _ |} =>
-        exists (bc_fuel : nat),
-          let bc := bytecode_behavior bc_fuel (compile_program prog) [] in
-          bc.(trace) = src_trace /\
-          match bc.(result) with
-          | Term_normal _ => True
-          | _ => False
-          end
-      | _ => True
-      end.
+    forall (prog : program) (src_fuel bc_fuel : nat),
+      behavior_equiv (interpret src_fuel prog)
+                     (bytecode_behavior bc_fuel (compile_program prog) []).
 
 End CompileSpec.

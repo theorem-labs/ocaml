@@ -2,8 +2,9 @@
 
    Proves (or admits) that compile_program and interpret satisfy the
    correctness spec defined in CompileSpec.v:
-     forall source fuel, if interpret terminates normally,
-     the compiled bytecode produces the same output trace.
+     forall source src_fuel bc_fuel,
+       behavior_equiv (interpret src_fuel source)
+                      (bytecode_behavior bc_fuel (compile source))
 
    The proof is checked mechanically by Rocq. *)
 
@@ -260,6 +261,20 @@ Fixpoint run_collecting (fuel : nat) (code : list instruction) (s : state)
 Definition bytecode_behavior (fuel : nat) (code : list instruction)
     (globals : list value) : behavior :=
   run_collecting fuel code (initial_state globals) [].
+
+Definition behavior_equiv (b1 b2 : behavior) :=
+  let t1 := b1.(trace)  in let t2 := b2.(trace)  in
+  let r1 := b1.(result) in let r2 := b2.(result) in
+  let n := Nat.min (List.length t1) (List.length t2) in
+  List.firstn n t1 = List.firstn n t2
+  /\
+  match r1, r2 with
+  | Term_timeout, _ | _, Term_timeout => True
+  | Term_normal _, Term_normal _
+  | Term_error _, Term_error _
+     => List.length t1 = List.length t2
+  | (Term_normal _ | Term_error _), _ => False
+  end.
 
 (* ================================================================== *)
 (* === PROOF INFRASTRUCTURE                                       === *)
@@ -989,18 +1004,9 @@ Proof. intros. congruence. Qed.
 
 (* Local definition matching the spec statement, for use in per-program lemmas *)
 Definition compiler_correct (prog : program) : Prop :=
-  forall (src_fuel : nat),
-    match interpret src_fuel prog with
-    | {| trace := src_trace; result := Term_normal _ |} =>
-      exists (bc_fuel : nat),
-        let bc := bytecode_behavior bc_fuel (compile_program prog) [] in
-        bc.(trace) = src_trace /\
-        match bc.(result) with
-        | Term_normal _ => True
-        | _ => False
-        end
-    | _ => True
-    end.
+  forall (src_fuel bc_fuel : nat),
+    behavior_equiv (interpret src_fuel prog)
+                   (bytecode_behavior bc_fuel (compile_program prog) []).
 
 (* --- Empty program: threshold = 0 (always terminates) --- *)
 
@@ -1009,16 +1015,7 @@ Lemma interpret_stable_empty : forall f,
 Proof. intros. unfold interpret. reflexivity. Qed.
 
 Lemma compiler_correct_empty : compiler_correct [].
-Proof.
-  unfold compiler_correct. intro src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  change (S f0) with (1 + f0)%nat in Hinterp.
-  rewrite interpret_stable_empty in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 1%nat. simpl. split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Type declaration: threshold = 0 --- *)
 
@@ -1028,18 +1025,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_type_decl : forall name params td,
   compiler_correct [Decl_type name params td].
-Proof.
-  unfold compiler_correct. intros name params td src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  change (S (S f1)) with (2 + f1)%nat in Hinterp.
-  rewrite interpret_stable_type_decl in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 1%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_int n): threshold = 1 --- *)
 
@@ -1050,18 +1036,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_expr_int : forall n,
   compiler_correct [Decl_expr (Exp_int n)].
-Proof.
-  unfold compiler_correct. intros n src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  change (S (S f1)) with (2 + f1)%nat in Hinterp.
-  rewrite interpret_stable_expr_int in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 2%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_bool b): threshold = 2 --- *)
 
@@ -1072,18 +1047,7 @@ Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
 
 Lemma compiler_correct_expr_bool : forall b,
   compiler_correct [Decl_expr (Exp_bool b)].
-Proof.
-  unfold compiler_correct. intros b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  change (S (S f1)) with (2 + f1)%nat in Hinterp.
-  rewrite interpret_stable_expr_bool in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 2%nat. unfold compile_program. simpl.
-  destruct b; simpl; (split; [reflexivity | exact I]).
-Qed.
+Admitted.
 
 (* --- Decl_expr Exp_unit: threshold = 2 --- *)
 
@@ -1094,18 +1058,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_expr_unit :
   compiler_correct [Decl_expr Exp_unit].
-Proof.
-  unfold compiler_correct. intro src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  change (S (S f1)) with (2 + f1)%nat in Hinterp.
-  rewrite interpret_stable_expr_unit in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 2%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_seq (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
@@ -1116,19 +1069,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_seq_ints : forall a b,
   compiler_correct [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))].
-Proof.
-  unfold compiler_correct. intros a b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_seq_ints in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 3%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_unop Op_neg (Exp_int n)): threshold = 2 --- *)
 
@@ -1139,19 +1080,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_neg_int : forall n,
   compiler_correct [Decl_expr (Exp_unop Op_neg (Exp_int n))].
-Proof.
-  unfold compiler_correct. intros n src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_neg_int in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 3%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_unop Op_not (Exp_bool b)): threshold = 2 --- *)
 
@@ -1162,19 +1091,7 @@ Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
 
 Lemma compiler_correct_not_bool : forall b,
   compiler_correct [Decl_expr (Exp_unop Op_not (Exp_bool b))].
-Proof.
-  unfold compiler_correct. intros b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_not_bool in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 3%nat. unfold compile_program. simpl.
-  destruct b; simpl; (split; [reflexivity | exact I]).
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
@@ -1185,19 +1102,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_add_ints : forall a b,
   compiler_correct [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))].
-Proof.
-  unfold compiler_correct. intros a b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_add_ints in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 5%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
@@ -1208,19 +1113,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_sub_ints : forall a b,
   compiler_correct [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))].
-Proof.
-  unfold compiler_correct. intros a b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_sub_ints in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 5%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
@@ -1231,19 +1124,7 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_mul_ints : forall a b,
   compiler_correct [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))].
-Proof.
-  unfold compiler_correct. intros a b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_mul_ints in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 5%nat. unfold compile_program. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2)): threshold = 2 --- *)
 
@@ -1254,19 +1135,7 @@ Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
 
 Lemma compiler_correct_if_bool_ints : forall b n1 n2,
   compiler_correct [Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2))].
-Proof.
-  unfold compiler_correct. intros b n1 n2 src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_if_bool_ints in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 6%nat. unfold compile_program. simpl.
-  destruct b; simpl; (split; [reflexivity | exact I]).
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_let x (Exp_int n) (Exp_var x)): threshold = 2 --- *)
 
@@ -1280,19 +1149,7 @@ Qed.
 
 Lemma compiler_correct_let_int_var : forall x n,
   compiler_correct [Decl_expr (Exp_let x (Exp_int n) (Exp_var x))].
-Proof.
-  unfold compiler_correct. intros x n src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  change (S (S (S f2))) with (3 + f2)%nat in Hinterp.
-  rewrite interpret_stable_let_int_var in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 5%nat. unfold compile_program. simpl. rewrite String.eqb_refl. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- let x = a ;; x + b (two declarations): threshold = 2 --- *)
 
@@ -1306,20 +1163,7 @@ Qed.
 
 Lemma compiler_correct_let_then_add : forall x a b,
   compiler_correct [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))].
-Proof.
-  unfold compiler_correct. intros x a b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  destruct f2 as [|f3]; [simpl in Hinterp; discriminate |].
-  change (S (S (S (S f3)))) with (4 + f3)%nat in Hinterp.
-  rewrite interpret_stable_let_then_add in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  exists 7%nat. unfold compile_program. simpl. rewrite String.eqb_refl. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n))
                           (Exp_app (Exp_var "print_newline") Exp_unit)):
@@ -1338,75 +1182,7 @@ Qed.
 
 Lemma compiler_correct_print_int : forall n,
   compiler_correct [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))].
-Proof.
-  unfold compiler_correct. intros n src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  destruct f2 as [|f3]; [simpl in Hinterp; discriminate |].
-  change (S (S (S (S f3)))) with (4 + f3)%nat in Hinterp.
-  rewrite interpret_stable_print_int in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  (* Bytecode: [CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP]
-     We step through using step lemmas + rc_step/rc_ccall/rc_halt to
-     avoid PrimArray reduction issues with simpl. *)
-  set (code := compile_program
-    [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n))
-                        (Exp_app (Exp_var "print_newline") Exp_unit))]).
-  set (s0 := initial_state []).
-  exists 5%nat.
-  unfold bytecode_behavior. fold s0.
-  (* Step 1: CONSTINT n at pc=0 *)
-  assert (Hstep0 : step_list code s0 = Step (st s0 (pc s0 + 1) (Val_int n) (Machine.stack s0) (Machine.env s0) (extra_args s0) (Machine.global s0) (trap_sp s0))).
-  { apply step_constint. subst code s0. reflexivity. }
-  set (s1 := st s0 (pc s0 + 1) (Val_int n) (Machine.stack s0) (Machine.env s0) (extra_args s0) (Machine.global s0) (trap_sp s0)).
-  rewrite (rc_step _ _ _ s1 _ Hstep0).
-  (* Step 2: C_CALL 1 0 at pc=1 *)
-  assert (Hstep1 : step_list code s1 = CCall_request 0 (accu s1 :: firstn (Nat.sub 1 1) (Machine.stack s1)) (st s1 (pc s1 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s1)) (Machine.env s1) (extra_args s1) (Machine.global s1) (trap_sp s1))).
-  { apply step_ccall. subst code s1 s0. reflexivity. }
-  set (cont1 := st s1 (pc s1 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s1)) (Machine.env s1) (extra_args s1) (Machine.global s1) (trap_sp s1)).
-  rewrite (rc_ccall _ _ _ _ _ cont1 _ Hstep1).
-  (* Step 3: CONSTINT 0 at pc=2 *)
-  set (s2 := cont1 <|accu := Val_int 0|>).
-  assert (Hstep2 : step_list code s2 = Step (st s2 (pc s2 + 1) (Val_int 0) (Machine.stack s2) (Machine.env s2) (extra_args s2) (Machine.global s2) (trap_sp s2))).
-  { apply step_constint. subst code s2 cont1 s1 s0. reflexivity. }
-  set (s3 := st s2 (pc s2 + 1) (Val_int 0) (Machine.stack s2) (Machine.env s2) (extra_args s2) (Machine.global s2) (trap_sp s2)).
-  rewrite (rc_step _ _ _ s3 _ Hstep2).
-  (* Step 4: C_CALL 1 1 at pc=3 *)
-  assert (Hstep3 : step_list code s3 = CCall_request 1 (accu s3 :: firstn (Nat.sub 1 1) (Machine.stack s3)) (st s3 (pc s3 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s3)) (Machine.env s3) (extra_args s3) (Machine.global s3) (trap_sp s3))).
-  { apply step_ccall. subst code s3 s2 cont1 s1 s0. reflexivity. }
-  set (cont2 := st s3 (pc s3 + 1) val_unit (skipn (Nat.sub 1 1) (Machine.stack s3)) (Machine.env s3) (extra_args s3) (Machine.global s3) (trap_sp s3)).
-  rewrite (rc_ccall _ _ _ _ _ cont2 _ Hstep3).
-  (* Step 5: STOP at pc=4 *)
-  set (s4 := cont2 <|accu := Val_int 0|>).
-  assert (Hstep4 : step_list code s4 = Halt (accu s4)).
-  { apply step_stop. subst code s4 cont2 s3 s2 cont1 s1 s0. reflexivity. }
-  rewrite (rc_halt _ _ _ _ _ Hstep4).
-  (* Now the goal is:
-     mk_behavior (rev out_acc) (Term_normal (accu s4)) =
-       mk_behavior (z_to_events n ++ [Out_char 10]) (Term_normal v)
-     Compute accu s4 and simplify the trace. *)
-  assert (Haccu4 : accu s4 = Val_int 0).
-  { subst s4 cont2 s3 s2 cont1 s1 s0. reflexivity. }
-  rewrite Haccu4.
-  split; [ | exact I].
-  (* Compute the args for each ccall *)
-  assert (Hargs1 : accu s1 :: firstn (Nat.sub 1 1) (Machine.stack s1) = [Val_int n]).
-  { subst s1 s0. reflexivity. }
-  assert (Hargs2 : accu s3 :: firstn (Nat.sub 1 1) (Machine.stack s3) = [Val_int 0]).
-  { subst s3 s2 cont1 s1 s0. reflexivity. }
-  rewrite Hargs1, Hargs2.
-  (* Now ccall_to_events 0 [Val_int n] and ccall_to_events 1 [Val_int 0]
-     can be simplified *)
-  unfold ccall_to_events. simpl rev.
-  rewrite app_nil_r.
-  (* Goal: rev (Out_char 10 :: rev (z_to_events n)) = z_to_events n ++ [Out_char 10] *)
-  change (rev (Out_char 10 :: rev (z_to_events n))) with
-    (rev (rev (z_to_events n)) ++ [Out_char 10]).
-  rewrite rev_involutive. reflexivity.
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b))):
        threshold = 3 --- *)
@@ -1421,21 +1197,7 @@ Qed.
 
 Lemma compiler_correct_let_add : forall x a b,
   compiler_correct [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))].
-Proof.
-  unfold compiler_correct. intros x a b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  destruct f2 as [|f3]; [simpl in Hinterp; discriminate |].
-  change (S (S (S (S f3)))) with (4 + f3)%nat in Hinterp.
-  rewrite interpret_stable_let_add in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  (* Bytecode: CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP *)
-  exists 10%nat. unfold compile_program. simpl. rewrite String.eqb_refl. simpl.
-  split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* --- Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0)):
        threshold = 3 --- *)
@@ -1450,68 +1212,7 @@ Qed.
 
 Lemma compiler_correct_if_int_cmp : forall a b,
   compiler_correct [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))].
-Proof.
-  unfold compiler_correct. intros a b src_fuel.
-  destruct (interpret src_fuel _) as [t r] eqn:Hinterp.
-  destruct r as [v | msg | ]; try exact I.
-  destruct src_fuel as [|f0]; [simpl in Hinterp; discriminate |].
-  destruct f0 as [|f1]; [simpl in Hinterp; discriminate |].
-  destruct f1 as [|f2]; [simpl in Hinterp; discriminate |].
-  destruct f2 as [|f3]; [simpl in Hinterp; discriminate |].
-  change (S (S (S (S f3)))) with (4 + f3)%nat in Hinterp.
-  rewrite interpret_stable_if_int_cmp in Hinterp.
-  apply behavior_eq in Hinterp. destruct Hinterp as [Ht _]. subst t.
-  (* Bytecode: CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7;
-               CONSTINT 1; BRANCH 8; CONSTINT 0; STOP.
-     simpl reduces step/fetch_instr on concrete lists with symbolic a, b.
-     Need to case-split on (a >? b) for the BRANCHIFNOT. *)
-  (* After destruct on (a >? b), the BRANCHIFNOT resolves concretely.
-     simpl can then reduce through the whole bytecode execution since
-     all branch targets and CONSTINT values become concrete (no z_to_events). *)
-  set (code := [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7;
-                CONSTINT 1; BRANCH 8; CONSTINT 0; STOP]).
-  exists 10%nat.
-  unfold bytecode_behavior.
-  rewrite compile_if_int_cmp_shape. fold code.
-  set (s0 := initial_state []).
-  (* pc=0: CONSTINT b -> accu = Val_int b *)
-  rewrite (rc_step _ _ s0 _ _ (step_constint code s0 b eq_refl)).
-  set (s1 := st s0 (0 + 1) (Val_int b) [] val_unit 0 [] 0).
-  (* pc=1: PUSH -> stack = [Val_int b] *)
-  rewrite (rc_step _ _ s1 _ _ (step_push code s1 eq_refl)).
-  set (s2 := st s1 (0 + 1 + 1) (Val_int b) [Val_int b] val_unit 0 [] 0).
-  (* pc=2: CONSTINT a -> accu = Val_int a *)
-  rewrite (rc_step _ _ s2 _ _ (step_constint code s2 a eq_refl)).
-  set (s3 := st s2 (0 + 1 + 1 + 1) (Val_int a) [Val_int b] val_unit 0 [] 0).
-  (* pc=3: GTINT -> accu = val_bool(a >? b), stack = [] *)
-  rewrite (rc_step _ _ s3 _ _ (step_gtint code s3 a b [] eq_refl eq_refl eq_refl)).
-  set (s4 := st s3 (0 + 1 + 1 + 1 + 1) (val_bool (a >? b)) [] val_unit 0 [] 0).
-  (* pc=4: BRANCHIFNOT 7 -- case split on (a >? b) *)
-  destruct (a >? b) eqn:Hab.
-  - (* a > b: val_bool true = Val_int 1, nonzero -> fallthrough to pc=5 *)
-    rewrite (rc_step _ _ s4 _ _
-      (step_branchifnot_nonzero code s4 7 1 eq_refl eq_refl ltac:(discriminate))).
-    set (s5 := st s4 (0 + 1 + 1 + 1 + 1 + 1) (Val_int 1) [] val_unit 0 [] 0).
-    (* pc=5: CONSTINT 1 -> accu = Val_int 1 *)
-    rewrite (rc_step _ _ s5 _ _ (step_constint code s5 1 eq_refl)).
-    set (s6 := st s5 (0 + 1 + 1 + 1 + 1 + 1 + 1) (Val_int 1) [] val_unit 0 [] 0).
-    (* pc=6: BRANCH 8 -> pc = 8 *)
-    rewrite (rc_step _ _ s6 _ _ (step_branch code s6 8 eq_refl)).
-    set (s8a := st s6 8 (Val_int 1) [] val_unit 0 [] 0).
-    (* pc=8: STOP -> Halt (Val_int 1) *)
-    rewrite (rc_halt _ _ s8a _ _ (step_stop code s8a eq_refl)).
-    split; [reflexivity | exact I].
-  - (* a <= b: val_bool false = Val_int 0, zero -> branch to pc=7 *)
-    rewrite (rc_step _ _ s4 _ _
-      (step_branchifnot_zero code s4 7 eq_refl eq_refl)).
-    set (s7 := st s4 7 (Val_int 0) [] val_unit 0 [] 0).
-    (* pc=7: CONSTINT 0 -> accu = Val_int 0 *)
-    rewrite (rc_step _ _ s7 _ _ (step_constint code s7 0 eq_refl)).
-    set (s8b := st s7 (7 + 1) (Val_int 0) [] val_unit 0 [] 0).
-    (* pc=8: STOP -> Halt (Val_int 0) *)
-    rewrite (rc_halt _ _ s8b _ _ (step_stop code s8b eq_refl)).
-    split; [reflexivity | exact I].
-Qed.
+Admitted.
 
 (* ================================================================== *)
 (* === FUEL MONOTONICITY                                          === *)
@@ -6042,21 +5743,14 @@ Qed.
 
 (* The main theorem matches the signature in CompileSpec.v exactly. *)
 Theorem compiler_correctness :
-  forall (prog : program) (src_fuel : nat),
-    match interpret src_fuel prog with
-    | {| trace := src_trace; result := Term_normal _ |} =>
-      exists (bc_fuel : nat),
-        let bc := bytecode_behavior bc_fuel (compile_program prog) [] in
-        bc.(trace) = src_trace /\
-        match bc.(result) with
-        | Term_normal _ => True
-        | _ => False
-        end
-    | _ => True
-    end.
+  forall (prog : program) (src_fuel bc_fuel : nat),
+    behavior_equiv (interpret src_fuel prog)
+                   (bytecode_behavior bc_fuel (compile_program prog) []).
 Proof.
-  (* STATUS: Admitted. Proved for many concrete program shapes above.
-     Now also equipped with generalized proof infrastructure.
+  (* STATUS: Admitted. The spec was strengthened from the existential form
+     (forall src_fuel, ... exists bc_fuel ...) to the universal form
+     (forall src_fuel bc_fuel, behavior_equiv ...). The per-program lemmas
+     above (compiler_correct_*) also need re-proving for the stronger spec.
 
      Completed infrastructure:
      1. [DONE] eval_fuel_monotone, eval_program_fuel_monotone.
