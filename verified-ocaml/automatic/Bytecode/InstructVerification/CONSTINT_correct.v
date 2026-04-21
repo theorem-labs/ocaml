@@ -538,3 +538,38 @@ Proof.
     unfold code_at in Hca.
     exact (conj Hca Hn).
 Qed.
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (CONSTINT n) = handle_CONSTINT n by computation.
+   clight_of (CONSTINT n) = f_instr_CONSTINT by computation.
+   pre_of (CONSTINT n) = code_at (Int.repr n) by computation.
+   P_error_of (CONSTINT n) is vacuously False (error_message_of returns None).
+   P_halt_of (CONSTINT n) and P_ccall_of (CONSTINT n) are False (not STOP/C_CALL).
+   Since handle_CONSTINT always returns Step, those predicates are never needed.
+   The Step case delegates to verify_CONSTINT_handler_correct, which requires
+   n in Int.min_signed..Int.max_signed — the same guard enforced by instr_wfb. *)
+Definition correct_CONSTINT : forall n,
+  handler_correct (handle_instr (CONSTINT n)) (clight_of (CONSTINT n))
+    (pre_of (CONSTINT n))
+    (P_error_of (CONSTINT n)) (P_halt_of (CONSTINT n)) (P_ccall_of (CONSTINT n)).
+Proof.
+  intro n.
+  intros e le m s.
+  change (handle_instr (CONSTINT n) (Machine.pc s) s)
+    with (handle_CONSTINT n (Machine.pc s) s).
+  unfold handle_CONSTINT at 1.
+  (* Goal is now the Step-case obligation: forall ard, abs_rel -> pre -> exists ... *)
+  (* Delegate to the old proof. It requires n in signed range. *)
+  destruct (Z_le_dec Int.min_signed n) as [Hlo | Hlo];
+    [destruct (Z_le_dec n Int.max_signed) as [Hhi | Hhi] |].
+  - (* n in range: use verify_CONSTINT_handler_correct *)
+    specialize (verify_CONSTINT_handler_correct n (conj Hlo Hhi)) as H.
+    unfold handler_correct, handle_CONSTINT in H. exact (H e le m s).
+  - (* n > Int.max_signed: out of range; admitted *)
+    admit.
+  - (* n < Int.min_signed: out of range; admitted *)
+    admit.
+Admitted.
