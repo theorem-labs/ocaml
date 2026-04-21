@@ -33,7 +33,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -406,4 +406,32 @@ Proof.
       { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore. apply Hsb_writable. exact Hofs'. }
     }
   }
+Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr NEGINT / clight_of NEGINT / pre_of NEGINT are convertible
+   with handle_NEGINT / f_instr_NEGINT / accu_is_long.
+   P_halt_of and P_ccall_of are vacuously satisfied (NEGINT never halts or
+   issues a C call).  P_error_of requires a small computation bridge. *)
+Definition correct_NEGINT :
+    handler_correct (handle_instr NEGINT) (clight_of NEGINT)
+      (pre_of NEGINT)
+      (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT).
+Proof.
+  intros e le m s.
+  change (handle_instr NEGINT (Machine.pc s) s)
+    with (handle_NEGINT (Machine.pc s) s).
+  unfold handle_NEGINT at 1.
+  destruct (Machine.accu s) eqn:Haccu.
+  - (* Val_int z: Step case — delegate to verify_NEGINT_compl_comp *)
+    specialize (verify_NEGINT_compl_comp e le m s) as Hold.
+    unfold handler_correct, handle_NEGINT in Hold.
+    rewrite Haccu in Hold.
+    exact Hold.
+  - (* Val_block: Error case *)
+    unfold P_error_of. simpl. rewrite Haccu. reflexivity.
+  - (* Val_ptr: Error case *)
+    unfold P_error_of. simpl. rewrite Haccu. reflexivity.
+  - (* Val_closure: Error case *)
+    unfold P_error_of. simpl. rewrite Haccu. reflexivity.
 Qed.

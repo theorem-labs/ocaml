@@ -15,8 +15,12 @@ From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ASSIGN_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LSLINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LSRINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SUBINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import NEGINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ANDINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ADDINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MULINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -385,8 +389,8 @@ Definition correct_NEGINT :
 Definition correct_ADDINT :
   handler_correct (handle_instr ADDINT) (clight_of ADDINT)
     (pre_of ADDINT)
-    (P_error_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT).
-Admitted.
+    (P_error_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT)
+  := ADDINT_correct.correct_ADDINT.
 
 Definition correct_SUBINT :
   handler_correct (handle_instr SUBINT) (clight_of SUBINT)
@@ -439,14 +443,14 @@ Definition correct_LSLINT :
 Definition correct_LSRINT :
   handler_correct (handle_instr LSRINT) (clight_of LSRINT)
     (pre_of LSRINT)
-    (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT).
-Admitted.
+    (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT)
+  := LSRINT_correct.correct_LSRINT.
 
 Definition correct_ASRINT :
   handler_correct (handle_instr ASRINT) (clight_of ASRINT)
     (pre_of ASRINT)
-    (P_error_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT).
-Admitted.
+    (P_error_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT)
+  := ASRINT_correct.correct_ASRINT.
 
 Definition correct_EQ :
   handler_correct (handle_instr EQ) (clight_of EQ)
