@@ -3,14 +3,14 @@
    RAISE pops a trap frame from the stack, restoring pc, sp, trap_sp,
    env, and extra_args.  This is the exception-raising instruction.
 
-   C code (f_instr_RAISE_NOTRACE):
-     _t'11 = s->trap_sp;   s->sp = _t'11;
-     _t'9 = s->sp;  _t'10 = *(cast _t'9 (tptr(tptr tint)) + 0);  s->pc = _t'10;
-     _t'6 = s->sp;  _t'7 = s->sp;  _t'8 = *(_t'7 + 1);
-     s->trap_sp = _t'6 + (_t'8 >> 1);
-     _t'4 = s->sp;  _t'5 = *(_t'4 + 2);  s->env = _t'5;
-     _t'2 = s->sp;  _t'3 = *(_t'2 + 3);  s->extra_args = _t'3 >> 1;
-     _t'1 = s->sp;  s->sp = _t'1 + 4;
+   C code (f_instr_RAISE_NOTRACE), live path (dead Sifthenelse branch elided):
+     _t'12 = s->trap_sp;   s->sp = _t'12;
+     _t'10 = s->sp;  _t'11 = *(cast _t'10 (tptr(tptr tint)) + 0);  s->pc = _t'11;
+     _t'7 = s->sp;  _t'8 = s->sp;  _t'9 = *(_t'8 + 1);
+     s->trap_sp = _t'7 + (_t'9 >> 1);
+     _t'5 = s->sp;  _t'6 = *(_t'5 + 2);  s->env = _t'6;
+     _t'3 = s->sp;  _t'4 = *(_t'3 + 3);  s->extra_args = _t'4 >> 1;
+     _t'2 = s->sp;  s->sp = _t'2 + 4;
      return 0;
 
    NO AXIOMS. *)
@@ -382,23 +382,30 @@ Proof.
       { apply (load_after_store_other m3 m4 sb (Ptrofs.unsigned so +24) (Ptrofs.unsigned so +16) env_cv _ Hstore4 Hsp_m3). left. lia. }
 
       (* Witnesses *)
-      set (le1 := PTree.set _t'11 (Vptr ts_b ts_ofs) le).
-      set (le2 := PTree.set _t'9 (Vptr ts_b ts_ofs) le1).
-      set (le3 := PTree.set _t'10 (Vptr pc_b pc_ofs) le2).
-      set (le4 := PTree.set _t'6 (Vptr ts_b ts_ofs) le3).
-      set (le5 := PTree.set _t'7 (Vptr ts_b ts_ofs) le4).
-      set (le6 := PTree.set _t'8 (Vlong (Int64.repr (prev_tsp * 2 + 1))) le5).
-      set (le7 := PTree.set _t'4 (Vptr ts_b ts_ofs) le6).
-      set (le8 := PTree.set _t'5 env_cv le7).
-      set (le9 := PTree.set _t'2 (Vptr ts_b ts_ofs) le8).
-      set (le10 := PTree.set _t'3 (Vlong (Int64.repr (saved_ea * 2 + 1))) le9).
-      set (le11 := PTree.set _t'1 (Vptr ts_b ts_ofs) le10).
+      set (le1 := PTree.set _t'12 (Vptr ts_b ts_ofs) le).
+      set (le2 := PTree.set _t'10 (Vptr ts_b ts_ofs) le1).
+      set (le3 := PTree.set _t'11 (Vptr pc_b pc_ofs) le2).
+      set (le4 := PTree.set _t'7 (Vptr ts_b ts_ofs) le3).
+      set (le5 := PTree.set _t'8 (Vptr ts_b ts_ofs) le4).
+      set (le6 := PTree.set _t'9 (Vlong (Int64.repr (prev_tsp * 2 + 1))) le5).
+      set (le7 := PTree.set _t'5 (Vptr ts_b ts_ofs) le6).
+      set (le8 := PTree.set _t'6 env_cv le7).
+      set (le9 := PTree.set _t'3 (Vptr ts_b ts_ofs) le8).
+      set (le10 := PTree.set _t'4 (Vlong (Int64.repr (saved_ea * 2 + 1))) le9).
+      set (le11 := PTree.set _t'2 (Vptr ts_b ts_ofs) le10).
 
       exists le11, m6, (Out_return (Some (Vint (Int.repr 0), tint))).
       split.
 
       (* Part 1: exec *)
       {
+        (* The new fn_body starts with a dead Sifthenelse (condition = 0). *)
+        apply exec_Sseq_1 with (t1 := E0) (le1 := le) (m1 := m).
+        { eapply exec_Sifthenelse with (b := false).
+          - econstructor.
+          - reflexivity.
+          - constructor. }
+        (* Now handle the live RAISE_NOTRACE code. *)
         apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m1).
         { apply (eval_stmt_to_exec clight_ge 15). eval_cbn.
           rewrite Hle_s; eval_cbn. try rewrite Hco; eval_cbn. try rewrite Htrap_offset; eval_cbn.
@@ -577,7 +584,7 @@ Proof.
 
         assert (Hle_s6 : le11 ! _s = Some (Vptr sb so)).
         { subst le11 le10 le9 le8 le7 le6 le5 le4 le3 le2 le1.
-          repeat (rewrite PTree.gso by (compute; congruence)). exact Hle_s. }
+          repeat (try rewrite PTree.gso by (compute; congruence)). exact Hle_s. }
 
         split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
@@ -661,8 +668,10 @@ Proof.
       destruct ft2 as [| v2 ft3]; try (inversion H; reflexivity).
       destruct ft3 as [| v3 ft4]; try (inversion H; reflexivity).
       destruct v3; try (inversion H; reflexivity).
-      discriminate.
 Qed.
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
 
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr RAISE_NOTRACE / clight_of RAISE_NOTRACE / pre_of RAISE_NOTRACE are
@@ -679,14 +688,14 @@ Proof.
     with (do_raise s.(accu) s).
   pose proof (verify_RAISE_NOTRACE_correct e le m s) as H.
   unfold handler_correct in H. simpl in H.
-  destruct (do_raise (accu s) s) eqn:Hdo.
+  destruct (do_raise (accu s) s) as [s'|v|msg|n' args s'] eqn:Hdo.
   - (* Step: delegate to existing proof *)
     exact H.
-  - (* Error: bridge P_error_of *)
-    unfold P_error_of. simpl.
-    exact (do_raise_error_implies_error_message (accu s) s s0 Hdo).
   - (* Halt: impossible — do_raise never returns Halt *)
     contradiction.
+  - (* Error: bridge P_error_of *)
+    unfold P_error_of. simpl.
+    exact (do_raise_error_implies_error_message (accu s) s msg Hdo).
   - (* CCall: impossible — do_raise never returns CCall_request *)
     contradiction.
 Qed.
