@@ -617,3 +617,29 @@ Proof.
     { exact Hsb_writable_m3. }
   }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (APPLY n) reduces to handle_APPLY n by computation.
+   clight_of (APPLY n) = f_instr_APPLY and pre_of (APPLY n) = apply_n_step_pre n
+   are convertible.  Error case is bridged by unfolding P_error_of and
+   case-splitting on get_code_ptr_s. *)
+Definition correct_APPLY : forall n,
+    handler_correct (Dispatch.handle_instr (Bytecode.AST.APPLY n))
+      (clight_of (Bytecode.AST.APPLY n))
+      (pre_of (Bytecode.AST.APPLY n))
+      (P_error_of (Bytecode.AST.APPLY n)) (P_halt_of (Bytecode.AST.APPLY n))
+      (P_ccall_of (Bytecode.AST.APPLY n)).
+Proof.
+  intro n. intros e le m s.
+  change (Dispatch.handle_instr (Bytecode.AST.APPLY n))
+    with (fun (pc' : Z) (s0 : Machine.state) => handle_APPLY n s0).
+  unfold handler_correct. simpl.
+  unfold handle_APPLY at 1.
+  destruct (get_code_ptr_s s s.(Machine.accu)) as [target_pc|] eqn:Hgcp.
+  - (* Step case: delegate to the old proof *)
+    pose proof (verify_APPLY_correct n e le m s) as H.
+    unfold handler_correct in H. simpl in H.
+    unfold handle_APPLY in H. rewrite Hgcp in H. exact H.
+  - (* Error: accu is not a closure *)
+    unfold P_error_of. simpl. rewrite Hgcp. reflexivity.
+Qed.

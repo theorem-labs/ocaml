@@ -87,6 +87,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEBLOC
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETVECTITEM_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SWITCH_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import POPTRAP_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY1_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY3_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM_correct.
@@ -160,8 +161,8 @@ Definition correct_PUSH_RETADDR : forall z,
 Definition correct_APPLY : forall n,
   handler_correct (handle_instr (APPLY n)) (clight_of (APPLY n))
     (pre_of (APPLY n))
-    (P_error_of (APPLY n)) (P_halt_of (APPLY n)) (P_ccall_of (APPLY n)).
-Admitted.
+    (P_error_of (APPLY n)) (P_halt_of (APPLY n)) (P_ccall_of (APPLY n))
+  := APPLY_correct.correct_APPLY.
 
 Definition correct_APPLY1 :
   handler_correct (handle_instr APPLY1) (clight_of APPLY1)
