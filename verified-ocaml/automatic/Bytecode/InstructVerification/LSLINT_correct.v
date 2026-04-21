@@ -372,3 +372,34 @@ Proof.
     destruct Hra as [_ [Hivla Hivlb]].
     rewrite Ha, Hs. exact (conj Hb (conj Hivla Hivlb)).
 Qed.
+
+(* Wrapper with the exact type required by InstructVerificationProof.v *)
+Local Notation LSLINT := Bytecode.AST.LSLINT.
+Theorem correct_LSLINT :
+    handler_correct (handle_instr LSLINT) (clight_of LSLINT)
+      (pre_of LSLINT)
+      (P_error_of LSLINT) (P_halt_of LSLINT) (P_ccall_of LSLINT).
+Proof.
+  intros e le m s.
+  change (handle_instr LSLINT) with handle_LSLINT.
+  change (clight_of LSLINT) with f_instr_LSLINT.
+  change (pre_of LSLINT) with shift_in_range.
+  (* handler_correct unfolds to a match on handle_LSLINT s.(pc) s *)
+  unfold handle_LSLINT at 1.
+  destruct (Machine.accu s) as [a| | |] eqn:Haccu;
+    destruct (Machine.stack s) as [|[b|? ?|?|?] rest] eqn:Hstk;
+    try (unfold P_error_of, error_message_of; rewrite Haccu, Hstk; reflexivity);
+    try (unfold P_error_of, error_message_of; rewrite Haccu; reflexivity).
+  (* Only the Step case remains: accu = Val_int a, stack = Val_int b :: rest *)
+  (* Reuse verify_LSLINT_correct for the Step case *)
+  intros ard Hrel Hpre.
+  pose proof (verify_LSLINT_correct e le m s) as H.
+  unfold handle_LSLINT in H. rewrite Haccu, Hstk in H.
+  apply (H ard Hrel).
+  (* Convert shift_in_range into the inner precondition *)
+  unfold shift_in_range in Hpre.
+  destruct Hpre as (a' & b' & rest' & Ha' & Hs' & Hb' & Hsr).
+  rewrite Haccu in Ha'. injection Ha' as <-.
+  rewrite Hstk in Hs'. injection Hs' as <- <-.
+  exact (conj Hb' (conj (proj1 (proj2 Hsr)) (proj2 (proj2 Hsr)))).
+Qed.

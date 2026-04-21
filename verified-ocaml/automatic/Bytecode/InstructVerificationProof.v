@@ -14,6 +14,9 @@ From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ASSIGN_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LSLINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SUBINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import NEGINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -376,8 +379,8 @@ Admitted.
 Definition correct_NEGINT :
   handler_correct (handle_instr NEGINT) (clight_of NEGINT)
     (pre_of NEGINT)
-    (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT).
-Admitted.
+    (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT)
+  := NEGINT_correct.correct_NEGINT.
 
 Definition correct_ADDINT :
   handler_correct (handle_instr ADDINT) (clight_of ADDINT)
@@ -388,8 +391,8 @@ Admitted.
 Definition correct_SUBINT :
   handler_correct (handle_instr SUBINT) (clight_of SUBINT)
     (pre_of SUBINT)
-    (P_error_of SUBINT) (P_halt_of SUBINT) (P_ccall_of SUBINT).
-Admitted.
+    (P_error_of SUBINT) (P_halt_of SUBINT) (P_ccall_of SUBINT)
+  := SUBINT_correct.correct_SUBINT.
 
 Definition correct_MULINT :
   handler_correct (handle_instr MULINT) (clight_of MULINT)
@@ -412,8 +415,8 @@ Admitted.
 Definition correct_ANDINT :
   handler_correct (handle_instr ANDINT) (clight_of ANDINT)
     (pre_of ANDINT)
-    (P_error_of ANDINT) (P_halt_of ANDINT) (P_ccall_of ANDINT).
-Admitted.
+    (P_error_of ANDINT) (P_halt_of ANDINT) (P_ccall_of ANDINT)
+  := ANDINT_correct.correct_ANDINT.
 
 Definition correct_ORINT :
   handler_correct (handle_instr ORINT) (clight_of ORINT)
@@ -430,8 +433,8 @@ Admitted.
 Definition correct_LSLINT :
   handler_correct (handle_instr LSLINT) (clight_of LSLINT)
     (pre_of LSLINT)
-    (P_error_of LSLINT) (P_halt_of LSLINT) (P_ccall_of LSLINT).
-Admitted.
+    (P_error_of LSLINT) (P_halt_of LSLINT) (P_ccall_of LSLINT)
+  := LSLINT_correct.correct_LSLINT.
 
 Definition correct_LSRINT :
   handler_correct (handle_instr LSRINT) (clight_of LSRINT)
