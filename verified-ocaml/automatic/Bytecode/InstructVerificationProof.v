@@ -24,6 +24,12 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MULINT_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ASRINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import XORINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ORINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BOOLNOT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import EQ_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import NEQ_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ISINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ULTINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -326,8 +332,8 @@ Admitted.
 Definition correct_BOOLNOT :
   handler_correct (handle_instr BOOLNOT) (clight_of BOOLNOT)
     (pre_of BOOLNOT)
-    (P_error_of BOOLNOT) (P_halt_of BOOLNOT) (P_ccall_of BOOLNOT).
-Admitted.
+    (P_error_of BOOLNOT) (P_halt_of BOOLNOT) (P_ccall_of BOOLNOT)
+  := BOOLNOT_correct.correct_BOOLNOT.
 
 Definition correct_PUSHTRAP : forall z,
   handler_correct (handle_instr (PUSHTRAP z)) (clight_of (PUSHTRAP z))
@@ -458,20 +464,20 @@ Definition correct_ASRINT :
 Definition correct_EQ :
   handler_correct (handle_instr EQ) (clight_of EQ)
     (pre_of EQ)
-    (P_error_of EQ) (P_halt_of EQ) (P_ccall_of EQ).
-Admitted.
+    (P_error_of EQ) (P_halt_of EQ) (P_ccall_of EQ)
+  := EQ_correct.correct_EQ.
 
 Definition correct_NEQ :
   handler_correct (handle_instr NEQ) (clight_of NEQ)
     (pre_of NEQ)
-    (P_error_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ).
-Admitted.
+    (P_error_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ)
+  := NEQ_correct.correct_NEQ.
 
 Definition correct_LTINT :
   handler_correct (handle_instr LTINT) (clight_of LTINT)
     (pre_of LTINT)
-    (P_error_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT).
-Admitted.
+    (P_error_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT)
+  := LTINT_correct.correct_LTINT.
 
 Definition correct_LEINT :
   handler_correct (handle_instr LEINT) (clight_of LEINT)
@@ -506,8 +512,8 @@ Admitted.
 Definition correct_ISINT :
   handler_correct (handle_instr ISINT) (clight_of ISINT)
     (pre_of ISINT)
-    (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT).
-Admitted.
+    (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT)
+  := ISINT_correct.correct_ISINT.
 
 Definition correct_GETMETHOD :
   handler_correct (handle_instr GETMETHOD) (clight_of GETMETHOD)

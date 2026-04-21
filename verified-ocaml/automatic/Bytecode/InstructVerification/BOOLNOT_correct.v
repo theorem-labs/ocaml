@@ -538,3 +538,29 @@ Proof.
   - exact H.
   - exact H.
 Qed.
+
+(* Final wrapper with the exact type expected by InstructVerificationProof.v. *)
+Definition correct_BOOLNOT :
+    handler_correct (handle_instr Bytecode.AST.BOOLNOT) (clight_of Bytecode.AST.BOOLNOT)
+      (pre_of Bytecode.AST.BOOLNOT)
+      (P_error_of Bytecode.AST.BOOLNOT) (P_halt_of Bytecode.AST.BOOLNOT) (P_ccall_of Bytecode.AST.BOOLNOT).
+Proof.
+  intros e le m s.
+  change (handle_instr Bytecode.AST.BOOLNOT (Machine.pc s) s)
+    with (handle_BOOLNOT (Machine.pc s) s).
+  unfold handle_BOOLNOT.
+  destruct (Machine.accu s) as [n | | | ] eqn:Haccu.
+  - destruct n as [|p|p].
+    + specialize (verify_BOOLNOT_handler_correct e le m s) as H.
+      unfold handle_BOOLNOT in H. rewrite Haccu in H. exact H.
+    + specialize (verify_BOOLNOT_handler_correct e le m s) as H.
+      unfold handle_BOOLNOT in H. rewrite Haccu in H. exact H.
+    + specialize (verify_BOOLNOT_handler_correct e le m s) as H.
+      unfold handle_BOOLNOT in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BOOLNOT_handler_correct e le m s) as H.
+    unfold handle_BOOLNOT in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BOOLNOT_handler_correct e le m s) as H.
+    unfold handle_BOOLNOT in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BOOLNOT_handler_correct e le m s) as H.
+    unfold handle_BOOLNOT in H. rewrite Haccu in H. exact H.
+Qed.
