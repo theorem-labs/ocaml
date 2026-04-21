@@ -808,3 +808,41 @@ Proof.
   - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
     exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
 Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v.
+   handle_instr (BEQ z1 z2) / clight_of (BEQ z1 z2) / pre_of (BEQ z1 z2)
+   are convertible with handle_BEQ z1 z2 / f_instr_BEQ / the building-block
+   conjunction used by verify_BEQ_handler_correct.  P_error_of / P_halt_of /
+   P_ccall_of are vacuously satisfied because handle_BEQ always returns Step.
+   The Int.min_signed <= z1 <= Int.max_signed constraint needed by the inner
+   proof is not derivable from pre_of and is admitted; it will be discharged
+   once instr_wfb is threaded into the precondition. *)
+Definition correct_BEQ : forall z1 z2,
+  handler_correct (handle_instr (Bytecode.AST.BEQ z1 z2)) (clight_of (Bytecode.AST.BEQ z1 z2))
+    (pre_of (Bytecode.AST.BEQ z1 z2))
+    (P_error_of (Bytecode.AST.BEQ z1 z2)) (P_halt_of (Bytecode.AST.BEQ z1 z2)) (P_ccall_of (Bytecode.AST.BEQ z1 z2)).
+Proof.
+  intros z1 z2. intros e le m s.
+  change (handle_instr (Bytecode.AST.BEQ z1 z2)) with (handle_BEQ z1 z2).
+  unfold handle_BEQ at 1.
+  destruct (Machine.accu s) eqn:Haccu;
+    [ destruct (z =? z1)%Z eqn:Heqb | | | ];
+    simpl;
+    try (intros ard _ Hpre;
+         destruct Hpre as [_ [Hai _]];
+         unfold accu_check, accu_signed_int in Hai;
+         rewrite Haccu in Hai;
+         contradiction).
+  - (* Val_int z, z = z1: branch taken *)
+    assert (Hn : Int.min_signed <= z1 <= Int.max_signed) by admit.
+    pose proof (verify_BEQ_handler_correct z1 z2 Hn e le m s) as H.
+    unfold handler_correct, handle_BEQ in H.
+    rewrite Haccu in H. rewrite Heqb in H.
+    exact H.
+  - (* Val_int z, z <> z1: fall through *)
+    assert (Hn : Int.min_signed <= z1 <= Int.max_signed) by admit.
+    pose proof (verify_BEQ_handler_correct z1 z2 Hn e le m s) as H.
+    unfold handler_correct, handle_BEQ in H.
+    rewrite Haccu in H. rewrite Heqb in H.
+    exact H.
+Admitted.
