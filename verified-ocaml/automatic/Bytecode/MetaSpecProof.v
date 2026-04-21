@@ -5,7 +5,8 @@
    can remain a module-type ascription layer plus Print Assumptions probes. *)
 
 From Stdlib Require Import ZArith List Strings.String.
-From OCamlInterp.Manual.Bytecode Require Import AST Machine InstructSpec.
+From OCamlInterp.Manual.Bytecode Require Import AST Machine.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import MetaSpec.
 
 Lemma handler_unique_mod_errors :

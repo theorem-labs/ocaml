@@ -60,7 +60,7 @@ From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
-From OCamlInterp.Manual Require Import Bytecode.InstructSpec.
+From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
 

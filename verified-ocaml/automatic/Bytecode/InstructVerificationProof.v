@@ -10,7 +10,7 @@ From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
-From OCamlInterp.Manual Require Import Bytecode.InstructSpec.
+From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 
 Definition correct_ACC : forall n,
   handler_correct (handle_instr (ACC n)) (clight_of (ACC n))

@@ -17,7 +17,7 @@ From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
-From OCamlInterp.Manual Require Import Bytecode.InstructSpec.
+From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 
 Theorem verify_C_CALLN_correct : forall nargs prim_idx,
   handler_correct (handle_C_CALL nargs prim_idx) f_instr_C_CALLN

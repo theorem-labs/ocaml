@@ -12,7 +12,8 @@
 
 From Stdlib Require Import ZArith List Strings.String.
 From OCamlInterp.Manual.Utils Require Import Value.
-From OCamlInterp.Manual.Bytecode Require Import AST Machine InstructSpec.
+From OCamlInterp.Manual.Bytecode Require Import AST Machine.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec.
 
 (* Error-message equivalence on step_result.
 

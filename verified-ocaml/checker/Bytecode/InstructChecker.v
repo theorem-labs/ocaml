@@ -3,7 +3,7 @@
    InstructVerificationFineGrainedSpec, plus the unified
    InstructVerificationSpec via the functor. *)
 
-From OCamlInterp.Manual Require Import Bytecode.InstructSpec.
+From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic.Bytecode Require InstructVerificationProof.
 
 Module InstructVerification <: InstructVerificationFineGrainedSpec.

@@ -18,7 +18,7 @@ From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From RecordUpdate Require Import RecordSet.
 Import RecordSetNotations.
-From OCamlInterp.Manual Require Import Bytecode.InstructSpec.
+From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 
 (* ================================================================== *)
 (* Trivially satisfiable blocks                                        *)
