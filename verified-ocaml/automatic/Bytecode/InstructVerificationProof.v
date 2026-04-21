@@ -48,6 +48,13 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETIN
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import POP_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import STOP_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RERAISE_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ATOM_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CHECK_SIGNALS_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETGLOBAL_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHATOM_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIF_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETGLOBAL_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BGEINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -194,8 +201,8 @@ Admitted.
 Definition correct_GETGLOBAL : forall n,
   handler_correct (handle_instr (GETGLOBAL n)) (clight_of (GETGLOBAL n))
     (pre_of (GETGLOBAL n))
-    (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)).
-Admitted.
+    (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n))
+  := GETGLOBAL_correct.correct_GETGLOBAL.
 
 Definition correct_PUSHGETGLOBAL : forall n,
   handler_correct (handle_instr (PUSHGETGLOBAL n)) (clight_of (PUSHGETGLOBAL n))
@@ -218,20 +225,20 @@ Admitted.
 Definition correct_SETGLOBAL : forall n,
   handler_correct (handle_instr (SETGLOBAL n)) (clight_of (SETGLOBAL n))
     (pre_of (SETGLOBAL n))
-    (P_error_of (SETGLOBAL n)) (P_halt_of (SETGLOBAL n)) (P_ccall_of (SETGLOBAL n)).
-Admitted.
+    (P_error_of (SETGLOBAL n)) (P_halt_of (SETGLOBAL n)) (P_ccall_of (SETGLOBAL n))
+  := SETGLOBAL_correct.correct_SETGLOBAL.
 
 Definition correct_ATOM : forall n,
   handler_correct (handle_instr (ATOM n)) (clight_of (ATOM n))
     (pre_of (ATOM n))
-    (P_error_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)).
-Admitted.
+    (P_error_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n))
+  := ATOM_correct.correct_ATOM.
 
 Definition correct_PUSHATOM : forall n,
   handler_correct (handle_instr (PUSHATOM n)) (clight_of (PUSHATOM n))
     (pre_of (PUSHATOM n))
-    (P_error_of (PUSHATOM n)) (P_halt_of (PUSHATOM n)) (P_ccall_of (PUSHATOM n)).
-Admitted.
+    (P_error_of (PUSHATOM n)) (P_halt_of (PUSHATOM n)) (P_ccall_of (PUSHATOM n))
+  := PUSHATOM_correct.correct_PUSHATOM.
 
 Definition correct_MAKEBLOCK : forall t size,
   handler_correct (handle_instr (MAKEBLOCK t size)) (clight_of (MAKEBLOCK t size))
@@ -332,8 +339,8 @@ Definition correct_BRANCH : forall z,
 Definition correct_BRANCHIF : forall z,
   handler_correct (handle_instr (BRANCHIF z)) (clight_of (BRANCHIF z))
     (pre_of (BRANCHIF z))
-    (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)).
-Admitted.
+    (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z))
+  := BRANCHIF_correct.correct_BRANCHIF.
 
 Definition correct_BRANCHIFNOT : forall z,
   handler_correct (handle_instr (BRANCHIFNOT z)) (clight_of (BRANCHIFNOT z))
@@ -386,8 +393,8 @@ Admitted.
 Definition correct_CHECK_SIGNALS :
   handler_correct (handle_instr CHECK_SIGNALS) (clight_of CHECK_SIGNALS)
     (pre_of CHECK_SIGNALS)
-    (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS).
-Admitted.
+    (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS)
+  := CHECK_SIGNALS_correct.correct_CHECK_SIGNALS.
 
 Definition correct_C_CALL : forall nargs prim_idx,
   handler_correct (handle_instr (C_CALL nargs prim_idx)) (clight_of (C_CALL nargs prim_idx))
@@ -588,8 +595,8 @@ Admitted.
 Definition correct_BGEINT : forall z1 z2,
   handler_correct (handle_instr (BGEINT z1 z2)) (clight_of (BGEINT z1 z2))
     (pre_of (BGEINT z1 z2))
-    (P_error_of (BGEINT z1 z2)) (P_halt_of (BGEINT z1 z2)) (P_ccall_of (BGEINT z1 z2)).
-Admitted.
+    (P_error_of (BGEINT z1 z2)) (P_halt_of (BGEINT z1 z2)) (P_ccall_of (BGEINT z1 z2))
+  := BGEINT_correct.correct_BGEINT.
 
 Definition correct_ULTINT :
   handler_correct (handle_instr ULTINT) (clight_of ULTINT)

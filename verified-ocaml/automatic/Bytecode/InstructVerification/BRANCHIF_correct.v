@@ -41,7 +41,9 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.Manual Require Bytecode.AST.
+Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
@@ -1104,4 +1106,36 @@ Proof.
         eapply Mem.perm_store_1; [ exact Hstore | ];
         apply Hsb_writable; exact Hofs' ])
     ]).
+Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (BRANCHIF z) = handle_BRANCHIF z by computation in Dispatch.
+   clight_of (BRANCHIF z) = f_instr_BRANCHIF, pre_of (BRANCHIF z) = branchif_step_pre z.
+   Since handle_BRANCHIF always returns Step, the P_error/P_halt/P_ccall
+   predicates are in dead match branches and thus irrelevant. *)
+Definition correct_BRANCHIF : forall z,
+  handler_correct (handle_instr (BRANCHIF z)) (clight_of (BRANCHIF z))
+    (pre_of (BRANCHIF z))
+    (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)).
+Proof.
+  intro z.
+  change (handler_correct (handle_BRANCHIF z) f_instr_BRANCHIF
+    (branchif_step_pre z)
+    (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z))).
+  intros e le m s.
+  unfold handle_BRANCHIF, branchif_step_pre.
+  destruct (Machine.accu s) as [n | | | ] eqn:Haccu.
+  - destruct n as [|p|p].
+    + specialize (verify_BRANCHIF_correct z e le m s) as H.
+      unfold handle_BRANCHIF in H. rewrite Haccu in H. exact H.
+    + specialize (verify_BRANCHIF_correct z e le m s) as H.
+      unfold handle_BRANCHIF in H. rewrite Haccu in H. exact H.
+    + specialize (verify_BRANCHIF_correct z e le m s) as H.
+      unfold handle_BRANCHIF in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BRANCHIF_correct z e le m s) as H.
+    unfold handle_BRANCHIF in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BRANCHIF_correct z e le m s) as H.
+    unfold handle_BRANCHIF in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BRANCHIF_correct z e le m s) as H.
+    unfold handle_BRANCHIF in H. rewrite Haccu in H. exact H.
 Qed.

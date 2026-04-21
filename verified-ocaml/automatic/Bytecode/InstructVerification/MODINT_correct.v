@@ -785,9 +785,12 @@ Proof.
     cbv [do_raise div_by_zero_exn error_message_of_raise] in *.
     destruct (Nat.eqb (Machine.trap_sp s) 0).
     + reflexivity.
-    + destruct (skipn _ _) as [|[?|?|?|?] [|[?|?|?|?] [? [|[?|?|?|?] ?]]]];
-        try reflexivity;
-        try exact Hold.
+    + destruct (skipn _ _) as [|v0 [|v1 [|v2 [|v3 l]]]];
+        try reflexivity; try exact Hold;
+        destruct v0; try reflexivity; try exact Hold;
+        destruct v1; try reflexivity; try exact Hold;
+        destruct v2; try reflexivity; try exact Hold;
+        destruct v3; try reflexivity; try exact Hold.
   - (* b <> 0: Step case *)
     exact Hold.
 Qed.
