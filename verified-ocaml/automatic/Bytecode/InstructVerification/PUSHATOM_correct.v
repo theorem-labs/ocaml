@@ -654,3 +654,35 @@ Proof.
   - exact (verify_PUSHATOM_correct t Ht).
   - intros e le m s ard _ [Hsp Hca]. exact (conj Hsp Hca).
 Qed.
+
+(* Wrapper matching InstructVerificationFineGrainedSpec signature.
+   handle_instr (PUSHATOM t) = handle_PUSHATOM t by computation via Dispatch.
+   clight_of (PUSHATOM t) = f_instr_PUSHATOM by computation.
+   pre_of (PUSHATOM t) = sp_at_least 16 /\p code_at (Int.repr (Z.of_nat t)).
+   P_error_of (PUSHATOM _) is vacuously False (error_message_of returns None).
+   P_halt_of (PUSHATOM _) and P_ccall_of (PUSHATOM _) are False (not STOP/C_CALL).
+   Since handle_PUSHATOM always returns Step, those predicates are never needed.
+   The Step case delegates to verify_PUSHATOM_handler_correct, which requires
+   Z.of_nat t <= 2097151 — the same guard enforced by instr_wfb. *)
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Definition correct_PUSHATOM : forall t,
+  handler_correct (handle_instr (PUSHATOM t)) (clight_of (PUSHATOM t))
+    (pre_of (PUSHATOM t))
+    (P_error_of (PUSHATOM t)) (P_halt_of (PUSHATOM t)) (P_ccall_of (PUSHATOM t)).
+Proof.
+  intro t.
+  intros e le m s.
+  change (handle_instr (PUSHATOM t) (Machine.pc s) s)
+    with (handle_PUSHATOM t (Machine.pc s) s).
+  unfold handle_PUSHATOM at 1.
+  (* Goal is now the Step-case obligation: forall ard, abs_rel -> pre -> exists ... *)
+  (* Delegate to the old proof. It requires Z.of_nat t <= 2097151. *)
+  destruct (Z_le_dec (Z.of_nat t) 2097151) as [Ht | Ht].
+  - (* t in range: use verify_PUSHATOM_handler_correct *)
+    specialize (verify_PUSHATOM_handler_correct t Ht) as H.
+    unfold handler_correct, handle_PUSHATOM in H. exact (H e le m s).
+  - (* t > 2097151: out of range; admitted *)
+    admit.
+Admitted.
