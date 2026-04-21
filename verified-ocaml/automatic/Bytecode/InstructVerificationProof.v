@@ -216,8 +216,8 @@ Definition correct_OFFSETCLOSURE : forall z,
 Definition correct_PUSHOFFSETCLOSURE : forall z,
   handler_correct (handle_instr (PUSHOFFSETCLOSURE z)) (clight_of (PUSHOFFSETCLOSURE z))
     (pre_of (PUSHOFFSETCLOSURE z))
-    (P_error_of (PUSHOFFSETCLOSURE z)) (P_halt_of (PUSHOFFSETCLOSURE z)) (P_ccall_of (PUSHOFFSETCLOSURE z)).
-Admitted.
+    (P_error_of (PUSHOFFSETCLOSURE z)) (P_halt_of (PUSHOFFSETCLOSURE z)) (P_ccall_of (PUSHOFFSETCLOSURE z))
+  := PUSHOFFSETCLOSURE_correct.correct_PUSHOFFSETCLOSURE.
 
 Definition correct_GETGLOBAL : forall n,
   handler_correct (handle_instr (GETGLOBAL n)) (clight_of (GETGLOBAL n))
