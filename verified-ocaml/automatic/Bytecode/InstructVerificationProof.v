@@ -75,6 +75,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSH_RET
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETFLOATFIELD_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIFNOT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import C_CALL_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -95,8 +96,8 @@ Definition correct_PUSH :
 Definition correct_PUSHACC : forall n,
   handler_correct (handle_instr (PUSHACC n)) (clight_of (PUSHACC n))
     (pre_of (PUSHACC n))
-    (P_error_of (PUSHACC n)) (P_halt_of (PUSHACC n)) (P_ccall_of (PUSHACC n)).
-Admitted.
+    (P_error_of (PUSHACC n)) (P_halt_of (PUSHACC n)) (P_ccall_of (PUSHACC n))
+  := PUSHACC_correct.correct_PUSHACC.
 
 Definition correct_POP : forall n,
   handler_correct (handle_instr (POP n)) (clight_of (POP n))

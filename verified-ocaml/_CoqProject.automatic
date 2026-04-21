@@ -132,6 +132,7 @@ automatic/Bytecode/InstructVerification/PUSHACC4_correct.v
 automatic/Bytecode/InstructVerification/PUSHACC5_correct.v
 automatic/Bytecode/InstructVerification/PUSHACC6_correct.v
 automatic/Bytecode/InstructVerification/PUSHACC7_correct.v
+automatic/Bytecode/InstructVerification/PUSHACC_correct.v
 automatic/Bytecode/InstructVerification/PUSHATOM0_correct.v
 automatic/Bytecode/InstructVerification/PUSHATOM_correct.v
 automatic/Bytecode/InstructVerification/PUSHCONST0_correct.v
