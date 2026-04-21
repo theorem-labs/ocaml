@@ -11,8 +11,7 @@
 # Most handlers are produced by a cpp shim (extract_shim.h) that redefines
 # interp.c's dispatch macros so each handler becomes a standalone function.
 # A small number remain hand-written because they diverge semantically from
-# interp.c (RAISE skips backtrace, C_CALL returns STATUS_CCALL, POPTRAP
-# omits signal restart, STOP returns STATUS_HALT).
+# interp.c (C_CALL returns STATUS_CCALL, STOP returns STATUS_HALT).
 
 set -euo pipefail
 
@@ -139,6 +138,7 @@ awk '
 # delete interp.c's own Integer_{,branch_}comparison #define blocks so the
 # shim's colon-free versions survive through cpp expansion.
 sed -i -e 's/Caml_state->trapsp/Caml_state_trapsp/g' \
+       -e 's/Caml_state->backtrace_active/Caml_state_backtrace_active/g' \
        -e 's/Instruct(\([A-Z0-9_]\+\)):/Instruct(\1)/g' \
        -e ':a' \
        -e 's/\(Instruct([A-Z0-9_]\+)\)[ \t]\+\(Instruct(\)/\1\n    \2/' \
@@ -148,7 +148,11 @@ sed -i -e 's/Caml_state->trapsp/Caml_state_trapsp/g' \
        -e 's/goto check_stacks;/Next;/g' \
        -e 's/goto process_actions;/Next;/g' \
        -e '/^[[:space:]]*process_actions:/d' \
-       -e '/^#define CAML_METHOD_CACHE$/d' "$TMP/dispatch.c"
+       -e '/^#define CAML_METHOD_CACHE$/d' \
+       -e '/^[[:space:]]*raise_notrace:/d' \
+       -e '/if.*Caml_state_trapsp/,/Make_exception_result/{/Make_exception_result/{N;d};d}' \
+       -e '/^[[:space:]]*check_stacks:/,/Fall through/d' \
+       "$TMP/dispatch.c"
 
 # Inline `/* Fallthrough */` bodies and flatten block-form handlers.
 awk -f "$INLINE_AWK" "$TMP/dispatch.c" > "$TMP/dispatch_norm.c"
@@ -268,6 +272,13 @@ emit_cpp "SETFLOATFIELD"
 
 # --- Exception handling ---
 emit_cpp "PUSHTRAP"
+emit_cpp "POPTRAP"
+
+# RAISE: extracted via cpp (backtrace dead-coded, external raise stripped).
+# RERAISE and RAISE_NOTRACE are identical in our model (no backtraces).
+emit_cpp "RAISE"
+emit_cpp "RAISE" | sed 's/instr_RAISE(/instr_RERAISE(/'
+emit_cpp "RAISE" | sed 's/instr_RAISE(/instr_RAISE_NOTRACE(/'
 
 # --- Atoms ---
 emit_cpp "ATOM0"
@@ -301,38 +312,11 @@ done
 
 # ===================================================================
 # SECTION 2: Handlers that must stay hand-written because they diverge
-# semantically from interp.c (different return codes, backtrace
-# skipping, signal-restart omission, C-call stubs).
+# semantically from interp.c (different return codes, C-call stubs).
 # ===================================================================
 
 # --- STOP: returns STATUS_HALT; interp.c does callback bookkeeping we skip ---
 emit_raw "STOP" "    /* Halt execution */"
-
-# --- POPTRAP: omits signal-check restart ---
-emit_raw "POPTRAP" "    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->sp += 4;"
-
-# --- RAISE family: skip backtrace, skip callback-boundary check ---
-emit_raw "RAISE" "    s->sp = s->trap_sp;
-    s->pc = Trap_pc(s->sp);
-    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->env = s->sp[2];
-    s->extra_args = Long_val(s->sp[3]);
-    s->sp += 4;"
-
-emit_raw "RERAISE" "    s->sp = s->trap_sp;
-    s->pc = Trap_pc(s->sp);
-    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->env = s->sp[2];
-    s->extra_args = Long_val(s->sp[3]);
-    s->sp += 4;"
-
-emit_raw "RAISE_NOTRACE" "    s->sp = s->trap_sp;
-    s->pc = Trap_pc(s->sp);
-    s->trap_sp = s->sp + Long_val(Trap_link_offset(s->sp));
-    s->env = s->sp[2];
-    s->extra_args = Long_val(s->sp[3]);
-    s->sp += 4;"
 
 # --- C calls: return STATUS_CCALL instead of invoking primitives ---
 cat << 'CCALLS'

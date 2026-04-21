@@ -52,6 +52,10 @@
 #define caml_something_to_do 0
 #define caml_process_pending_actions()
 
+/* Backtrace machinery: erase. Our model skips backtraces. */
+#define Caml_state_backtrace_active 0
+#define caml_stash_backtrace(a, b, c)
+
 /* Caml_state access. The input is pre-rewritten so Caml_state->trapsp
    becomes Caml_state_trapsp (a bare identifier cpp can expand). */
 #define Caml_state_trapsp (s->trap_sp)
