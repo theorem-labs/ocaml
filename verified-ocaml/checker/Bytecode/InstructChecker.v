@@ -4,9 +4,10 @@
    InstructVerificationSpec via the functor. *)
 
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec.
 From OCamlInterp.Automatic.Bytecode Require InstructVerificationProof.
 
-Module InstructVerification <: InstructVerificationFineGrainedSpec.
+Module InstructVerification <: InstructVerificationFineGrainedSpec InstructVerificationProof.DispatchHI.
 
   Definition correct_ACC := InstructVerificationProof.correct_ACC.
   Definition correct_PUSH := InstructVerificationProof.correct_PUSH.
@@ -771,7 +772,7 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
 End InstructVerification.
 
 Module InstructVerificationUnified :=
-  InstructVerificationFromFineGrained InstructVerification.
+  InstructVerificationFromFineGrained InstructVerificationProof.DispatchHI InstructVerification.
 
 Section __.
 Set Printing All.

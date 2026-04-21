@@ -8,9 +8,13 @@ From compcert Require Import AST Integers Ctypes Cop Clight ClightBigstep Events
 From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
-From OCamlInterp.Manual.Bytecode.Interpret Require Import Dispatch.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import Dispatch HandleInstrSpec.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+
+Module DispatchHI <: HandleInstrSpec.
+  Definition handle_instr := Dispatch.handle_instr.
+End DispatchHI.
 
 Definition correct_ACC : forall n,
   handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
