@@ -740,3 +740,58 @@ Proof.
     destruct Hdm as (a & b & rest & Ha & Hs & Hbne & Hra & Hrb & Hva & Hvb).
     rewrite Ha, Hs. exact (conj Hbne (conj Hra (conj Hrb (conj Hva Hvb)))).
 Qed.
+
+(* Helper: do_raise returning Error implies error_message_of_raise = Some msg *)
+Local Lemma do_raise_error_iff : forall exn s msg,
+  do_raise exn s = Error msg ->
+  error_message_of_raise s = Some msg.
+Proof.
+  intros exn s msg H.
+  unfold do_raise in H. unfold error_message_of_raise.
+  destruct (Nat.eqb (trap_sp s) 0) eqn:Htrap.
+  - inversion H. reflexivity.
+  - set (k := Nat.sub (length (Machine.stack s)) (trap_sp s)) in *.
+    set (frame_top := skipn k (Machine.stack s)) in *.
+    destruct frame_top as [|v1 rest1]; [inversion H; reflexivity|].
+    destruct v1; try (inversion H; reflexivity).
+    destruct rest1 as [|v2 rest2]; [inversion H; reflexivity|].
+    destruct v2; try (inversion H; reflexivity).
+    destruct rest2 as [|v3 rest3]; [inversion H; reflexivity|].
+    destruct rest3 as [|v4 rest4]; [inversion H; reflexivity|].
+    destruct v4; inversion H; reflexivity.
+Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v *)
+Theorem correct_DIVINT :
+  handler_correct (handle_instr Bytecode.AST.DIVINT) (clight_of Bytecode.AST.DIVINT)
+    (pre_of Bytecode.AST.DIVINT)
+    (P_error_of Bytecode.AST.DIVINT) (P_halt_of Bytecode.AST.DIVINT) (P_ccall_of Bytecode.AST.DIVINT).
+Proof.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr Bytecode.AST.DIVINT) with handle_DIVINT.
+  change (clight_of Bytecode.AST.DIVINT) with f_instr_DIVINT.
+  pose proof (verify_DIVINT_handler_correct) as H.
+  unfold handler_correct in H. specialize (H e le m s).
+  destruct (handle_DIVINT (Machine.pc s) s) eqn:Hres.
+  - (* Step *)
+    intros ard Hrel Hpre.
+    change (pre_of Bytecode.AST.DIVINT) with divmod_safe in Hpre.
+    exact (H ard Hrel Hpre).
+  - (* Halt *)
+    unfold P_halt_of. simpl. tauto.
+  - (* Error *)
+    unfold P_error_of, error_message_of.
+    unfold handle_DIVINT in Hres.
+    destruct (Machine.accu s) as [a| | |] eqn:Haccu;
+      destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk;
+      try (inversion Hres; subst; reflexivity).
+    destruct v_hd as [b| | |];
+      try (inversion Hres; subst; reflexivity).
+    destruct (Z.eqb b 0) eqn:Hbeq.
+    + (* b = 0, do_raise case *)
+      eapply do_raise_error_iff. exact Hres.
+    + discriminate Hres.
+  - (* CCall_request *)
+    unfold P_ccall_of. simpl. tauto.
+Qed.

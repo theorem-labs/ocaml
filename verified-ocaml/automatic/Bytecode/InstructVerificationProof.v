@@ -38,6 +38,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LEINT_co
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MODINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHCONSTINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETREF_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import DIVINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -424,8 +425,8 @@ Definition correct_MULINT :
 Definition correct_DIVINT :
   handler_correct (handle_instr DIVINT) (clight_of DIVINT)
     (pre_of DIVINT)
-    (P_error_of DIVINT) (P_halt_of DIVINT) (P_ccall_of DIVINT).
-Admitted.
+    (P_error_of DIVINT) (P_halt_of DIVINT) (P_ccall_of DIVINT)
+  := DIVINT_correct.correct_DIVINT.
 
 Definition correct_MODINT :
   handler_correct (handle_instr MODINT) (clight_of MODINT)
