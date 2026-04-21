@@ -630,3 +630,27 @@ Proof.
   (* Case 4: accu = Val_closure => size_or_heap = None => Error *)
   { simpl. reflexivity. }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr VECTLENGTH / clight_of VECTLENGTH / pre_of VECTLENGTH are
+   convertible with handle_VECTLENGTH / f_instr_VECTLENGTH / (fun _ => vectlength_pre).
+   P_halt_of and P_ccall_of are vacuously satisfied (VECTLENGTH never halts
+   or issues a C call).  P_error_of requires a small computation bridge. *)
+Definition correct_VECTLENGTH :
+    handler_correct (handle_instr Bytecode.AST.VECTLENGTH) (clight_of Bytecode.AST.VECTLENGTH)
+      (pre_of Bytecode.AST.VECTLENGTH)
+      (P_error_of Bytecode.AST.VECTLENGTH) (P_halt_of Bytecode.AST.VECTLENGTH) (P_ccall_of Bytecode.AST.VECTLENGTH).
+Proof.
+  intros e le m s.
+  change (handle_instr Bytecode.AST.VECTLENGTH (Machine.pc s) s)
+    with (handle_VECTLENGTH (Machine.pc s) s).
+  unfold handle_VECTLENGTH at 1.
+  destruct (size_or_heap s (Machine.accu s)) eqn:Hsize.
+  - (* Some n: Step case — delegate to verify_VECTLENGTH_correct *)
+    specialize (verify_VECTLENGTH_correct e le m s) as Hold.
+    unfold handler_correct, handle_VECTLENGTH in Hold.
+    rewrite Hsize in Hold.
+    exact Hold.
+  - (* None: Error case *)
+    unfold P_error_of, error_message_of. rewrite Hsize. reflexivity.
+Qed.
