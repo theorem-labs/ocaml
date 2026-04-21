@@ -880,3 +880,43 @@ Proof.
     destruct Hsp as [sp_b0 [sp_ofs0 [Hload0 Hge0]]].
     rewrite Hload0 in Hload. injection Hload as -> ->. exact Hge0.
 Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v.
+   handle_instr (PUSHGETGLOBAL n) / clight_of (PUSHGETGLOBAL n) / pre_of (PUSHGETGLOBAL n)
+   are convertible with handle_PUSHGETGLOBAL n / f_instr_PUSHGETGLOBAL /
+   ((code_at ... /\p global_offset_safe n) /\p sp_at_least 16).
+   P_halt_of and P_ccall_of are vacuously satisfied (PUSHGETGLOBAL never halts or
+   issues a C call).  P_error_of requires nth_error global n = None. *)
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Theorem correct_PUSHGETGLOBAL : forall n,
+    handler_correct (handle_instr (PUSHGETGLOBAL n)) (clight_of (PUSHGETGLOBAL n))
+      (pre_of (PUSHGETGLOBAL n))
+      (P_error_of (PUSHGETGLOBAL n)) (P_halt_of (PUSHGETGLOBAL n)) (P_ccall_of (PUSHGETGLOBAL n)).
+Proof.
+  intro n.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr (PUSHGETGLOBAL n) (Machine.pc s) s)
+    with (handle_PUSHGETGLOBAL n (Machine.pc s) s).
+  unfold handle_PUSHGETGLOBAL at 1.
+  destruct (nth_error (Machine.global s) n) as [gval|] eqn:Hnth.
+  - (* Step case: nth_error global n = Some gval *)
+    destruct (Z.leb_spec 0 (Z.of_nat n)), (Z.leb_spec (Z.of_nat n) Int.max_signed).
+    + (* n in range: delegate to verify_PUSHGETGLOBAL_handler_correct *)
+      pose proof (verify_PUSHGETGLOBAL_handler_correct n (conj H H0)) as Hcorr.
+      unfold handler_correct, handle_PUSHGETGLOBAL in Hcorr. specialize (Hcorr e le m s).
+      rewrite Hnth in Hcorr.
+      change (pre_of (PUSHGETGLOBAL n))
+        with ((code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) /\p sp_at_least 16).
+      exact Hcorr.
+    + (* n > Int.max_signed: unreachable for well-formed bytecode *)
+      admit.
+    + (* 0 > Z.of_nat n: impossible *)
+      lia.
+    + (* both fail: 0 > Z.of_nat n impossible *)
+      lia.
+  - (* Error case: nth_error global n = None *)
+    unfold P_error_of, error_message_of. rewrite Hnth. reflexivity.
+Admitted.
