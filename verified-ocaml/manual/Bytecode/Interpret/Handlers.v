@@ -40,10 +40,11 @@ Definition z_flip_sign (a : Z) : Z := Z.lxor a (Z.shiftl 1 (word_bits - 1)).
 Definition make_exn_string (chars : list Z) : value :=
   Val_block 252 (List.map Val_int chars).
 
-(* "Division_by_zero" ASCII codes *)
+Definition list_Z_of_string (s : string) : list Z :=
+  List.map Z.of_N (List.map Ascii.N_of_ascii (list_ascii_of_string s)).
+Definition div_by_zero_list_Z := Eval cbv in list_Z_of_string "Division_by_zero".
 Definition div_by_zero_exn : value :=
-  Val_block 248 [make_exn_string [68;105;118;105;115;105;111;110;95;98;121;95;122;101;114;111];
-                 Val_int (-6)].
+  Val_block 248 [make_exn_string div_by_zero_list_Z; Val_int (-6)].
 
 (* Perform the RAISE operation with a given exception value.
    Mirrors interp.c: sp = trap_sp; pc = handler_pc; env = env; extra_args = ea; sp+=4. *)
