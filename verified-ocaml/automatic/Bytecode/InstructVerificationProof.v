@@ -30,6 +30,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import NEQ_corr
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ISINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LTINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ULTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSH_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -44,8 +45,8 @@ Admitted.
 Definition correct_PUSH :
   handler_correct (handle_instr PUSH) (clight_of PUSH)
     (pre_of PUSH)
-    (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
-Admitted.
+    (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH)
+  := PUSH_correct.correct_PUSH.
 
 Definition correct_PUSHACC : forall n,
   handler_correct (handle_instr (PUSHACC n)) (clight_of (PUSHACC n))
