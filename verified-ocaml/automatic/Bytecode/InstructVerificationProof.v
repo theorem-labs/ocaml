@@ -55,6 +55,9 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHATOM
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIF_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETGLOBAL_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BGEINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BGTINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BNEQ_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -571,14 +574,14 @@ Admitted.
 Definition correct_BNEQ : forall z1 z2,
   handler_correct (handle_instr (BNEQ z1 z2)) (clight_of (BNEQ z1 z2))
     (pre_of (BNEQ z1 z2))
-    (P_error_of (BNEQ z1 z2)) (P_halt_of (BNEQ z1 z2)) (P_ccall_of (BNEQ z1 z2)).
-Admitted.
+    (P_error_of (BNEQ z1 z2)) (P_halt_of (BNEQ z1 z2)) (P_ccall_of (BNEQ z1 z2))
+  := BNEQ_correct.correct_BNEQ.
 
 Definition correct_BLTINT : forall z1 z2,
   handler_correct (handle_instr (BLTINT z1 z2)) (clight_of (BLTINT z1 z2))
     (pre_of (BLTINT z1 z2))
-    (P_error_of (BLTINT z1 z2)) (P_halt_of (BLTINT z1 z2)) (P_ccall_of (BLTINT z1 z2)).
-Admitted.
+    (P_error_of (BLTINT z1 z2)) (P_halt_of (BLTINT z1 z2)) (P_ccall_of (BLTINT z1 z2))
+  := BLTINT_correct.correct_BLTINT.
 
 Definition correct_BLEINT : forall z1 z2,
   handler_correct (handle_instr (BLEINT z1 z2)) (clight_of (BLEINT z1 z2))
@@ -589,8 +592,8 @@ Definition correct_BLEINT : forall z1 z2,
 Definition correct_BGTINT : forall z1 z2,
   handler_correct (handle_instr (BGTINT z1 z2)) (clight_of (BGTINT z1 z2))
     (pre_of (BGTINT z1 z2))
-    (P_error_of (BGTINT z1 z2)) (P_halt_of (BGTINT z1 z2)) (P_ccall_of (BGTINT z1 z2)).
-Admitted.
+    (P_error_of (BGTINT z1 z2)) (P_halt_of (BGTINT z1 z2)) (P_ccall_of (BGTINT z1 z2))
+  := BGTINT_correct.correct_BGTINT.
 
 Definition correct_BGEINT : forall z1 z2,
   handler_correct (handle_instr (BGEINT z1 z2)) (clight_of (BGEINT z1 z2))
