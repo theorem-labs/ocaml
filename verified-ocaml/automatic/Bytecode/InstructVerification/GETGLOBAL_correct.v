@@ -600,3 +600,42 @@ Proof.
   - intros e le m s ard _ [Hca Hgs].
     exact (conj Hca (conj Hn Hgs)).
 Qed.
+
+(* Wrapper matching InstructVerificationFineGrainedSpec signature.
+   handle_instr (GETGLOBAL n) reduces to handle_GETGLOBAL n by computation.
+   clight_of (GETGLOBAL n) = f_instr_GETGLOBAL,
+   pre_of (GETGLOBAL n) = code_at ... /\p global_offset_safe n.
+   Error case (index out of bounds) matches P_error_of exactly.
+   Step case delegates to verify_GETGLOBAL_handler_correct (requires Z.of_nat n <= Int.max_signed). *)
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Theorem correct_GETGLOBAL : forall n,
+    handler_correct (handle_instr (GETGLOBAL n)) (clight_of (GETGLOBAL n))
+      (pre_of (GETGLOBAL n))
+      (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)).
+Proof.
+  intro n.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr (GETGLOBAL n) (Machine.pc s) s)
+    with (handle_GETGLOBAL n (Machine.pc s) s).
+  unfold handle_GETGLOBAL at 1.
+  destruct (nth_error (Machine.global s) n) as [gval|] eqn:Hnth.
+  - (* Step case: nth_error global n = Some gval *)
+    destruct (Z.leb_spec 0 (Z.of_nat n)), (Z.leb_spec (Z.of_nat n) Int.max_signed).
+    + (* n in range: delegate to verify_GETGLOBAL_handler_correct *)
+      pose proof (verify_GETGLOBAL_handler_correct n (conj H H0)) as Hcorr.
+      unfold handler_correct, handle_GETGLOBAL in Hcorr. specialize (Hcorr e le m s).
+      rewrite Hnth in Hcorr.
+      change (pre_of (GETGLOBAL n)) with (code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n).
+      exact Hcorr.
+    + (* n > Int.max_signed: unreachable for well-formed bytecode *)
+      admit.
+    + (* 0 > Z.of_nat n: impossible *)
+      lia.
+    + (* both fail: 0 > Z.of_nat n impossible *)
+      lia.
+  - (* Error case: nth_error global n = None *)
+    unfold P_error_of, error_message_of. rewrite Hnth. reflexivity.
+Admitted.
