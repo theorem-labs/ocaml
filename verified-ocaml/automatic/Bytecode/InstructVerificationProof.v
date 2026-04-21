@@ -60,6 +60,10 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BGTINT_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BNEQ_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BEQ_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BUGEINT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETFIELD_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETCLOSURE_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHGETGLOBAL_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import VECTLENGTH_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -194,8 +198,8 @@ Admitted.
 Definition correct_OFFSETCLOSURE : forall z,
   handler_correct (handle_instr (OFFSETCLOSURE z)) (clight_of (OFFSETCLOSURE z))
     (pre_of (OFFSETCLOSURE z))
-    (P_error_of (OFFSETCLOSURE z)) (P_halt_of (OFFSETCLOSURE z)) (P_ccall_of (OFFSETCLOSURE z)).
-Admitted.
+    (P_error_of (OFFSETCLOSURE z)) (P_halt_of (OFFSETCLOSURE z)) (P_ccall_of (OFFSETCLOSURE z))
+  := OFFSETCLOSURE_correct.correct_OFFSETCLOSURE.
 
 Definition correct_PUSHOFFSETCLOSURE : forall z,
   handler_correct (handle_instr (PUSHOFFSETCLOSURE z)) (clight_of (PUSHOFFSETCLOSURE z))
@@ -212,8 +216,8 @@ Definition correct_GETGLOBAL : forall n,
 Definition correct_PUSHGETGLOBAL : forall n,
   handler_correct (handle_instr (PUSHGETGLOBAL n)) (clight_of (PUSHGETGLOBAL n))
     (pre_of (PUSHGETGLOBAL n))
-    (P_error_of (PUSHGETGLOBAL n)) (P_halt_of (PUSHGETGLOBAL n)) (P_ccall_of (PUSHGETGLOBAL n)).
-Admitted.
+    (P_error_of (PUSHGETGLOBAL n)) (P_halt_of (PUSHGETGLOBAL n)) (P_ccall_of (PUSHGETGLOBAL n))
+  := PUSHGETGLOBAL_correct.correct_PUSHGETGLOBAL.
 
 Definition correct_GETGLOBALFIELD : forall n p,
   handler_correct (handle_instr (GETGLOBALFIELD n p)) (clight_of (GETGLOBALFIELD n p))
@@ -278,8 +282,8 @@ Admitted.
 Definition correct_GETFIELD : forall n,
   handler_correct (handle_instr (GETFIELD n)) (clight_of (GETFIELD n))
     (pre_of (GETFIELD n))
-    (P_error_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)).
-Admitted.
+    (P_error_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n))
+  := GETFIELD_correct.correct_GETFIELD.
 
 Definition correct_GETFLOATFIELD : forall n,
   handler_correct (handle_instr (GETFLOATFIELD n)) (clight_of (GETFLOATFIELD n))
@@ -302,8 +306,8 @@ Admitted.
 Definition correct_VECTLENGTH :
   handler_correct (handle_instr VECTLENGTH) (clight_of VECTLENGTH)
     (pre_of VECTLENGTH)
-    (P_error_of VECTLENGTH) (P_halt_of VECTLENGTH) (P_ccall_of VECTLENGTH).
-Admitted.
+    (P_error_of VECTLENGTH) (P_halt_of VECTLENGTH) (P_ccall_of VECTLENGTH)
+  := VECTLENGTH_correct.correct_VECTLENGTH.
 
 Definition correct_GETVECTITEM :
   handler_correct (handle_instr GETVECTITEM) (clight_of GETVECTITEM)
