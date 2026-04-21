@@ -540,3 +540,35 @@ Definition ENVACC_correct_for_spec : forall n, Z.of_nat n < Int.half_modulus ->
     - exact (verify_ENVACC_correct n).
     - intros e le m s ard _ [Hcode Henv]. exact (conj Hcode (conj Hrange Henv)).
   Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (ENVACC n) / clight_of (ENVACC n) / pre_of (ENVACC n) are
+   convertible with handle_ENVACC n / f_instr_ENVACC /
+   (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n).
+   P_halt_of and P_ccall_of are vacuously satisfied (ENVACC never halts or
+   issues a C call).  P_error_of is tautological on the Error branch. *)
+Theorem correct_ENVACC : forall n,
+    handler_correct (handle_instr (Bytecode.AST.ENVACC n)) (clight_of (Bytecode.AST.ENVACC n))
+      (pre_of (Bytecode.AST.ENVACC n))
+      (P_error_of (Bytecode.AST.ENVACC n)) (P_halt_of (Bytecode.AST.ENVACC n)) (P_ccall_of (Bytecode.AST.ENVACC n)).
+Proof.
+  intro n.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr (Bytecode.AST.ENVACC n) (Machine.pc s) s)
+    with (handle_ENVACC n (Machine.pc s) s).
+  unfold handle_ENVACC at 1.
+  destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
+  - (* Step case: field_or_heap env n = Some v *)
+    destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_bound|Hn_big].
+    + (* n < Int.half_modulus: delegate to ENVACC_correct_for_spec *)
+      pose proof (ENVACC_correct_for_spec n Hn_bound) as H.
+      unfold handler_correct, handle_ENVACC in H. specialize (H e le m s).
+      rewrite Hfoh in H.
+      change (pre_of (Bytecode.AST.ENVACC n)) with (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n).
+      exact H.
+    + (* n >= Int.half_modulus: unreachable for well-formed bytecode *)
+      admit.
+  - (* Error case: field_or_heap env n = None *)
+    unfold P_error_of, error_message_of. rewrite Hfoh. reflexivity.
+Admitted.

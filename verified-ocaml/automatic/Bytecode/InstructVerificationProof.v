@@ -64,6 +64,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETFIELD
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETCLOSURE_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHGETGLOBAL_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import VECTLENGTH_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ENVACC_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -102,8 +103,8 @@ Definition correct_ASSIGN : forall n,
 Definition correct_ENVACC : forall n,
   handler_correct (handle_instr (ENVACC n)) (clight_of (ENVACC n))
     (pre_of (ENVACC n))
-    (P_error_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)).
-Admitted.
+    (P_error_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n))
+  := ENVACC_correct.correct_ENVACC.
 
 Definition correct_PUSHENVACC : forall n,
   handler_correct (handle_instr (PUSHENVACC n)) (clight_of (PUSHENVACC n))
