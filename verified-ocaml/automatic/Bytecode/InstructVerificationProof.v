@@ -31,6 +31,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ISINT_co
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LTINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ULTINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSH_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GEINT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -495,8 +496,8 @@ Admitted.
 Definition correct_GEINT :
   handler_correct (handle_instr GEINT) (clight_of GEINT)
     (pre_of GEINT)
-    (P_error_of GEINT) (P_halt_of GEINT) (P_ccall_of GEINT).
-Admitted.
+    (P_error_of GEINT) (P_halt_of GEINT) (P_ccall_of GEINT)
+  := GEINT_correct.correct_GEINT.
 
 Definition correct_OFFSETINT : forall z,
   handler_correct (handle_instr (OFFSETINT z)) (clight_of (OFFSETINT z))
