@@ -1246,8 +1246,6 @@ Proof.
   - (* stack = arg1 :: rest *)
     destruct (get_code_ptr_s s s.(Machine.accu)) as [target_pc|] eqn:Hgcp.
     + (* Step case: delegate to the old proof *)
-      unfold handle_APPLY1 in H.
-      rewrite Hstk in H. rewrite Hgcp in H.
       exact H.
     + (* Error: accu is not a closure *)
       unfold P_error_of. simpl. rewrite Hstk. rewrite Hgcp. reflexivity.

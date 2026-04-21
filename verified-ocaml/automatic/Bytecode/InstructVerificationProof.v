@@ -89,6 +89,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SWITCH_c
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import POPTRAP_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY1_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY2_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPLY3_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM3_correct.
@@ -173,8 +174,8 @@ Definition correct_APPLY1 :
 Definition correct_APPLY2 :
   handler_correct (handle_instr APPLY2) (clight_of APPLY2)
     (pre_of APPLY2)
-    (P_error_of APPLY2) (P_halt_of APPLY2) (P_ccall_of APPLY2).
-Admitted.
+    (P_error_of APPLY2) (P_halt_of APPLY2) (P_ccall_of APPLY2)
+  := APPLY2_correct.correct_APPLY2.
 
 Definition correct_APPLY3 :
   handler_correct (handle_instr APPLY3) (clight_of APPLY3)
