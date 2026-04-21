@@ -319,6 +319,8 @@ Proof.
     rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.
 
+Local Abbreviation ULTINT := Bytecode.AST.ULTINT.
+
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr ULTINT / clight_of ULTINT / pre_of ULTINT are convertible
    with handle_ULTINT / f_instr_ULTINT / unsigned_ints_safe.
