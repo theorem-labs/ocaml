@@ -43,6 +43,7 @@ From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
+Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
@@ -1126,4 +1127,39 @@ Proof.
     destruct Hstep_pre as (_ & _ & Haccu_absurd & _).
     simpl in Haccu_absurd. destruct Haccu_absurd.
   }
+Qed.
+
+(* Wrapper with the exact type expected by InstructVerificationProof.v.
+   handle_instr (BRANCHIFNOT z) = handle_BRANCHIFNOT z by computation in Dispatch.
+   clight_of (BRANCHIFNOT z) = f_instr_BRANCHIFNOT, pre_of (BRANCHIFNOT z) = branchifnot_step_pre z.
+   Since handle_BRANCHIFNOT always returns Step, the P_error/P_halt/P_ccall
+   predicates are in dead match branches and thus irrelevant. *)
+Definition correct_BRANCHIFNOT : forall z,
+  handler_correct (handle_instr (BRANCHIFNOT z)) (clight_of (BRANCHIFNOT z))
+    (pre_of (BRANCHIFNOT z))
+    (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
+Proof.
+  intro z.
+  change (handler_correct (handle_BRANCHIFNOT z) f_instr_BRANCHIFNOT
+    (branchifnot_step_pre z)
+    (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z))).
+  intros e le m s.
+  unfold handle_BRANCHIFNOT, branchifnot_step_pre.
+  destruct (Machine.accu s) as [n | tag fields | addr | addr ofs_cl] eqn:Haccu.
+  - destruct n as [|p|p].
+    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
+      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
+    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
+      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
+    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
+      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
+  - destruct fields as [| hd tl].
+    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
+      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
+    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
+      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
+    unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
+  - specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
+    unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
 Qed.

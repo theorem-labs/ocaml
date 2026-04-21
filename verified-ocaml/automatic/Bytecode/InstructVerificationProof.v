@@ -53,6 +53,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CHECK_SI
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETGLOBAL_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHATOM_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIF_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIFNOT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETGLOBAL_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BGEINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLTINT_correct.
@@ -355,8 +356,8 @@ Definition correct_BRANCHIF : forall z,
 Definition correct_BRANCHIFNOT : forall z,
   handler_correct (handle_instr (BRANCHIFNOT z)) (clight_of (BRANCHIFNOT z))
     (pre_of (BRANCHIFNOT z))
-    (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
-Admitted.
+    (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z))
+  := BRANCHIFNOT_correct.correct_BRANCHIFNOT.
 
 Definition correct_SWITCH : forall nc nb const_targets block_targets,
   handler_correct (handle_instr (SWITCH nc nb const_targets block_targets)) (clight_of (SWITCH nc nb const_targets block_targets))
