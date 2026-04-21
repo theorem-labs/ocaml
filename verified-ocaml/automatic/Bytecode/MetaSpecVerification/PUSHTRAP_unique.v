@@ -1,0 +1,16 @@
+(* PUSHTRAP_unique.v - [UNTRUSTED] Per-instruction uniqueness proof for PUSHTRAP.
+   Stub file; proof to be filled in by subagent. *)
+
+From Stdlib Require Import ZArith List Strings.String.
+From OCamlInterp.Manual.Bytecode Require Import AST Machine.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
+
+Lemma unique_PUSHTRAP : forall z, 
+  forall (h1 h2 : Z -> state -> step_result),
+    handler_correct h1 (clight_of (PUSHTRAP z))
+      (pre_of (PUSHTRAP z)) (P_error_of (PUSHTRAP z)) (P_halt_of (PUSHTRAP z)) (P_ccall_of (PUSHTRAP z)) ->
+    handler_correct h2 (clight_of (PUSHTRAP z))
+      (pre_of (PUSHTRAP z)) (P_error_of (PUSHTRAP z)) (P_halt_of (PUSHTRAP z)) (P_ccall_of (PUSHTRAP z)) ->
+    forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
+Proof.
+Admitted.
