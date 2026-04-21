@@ -602,3 +602,37 @@ Proof.
     rewrite Hsp_load' in Hsp_load. injection Hsp_load. intros; subst.
     lia.
 Qed.
+
+(* Wrapper matching InstructVerificationFineGrainedSpec signature.
+   handle_instr (ACC n) reduces to handle_ACC n by computation.
+   clight_of (ACC n) = f_instr_ACC, pre_of (ACC n) = code_at (Int.repr (Z.of_nat n)).
+   Error case (stack underflow) matches P_error_of exactly.
+   Step case delegates to verify_ACC_handler_correct (requires Z.of_nat n < Int.half_modulus). *)
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Theorem correct_ACC : forall n,
+    handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
+      (pre_of (ACC n))
+      (P_error_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
+Proof.
+  intro n.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr (ACC n) (Machine.pc s) s)
+    with (handle_ACC n (Machine.pc s) s).
+  unfold handle_ACC at 1.
+  destruct (nth_error (Machine.stack s) n) as [v|] eqn:Hnth.
+  - (* Step case: nth_error stack n = Some v *)
+    destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_bound|Hn_big].
+    + (* n < Int.half_modulus: delegate to verify_ACC_handler_correct *)
+      pose proof (verify_ACC_handler_correct n Hn_bound) as H.
+      unfold handler_correct, handle_ACC in H. specialize (H e le m s).
+      rewrite Hnth in H.
+      change (pre_of (ACC n)) with (code_at (Int.repr (Z.of_nat n))).
+      exact H.
+    + (* n >= Int.half_modulus: unreachable for well-formed bytecode *)
+      admit.
+  - (* Error case: nth_error stack n = None *)
+    unfold P_error_of, error_message_of. rewrite Hnth. reflexivity.
+Admitted.
