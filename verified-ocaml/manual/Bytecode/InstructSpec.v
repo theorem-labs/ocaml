@@ -2845,30 +2845,8 @@ Definition switch_step_pre (_nc _nb : nat) (const_targets block_targets : list Z
 (*     (P_error_of i) (P_halt_of i) (P_ccall_of i)                     *)
 (* ================================================================== *)
 
-Lemma handler_correct_absorb_wfb :
-  forall (wfb : bool) handler f pre P_err P_halt P_ccall,
-    (wfb = true -> handler_correct handler f pre P_err P_halt P_ccall) ->
-    handler_correct handler f
-      (fun e m s ard => wfb = true /\ pre e m s ard)
-      (fun msg s => handler s.(Machine.pc) s = Error msg)
-      (fun v => if wfb then P_halt v else True)
-      (fun n args s => if wfb then P_ccall n args s else True).
-Proof.
-  intros wfb handler f pre P_err P_halt P_ccall H.
-  unfold handler_correct.
-  intros e le m s.
-  destruct (handler s.(Machine.pc) s) eqn:Heq.
-  - intros ard Habs [Hwfb Hpre].
-    specialize (H Hwfb e le m s). rewrite Heq in H.
-    exact (H ard Habs Hpre).
-  - exact Heq.
-  - destruct wfb.
-    + specialize (H eq_refl e le m s). rewrite Heq in H. exact H.
-    + exact I.
-  - destruct wfb.
-    + specialize (H eq_refl e le m s). rewrite Heq in H. exact H.
-    + exact I.
-Qed.
+(* handler_correct_absorb_wfb removed — no longer needed after uniformizing
+   InstructVerificationFineGrainedSpec parameters to use dispatch functions directly. *)
 
 Definition instr_wfb (i : instruction) : bool :=
   match i with
@@ -3218,922 +3196,480 @@ Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data
 (*   /\p                — right-assoc conjunction of preconditions      *)
 (*                                                                      *)
 (* Each entry: handler_correct handler c_func pre err stuck external    *)
-(* 0 Admitted, 0 Axioms across all 151 proofs and bridges.              *)
+(* 94 uniform parameters (one per AST constructor).                     *)
 (* ================================================================== *)
 
 Module Type InstructVerificationFineGrainedSpec.
 
-  Parameter correct_ACC0 :
-    handler_correct (handle_ACC 0) f_instr_ACC0
-      no_pre
-      (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC1 :
-    handler_correct (handle_ACC 1) f_instr_ACC1
-      no_pre
-      (fun _ s => nth_error s.(Machine.stack) 1 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC2 :
-    handler_correct (handle_ACC 2) f_instr_ACC2
-      no_pre
-      (fun _ s => nth_error s.(Machine.stack) 2 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC3 :
-    handler_correct (handle_ACC 3) f_instr_ACC3
-      no_pre
-      (fun _ s => nth_error s.(Machine.stack) 3 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC4 :
-    handler_correct (handle_ACC 4) f_instr_ACC4
-      no_pre
-      (fun _ s => nth_error s.(Machine.stack) 4 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC5 :
-    handler_correct (handle_ACC 5) f_instr_ACC5
-      no_pre
-      (fun _ s => nth_error s.(Machine.stack) 5 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC6 :
-    handler_correct (handle_ACC 6) f_instr_ACC6
-      no_pre
-      (fun _ s => nth_error s.(Machine.stack) 6 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC7 :
-    handler_correct (handle_ACC 7) f_instr_ACC7
-      no_pre
-      (fun _ s => nth_error s.(Machine.stack) 7 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ACC :
-    forall n,
-    Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ACC n) f_instr_ACC
-      (code_at (Int.repr (Z.of_nat n)))
-      (fun _ s => nth_error s.(Machine.stack) n = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ADDINT :
-    handler_correct handle_ADDINT f_instr_ADDINT
-      (accu_check ak_long /\p stack_head_is_long)
-      (fun _ s => forall a b rest, s.(Machine.accu) = Val_int a -> s.(Machine.stack) = Val_int b :: rest -> False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ANDINT :
-    handler_correct handle_ANDINT f_instr_ANDINT
-      (accu_check ak_long /\p stack_head_is_long)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPLY1 :
-    handler_correct (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
-      apply1_step_pre
-      (fun msg s => (msg = "APPLY1: accu is not a closure"%string /\ get_code_ptr_s s s.(Machine.accu) = None) \/ (msg = "APPLY1: stack underflow"%string)) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPLY2 :
-    handler_correct (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
-      apply2_step_pre
-      (fun msg s => (msg = "APPLY2: accu is not a closure"%string /\ get_code_ptr_s s s.(Machine.accu) = None) \/ (msg = "APPLY2: stack underflow"%string)) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPLY3 :
-    handler_correct (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
-      apply3_step_pre
-      (fun msg s => match s.(Machine.stack) with | _ :: _ :: _ :: _ => get_code_ptr_s s s.(Machine.accu) = None | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPLY :
-    forall n,
-    handler_correct (fun _ s => handle_APPLY n s) f_instr_APPLY
-      (apply_n_step_pre n)
-      (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPTERM1 :
-    forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
-      (appterm1_step_pre slotsize)
-      (fun msg s => s.(Machine.stack) = nil \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPTERM2 :
-    forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM2 slotsize s) f_instr_APPTERM2
-      (appterm2_step_pre slotsize)
-      (fun msg s => s.(Machine.stack) = nil \/ (exists a, s.(Machine.stack) = a :: nil) \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPTERM3 :
-    forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
-      (appterm3_step_pre slotsize)
-      (fun msg s => match s.(Machine.stack) with | _ :: _ :: _ :: _ => False | _ => True end \/ get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_APPTERM :
-    forall nargs slotsize,
-    handler_correct (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
-      (fun e0 m s ard =>
-         get_code_ptr_s s s.(Machine.accu) <> None /\
-         let s' := match get_code_ptr_s s s.(Machine.accu) with
-                   | Some target_pc =>
-                     s <|pc := target_pc|>
-                       <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
-                       <|env := s.(Machine.accu)|>
-                       <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
-                   | None => s
-                   end in
-         forall le,
-           abs_rel_with_ard e0 le m s ard ->
-           exists le' m' out,
-             exec_stmt function_entry1 clight_ge e0 le m
-               (fn_body f_instr_APPTERM) E0 le' m' out /\
-             abs_rel e0 le' m' s')
-      (fun msg s => get_code_ptr_s s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ASRINT :
-    handler_correct handle_ASRINT f_instr_ASRINT
-      (arith_safe arith_shift)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ASSIGN :
-    forall n,
-    handler_correct (handle_ASSIGN n) f_instr_ASSIGN
-      (assign_step_pre n)
-      (fun _ s => set_nth s.(Machine.stack) n s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ATOM0 :
-    handler_correct handle_ATOM0 f_instr_ATOM0
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ATOM :
-    forall t, Z.of_nat t <= 2097151 ->
-    handler_correct (handle_ATOM t) f_instr_ATOM
-      (code_at (Int.repr (Z.of_nat t)))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BEQ :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BEQ n target) f_instr_BEQ
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BGEINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BGEINT n target) f_instr_BGEINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun msg s => msg = "BGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BGTINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BGTINT n target) f_instr_BGTINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun msg s => msg = "BGTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BLEINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BLEINT n target) f_instr_BLEINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun msg s => msg = "BLEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BLTINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BLTINT n target) f_instr_BLTINT
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun msg s => msg = "BLTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BNEQ :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BNEQ n target) f_instr_BNEQ
-      (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BOOLNOT :
-    handler_correct handle_BOOLNOT f_instr_BOOLNOT
-      (accu_check ak_bool /\p accu_check ak_long)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BRANCHIFNOT :
-    forall target,
-    handler_correct (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
-      (branchifnot_step_pre target)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BRANCHIF :
-    forall target,
-    handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
-      (branchif_step_pre target)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BRANCH :
-    forall target,
-    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
-      code_loadable
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-
-  Parameter correct_BUGEINT :
-    forall n target,
-    0 <= n -> Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
-      ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
-      (fun msg s => msg = "BUGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_BULTINT :
-    forall n target,
-    0 <= n -> Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BULTINT n target) f_instr_BULTINT
-      ((((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long)
-      (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CHECK_SIGNALS :
-    handler_correct handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CLOSUREREC :
-    forall code_ofs, Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
-      (heap_alloc_with_stores 2 247 alloc_store_2
-       /\p code_at (Int.repr 1)
-       /\p code_arg_at 1 (Int.repr 0)
-       /\p code_arg_at 2 (Int.repr code_ofs)
-       /\p sp_at_least 16)
-      (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CLOSURE :
-    forall nvars code_ofs,
-    (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
-    Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
-      (closure_general_step_pre nvars code_ofs)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CONST0 :
-    handler_correct (handle_CONSTINT 0) f_instr_CONST0
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CONST1 :
-    handler_correct (handle_CONSTINT 1) f_instr_CONST1
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CONST2 :
-    handler_correct (handle_CONSTINT 2) f_instr_CONST2
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CONST3 :
-    handler_correct (handle_CONSTINT 3) f_instr_CONST3
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_CONSTINT :
-    forall n, Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
-      (code_at (Int.repr n))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_C_CALL1 :
-    forall prim_idx,
-    handler_correct (handle_C_CALL 1 prim_idx) f_instr_C_CALL1
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => True).
-
-  Parameter correct_C_CALL2 :
-    forall prim_idx,
-    handler_correct (handle_C_CALL 2 prim_idx) f_instr_C_CALL2
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => True).
-
-  Parameter correct_C_CALL3 :
-    forall prim_idx,
-    handler_correct (handle_C_CALL 3 prim_idx) f_instr_C_CALL3
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => True).
-
-  Parameter correct_C_CALL4 :
-    forall prim_idx,
-    handler_correct (handle_C_CALL 4 prim_idx) f_instr_C_CALL4
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => True).
-
-  Parameter correct_C_CALL5 :
-    forall prim_idx,
-    handler_correct (handle_C_CALL 5 prim_idx) f_instr_C_CALL5
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => True).
-
-  Parameter correct_C_CALLN :
-    forall nargs prim_idx,
-    handler_correct (handle_C_CALL nargs prim_idx) f_instr_C_CALLN
-      no_pre
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => True).
-
-  Parameter correct_DIVINT :
-    handler_correct handle_DIVINT f_instr_DIVINT
-      (arith_safe arith_divmod)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int b :: _ => Z.eqb b 0 = true | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ENVACC1 :
-    handler_correct (handle_ENVACC 1) f_instr_ENVACC1
-      (env_field_loadable 1)
-      (fun _ s => field_or_heap s s.(Machine.env) 1 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ENVACC2 :
-    handler_correct (handle_ENVACC 2) f_instr_ENVACC2
-      (env_field_loadable 2)
-      (fun _ s => field_or_heap s s.(Machine.env) 2 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ENVACC3 :
-    handler_correct (handle_ENVACC 3) f_instr_ENVACC3
-      (env_field_loadable 3)
-      (fun _ s => field_or_heap s s.(Machine.env) 3 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ENVACC4 :
-    handler_correct (handle_ENVACC 4) f_instr_ENVACC4
-      (env_field_loadable 4)
-      (fun _ s => field_or_heap s s.(Machine.env) 4 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ENVACC :
-    forall n, Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ENVACC n) f_instr_ENVACC
-      (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
-      (fun _ s => field_or_heap s s.(Machine.env) n = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_EQ :
-    handler_correct handle_EQ f_instr_EQ
-      (arith_safe arith_unsigned)
-      (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
-
-
-  Parameter correct_GEINT :
-    handler_correct handle_GEINT f_instr_GEINT
-      (arith_safe arith_signed)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETBYTESCHAR :
-    handler_correct handle_GETSTRINGCHAR f_instr_GETBYTESCHAR
-      getstringchar_step_pre
-      (fun msg s => match s.(Machine.stack) with | Val_int idx :: _ => match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with | Some (Val_int _) => False | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETDYNMET :
-    handler_correct handle_GETDYNMET f_instr_GETDYNMET
-      getdynmet_pre
-      (fun msg _ => msg = "GETDYNMET: stack underflow"%string \/
-        msg = "GETDYNMET: no class table"%string \/
-        msg = "GETDYNMET: method not found"%string)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETFIELD0 :
-    handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
-      (heap_field_loadable 0)
-      (fun _ s => field_or_heap s s.(Machine.accu) 0 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETFIELD1 :
-    handler_correct (handle_GETFIELD 1) f_instr_GETFIELD1
-      (heap_field_loadable 1)
-      (fun _ s => field_or_heap s s.(Machine.accu) 1 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETFIELD2 :
-    handler_correct (handle_GETFIELD 2) f_instr_GETFIELD2
-      (heap_field_loadable 2)
-      (fun _ s => field_or_heap s s.(Machine.accu) 2 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETFIELD3 :
-    handler_correct (handle_GETFIELD 3) f_instr_GETFIELD3
-      (heap_field_loadable 3)
-      (fun _ s => field_or_heap s s.(Machine.accu) 3 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETFIELD :
-    forall n, Int.min_signed <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
-      (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
-      (fun _ s => field_or_heap s s.(Machine.accu) n = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETFLOATFIELD :
-    forall n,
-    handler_correct (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
-      (getfloatfield_step_pre n)
-      (fun _ s => field_or_heap s s.(Machine.accu) n = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETGLOBALFIELD :
-    forall n p,
-    handler_correct (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
-      (getglobalfield_step_pre n p)
-      (fun msg s => (nth_error s.(Machine.global) n = None /\ msg = "GETGLOBALFIELD: index out of bounds"%string) \/ (exists glob, nth_error s.(Machine.global) n = Some glob /\ field_or_heap s glob p = None /\ msg = "GETGLOBALFIELD: field access failed"%string)) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETGLOBAL :
-    forall n,
-    0 <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
-      (code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n)
-      (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETMETHOD :
-    handler_correct handle_GETMETHOD f_instr_GETMETHOD
-      getmethod_step_pre
-      (fun msg _ => msg = "GETMETHOD: stack underflow"%string \/
-        msg = "GETMETHOD: no class table"%string \/
-        msg = "GETMETHOD: not an integer index"%string \/
-        msg = "GETMETHOD: method not found"%string)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETPUBMET :
-    forall tag,
-    handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
-      (getpubmet_pre tag)
-      (fun msg _ => msg = "GETPUBMET: no class table"%string \/
-        msg = "GETPUBMET: method not found"%string)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETSTRINGCHAR :
-    handler_correct handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
-      getstringchar_step_pre
-      (fun msg s =>
-         match s.(Machine.stack) with
-         | Val_int idx :: _ =>
-             match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
-             | Some (Val_int _) => False
-             | _ => True
-             end
-         | _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GETVECTITEM :
-    handler_correct handle_GETVECTITEM f_instr_GETVECTITEM
-      getvectitem_step_pre
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
-                  | _, Val_int idx :: _ =>
-                    field_or_heap s s.(Machine.accu) (Z.to_nat idx) = None
-                  | _, _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GRAB :
-    forall required,
-    handler_correct (handle_GRAB required) f_instr_GRAB
-      (grab_step_pre required)
-      (fun msg s => msg = "GRAB: malformed return frame"%string /\ Nat.leb required (extra_args s) = false /\ match skipn (S (extra_args s)) (Machine.stack s) with | Val_int _ :: _ :: Val_int _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_GTINT :
-    handler_correct handle_GTINT f_instr_GTINT
-      (arith_safe arith_signed)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ISINT :
-    handler_correct handle_ISINT f_instr_ISINT
-      (accu_check ak_immediate)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_LEINT :
-    handler_correct handle_LEINT f_instr_LEINT
-      (arith_safe arith_signed)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_LSLINT :
-    handler_correct handle_LSLINT f_instr_LSLINT
-      (arith_safe arith_shift)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_LSRINT :
-    handler_correct handle_LSRINT f_instr_LSRINT
-      (arith_safe arith_shift)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_LTINT :
-    handler_correct handle_LTINT f_instr_LTINT
-      (arith_safe arith_signed)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_MAKEBLOCK1 :
-    forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
-      (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1
-       /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_MAKEBLOCK2 :
-    forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
-      (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
-       /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_MAKEBLOCK3 :
-    forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
-      (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
-       /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_MAKEBLOCK :
-    forall (t size : nat), (size >= 1)%nat ->
-    handler_correct (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
-      (makeblock_step_pre t size)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_MAKEFLOATBLOCK :
-    forall (n : nat), (n >= 1)%nat ->
-    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
-      (makefloatblock_step_pre n)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_MODINT :
-    handler_correct handle_MODINT f_instr_MODINT
-      (arith_safe arith_divmod)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int b :: _ => Z.eqb b 0 = true | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_MULINT :
-    handler_correct handle_MULINT f_instr_MULINT
-      (accu_check ak_long /\p stack_head_is_long)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_NEGINT :
-    handler_correct handle_NEGINT f_instr_NEGINT
-      (accu_check ak_long)
-      (fun _ s => forall n, s.(Machine.accu) <> Val_int n) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_NEQ :
-    handler_correct handle_NEQ f_instr_NEQ
-      (arith_safe arith_unsigned)
-      (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_OFFSETCLOSURE0 :
-    handler_correct (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
-      no_pre
-      (fun msg s => msg = "OFFSETCLOSURE: invalid env"%string /\
-        match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_OFFSETCLOSURE3 :
-    handler_correct (handle_OFFSETCLOSURE 2) f_instr_OFFSETCLOSURE3
-      (closure_offset_pre 2 24)
-      (fun msg s =>
-        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "OFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_OFFSETCLOSUREM3 :
-    handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM3
-      (closure_offset_pre (-2) (-24))
-      (fun msg s =>
-        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "OFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_OFFSETCLOSURE :
-    forall n,
-    handler_correct (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
-      (offsetclosure_pre n)
-      (fun msg s =>
-        (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "OFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_OFFSETINT :
-    forall ofs, Int.min_signed <= ofs * 2 <= Int.max_signed ->
-    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (code_at (Int.repr ofs) /\p accu_check ak_long)
-      (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_OFFSETREF :
-    forall n,
-    handler_correct (handle_OFFSETREF n) f_instr_OFFSETREF
-      (fun _ => offsetref_heap_pre n)
-      (fun _ s => match s.(Machine.accu) with
-                  | Val_ptr addr =>
-                    match heap_lookup s.(Machine.hp) addr with
-                    | Some (_, Val_int _ :: _) => False
-                    | _ => True
-                    end
-                  | _ => True
-                  end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_ORINT :
-    handler_correct handle_ORINT f_instr_ORINT
-      (accu_check ak_long /\p stack_head_is_long)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
-
-
-  Parameter correct_POPTRAP :
-    handler_correct (handle_POPTRAP) f_instr_POPTRAP
-      poptrap_step_pre
-      (fun msg _ => msg = "POPTRAP: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_POP :
-    forall n,
-    Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_POP n) f_instr_POP
-      ((code_at (Int.repr (Z.of_nat n)) /\p code_ne_struct) /\p stack_length_ge n)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHACC1 :
-    handler_correct (handle_PUSHACC 1) f_instr_PUSHACC1
-      (sp_at_least 16)
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 1 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHACC2 :
-    handler_correct (handle_PUSHACC 2) f_instr_PUSHACC2
-      (sp_at_least 16)
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 2 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHACC3 :
-    handler_correct (handle_PUSHACC 3) f_instr_PUSHACC3
-      (sp_at_least 16)
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 3 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHACC4 :
-    handler_correct (handle_PUSHACC 4) f_instr_PUSHACC4
-      (sp_at_least 16)
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 4 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHACC5 :
-    handler_correct (handle_PUSHACC 5) f_instr_PUSHACC5
-      (sp_at_least 16)
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 5 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHACC6 :
-    handler_correct (handle_PUSHACC 6) f_instr_PUSHACC6
-      (sp_at_least 16)
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 6 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHACC7 :
-    handler_correct (handle_PUSHACC 7) f_instr_PUSHACC7
-      (sp_at_least 16)
-      (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 7 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHATOM0 :
-    handler_correct handle_PUSHATOM0 f_instr_PUSHATOM0
-      (sp_at_least 16)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHATOM :
-    forall t, Z.of_nat t <= 2097151 ->
-    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
-      (sp_at_least 16 /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHCONST0 :
-    handler_correct (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
-      (sp_at_least 16)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHCONST1 :
-    handler_correct (handle_PUSHCONSTINT 1) f_instr_PUSHCONST1
-      (sp_at_least 16)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHCONST2 :
-    handler_correct (handle_PUSHCONSTINT 2) f_instr_PUSHCONST2
-      (sp_at_least 16)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHCONST3 :
-    handler_correct (handle_PUSHCONSTINT 3) f_instr_PUSHCONST3
-      (sp_at_least 16)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHCONSTINT :
-    forall n,
-    handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
-      (pushconstint_step_pre n)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHENVACC1 :
-    handler_correct (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
-      (pushenvacc_step_pre 1)
-      (fun _ s => field_or_heap s s.(Machine.env) 1 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHENVACC2 :
-    handler_correct (handle_PUSHENVACC 2) f_instr_PUSHENVACC2
-      (pushenvacc_step_pre 2)
-      (fun _ s => field_or_heap s s.(Machine.env) 2 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHENVACC3 :
-    handler_correct (handle_PUSHENVACC 3) f_instr_PUSHENVACC3
-      (pushenvacc_step_pre 3)
-      (fun _ s => field_or_heap s s.(Machine.env) 3 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHENVACC4 :
-    handler_correct (handle_PUSHENVACC 4) f_instr_PUSHENVACC4
-      (pushenvacc_step_pre 4)
-      (fun _ s => field_or_heap s s.(Machine.env) 4 = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHENVACC :
-    forall n,
-    handler_correct (handle_PUSHENVACC n) f_instr_PUSHENVACC
-      (pushenvacc_generic_step_pre n)
-      (fun _ s => field_or_heap s s.(Machine.env) n = None)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHGETGLOBALFIELD :
-    forall n p,
-    handler_correct (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
-      (pushgetglobalfield_step_pre n p)
-      (fun msg s =>
-         nth_error s.(Machine.global) n = None \/
-         (exists glob, nth_error s.(Machine.global) n = Some glob /\
-                       field_or_heap s glob p = None))
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHGETGLOBAL :
-    forall n,
-    0 <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
-      ((code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) /\p sp_at_least 16)
-      (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHOFFSETCLOSURE0 :
-    handler_correct (handle_PUSHOFFSETCLOSURE 0) f_instr_PUSHOFFSETCLOSURE0
-      (sp_at_least 16)
-      (fun msg s => msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
-        match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHOFFSETCLOSURE3 :
-    handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE3
-      (sp_at_least 16 /\p closure_offset_pre 2 24)
-      (fun msg s =>
-        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHOFFSETCLOSUREM3 :
-    handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM3
-      (sp_at_least 16 /\p closure_offset_pre (-2) (-24))
-      (fun msg s =>
-        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHOFFSETCLOSURE :
-    forall ofs,
-    handler_correct (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
-      (pushoffsetclosure_step_pre ofs)
-      (fun msg s =>
-        (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
-         match Machine.env s with Val_block _ _ => True | _ => False end) \/
-        (msg = "PUSHOFFSETCLOSURE: invalid env"%string /\
-         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end))
-      (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSHTRAP :
-    forall handler_pc,
-    handler_correct (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
-      (pushtrap_step_pre handler_pc)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
-
-  Parameter correct_PUSH_RETADDR :
-    forall ret_addr,
-    handler_correct (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
-      (push_retaddr_step_pre ret_addr)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_ACC : forall n,
+    handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
+      (fun e m s ard => instr_wfb (ACC n) = true /\ pre_of (ACC n) e m s ard)
+      (P_error_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
 
   Parameter correct_PUSH :
-    handler_correct handle_PUSH f_instr_PUSH
-      (sp_at_least 16)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr PUSH) (clight_of PUSH)
+      (fun e m s ard => instr_wfb PUSH = true /\ pre_of PUSH e m s ard)
+      (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
 
-  Parameter correct_RAISE_NOTRACE :
-    handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
-      raise_step_pre
-      (fun msg _ => msg = "unhandled exception"%string \/ msg = "RAISE: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_PUSHACC : forall n,
+    handler_correct (handle_instr (PUSHACC n)) (clight_of (PUSHACC n))
+      (fun e m s ard => instr_wfb (PUSHACC n) = true /\ pre_of (PUSHACC n) e m s ard)
+      (P_error_of (PUSHACC n)) (P_halt_of (PUSHACC n)) (P_ccall_of (PUSHACC n)).
 
-  Parameter correct_RAISE :
-    handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RAISE
-      raise_step_pre
-      (fun msg _ => msg = "unhandled exception"%string \/ msg = "RAISE: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_POP : forall n,
+    handler_correct (handle_instr (POP n)) (clight_of (POP n))
+      (fun e m s ard => instr_wfb (POP n) = true /\ pre_of (POP n) e m s ard)
+      (P_error_of (POP n)) (P_halt_of (POP n)) (P_ccall_of (POP n)).
 
+  Parameter correct_ASSIGN : forall n,
+    handler_correct (handle_instr (ASSIGN n)) (clight_of (ASSIGN n))
+      (fun e m s ard => instr_wfb (ASSIGN n) = true /\ pre_of (ASSIGN n) e m s ard)
+      (P_error_of (ASSIGN n)) (P_halt_of (ASSIGN n)) (P_ccall_of (ASSIGN n)).
 
-  Parameter correct_RERAISE :
-    handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RERAISE
-      raise_step_pre
-      (fun msg _ => msg = "unhandled exception"%string \/ msg = "RAISE: malformed trap frame"%string) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_ENVACC : forall n,
+    handler_correct (handle_instr (ENVACC n)) (clight_of (ENVACC n))
+      (fun e m s ard => instr_wfb (ENVACC n) = true /\ pre_of (ENVACC n) e m s ard)
+      (P_error_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)).
+
+  Parameter correct_PUSHENVACC : forall n,
+    handler_correct (handle_instr (PUSHENVACC n)) (clight_of (PUSHENVACC n))
+      (fun e m s ard => instr_wfb (PUSHENVACC n) = true /\ pre_of (PUSHENVACC n) e m s ard)
+      (P_error_of (PUSHENVACC n)) (P_halt_of (PUSHENVACC n)) (P_ccall_of (PUSHENVACC n)).
+
+  Parameter correct_PUSH_RETADDR : forall z,
+    handler_correct (handle_instr (PUSH_RETADDR z)) (clight_of (PUSH_RETADDR z))
+      (fun e m s ard => instr_wfb (PUSH_RETADDR z) = true /\ pre_of (PUSH_RETADDR z) e m s ard)
+      (P_error_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)).
+
+  Parameter correct_APPLY : forall n,
+    handler_correct (handle_instr (APPLY n)) (clight_of (APPLY n))
+      (fun e m s ard => instr_wfb (APPLY n) = true /\ pre_of (APPLY n) e m s ard)
+      (P_error_of (APPLY n)) (P_halt_of (APPLY n)) (P_ccall_of (APPLY n)).
+
+  Parameter correct_APPLY1 :
+    handler_correct (handle_instr APPLY1) (clight_of APPLY1)
+      (fun e m s ard => instr_wfb APPLY1 = true /\ pre_of APPLY1 e m s ard)
+      (P_error_of APPLY1) (P_halt_of APPLY1) (P_ccall_of APPLY1).
+
+  Parameter correct_APPLY2 :
+    handler_correct (handle_instr APPLY2) (clight_of APPLY2)
+      (fun e m s ard => instr_wfb APPLY2 = true /\ pre_of APPLY2 e m s ard)
+      (P_error_of APPLY2) (P_halt_of APPLY2) (P_ccall_of APPLY2).
+
+  Parameter correct_APPLY3 :
+    handler_correct (handle_instr APPLY3) (clight_of APPLY3)
+      (fun e m s ard => instr_wfb APPLY3 = true /\ pre_of APPLY3 e m s ard)
+      (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3).
+
+  Parameter correct_APPTERM : forall nargs slotsize,
+    handler_correct (handle_instr (APPTERM nargs slotsize)) (clight_of (APPTERM nargs slotsize))
+      (fun e m s ard => instr_wfb (APPTERM nargs slotsize) = true /\ pre_of (APPTERM nargs slotsize) e m s ard)
+      (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)).
+
+  Parameter correct_APPTERM1 : forall n,
+    handler_correct (handle_instr (APPTERM1 n)) (clight_of (APPTERM1 n))
+      (fun e m s ard => instr_wfb (APPTERM1 n) = true /\ pre_of (APPTERM1 n) e m s ard)
+      (P_error_of (APPTERM1 n)) (P_halt_of (APPTERM1 n)) (P_ccall_of (APPTERM1 n)).
+
+  Parameter correct_APPTERM2 : forall n,
+    handler_correct (handle_instr (APPTERM2 n)) (clight_of (APPTERM2 n))
+      (fun e m s ard => instr_wfb (APPTERM2 n) = true /\ pre_of (APPTERM2 n) e m s ard)
+      (P_error_of (APPTERM2 n)) (P_halt_of (APPTERM2 n)) (P_ccall_of (APPTERM2 n)).
+
+  Parameter correct_APPTERM3 : forall n,
+    handler_correct (handle_instr (APPTERM3 n)) (clight_of (APPTERM3 n))
+      (fun e m s ard => instr_wfb (APPTERM3 n) = true /\ pre_of (APPTERM3 n) e m s ard)
+      (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)).
+
+  Parameter correct_RETURN : forall n,
+    handler_correct (handle_instr (RETURN n)) (clight_of (RETURN n))
+      (fun e m s ard => instr_wfb (RETURN n) = true /\ pre_of (RETURN n) e m s ard)
+      (P_error_of (RETURN n)) (P_halt_of (RETURN n)) (P_ccall_of (RETURN n)).
 
   Parameter correct_RESTART :
-    handler_correct handle_RESTART f_instr_RESTART
-      restart_step_pre
-      (fun msg s => (msg = "RESTART: env is not a block"%string /\ match Machine.env s with | Val_int _ | Val_ptr _ => True | _ => False end) \/ (msg = "RESTART: dangling pointer"%string /\ exists addr ofs, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = None) \/ (msg = "RESTART: env is not a closure"%string /\ ((exists addr ofs t fs, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = Some (t, fs) /\ Nat.eqb t Closure_tag = false) \/ (exists t fs, Machine.env s = Val_block t fs /\ Nat.eqb t Closure_tag = false))) \/ (msg = "RESTART: malformed closure"%string /\ ((exists addr ofs t all_fields, Machine.env s = Val_closure addr ofs /\ heap_lookup s.(Machine.hp) addr = Some (t, all_fields) /\ Nat.eqb t Closure_tag = true /\ nth_error (skipn ofs all_fields) 2 = None) \/ (exists t fs, Machine.env s = Val_block t fs /\ Nat.eqb t Closure_tag = true /\ nth_error fs 2 = None)))) (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr RESTART) (clight_of RESTART)
+      (fun e m s ard => instr_wfb RESTART = true /\ pre_of RESTART e m s ard)
+      (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART).
 
+  Parameter correct_GRAB : forall n,
+    handler_correct (handle_instr (GRAB n)) (clight_of (GRAB n))
+      (fun e m s ard => instr_wfb (GRAB n) = true /\ pre_of (GRAB n) e m s ard)
+      (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)).
 
-  Parameter correct_RETURN :
-    forall stacksize,
-    handler_correct (fun _ => handle_RETURN stacksize) f_instr_RETURN
-      (return_step_pre stacksize)
-      (fun msg _ => msg = "RETURN: accu is not a closure"%string \/ msg = "RETURN: malformed return frame"%string) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_CLOSURE : forall n z,
+    handler_correct (handle_instr (CLOSURE n z)) (clight_of (CLOSURE n z))
+      (fun e m s ard => instr_wfb (CLOSURE n z) = true /\ pre_of (CLOSURE n z) e m s ard)
+      (P_error_of (CLOSURE n z)) (P_halt_of (CLOSURE n z)) (P_ccall_of (CLOSURE n z)).
 
-  Parameter correct_SETBYTESCHAR :
-    handler_correct handle_SETBYTESCHAR f_instr_SETBYTESCHAR
-      setbyteschar_step_pre
-      (fun _ s =>
-         match s.(Machine.stack) with
-         | Val_int idx :: Val_int newchar :: _ =>
-             match s.(Machine.accu) with
-             | Val_ptr addr =>
-               match heap_lookup s.(Machine.hp) addr with
-               | Some (_, fields) =>
-                   set_nth fields (Z.to_nat idx) (Val_int newchar) = None
-               | None => True
-               end
-             | _ => True
-             end
-         | _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_CLOSUREREC : forall n1 n2 l,
+    handler_correct (handle_instr (CLOSUREREC n1 n2 l)) (clight_of (CLOSUREREC n1 n2 l))
+      (fun e m s ard => instr_wfb (CLOSUREREC n1 n2 l) = true /\ pre_of (CLOSUREREC n1 n2 l) e m s ard)
+      (P_error_of (CLOSUREREC n1 n2 l)) (P_halt_of (CLOSUREREC n1 n2 l)) (P_ccall_of (CLOSUREREC n1 n2 l)).
 
-  Parameter correct_SETFIELD0 :
-    handler_correct (handle_SETFIELD 0) f_instr_SETFIELD0
-      (setfield_heap_pre 0)
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 0 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_OFFSETCLOSURE : forall z,
+    handler_correct (handle_instr (OFFSETCLOSURE z)) (clight_of (OFFSETCLOSURE z))
+      (fun e m s ard => instr_wfb (OFFSETCLOSURE z) = true /\ pre_of (OFFSETCLOSURE z) e m s ard)
+      (P_error_of (OFFSETCLOSURE z)) (P_halt_of (OFFSETCLOSURE z)) (P_ccall_of (OFFSETCLOSURE z)).
 
-  Parameter correct_SETFIELD1 :
-    handler_correct (handle_SETFIELD 1) f_instr_SETFIELD1
-      (setfield_heap_pre 1)
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 1 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_PUSHOFFSETCLOSURE : forall z,
+    handler_correct (handle_instr (PUSHOFFSETCLOSURE z)) (clight_of (PUSHOFFSETCLOSURE z))
+      (fun e m s ard => instr_wfb (PUSHOFFSETCLOSURE z) = true /\ pre_of (PUSHOFFSETCLOSURE z) e m s ard)
+      (P_error_of (PUSHOFFSETCLOSURE z)) (P_halt_of (PUSHOFFSETCLOSURE z)) (P_ccall_of (PUSHOFFSETCLOSURE z)).
 
-  Parameter correct_SETFIELD2 :
-    handler_correct (handle_SETFIELD 2) f_instr_SETFIELD2
-      (setfield_heap_pre 2)
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 2 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_GETGLOBAL : forall n,
+    handler_correct (handle_instr (GETGLOBAL n)) (clight_of (GETGLOBAL n))
+      (fun e m s ard => instr_wfb (GETGLOBAL n) = true /\ pre_of (GETGLOBAL n) e m s ard)
+      (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)).
 
-  Parameter correct_SETFIELD3 :
-    handler_correct (handle_SETFIELD 3) f_instr_SETFIELD3
-      (setfield_heap_pre 3)
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields 3 (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_PUSHGETGLOBAL : forall n,
+    handler_correct (handle_instr (PUSHGETGLOBAL n)) (clight_of (PUSHGETGLOBAL n))
+      (fun e m s ard => instr_wfb (PUSHGETGLOBAL n) = true /\ pre_of (PUSHGETGLOBAL n) e m s ard)
+      (P_error_of (PUSHGETGLOBAL n)) (P_halt_of (PUSHGETGLOBAL n)) (P_ccall_of (PUSHGETGLOBAL n)).
 
-  Parameter correct_SETFIELD :
-    forall n,
-    handler_correct (handle_SETFIELD n) f_instr_SETFIELD
-      (setfield_step_pre n)
-      (fun _ s => match s.(Machine.stack) with | newval :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields n newval = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_GETGLOBALFIELD : forall n1 n2,
+    handler_correct (handle_instr (GETGLOBALFIELD n1 n2)) (clight_of (GETGLOBALFIELD n1 n2))
+      (fun e m s ard => instr_wfb (GETGLOBALFIELD n1 n2) = true /\ pre_of (GETGLOBALFIELD n1 n2) e m s ard)
+      (P_error_of (GETGLOBALFIELD n1 n2)) (P_halt_of (GETGLOBALFIELD n1 n2)) (P_ccall_of (GETGLOBALFIELD n1 n2)).
 
-  Parameter correct_SETFLOATFIELD :
-    forall n,
-    handler_correct (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
-      (setfloatfield_step_pre n)
-      (fun _ s => match s.(Machine.stack) with | _ :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields n (hd (Val_int 0) s.(Machine.stack)) = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_PUSHGETGLOBALFIELD : forall n1 n2,
+    handler_correct (handle_instr (PUSHGETGLOBALFIELD n1 n2)) (clight_of (PUSHGETGLOBALFIELD n1 n2))
+      (fun e m s ard => instr_wfb (PUSHGETGLOBALFIELD n1 n2) = true /\ pre_of (PUSHGETGLOBALFIELD n1 n2) e m s ard)
+      (P_error_of (PUSHGETGLOBALFIELD n1 n2)) (P_halt_of (PUSHGETGLOBALFIELD n1 n2)) (P_ccall_of (PUSHGETGLOBALFIELD n1 n2)).
 
-  Parameter correct_SETGLOBAL :
-    forall n,
-    handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
-      (setglobal_step_pre n)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_SETGLOBAL : forall n,
+    handler_correct (handle_instr (SETGLOBAL n)) (clight_of (SETGLOBAL n))
+      (fun e m s ard => instr_wfb (SETGLOBAL n) = true /\ pre_of (SETGLOBAL n) e m s ard)
+      (P_error_of (SETGLOBAL n)) (P_halt_of (SETGLOBAL n)) (P_ccall_of (SETGLOBAL n)).
 
-  Parameter correct_SETVECTITEM :
-    handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
-      setvectitem_pre
-      (fun _ s => match s.(Machine.stack) with | Val_int idx :: newval :: _ => match s.(Machine.accu) with | Val_ptr addr => match heap_lookup s.(Machine.hp) addr with | Some (_, fields) => set_nth fields (Z.to_nat idx) newval = None | None => True end | _ => True end | _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_ATOM : forall n,
+    handler_correct (handle_instr (ATOM n)) (clight_of (ATOM n))
+      (fun e m s ard => instr_wfb (ATOM n) = true /\ pre_of (ATOM n) e m s ard)
+      (P_error_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)).
 
-  Parameter correct_STOP :
-    handler_correct (fun _ => handle_STOP) f_instr_STOP
-      no_pre
-      (fun _ _ => False) (fun _ => True) (fun _ _ _ => False).
+  Parameter correct_PUSHATOM : forall n,
+    handler_correct (handle_instr (PUSHATOM n)) (clight_of (PUSHATOM n))
+      (fun e m s ard => instr_wfb (PUSHATOM n) = true /\ pre_of (PUSHATOM n) e m s ard)
+      (P_error_of (PUSHATOM n)) (P_halt_of (PUSHATOM n)) (P_ccall_of (PUSHATOM n)).
 
-  Parameter correct_SUBINT :
-    handler_correct handle_SUBINT f_instr_SUBINT
-      (accu_check ak_long /\p stack_head_is_long)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_MAKEBLOCK : forall n1 n2,
+    handler_correct (handle_instr (MAKEBLOCK n1 n2)) (clight_of (MAKEBLOCK n1 n2))
+      (fun e m s ard => instr_wfb (MAKEBLOCK n1 n2) = true /\ pre_of (MAKEBLOCK n1 n2) e m s ard)
+      (P_error_of (MAKEBLOCK n1 n2)) (P_halt_of (MAKEBLOCK n1 n2)) (P_ccall_of (MAKEBLOCK n1 n2)).
 
-  Parameter correct_SWITCH :
-    forall (_nc _nb : nat) (const_targets block_targets : list Z),
-    handler_correct (fun _ s => handle_SWITCH _nc _nb const_targets block_targets s) f_instr_SWITCH
-      (switch_step_pre _nc _nb const_targets block_targets)
-      (fun msg s =>
-        (msg = "SWITCH: constant index out of range"%string /\
-         match Machine.accu s with Val_int _ => True | _ => False end) \/
-        (msg = "SWITCH: block tag out of range"%string) \/
-        (msg = "SWITCH: dangling pointer"%string /\
-         match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end))
-      (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_MAKEBLOCK1 : forall n,
+    handler_correct (handle_instr (MAKEBLOCK1 n)) (clight_of (MAKEBLOCK1 n))
+      (fun e m s ard => instr_wfb (MAKEBLOCK1 n) = true /\ pre_of (MAKEBLOCK1 n) e m s ard)
+      (P_error_of (MAKEBLOCK1 n)) (P_halt_of (MAKEBLOCK1 n)) (P_ccall_of (MAKEBLOCK1 n)).
 
-  Parameter correct_UGEINT :
-    handler_correct handle_UGEINT f_instr_UGEINT
-      (arith_safe arith_ucompare)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_MAKEBLOCK2 : forall n,
+    handler_correct (handle_instr (MAKEBLOCK2 n)) (clight_of (MAKEBLOCK2 n))
+      (fun e m s ard => instr_wfb (MAKEBLOCK2 n) = true /\ pre_of (MAKEBLOCK2 n) e m s ard)
+      (P_error_of (MAKEBLOCK2 n)) (P_halt_of (MAKEBLOCK2 n)) (P_ccall_of (MAKEBLOCK2 n)).
 
-  Parameter correct_ULTINT :
-    handler_correct handle_ULTINT f_instr_ULTINT
-      (arith_safe arith_ucompare)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
+  Parameter correct_MAKEBLOCK3 : forall n,
+    handler_correct (handle_instr (MAKEBLOCK3 n)) (clight_of (MAKEBLOCK3 n))
+      (fun e m s ard => instr_wfb (MAKEBLOCK3 n) = true /\ pre_of (MAKEBLOCK3 n) e m s ard)
+      (P_error_of (MAKEBLOCK3 n)) (P_halt_of (MAKEBLOCK3 n)) (P_ccall_of (MAKEBLOCK3 n)).
+
+  Parameter correct_MAKEFLOATBLOCK : forall n,
+    handler_correct (handle_instr (MAKEFLOATBLOCK n)) (clight_of (MAKEFLOATBLOCK n))
+      (fun e m s ard => instr_wfb (MAKEFLOATBLOCK n) = true /\ pre_of (MAKEFLOATBLOCK n) e m s ard)
+      (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)).
+
+  Parameter correct_GETFIELD : forall n,
+    handler_correct (handle_instr (GETFIELD n)) (clight_of (GETFIELD n))
+      (fun e m s ard => instr_wfb (GETFIELD n) = true /\ pre_of (GETFIELD n) e m s ard)
+      (P_error_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)).
+
+  Parameter correct_GETFLOATFIELD : forall n,
+    handler_correct (handle_instr (GETFLOATFIELD n)) (clight_of (GETFLOATFIELD n))
+      (fun e m s ard => instr_wfb (GETFLOATFIELD n) = true /\ pre_of (GETFLOATFIELD n) e m s ard)
+      (P_error_of (GETFLOATFIELD n)) (P_halt_of (GETFLOATFIELD n)) (P_ccall_of (GETFLOATFIELD n)).
+
+  Parameter correct_SETFIELD : forall n,
+    handler_correct (handle_instr (SETFIELD n)) (clight_of (SETFIELD n))
+      (fun e m s ard => instr_wfb (SETFIELD n) = true /\ pre_of (SETFIELD n) e m s ard)
+      (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)).
+
+  Parameter correct_SETFLOATFIELD : forall n,
+    handler_correct (handle_instr (SETFLOATFIELD n)) (clight_of (SETFLOATFIELD n))
+      (fun e m s ard => instr_wfb (SETFLOATFIELD n) = true /\ pre_of (SETFLOATFIELD n) e m s ard)
+      (P_error_of (SETFLOATFIELD n)) (P_halt_of (SETFLOATFIELD n)) (P_ccall_of (SETFLOATFIELD n)).
 
   Parameter correct_VECTLENGTH :
-    handler_correct handle_VECTLENGTH f_instr_VECTLENGTH
-      (fun _ => vectlength_pre)
-      (fun _ s => size_or_heap s s.(Machine.accu) = None) (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr VECTLENGTH) (clight_of VECTLENGTH)
+      (fun e m s ard => instr_wfb VECTLENGTH = true /\ pre_of VECTLENGTH e m s ard)
+      (P_error_of VECTLENGTH) (P_halt_of VECTLENGTH) (P_ccall_of VECTLENGTH).
+
+  Parameter correct_GETVECTITEM :
+    handler_correct (handle_instr GETVECTITEM) (clight_of GETVECTITEM)
+      (fun e m s ard => instr_wfb GETVECTITEM = true /\ pre_of GETVECTITEM e m s ard)
+      (P_error_of GETVECTITEM) (P_halt_of GETVECTITEM) (P_ccall_of GETVECTITEM).
+
+  Parameter correct_SETVECTITEM :
+    handler_correct (handle_instr SETVECTITEM) (clight_of SETVECTITEM)
+      (fun e m s ard => instr_wfb SETVECTITEM = true /\ pre_of SETVECTITEM e m s ard)
+      (P_error_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM).
+
+  Parameter correct_GETBYTESCHAR :
+    handler_correct (handle_instr GETBYTESCHAR) (clight_of GETBYTESCHAR)
+      (fun e m s ard => instr_wfb GETBYTESCHAR = true /\ pre_of GETBYTESCHAR e m s ard)
+      (P_error_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR).
+
+  Parameter correct_SETBYTESCHAR :
+    handler_correct (handle_instr SETBYTESCHAR) (clight_of SETBYTESCHAR)
+      (fun e m s ard => instr_wfb SETBYTESCHAR = true /\ pre_of SETBYTESCHAR e m s ard)
+      (P_error_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR).
+
+  Parameter correct_GETSTRINGCHAR :
+    handler_correct (handle_instr GETSTRINGCHAR) (clight_of GETSTRINGCHAR)
+      (fun e m s ard => instr_wfb GETSTRINGCHAR = true /\ pre_of GETSTRINGCHAR e m s ard)
+      (P_error_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR).
+
+  Parameter correct_BRANCH : forall z,
+    handler_correct (handle_instr (BRANCH z)) (clight_of (BRANCH z))
+      (fun e m s ard => instr_wfb (BRANCH z) = true /\ pre_of (BRANCH z) e m s ard)
+      (P_error_of (BRANCH z)) (P_halt_of (BRANCH z)) (P_ccall_of (BRANCH z)).
+
+  Parameter correct_BRANCHIF : forall z,
+    handler_correct (handle_instr (BRANCHIF z)) (clight_of (BRANCHIF z))
+      (fun e m s ard => instr_wfb (BRANCHIF z) = true /\ pre_of (BRANCHIF z) e m s ard)
+      (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)).
+
+  Parameter correct_BRANCHIFNOT : forall z,
+    handler_correct (handle_instr (BRANCHIFNOT z)) (clight_of (BRANCHIFNOT z))
+      (fun e m s ard => instr_wfb (BRANCHIFNOT z) = true /\ pre_of (BRANCHIFNOT z) e m s ard)
+      (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
+
+  Parameter correct_SWITCH : forall n1 n2 l1 l2,
+    handler_correct (handle_instr (SWITCH n1 n2 l1 l2)) (clight_of (SWITCH n1 n2 l1 l2))
+      (fun e m s ard => instr_wfb (SWITCH n1 n2 l1 l2) = true /\ pre_of (SWITCH n1 n2 l1 l2) e m s ard)
+      (P_error_of (SWITCH n1 n2 l1 l2)) (P_halt_of (SWITCH n1 n2 l1 l2)) (P_ccall_of (SWITCH n1 n2 l1 l2)).
+
+  Parameter correct_BOOLNOT :
+    handler_correct (handle_instr BOOLNOT) (clight_of BOOLNOT)
+      (fun e m s ard => instr_wfb BOOLNOT = true /\ pre_of BOOLNOT e m s ard)
+      (P_error_of BOOLNOT) (P_halt_of BOOLNOT) (P_ccall_of BOOLNOT).
+
+  Parameter correct_PUSHTRAP : forall z,
+    handler_correct (handle_instr (PUSHTRAP z)) (clight_of (PUSHTRAP z))
+      (fun e m s ard => instr_wfb (PUSHTRAP z) = true /\ pre_of (PUSHTRAP z) e m s ard)
+      (P_error_of (PUSHTRAP z)) (P_halt_of (PUSHTRAP z)) (P_ccall_of (PUSHTRAP z)).
+
+  Parameter correct_POPTRAP :
+    handler_correct (handle_instr POPTRAP) (clight_of POPTRAP)
+      (fun e m s ard => instr_wfb POPTRAP = true /\ pre_of POPTRAP e m s ard)
+      (P_error_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP).
+
+  Parameter correct_RAISE :
+    handler_correct (handle_instr RAISE) (clight_of RAISE)
+      (fun e m s ard => instr_wfb RAISE = true /\ pre_of RAISE e m s ard)
+      (P_error_of RAISE) (P_halt_of RAISE) (P_ccall_of RAISE).
+
+  Parameter correct_RERAISE :
+    handler_correct (handle_instr RERAISE) (clight_of RERAISE)
+      (fun e m s ard => instr_wfb RERAISE = true /\ pre_of RERAISE e m s ard)
+      (P_error_of RERAISE) (P_halt_of RERAISE) (P_ccall_of RERAISE).
+
+  Parameter correct_RAISE_NOTRACE :
+    handler_correct (handle_instr RAISE_NOTRACE) (clight_of RAISE_NOTRACE)
+      (fun e m s ard => instr_wfb RAISE_NOTRACE = true /\ pre_of RAISE_NOTRACE e m s ard)
+      (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE).
+
+  Parameter correct_CHECK_SIGNALS :
+    handler_correct (handle_instr CHECK_SIGNALS) (clight_of CHECK_SIGNALS)
+      (fun e m s ard => instr_wfb CHECK_SIGNALS = true /\ pre_of CHECK_SIGNALS e m s ard)
+      (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS).
+
+  Parameter correct_C_CALL : forall n1 n2,
+    handler_correct (handle_instr (C_CALL n1 n2)) (clight_of (C_CALL n1 n2))
+      (fun e m s ard => instr_wfb (C_CALL n1 n2) = true /\ pre_of (C_CALL n1 n2) e m s ard)
+      (P_error_of (C_CALL n1 n2)) (P_halt_of (C_CALL n1 n2)) (P_ccall_of (C_CALL n1 n2)).
+
+  Parameter correct_CONSTINT : forall z,
+    handler_correct (handle_instr (CONSTINT z)) (clight_of (CONSTINT z))
+      (fun e m s ard => instr_wfb (CONSTINT z) = true /\ pre_of (CONSTINT z) e m s ard)
+      (P_error_of (CONSTINT z)) (P_halt_of (CONSTINT z)) (P_ccall_of (CONSTINT z)).
+
+  Parameter correct_PUSHCONSTINT : forall z,
+    handler_correct (handle_instr (PUSHCONSTINT z)) (clight_of (PUSHCONSTINT z))
+      (fun e m s ard => instr_wfb (PUSHCONSTINT z) = true /\ pre_of (PUSHCONSTINT z) e m s ard)
+      (P_error_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)).
+
+  Parameter correct_NEGINT :
+    handler_correct (handle_instr NEGINT) (clight_of NEGINT)
+      (fun e m s ard => instr_wfb NEGINT = true /\ pre_of NEGINT e m s ard)
+      (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT).
+
+  Parameter correct_ADDINT :
+    handler_correct (handle_instr ADDINT) (clight_of ADDINT)
+      (fun e m s ard => instr_wfb ADDINT = true /\ pre_of ADDINT e m s ard)
+      (P_error_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT).
+
+  Parameter correct_SUBINT :
+    handler_correct (handle_instr SUBINT) (clight_of SUBINT)
+      (fun e m s ard => instr_wfb SUBINT = true /\ pre_of SUBINT e m s ard)
+      (P_error_of SUBINT) (P_halt_of SUBINT) (P_ccall_of SUBINT).
+
+  Parameter correct_MULINT :
+    handler_correct (handle_instr MULINT) (clight_of MULINT)
+      (fun e m s ard => instr_wfb MULINT = true /\ pre_of MULINT e m s ard)
+      (P_error_of MULINT) (P_halt_of MULINT) (P_ccall_of MULINT).
+
+  Parameter correct_DIVINT :
+    handler_correct (handle_instr DIVINT) (clight_of DIVINT)
+      (fun e m s ard => instr_wfb DIVINT = true /\ pre_of DIVINT e m s ard)
+      (P_error_of DIVINT) (P_halt_of DIVINT) (P_ccall_of DIVINT).
+
+  Parameter correct_MODINT :
+    handler_correct (handle_instr MODINT) (clight_of MODINT)
+      (fun e m s ard => instr_wfb MODINT = true /\ pre_of MODINT e m s ard)
+      (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT).
+
+  Parameter correct_ANDINT :
+    handler_correct (handle_instr ANDINT) (clight_of ANDINT)
+      (fun e m s ard => instr_wfb ANDINT = true /\ pre_of ANDINT e m s ard)
+      (P_error_of ANDINT) (P_halt_of ANDINT) (P_ccall_of ANDINT).
+
+  Parameter correct_ORINT :
+    handler_correct (handle_instr ORINT) (clight_of ORINT)
+      (fun e m s ard => instr_wfb ORINT = true /\ pre_of ORINT e m s ard)
+      (P_error_of ORINT) (P_halt_of ORINT) (P_ccall_of ORINT).
 
   Parameter correct_XORINT :
-    handler_correct handle_XORINT f_instr_XORINT
-      (accu_check ak_long /\p stack_head_is_long)
-      (fun _ s => match s.(Machine.accu), s.(Machine.stack) with | Val_int _, Val_int _ :: _ => False | _, _ => True end) (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr XORINT) (clight_of XORINT)
+      (fun e m s ard => instr_wfb XORINT = true /\ pre_of XORINT e m s ard)
+      (P_error_of XORINT) (P_halt_of XORINT) (P_ccall_of XORINT).
+
+  Parameter correct_LSLINT :
+    handler_correct (handle_instr LSLINT) (clight_of LSLINT)
+      (fun e m s ard => instr_wfb LSLINT = true /\ pre_of LSLINT e m s ard)
+      (P_error_of LSLINT) (P_halt_of LSLINT) (P_ccall_of LSLINT).
+
+  Parameter correct_LSRINT :
+    handler_correct (handle_instr LSRINT) (clight_of LSRINT)
+      (fun e m s ard => instr_wfb LSRINT = true /\ pre_of LSRINT e m s ard)
+      (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT).
+
+  Parameter correct_ASRINT :
+    handler_correct (handle_instr ASRINT) (clight_of ASRINT)
+      (fun e m s ard => instr_wfb ASRINT = true /\ pre_of ASRINT e m s ard)
+      (P_error_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT).
+
+  Parameter correct_EQ :
+    handler_correct (handle_instr EQ) (clight_of EQ)
+      (fun e m s ard => instr_wfb EQ = true /\ pre_of EQ e m s ard)
+      (P_error_of EQ) (P_halt_of EQ) (P_ccall_of EQ).
+
+  Parameter correct_NEQ :
+    handler_correct (handle_instr NEQ) (clight_of NEQ)
+      (fun e m s ard => instr_wfb NEQ = true /\ pre_of NEQ e m s ard)
+      (P_error_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ).
+
+  Parameter correct_LTINT :
+    handler_correct (handle_instr LTINT) (clight_of LTINT)
+      (fun e m s ard => instr_wfb LTINT = true /\ pre_of LTINT e m s ard)
+      (P_error_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT).
+
+  Parameter correct_LEINT :
+    handler_correct (handle_instr LEINT) (clight_of LEINT)
+      (fun e m s ard => instr_wfb LEINT = true /\ pre_of LEINT e m s ard)
+      (P_error_of LEINT) (P_halt_of LEINT) (P_ccall_of LEINT).
+
+  Parameter correct_GTINT :
+    handler_correct (handle_instr GTINT) (clight_of GTINT)
+      (fun e m s ard => instr_wfb GTINT = true /\ pre_of GTINT e m s ard)
+      (P_error_of GTINT) (P_halt_of GTINT) (P_ccall_of GTINT).
+
+  Parameter correct_GEINT :
+    handler_correct (handle_instr GEINT) (clight_of GEINT)
+      (fun e m s ard => instr_wfb GEINT = true /\ pre_of GEINT e m s ard)
+      (P_error_of GEINT) (P_halt_of GEINT) (P_ccall_of GEINT).
+
+  Parameter correct_OFFSETINT : forall z,
+    handler_correct (handle_instr (OFFSETINT z)) (clight_of (OFFSETINT z))
+      (fun e m s ard => instr_wfb (OFFSETINT z) = true /\ pre_of (OFFSETINT z) e m s ard)
+      (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)).
+
+  Parameter correct_OFFSETREF : forall z,
+    handler_correct (handle_instr (OFFSETREF z)) (clight_of (OFFSETREF z))
+      (fun e m s ard => instr_wfb (OFFSETREF z) = true /\ pre_of (OFFSETREF z) e m s ard)
+      (P_error_of (OFFSETREF z)) (P_halt_of (OFFSETREF z)) (P_ccall_of (OFFSETREF z)).
+
+  Parameter correct_ISINT :
+    handler_correct (handle_instr ISINT) (clight_of ISINT)
+      (fun e m s ard => instr_wfb ISINT = true /\ pre_of ISINT e m s ard)
+      (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT).
+
+  Parameter correct_GETMETHOD :
+    handler_correct (handle_instr GETMETHOD) (clight_of GETMETHOD)
+      (fun e m s ard => instr_wfb GETMETHOD = true /\ pre_of GETMETHOD e m s ard)
+      (P_error_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD).
+
+  Parameter correct_GETPUBMET : forall z,
+    handler_correct (handle_instr (GETPUBMET z)) (clight_of (GETPUBMET z))
+      (fun e m s ard => instr_wfb (GETPUBMET z) = true /\ pre_of (GETPUBMET z) e m s ard)
+      (P_error_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
+
+  Parameter correct_GETDYNMET :
+    handler_correct (handle_instr GETDYNMET) (clight_of GETDYNMET)
+      (fun e m s ard => instr_wfb GETDYNMET = true /\ pre_of GETDYNMET e m s ard)
+      (P_error_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET).
+
+  Parameter correct_BEQ : forall z1 z2,
+    handler_correct (handle_instr (BEQ z1 z2)) (clight_of (BEQ z1 z2))
+      (fun e m s ard => instr_wfb (BEQ z1 z2) = true /\ pre_of (BEQ z1 z2) e m s ard)
+      (P_error_of (BEQ z1 z2)) (P_halt_of (BEQ z1 z2)) (P_ccall_of (BEQ z1 z2)).
+
+  Parameter correct_BNEQ : forall z1 z2,
+    handler_correct (handle_instr (BNEQ z1 z2)) (clight_of (BNEQ z1 z2))
+      (fun e m s ard => instr_wfb (BNEQ z1 z2) = true /\ pre_of (BNEQ z1 z2) e m s ard)
+      (P_error_of (BNEQ z1 z2)) (P_halt_of (BNEQ z1 z2)) (P_ccall_of (BNEQ z1 z2)).
+
+  Parameter correct_BLTINT : forall z1 z2,
+    handler_correct (handle_instr (BLTINT z1 z2)) (clight_of (BLTINT z1 z2))
+      (fun e m s ard => instr_wfb (BLTINT z1 z2) = true /\ pre_of (BLTINT z1 z2) e m s ard)
+      (P_error_of (BLTINT z1 z2)) (P_halt_of (BLTINT z1 z2)) (P_ccall_of (BLTINT z1 z2)).
+
+  Parameter correct_BLEINT : forall z1 z2,
+    handler_correct (handle_instr (BLEINT z1 z2)) (clight_of (BLEINT z1 z2))
+      (fun e m s ard => instr_wfb (BLEINT z1 z2) = true /\ pre_of (BLEINT z1 z2) e m s ard)
+      (P_error_of (BLEINT z1 z2)) (P_halt_of (BLEINT z1 z2)) (P_ccall_of (BLEINT z1 z2)).
+
+  Parameter correct_BGTINT : forall z1 z2,
+    handler_correct (handle_instr (BGTINT z1 z2)) (clight_of (BGTINT z1 z2))
+      (fun e m s ard => instr_wfb (BGTINT z1 z2) = true /\ pre_of (BGTINT z1 z2) e m s ard)
+      (P_error_of (BGTINT z1 z2)) (P_halt_of (BGTINT z1 z2)) (P_ccall_of (BGTINT z1 z2)).
+
+  Parameter correct_BGEINT : forall z1 z2,
+    handler_correct (handle_instr (BGEINT z1 z2)) (clight_of (BGEINT z1 z2))
+      (fun e m s ard => instr_wfb (BGEINT z1 z2) = true /\ pre_of (BGEINT z1 z2) e m s ard)
+      (P_error_of (BGEINT z1 z2)) (P_halt_of (BGEINT z1 z2)) (P_ccall_of (BGEINT z1 z2)).
+
+  Parameter correct_ULTINT :
+    handler_correct (handle_instr ULTINT) (clight_of ULTINT)
+      (fun e m s ard => instr_wfb ULTINT = true /\ pre_of ULTINT e m s ard)
+      (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT).
+
+  Parameter correct_UGEINT :
+    handler_correct (handle_instr UGEINT) (clight_of UGEINT)
+      (fun e m s ard => instr_wfb UGEINT = true /\ pre_of UGEINT e m s ard)
+      (P_error_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT).
+
+  Parameter correct_BULTINT : forall z1 z2,
+    handler_correct (handle_instr (BULTINT z1 z2)) (clight_of (BULTINT z1 z2))
+      (fun e m s ard => instr_wfb (BULTINT z1 z2) = true /\ pre_of (BULTINT z1 z2) e m s ard)
+      (P_error_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2)).
+
+  Parameter correct_BUGEINT : forall z1 z2,
+    handler_correct (handle_instr (BUGEINT z1 z2)) (clight_of (BUGEINT z1 z2))
+      (fun e m s ard => instr_wfb (BUGEINT z1 z2) = true /\ pre_of (BUGEINT z1 z2) e m s ard)
+      (P_error_of (BUGEINT z1 z2)) (P_halt_of (BUGEINT z1 z2)) (P_ccall_of (BUGEINT z1 z2)).
+
+  Parameter correct_STOP :
+    handler_correct (handle_instr STOP) (clight_of STOP)
+      (fun e m s ard => instr_wfb STOP = true /\ pre_of STOP e m s ard)
+      (P_error_of STOP) (P_halt_of STOP) (P_ccall_of STOP).
 
 End InstructVerificationFineGrainedSpec.
 
@@ -4153,190 +3689,37 @@ Module InstructVerificationFromFineGrained
                   (P_error_of i) (P_halt_of i) (P_ccall_of i).
     Proof.
       intro i; destruct i;
-        cbn [handle_instr Dispatch.handle_instr clight_of instr_wfb pre_of P_error_of P_halt_of P_ccall_of].
-      - (* ACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ACC; apply Z.ltb_lt; exact H.
-      - (* PUSH *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH.
-      - (* PUSHACC *)
-        destruct n as [|[|[|[|[|[|[|[|n']]]]]]]];
-          apply handler_correct_absorb_wfb; intro H; try discriminate H.
-        + apply correct_PUSHACC1. + apply correct_PUSHACC2.
-        + apply correct_PUSHACC3. + apply correct_PUSHACC4.
-        + apply correct_PUSHACC5. + apply correct_PUSHACC6.
-        + apply correct_PUSHACC7.
-      - (* POP *) apply handler_correct_absorb_wfb; intro H; apply correct_POP; apply Z.ltb_lt; exact H.
-      - (* ASSIGN *) apply handler_correct_absorb_wfb; intro; apply correct_ASSIGN.
-      - (* ENVACC *) apply handler_correct_absorb_wfb; intro H; apply correct_ENVACC; apply Z.ltb_lt; exact H.
-      - (* PUSHENVACC *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHENVACC.
-      - (* PUSH_RETADDR *) apply handler_correct_absorb_wfb; intro; apply correct_PUSH_RETADDR.
-      - (* APPLY *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY.
-      - (* APPLY1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY1.
-      - (* APPLY2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY2.
-      - (* APPLY3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPLY3.
-      - (* APPTERM *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM.
-      - (* APPTERM1 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM1.
-      - (* APPTERM2 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM2.
-      - (* APPTERM3 *) apply handler_correct_absorb_wfb; intro; apply correct_APPTERM3.
-      - (* RETURN *) apply handler_correct_absorb_wfb; intro; apply correct_RETURN.
-      - (* RESTART *) apply handler_correct_absorb_wfb; intro; apply correct_RESTART.
-      - (* GRAB *) apply handler_correct_absorb_wfb; intro; apply correct_GRAB.
-      - (* CLOSURE *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply andb_prop in H1; destruct H1 as [H1 H3].
-        apply andb_prop in H1; destruct H1 as [H1 H4].
-        apply Z.leb_le in H2; apply Z.leb_le in H3; apply Z.leb_le in H4; apply Z.leb_le in H1.
-        apply correct_CLOSURE; lia.
-      - (* CLOSUREREC *)
-        destruct n as [|[|nfuncs']].
-        + apply handler_correct_absorb_wfb; intro H; discriminate.
-        + destruct n0 as [|nvars'].
-          * destruct l as [|code_ofs [|rest_ofs]].
-            -- apply handler_correct_absorb_wfb; intro H; discriminate.
-            -- apply handler_correct_absorb_wfb; intro H.
-              apply andb_prop in H; destruct H as [H1 H2].
-              apply Z.leb_le in H1; apply Z.leb_le in H2.
-              apply correct_CLOSUREREC; lia.
-            -- apply handler_correct_absorb_wfb; intro H; discriminate.
-          * apply handler_correct_absorb_wfb; intro H; discriminate.
-        + apply handler_correct_absorb_wfb; intro H; discriminate.
-      - (* OFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETCLOSURE.
-      - (* PUSHOFFSETCLOSURE *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHOFFSETCLOSURE.
-      - (* GETGLOBAL *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_GETGLOBAL; lia.
-      - (* PUSHGETGLOBAL *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_PUSHGETGLOBAL; lia.
-      - (* GETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETGLOBALFIELD.
-      - (* PUSHGETGLOBALFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHGETGLOBALFIELD.
-      - (* SETGLOBAL *) apply handler_correct_absorb_wfb; intro; apply correct_SETGLOBAL.
-      - (* ATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_ATOM; apply Z.leb_le; exact H.
-      - (* PUSHATOM *) apply handler_correct_absorb_wfb; intro H; apply correct_PUSHATOM; apply Z.leb_le; exact H.
-      - (* MAKEBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEBLOCK; apply Nat.leb_le; exact H.
-      - (* MAKEBLOCK1 *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_MAKEBLOCK1; lia.
-      - (* MAKEBLOCK2 *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_MAKEBLOCK2; lia.
-      - (* MAKEBLOCK3 *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_MAKEBLOCK3; lia.
-      - (* MAKEFLOATBLOCK *) apply handler_correct_absorb_wfb; intro H; apply correct_MAKEFLOATBLOCK; apply Nat.leb_le; exact H.
-      - (* GETFIELD *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_GETFIELD; lia.
-      - (* GETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_GETFLOATFIELD.
-      - (* SETFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFIELD.
-      - (* SETFLOATFIELD *) apply handler_correct_absorb_wfb; intro; apply correct_SETFLOATFIELD.
-      - (* VECTLENGTH *) apply handler_correct_absorb_wfb; intro; apply correct_VECTLENGTH.
-      - (* GETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_GETVECTITEM.
-      - (* SETVECTITEM *) apply handler_correct_absorb_wfb; intro; apply correct_SETVECTITEM.
-      - (* GETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETBYTESCHAR.
-      - (* SETBYTESCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_SETBYTESCHAR.
-      - (* GETSTRINGCHAR *) apply handler_correct_absorb_wfb; intro; apply correct_GETSTRINGCHAR.
-      - (* BRANCH *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCH.
-      - (* BRANCHIF *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIF.
-      - (* BRANCHIFNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BRANCHIFNOT.
-      - (* SWITCH *) apply handler_correct_absorb_wfb; intro; apply correct_SWITCH.
-      - (* BOOLNOT *) apply handler_correct_absorb_wfb; intro; apply correct_BOOLNOT.
-      - (* PUSHTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHTRAP.
-      - (* POPTRAP *) apply handler_correct_absorb_wfb; intro; apply correct_POPTRAP.
-      - (* RAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE.
-      - (* RERAISE *) apply handler_correct_absorb_wfb; intro; apply correct_RERAISE.
-      - (* RAISE_NOTRACE *) apply handler_correct_absorb_wfb; intro; apply correct_RAISE_NOTRACE.
-      - (* CHECK_SIGNALS *) apply handler_correct_absorb_wfb; intro; apply correct_CHECK_SIGNALS.
-      - (* C_CALL *) apply handler_correct_absorb_wfb; intro; apply correct_C_CALLN.
-      - (* CONSTINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_CONSTINT; lia.
-      - (* PUSHCONSTINT *) apply handler_correct_absorb_wfb; intro; apply correct_PUSHCONSTINT.
-      - (* NEGINT *) apply handler_correct_absorb_wfb; intro; apply correct_NEGINT.
-      - (* ADDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ADDINT.
-      - (* SUBINT *) apply handler_correct_absorb_wfb; intro; apply correct_SUBINT.
-      - (* MULINT *) apply handler_correct_absorb_wfb; intro; apply correct_MULINT.
-      - (* DIVINT *) apply handler_correct_absorb_wfb; intro; apply correct_DIVINT.
-      - (* MODINT *) apply handler_correct_absorb_wfb; intro; apply correct_MODINT.
-      - (* ANDINT *) apply handler_correct_absorb_wfb; intro; apply correct_ANDINT.
-      - (* ORINT *) apply handler_correct_absorb_wfb; intro; apply correct_ORINT.
-      - (* XORINT *) apply handler_correct_absorb_wfb; intro; apply correct_XORINT.
-      - (* LSLINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSLINT.
-      - (* LSRINT *) apply handler_correct_absorb_wfb; intro; apply correct_LSRINT.
-      - (* ASRINT *) apply handler_correct_absorb_wfb; intro; apply correct_ASRINT.
-      - (* EQ *) apply handler_correct_absorb_wfb; intro; apply correct_EQ.
-      - (* NEQ *) apply handler_correct_absorb_wfb; intro; apply correct_NEQ.
-      - (* LTINT *) apply handler_correct_absorb_wfb; intro; apply correct_LTINT.
-      - (* LEINT *) apply handler_correct_absorb_wfb; intro; apply correct_LEINT.
-      - (* GTINT *) apply handler_correct_absorb_wfb; intro; apply correct_GTINT.
-      - (* GEINT *) apply handler_correct_absorb_wfb; intro; apply correct_GEINT.
-      - (* OFFSETINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_OFFSETINT; lia.
-      - (* OFFSETREF *) apply handler_correct_absorb_wfb; intro; apply correct_OFFSETREF.
-      - (* ISINT *) apply handler_correct_absorb_wfb; intro; apply correct_ISINT.
-      - (* GETMETHOD *) apply handler_correct_absorb_wfb; intro; apply correct_GETMETHOD.
-      - (* GETPUBMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETPUBMET.
-      - (* GETDYNMET *) apply handler_correct_absorb_wfb; intro; apply correct_GETDYNMET.
-      - (* BEQ *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_BEQ; lia.
-      - (* BNEQ *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_BNEQ; lia.
-      - (* BLTINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_BLTINT; lia.
-      - (* BLEINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_BLEINT; lia.
-      - (* BGTINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_BGTINT; lia.
-      - (* BGEINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply Z.leb_le in H1; apply Z.leb_le in H2.
-        apply correct_BGEINT; lia.
-      - (* ULTINT *) apply handler_correct_absorb_wfb; intro; apply correct_ULTINT.
-      - (* UGEINT *) apply handler_correct_absorb_wfb; intro; apply correct_UGEINT.
-      - (* BULTINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply andb_prop in H1; destruct H1 as [H1 H3].
-        apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
-        apply correct_BULTINT; lia.
-      - (* BUGEINT *)
-        apply handler_correct_absorb_wfb; intro H.
-        apply andb_prop in H; destruct H as [H1 H2].
-        apply andb_prop in H1; destruct H1 as [H1 H3].
-        apply Z.leb_le in H1; apply Z.leb_le in H2; apply Z.leb_le in H3.
-        apply correct_BUGEINT; lia.
-      - (* STOP *) apply handler_correct_absorb_wfb; intro; apply correct_STOP.
+      [ apply correct_ACC | apply correct_PUSH | apply correct_PUSHACC | apply correct_POP
+      | apply correct_ASSIGN | apply correct_ENVACC | apply correct_PUSHENVACC
+      | apply correct_PUSH_RETADDR | apply correct_APPLY | apply correct_APPLY1
+      | apply correct_APPLY2 | apply correct_APPLY3 | apply correct_APPTERM
+      | apply correct_APPTERM1 | apply correct_APPTERM2 | apply correct_APPTERM3
+      | apply correct_RETURN | apply correct_RESTART | apply correct_GRAB
+      | apply correct_CLOSURE | apply correct_CLOSUREREC | apply correct_OFFSETCLOSURE
+      | apply correct_PUSHOFFSETCLOSURE | apply correct_GETGLOBAL | apply correct_PUSHGETGLOBAL
+      | apply correct_GETGLOBALFIELD | apply correct_PUSHGETGLOBALFIELD | apply correct_SETGLOBAL
+      | apply correct_ATOM | apply correct_PUSHATOM | apply correct_MAKEBLOCK
+      | apply correct_MAKEBLOCK1 | apply correct_MAKEBLOCK2 | apply correct_MAKEBLOCK3
+      | apply correct_MAKEFLOATBLOCK | apply correct_GETFIELD | apply correct_GETFLOATFIELD
+      | apply correct_SETFIELD | apply correct_SETFLOATFIELD | apply correct_VECTLENGTH
+      | apply correct_GETVECTITEM | apply correct_SETVECTITEM | apply correct_GETBYTESCHAR
+      | apply correct_SETBYTESCHAR | apply correct_GETSTRINGCHAR | apply correct_BRANCH
+      | apply correct_BRANCHIF | apply correct_BRANCHIFNOT | apply correct_SWITCH
+      | apply correct_BOOLNOT | apply correct_PUSHTRAP | apply correct_POPTRAP
+      | apply correct_RAISE | apply correct_RERAISE | apply correct_RAISE_NOTRACE
+      | apply correct_CHECK_SIGNALS | apply correct_C_CALL | apply correct_CONSTINT
+      | apply correct_PUSHCONSTINT | apply correct_NEGINT | apply correct_ADDINT
+      | apply correct_SUBINT | apply correct_MULINT | apply correct_DIVINT
+      | apply correct_MODINT | apply correct_ANDINT | apply correct_ORINT
+      | apply correct_XORINT | apply correct_LSLINT | apply correct_LSRINT
+      | apply correct_ASRINT | apply correct_EQ | apply correct_NEQ
+      | apply correct_LTINT | apply correct_LEINT | apply correct_GTINT
+      | apply correct_GEINT | apply correct_OFFSETINT | apply correct_OFFSETREF
+      | apply correct_ISINT | apply correct_GETMETHOD | apply correct_GETPUBMET
+      | apply correct_GETDYNMET | apply correct_BEQ | apply correct_BNEQ
+      | apply correct_BLTINT | apply correct_BLEINT | apply correct_BGTINT
+      | apply correct_BGEINT | apply correct_ULTINT | apply correct_UGEINT
+      | apply correct_BULTINT | apply correct_BUGEINT | apply correct_STOP ].
     Qed.
 End InstructVerificationFromFineGrained.
+

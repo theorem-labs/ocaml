@@ -11,444 +11,578 @@ From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.InstructSpec.
 
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC4_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC5_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC6_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC7_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ACC_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ADDINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ANDINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPLY1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPLY2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPLY3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPLY_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPTERM1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPTERM2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPTERM3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.APPTERM_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ASRINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ASSIGN_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ATOM0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ATOM_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BEQ_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BGEINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BGTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BLEINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BLTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BNEQ_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BOOLNOT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BRANCHIFNOT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BRANCHIF_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BRANCH_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BUGEINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.BULTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CHECK_SIGNALS_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CLOSUREREC_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CLOSURE_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CONST0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CONST1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CONST2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CONST3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.CONSTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.C_CALL1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.C_CALL2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.C_CALL3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.C_CALL4_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.C_CALL5_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.C_CALLN_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.DIVINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC4_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ENVACC_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.EQ_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GEINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETBYTESCHAR_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETDYNMET_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETFIELD0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETFIELD1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETFIELD2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETFIELD3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETFIELD_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETFLOATFIELD_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETGLOBALFIELD_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETGLOBAL_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETMETHOD_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETPUBMET_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETSTRINGCHAR_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GETVECTITEM_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GRAB_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.GTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ISINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.LEINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.LSLINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.LSRINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.LTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.MAKEBLOCK1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.MAKEBLOCK2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.MAKEBLOCK3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.MAKEBLOCK_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.MAKEFLOATBLOCK_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.MODINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.MULINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.NEGINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.NEQ_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSURE0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSURE3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSUREM3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETCLOSURE_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.OFFSETREF_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ORINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.POPTRAP_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.POP_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC4_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC5_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC6_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHACC7_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHATOM0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHATOM_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHCONST0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHCONST1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHCONST2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHCONST3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHCONSTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHENVACC1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHENVACC2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHENVACC3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHENVACC4_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHENVACC_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHGETGLOBALFIELD_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHGETGLOBAL_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSURE0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSURE3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSUREM3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHOFFSETCLOSURE_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSHTRAP_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSH_RETADDR_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.PUSH_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.RAISE_NOTRACE_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.RAISE_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.RERAISE_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.RESTART_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.RETURN_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETBYTESCHAR_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETFIELD0_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETFIELD1_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETFIELD2_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETFIELD3_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETFIELD_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETFLOATFIELD_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETGLOBAL_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SETVECTITEM_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.STOP_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SUBINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.SWITCH_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.UGEINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.ULTINT_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.VECTLENGTH_correct.
-From OCamlInterp.Automatic Require Bytecode.InstructVerification.XORINT_correct.
-
 
 Module InstructVerification <: InstructVerificationFineGrainedSpec.
 
-  Definition correct_ACC0 := ACC0_correct.verify_ACC0_compl_comp.
-  Definition correct_ACC1 := ACC1_correct.verify_ACC1.
-  Definition correct_ACC2 := ACC2_correct.verify_ACC2.
-  Definition correct_ACC3 := ACC3_correct.verify_ACC3.
-  Definition correct_ACC4 := ACC4_correct.verify_ACC4.
-  Definition correct_ACC5 := ACC5_correct.verify_ACC5.
-  Definition correct_ACC6 := ACC6_correct.verify_ACC6.
-  Definition correct_ACC7 := ACC7_correct.verify_ACC7.
-  Definition correct_ACC :
-    forall n,
-    Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ACC n) f_instr_ACC
-      (code_at (Int.repr (Z.of_nat n)))
-      (fun _ s => nth_error s.(Machine.stack) n = None) (fun _ => False) (fun _ _ _ => False)
-    := ACC_correct.verify_ACC_handler_correct.
-  Definition correct_ADDINT := ADDINT_correct.verify_ADDINT_compl_comp.
-  Definition correct_ANDINT := ANDINT_correct.verify_ANDINT_correct.
-  Definition correct_APPLY1 := APPLY1_correct.verify_APPLY1_correct.
-  Definition correct_APPLY2 := APPLY2_correct.verify_APPLY2_correct.
-  Definition correct_APPLY3 := APPLY3_correct.verify_APPLY3_correct.
-  Definition correct_APPLY := APPLY_correct.verify_APPLY_correct.
-  Definition correct_APPTERM1 := APPTERM1_correct.verify_APPTERM1_correct.
-  Definition correct_APPTERM2 := APPTERM2_correct.verify_APPTERM2_correct.
-  Definition correct_APPTERM3 := APPTERM3_correct.verify_APPTERM3_correct.
-  Definition correct_APPTERM := APPTERM_correct.verify_APPTERM_correct.
-  Definition correct_ASRINT := ASRINT_correct.verify_ASRINT_handler_correct.
-  Definition correct_ASSIGN := ASSIGN_correct.verify_ASSIGN_correct.
-  Definition correct_ATOM0 := ATOM0_correct.verify_ATOM0_correct.
-  Definition correct_ATOM := ATOM_correct.verify_ATOM_correct.
-  Definition correct_BEQ :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BEQ n target) f_instr_BEQ
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
-    := BEQ_correct.verify_BEQ_handler_correct.
-  Definition correct_BGEINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BGEINT n target) f_instr_BGEINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun msg s => msg = "BGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
-    := BGEINT_correct.verify_BGEINT_handler_correct.
-  Definition correct_BGTINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BGTINT n target) f_instr_BGTINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun msg s => msg = "BGTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
-    := BGTINT_correct.verify_BGTINT_handler_correct.
-  Definition correct_BLEINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BLEINT n target) f_instr_BLEINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun msg s => msg = "BLEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
-    := BLEINT_correct.verify_BLEINT_handler_correct.
-  Definition correct_BLTINT :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BLTINT n target) f_instr_BLTINT
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun msg s => msg = "BLTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
-    := BLTINT_correct.verify_BLTINT_handler_correct.
-  Definition correct_BNEQ :
-    forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BNEQ n target) f_instr_BNEQ
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
-    := BNEQ_correct.verify_BNEQ_handler_correct.
-  Definition correct_BOOLNOT := BOOLNOT_correct.verify_BOOLNOT_handler_correct.
-  Definition correct_BRANCHIFNOT := BRANCHIFNOT_correct.verify_BRANCHIFNOT_correct.
-  Definition correct_BRANCHIF := BRANCHIF_correct.verify_BRANCHIF_correct.
-  Definition correct_BRANCH :
-    forall target,
-    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
-      code_loadable
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
-    := BRANCH_correct.verify_BRANCH_handler_correct.
-  Definition correct_BUGEINT :
-    forall n target,
-    0 <= n -> Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
-      (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
-      (fun msg s => msg = "BUGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
-    := BUGEINT_correct.verify_BUGEINT_handler_correct.
-  Definition correct_BULTINT :
-    forall n target,
-    0 <= n -> Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BULTINT n target) f_instr_BULTINT
-      (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
-      (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False)
-    := BULTINT_correct.verify_BULTINT_handler_correct.
-  Definition correct_CHECK_SIGNALS := CHECK_SIGNALS_correct.verify_CHECK_SIGNALS_correct.
-  Definition correct_CLOSUREREC := CLOSUREREC_correct.CLOSUREREC_correct_for_spec.
-  Definition correct_CLOSURE := CLOSURE_correct.CLOSURE_correct_for_spec.
-  Definition correct_CONST0 := CONST0_correct.verify_CONST0_compl_comp.
-  Definition correct_CONST1 := CONST1_correct.verify_CONST1_correct.
-  Definition correct_CONST2 := CONST2_correct.verify_CONST2_correct.
-  Definition correct_CONST3 := CONST3_correct.verify_CONST3_correct.
-  Definition correct_CONSTINT := CONSTINT_correct.verify_CONSTINT_handler_correct.
-  Definition correct_C_CALL1 prim_idx := C_CALL1_correct.verify_C_CALL1_correct prim_idx.
-  Definition correct_C_CALL2 prim_idx := C_CALL2_correct.verify_C_CALL2_correct prim_idx.
-  Definition correct_C_CALL3 prim_idx := C_CALL3_correct.verify_C_CALL3_correct prim_idx.
-  Definition correct_C_CALL4 prim_idx := C_CALL4_correct.verify_C_CALL4_correct prim_idx.
-  Definition correct_C_CALL5 prim_idx := C_CALL5_correct.verify_C_CALL5_correct prim_idx.
-  Definition correct_C_CALLN nargs prim_idx := C_CALLN_correct.verify_C_CALLN_correct nargs prim_idx.
-  Definition correct_DIVINT := DIVINT_correct.verify_DIVINT_handler_correct.
-  Definition correct_ENVACC1 := ENVACC1_correct.verify_ENVACC1_with_pre.
-  Definition correct_ENVACC2 := ENVACC2_correct.verify_ENVACC2_with_pre.
-  Definition correct_ENVACC3 := ENVACC3_correct.verify_ENVACC3_with_pre.
-  Definition correct_ENVACC4 := ENVACC4_correct.verify_ENVACC4_with_pre.
-  Definition correct_ENVACC := ENVACC_correct.ENVACC_correct_for_spec.
-  Definition correct_EQ := EQ_correct.verify_EQ_handler_correct.
-  Definition correct_GEINT := GEINT_correct.verify_GEINT_handler_correct.
-  Definition correct_GETBYTESCHAR := GETBYTESCHAR_correct.verify_GETBYTESCHAR_correct.
-  Definition correct_GETDYNMET := GETDYNMET_correct.verify_GETDYNMET_correct.
-  Definition correct_GETFIELD0 := GETFIELD0_correct.verify_GETFIELD0_with_pre.
-  Definition correct_GETFIELD1 := GETFIELD1_correct.verify_GETFIELD1_with_pre.
-  Definition correct_GETFIELD2 := GETFIELD2_correct.verify_GETFIELD2_with_pre.
-  Definition correct_GETFIELD3 := GETFIELD3_correct.verify_GETFIELD3_with_pre.
-  Definition correct_GETFIELD := GETFIELD_correct.GETFIELD_correct_for_spec.
-  Definition correct_GETFLOATFIELD := GETFLOATFIELD_correct.verify_GETFLOATFIELD_correct.
-  Definition correct_GETGLOBALFIELD := GETGLOBALFIELD_correct.verify_GETGLOBALFIELD_correct.
-  Definition correct_GETGLOBAL :
-    forall n,
-    0 <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
-      (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n))
-      (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False)
-    := GETGLOBAL_correct.verify_GETGLOBAL_handler_correct.
-  Definition correct_GETMETHOD := GETMETHOD_correct.verify_GETMETHOD_correct.
-  Definition correct_GETPUBMET := GETPUBMET_correct.verify_GETPUBMET_correct.
-  Definition correct_GETSTRINGCHAR := GETSTRINGCHAR_correct.verify_GETSTRINGCHAR_correct.
-  Definition correct_GETVECTITEM := GETVECTITEM_correct.verify_GETVECTITEM_correct.
-  Definition correct_GRAB := GRAB_correct.verify_GRAB_correct.
-  Definition correct_GTINT := GTINT_correct.verify_GTINT_handler_correct.
-  Definition correct_ISINT := ISINT_correct.verify_ISINT_handler_correct.
-  Definition correct_LEINT := LEINT_correct.verify_LEINT_handler_correct.
-  Definition correct_LSLINT := LSLINT_correct.verify_LSLINT_handler_correct.
-  Definition correct_LSRINT := LSRINT_correct.verify_LSRINT_handler_correct.
-  Definition correct_LTINT := LTINT_correct.verify_LTINT_handler_correct.
-  Definition correct_MAKEBLOCK1 := MAKEBLOCK1_correct.MAKEBLOCK1_correct_for_spec.
-  Definition correct_MAKEBLOCK2 := MAKEBLOCK2_correct.MAKEBLOCK2_correct_for_spec.
-  Definition correct_MAKEBLOCK3 := MAKEBLOCK3_correct.MAKEBLOCK3_correct_for_spec.
-  Definition correct_MAKEBLOCK := MAKEBLOCK_correct.verify_MAKEBLOCK_correct.
-  Definition correct_MAKEFLOATBLOCK := MAKEFLOATBLOCK_correct.verify_MAKEFLOATBLOCK_correct.
-  Definition correct_MODINT := MODINT_correct.verify_MODINT_handler_correct.
-  Definition correct_MULINT := MULINT_correct.verify_MULINT_correct.
-  Definition correct_NEGINT := NEGINT_correct.verify_NEGINT_compl_comp.
-  Definition correct_NEQ := NEQ_correct.verify_NEQ_handler_correct.
-  Definition correct_OFFSETCLOSURE0 := OFFSETCLOSURE0_correct.verify_OFFSETCLOSURE0_compl_comp.
-  Definition correct_OFFSETCLOSURE3 := OFFSETCLOSURE3_correct.verify_OFFSETCLOSURE3_compl_comp.
-  Definition correct_OFFSETCLOSUREM3 := OFFSETCLOSUREM3_correct.verify_OFFSETCLOSUREM3_compl_comp.
-  Definition correct_OFFSETCLOSURE := OFFSETCLOSURE_correct.verify_OFFSETCLOSURE_correct.
-  Definition correct_OFFSETINT := OFFSETINT_correct.verify_OFFSETINT_handler_correct.
-  Definition correct_OFFSETREF := OFFSETREF_correct.verify_OFFSETREF_correct.
-  Definition correct_ORINT := ORINT_correct.verify_ORINT_correct.
-  Definition correct_POPTRAP := POPTRAP_correct.verify_POPTRAP_correct.
-  Definition correct_POP :
-    forall n,
-    Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_POP n) f_instr_POP
-      (pre_and (pre_and (code_at (Int.repr (Z.of_nat n))) code_ne_struct) (stack_length_ge n))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
-    := POP_correct.verify_POP_handler_correct.
-  Definition correct_PUSHACC1 := PUSHACC1_correct.verify_PUSHACC1_correct.
-  Definition correct_PUSHACC2 := PUSHACC2_correct.verify_PUSHACC2_correct.
-  Definition correct_PUSHACC3 := PUSHACC3_correct.verify_PUSHACC3_correct.
-  Definition correct_PUSHACC4 := PUSHACC4_correct.verify_PUSHACC4_correct.
-  Definition correct_PUSHACC5 := PUSHACC5_correct.verify_PUSHACC5_correct.
-  Definition correct_PUSHACC6 := PUSHACC6_correct.verify_PUSHACC6_correct.
-  Definition correct_PUSHACC7 := PUSHACC7_correct.verify_PUSHACC7_correct.
-  Definition correct_PUSHATOM0 := PUSHATOM0_correct.verify_PUSHATOM0_correct.
-  Definition correct_PUSHATOM :
-    forall t, Z.of_nat t <= 2097151 ->
-    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
-      (pre_and (sp_at_least 16) (code_at (Int.repr (Z.of_nat t))))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False)
-    := PUSHATOM_correct.verify_PUSHATOM_handler_correct.
-  Definition correct_PUSHCONST0 := PUSHCONST0_correct.verify_PUSHCONST0_correct.
-  Definition correct_PUSHCONST1 := PUSHCONST1_correct.verify_PUSHCONST1_correct.
-  Definition correct_PUSHCONST2 := PUSHCONST2_correct.verify_PUSHCONST2_correct.
-  Definition correct_PUSHCONST3 := PUSHCONST3_correct.verify_PUSHCONST3_correct.
-  Definition correct_PUSHCONSTINT := PUSHCONSTINT_correct.verify_PUSHCONSTINT_correct.
-  Definition correct_PUSHENVACC1 := PUSHENVACC1_correct.verify_PUSHENVACC1_correct.
-  Definition correct_PUSHENVACC2 := PUSHENVACC2_correct.verify_PUSHENVACC2_correct.
-  Definition correct_PUSHENVACC3 := PUSHENVACC3_correct.verify_PUSHENVACC3_correct.
-  Definition correct_PUSHENVACC4 := PUSHENVACC4_correct.verify_PUSHENVACC4_correct.
-  Definition correct_PUSHENVACC := PUSHENVACC_correct.verify_PUSHENVACC_correct.
-  Definition correct_PUSHGETGLOBALFIELD := PUSHGETGLOBALFIELD_correct.verify_PUSHGETGLOBALFIELD_correct.
-  Definition correct_PUSHGETGLOBAL :
-    forall n,
-    0 <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
-      (pre_and (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n)) (sp_at_least 16))
-      (fun _ s => nth_error s.(Machine.global) n = None) (fun _ => False) (fun _ _ _ => False)
-    := PUSHGETGLOBAL_correct.verify_PUSHGETGLOBAL_handler_correct.
-  Definition correct_PUSHOFFSETCLOSURE0 := PUSHOFFSETCLOSURE0_correct.verify_PUSHOFFSETCLOSURE0_correct.
-  Definition correct_PUSHOFFSETCLOSURE3 := PUSHOFFSETCLOSURE3_correct.verify_PUSHOFFSETCLOSURE3_correct.
-  Definition correct_PUSHOFFSETCLOSUREM3 := PUSHOFFSETCLOSUREM3_correct.verify_PUSHOFFSETCLOSUREM3_correct.
-  Definition correct_PUSHOFFSETCLOSURE := PUSHOFFSETCLOSURE_correct.verify_PUSHOFFSETCLOSURE_correct.
-  Definition correct_PUSHTRAP := PUSHTRAP_correct.verify_PUSHTRAP_correct.
-  Definition correct_PUSH_RETADDR := PUSH_RETADDR_correct.verify_PUSH_RETADDR_correct.
-  Definition correct_PUSH := PUSH_correct.verify_PUSH_correct.
-  Definition correct_RAISE_NOTRACE := RAISE_NOTRACE_correct.verify_RAISE_NOTRACE_correct.
-  Definition correct_RAISE := RAISE_correct.verify_RAISE_correct.
-  Definition correct_RERAISE := RERAISE_correct.verify_RERAISE_correct.
-  Definition correct_RESTART := RESTART_correct.verify_RESTART_correct.
-  Definition correct_RETURN := RETURN_correct.verify_RETURN_correct.
-  Definition correct_SETBYTESCHAR := SETBYTESCHAR_correct.verify_SETBYTESCHAR_correct.
-  Definition correct_SETFIELD0 := SETFIELD0_correct.verify_SETFIELD0_correct.
-  Definition correct_SETFIELD1 := SETFIELD1_correct.verify_SETFIELD1_correct.
-  Definition correct_SETFIELD2 := SETFIELD2_correct.verify_SETFIELD2_correct.
-  Definition correct_SETFIELD3 := SETFIELD3_correct.verify_SETFIELD3_correct.
-  Definition correct_SETFIELD := SETFIELD_correct.verify_SETFIELD_correct.
-  Definition correct_SETFLOATFIELD := SETFLOATFIELD_correct.verify_SETFLOATFIELD_correct.
-  Definition correct_SETGLOBAL := SETGLOBAL_correct.verify_SETGLOBAL_correct.
-  Definition correct_SETVECTITEM := SETVECTITEM_correct.verify_SETVECTITEM_correct.
-  Definition correct_STOP := STOP_correct.verify_STOP_correct.
-  Definition correct_SUBINT := SUBINT_correct.verify_SUBINT_correct.
-  Definition correct_SWITCH := SWITCH_correct.verify_SWITCH_handler_correct.
-  Definition correct_UGEINT := UGEINT_correct.verify_UGEINT_handler_correct.
-  Definition correct_ULTINT := ULTINT_correct.verify_ULTINT_handler_correct.
-  Definition correct_VECTLENGTH := VECTLENGTH_correct.verify_VECTLENGTH_correct.
-  Definition correct_XORINT := XORINT_correct.verify_XORINT_correct.
+  Definition correct_ACC : forall n,
+    handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
+      (fun e m s ard => instr_wfb (ACC n) = true /\ pre_of (ACC n) e m s ard)
+      (P_error_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
+  Admitted.
+
+  Definition correct_PUSH :
+    handler_correct (handle_instr PUSH) (clight_of PUSH)
+      (fun e m s ard => instr_wfb PUSH = true /\ pre_of PUSH e m s ard)
+      (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
+  Admitted.
+
+  Definition correct_PUSHACC : forall n,
+    handler_correct (handle_instr (PUSHACC n)) (clight_of (PUSHACC n))
+      (fun e m s ard => instr_wfb (PUSHACC n) = true /\ pre_of (PUSHACC n) e m s ard)
+      (P_error_of (PUSHACC n)) (P_halt_of (PUSHACC n)) (P_ccall_of (PUSHACC n)).
+  Admitted.
+
+  Definition correct_POP : forall n,
+    handler_correct (handle_instr (POP n)) (clight_of (POP n))
+      (fun e m s ard => instr_wfb (POP n) = true /\ pre_of (POP n) e m s ard)
+      (P_error_of (POP n)) (P_halt_of (POP n)) (P_ccall_of (POP n)).
+  Admitted.
+
+  Definition correct_ASSIGN : forall n,
+    handler_correct (handle_instr (ASSIGN n)) (clight_of (ASSIGN n))
+      (fun e m s ard => instr_wfb (ASSIGN n) = true /\ pre_of (ASSIGN n) e m s ard)
+      (P_error_of (ASSIGN n)) (P_halt_of (ASSIGN n)) (P_ccall_of (ASSIGN n)).
+  Admitted.
+
+  Definition correct_ENVACC : forall n,
+    handler_correct (handle_instr (ENVACC n)) (clight_of (ENVACC n))
+      (fun e m s ard => instr_wfb (ENVACC n) = true /\ pre_of (ENVACC n) e m s ard)
+      (P_error_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)).
+  Admitted.
+
+  Definition correct_PUSHENVACC : forall n,
+    handler_correct (handle_instr (PUSHENVACC n)) (clight_of (PUSHENVACC n))
+      (fun e m s ard => instr_wfb (PUSHENVACC n) = true /\ pre_of (PUSHENVACC n) e m s ard)
+      (P_error_of (PUSHENVACC n)) (P_halt_of (PUSHENVACC n)) (P_ccall_of (PUSHENVACC n)).
+  Admitted.
+
+  Definition correct_PUSH_RETADDR : forall z,
+    handler_correct (handle_instr (PUSH_RETADDR z)) (clight_of (PUSH_RETADDR z))
+      (fun e m s ard => instr_wfb (PUSH_RETADDR z) = true /\ pre_of (PUSH_RETADDR z) e m s ard)
+      (P_error_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)).
+  Admitted.
+
+  Definition correct_APPLY : forall n,
+    handler_correct (handle_instr (APPLY n)) (clight_of (APPLY n))
+      (fun e m s ard => instr_wfb (APPLY n) = true /\ pre_of (APPLY n) e m s ard)
+      (P_error_of (APPLY n)) (P_halt_of (APPLY n)) (P_ccall_of (APPLY n)).
+  Admitted.
+
+  Definition correct_APPLY1 :
+    handler_correct (handle_instr APPLY1) (clight_of APPLY1)
+      (fun e m s ard => instr_wfb APPLY1 = true /\ pre_of APPLY1 e m s ard)
+      (P_error_of APPLY1) (P_halt_of APPLY1) (P_ccall_of APPLY1).
+  Admitted.
+
+  Definition correct_APPLY2 :
+    handler_correct (handle_instr APPLY2) (clight_of APPLY2)
+      (fun e m s ard => instr_wfb APPLY2 = true /\ pre_of APPLY2 e m s ard)
+      (P_error_of APPLY2) (P_halt_of APPLY2) (P_ccall_of APPLY2).
+  Admitted.
+
+  Definition correct_APPLY3 :
+    handler_correct (handle_instr APPLY3) (clight_of APPLY3)
+      (fun e m s ard => instr_wfb APPLY3 = true /\ pre_of APPLY3 e m s ard)
+      (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3).
+  Admitted.
+
+  Definition correct_APPTERM : forall nargs slotsize,
+    handler_correct (handle_instr (APPTERM nargs slotsize)) (clight_of (APPTERM nargs slotsize))
+      (fun e m s ard => instr_wfb (APPTERM nargs slotsize) = true /\ pre_of (APPTERM nargs slotsize) e m s ard)
+      (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)).
+  Admitted.
+
+  Definition correct_APPTERM1 : forall n,
+    handler_correct (handle_instr (APPTERM1 n)) (clight_of (APPTERM1 n))
+      (fun e m s ard => instr_wfb (APPTERM1 n) = true /\ pre_of (APPTERM1 n) e m s ard)
+      (P_error_of (APPTERM1 n)) (P_halt_of (APPTERM1 n)) (P_ccall_of (APPTERM1 n)).
+  Admitted.
+
+  Definition correct_APPTERM2 : forall n,
+    handler_correct (handle_instr (APPTERM2 n)) (clight_of (APPTERM2 n))
+      (fun e m s ard => instr_wfb (APPTERM2 n) = true /\ pre_of (APPTERM2 n) e m s ard)
+      (P_error_of (APPTERM2 n)) (P_halt_of (APPTERM2 n)) (P_ccall_of (APPTERM2 n)).
+  Admitted.
+
+  Definition correct_APPTERM3 : forall n,
+    handler_correct (handle_instr (APPTERM3 n)) (clight_of (APPTERM3 n))
+      (fun e m s ard => instr_wfb (APPTERM3 n) = true /\ pre_of (APPTERM3 n) e m s ard)
+      (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)).
+  Admitted.
+
+  Definition correct_RETURN : forall n,
+    handler_correct (handle_instr (RETURN n)) (clight_of (RETURN n))
+      (fun e m s ard => instr_wfb (RETURN n) = true /\ pre_of (RETURN n) e m s ard)
+      (P_error_of (RETURN n)) (P_halt_of (RETURN n)) (P_ccall_of (RETURN n)).
+  Admitted.
+
+  Definition correct_RESTART :
+    handler_correct (handle_instr RESTART) (clight_of RESTART)
+      (fun e m s ard => instr_wfb RESTART = true /\ pre_of RESTART e m s ard)
+      (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART).
+  Admitted.
+
+  Definition correct_GRAB : forall n,
+    handler_correct (handle_instr (GRAB n)) (clight_of (GRAB n))
+      (fun e m s ard => instr_wfb (GRAB n) = true /\ pre_of (GRAB n) e m s ard)
+      (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)).
+  Admitted.
+
+  Definition correct_CLOSURE : forall n z,
+    handler_correct (handle_instr (CLOSURE n z)) (clight_of (CLOSURE n z))
+      (fun e m s ard => instr_wfb (CLOSURE n z) = true /\ pre_of (CLOSURE n z) e m s ard)
+      (P_error_of (CLOSURE n z)) (P_halt_of (CLOSURE n z)) (P_ccall_of (CLOSURE n z)).
+  Admitted.
+
+  Definition correct_CLOSUREREC : forall n1 n2 l,
+    handler_correct (handle_instr (CLOSUREREC n1 n2 l)) (clight_of (CLOSUREREC n1 n2 l))
+      (fun e m s ard => instr_wfb (CLOSUREREC n1 n2 l) = true /\ pre_of (CLOSUREREC n1 n2 l) e m s ard)
+      (P_error_of (CLOSUREREC n1 n2 l)) (P_halt_of (CLOSUREREC n1 n2 l)) (P_ccall_of (CLOSUREREC n1 n2 l)).
+  Admitted.
+
+  Definition correct_OFFSETCLOSURE : forall z,
+    handler_correct (handle_instr (OFFSETCLOSURE z)) (clight_of (OFFSETCLOSURE z))
+      (fun e m s ard => instr_wfb (OFFSETCLOSURE z) = true /\ pre_of (OFFSETCLOSURE z) e m s ard)
+      (P_error_of (OFFSETCLOSURE z)) (P_halt_of (OFFSETCLOSURE z)) (P_ccall_of (OFFSETCLOSURE z)).
+  Admitted.
+
+  Definition correct_PUSHOFFSETCLOSURE : forall z,
+    handler_correct (handle_instr (PUSHOFFSETCLOSURE z)) (clight_of (PUSHOFFSETCLOSURE z))
+      (fun e m s ard => instr_wfb (PUSHOFFSETCLOSURE z) = true /\ pre_of (PUSHOFFSETCLOSURE z) e m s ard)
+      (P_error_of (PUSHOFFSETCLOSURE z)) (P_halt_of (PUSHOFFSETCLOSURE z)) (P_ccall_of (PUSHOFFSETCLOSURE z)).
+  Admitted.
+
+  Definition correct_GETGLOBAL : forall n,
+    handler_correct (handle_instr (GETGLOBAL n)) (clight_of (GETGLOBAL n))
+      (fun e m s ard => instr_wfb (GETGLOBAL n) = true /\ pre_of (GETGLOBAL n) e m s ard)
+      (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)).
+  Admitted.
+
+  Definition correct_PUSHGETGLOBAL : forall n,
+    handler_correct (handle_instr (PUSHGETGLOBAL n)) (clight_of (PUSHGETGLOBAL n))
+      (fun e m s ard => instr_wfb (PUSHGETGLOBAL n) = true /\ pre_of (PUSHGETGLOBAL n) e m s ard)
+      (P_error_of (PUSHGETGLOBAL n)) (P_halt_of (PUSHGETGLOBAL n)) (P_ccall_of (PUSHGETGLOBAL n)).
+  Admitted.
+
+  Definition correct_GETGLOBALFIELD : forall n1 n2,
+    handler_correct (handle_instr (GETGLOBALFIELD n1 n2)) (clight_of (GETGLOBALFIELD n1 n2))
+      (fun e m s ard => instr_wfb (GETGLOBALFIELD n1 n2) = true /\ pre_of (GETGLOBALFIELD n1 n2) e m s ard)
+      (P_error_of (GETGLOBALFIELD n1 n2)) (P_halt_of (GETGLOBALFIELD n1 n2)) (P_ccall_of (GETGLOBALFIELD n1 n2)).
+  Admitted.
+
+  Definition correct_PUSHGETGLOBALFIELD : forall n1 n2,
+    handler_correct (handle_instr (PUSHGETGLOBALFIELD n1 n2)) (clight_of (PUSHGETGLOBALFIELD n1 n2))
+      (fun e m s ard => instr_wfb (PUSHGETGLOBALFIELD n1 n2) = true /\ pre_of (PUSHGETGLOBALFIELD n1 n2) e m s ard)
+      (P_error_of (PUSHGETGLOBALFIELD n1 n2)) (P_halt_of (PUSHGETGLOBALFIELD n1 n2)) (P_ccall_of (PUSHGETGLOBALFIELD n1 n2)).
+  Admitted.
+
+  Definition correct_SETGLOBAL : forall n,
+    handler_correct (handle_instr (SETGLOBAL n)) (clight_of (SETGLOBAL n))
+      (fun e m s ard => instr_wfb (SETGLOBAL n) = true /\ pre_of (SETGLOBAL n) e m s ard)
+      (P_error_of (SETGLOBAL n)) (P_halt_of (SETGLOBAL n)) (P_ccall_of (SETGLOBAL n)).
+  Admitted.
+
+  Definition correct_ATOM : forall n,
+    handler_correct (handle_instr (ATOM n)) (clight_of (ATOM n))
+      (fun e m s ard => instr_wfb (ATOM n) = true /\ pre_of (ATOM n) e m s ard)
+      (P_error_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)).
+  Admitted.
+
+  Definition correct_PUSHATOM : forall n,
+    handler_correct (handle_instr (PUSHATOM n)) (clight_of (PUSHATOM n))
+      (fun e m s ard => instr_wfb (PUSHATOM n) = true /\ pre_of (PUSHATOM n) e m s ard)
+      (P_error_of (PUSHATOM n)) (P_halt_of (PUSHATOM n)) (P_ccall_of (PUSHATOM n)).
+  Admitted.
+
+  Definition correct_MAKEBLOCK : forall n1 n2,
+    handler_correct (handle_instr (MAKEBLOCK n1 n2)) (clight_of (MAKEBLOCK n1 n2))
+      (fun e m s ard => instr_wfb (MAKEBLOCK n1 n2) = true /\ pre_of (MAKEBLOCK n1 n2) e m s ard)
+      (P_error_of (MAKEBLOCK n1 n2)) (P_halt_of (MAKEBLOCK n1 n2)) (P_ccall_of (MAKEBLOCK n1 n2)).
+  Admitted.
+
+  Definition correct_MAKEBLOCK1 : forall n,
+    handler_correct (handle_instr (MAKEBLOCK1 n)) (clight_of (MAKEBLOCK1 n))
+      (fun e m s ard => instr_wfb (MAKEBLOCK1 n) = true /\ pre_of (MAKEBLOCK1 n) e m s ard)
+      (P_error_of (MAKEBLOCK1 n)) (P_halt_of (MAKEBLOCK1 n)) (P_ccall_of (MAKEBLOCK1 n)).
+  Admitted.
+
+  Definition correct_MAKEBLOCK2 : forall n,
+    handler_correct (handle_instr (MAKEBLOCK2 n)) (clight_of (MAKEBLOCK2 n))
+      (fun e m s ard => instr_wfb (MAKEBLOCK2 n) = true /\ pre_of (MAKEBLOCK2 n) e m s ard)
+      (P_error_of (MAKEBLOCK2 n)) (P_halt_of (MAKEBLOCK2 n)) (P_ccall_of (MAKEBLOCK2 n)).
+  Admitted.
+
+  Definition correct_MAKEBLOCK3 : forall n,
+    handler_correct (handle_instr (MAKEBLOCK3 n)) (clight_of (MAKEBLOCK3 n))
+      (fun e m s ard => instr_wfb (MAKEBLOCK3 n) = true /\ pre_of (MAKEBLOCK3 n) e m s ard)
+      (P_error_of (MAKEBLOCK3 n)) (P_halt_of (MAKEBLOCK3 n)) (P_ccall_of (MAKEBLOCK3 n)).
+  Admitted.
+
+  Definition correct_MAKEFLOATBLOCK : forall n,
+    handler_correct (handle_instr (MAKEFLOATBLOCK n)) (clight_of (MAKEFLOATBLOCK n))
+      (fun e m s ard => instr_wfb (MAKEFLOATBLOCK n) = true /\ pre_of (MAKEFLOATBLOCK n) e m s ard)
+      (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)).
+  Admitted.
+
+  Definition correct_GETFIELD : forall n,
+    handler_correct (handle_instr (GETFIELD n)) (clight_of (GETFIELD n))
+      (fun e m s ard => instr_wfb (GETFIELD n) = true /\ pre_of (GETFIELD n) e m s ard)
+      (P_error_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)).
+  Admitted.
+
+  Definition correct_GETFLOATFIELD : forall n,
+    handler_correct (handle_instr (GETFLOATFIELD n)) (clight_of (GETFLOATFIELD n))
+      (fun e m s ard => instr_wfb (GETFLOATFIELD n) = true /\ pre_of (GETFLOATFIELD n) e m s ard)
+      (P_error_of (GETFLOATFIELD n)) (P_halt_of (GETFLOATFIELD n)) (P_ccall_of (GETFLOATFIELD n)).
+  Admitted.
+
+  Definition correct_SETFIELD : forall n,
+    handler_correct (handle_instr (SETFIELD n)) (clight_of (SETFIELD n))
+      (fun e m s ard => instr_wfb (SETFIELD n) = true /\ pre_of (SETFIELD n) e m s ard)
+      (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)).
+  Admitted.
+
+  Definition correct_SETFLOATFIELD : forall n,
+    handler_correct (handle_instr (SETFLOATFIELD n)) (clight_of (SETFLOATFIELD n))
+      (fun e m s ard => instr_wfb (SETFLOATFIELD n) = true /\ pre_of (SETFLOATFIELD n) e m s ard)
+      (P_error_of (SETFLOATFIELD n)) (P_halt_of (SETFLOATFIELD n)) (P_ccall_of (SETFLOATFIELD n)).
+  Admitted.
+
+  Definition correct_VECTLENGTH :
+    handler_correct (handle_instr VECTLENGTH) (clight_of VECTLENGTH)
+      (fun e m s ard => instr_wfb VECTLENGTH = true /\ pre_of VECTLENGTH e m s ard)
+      (P_error_of VECTLENGTH) (P_halt_of VECTLENGTH) (P_ccall_of VECTLENGTH).
+  Admitted.
+
+  Definition correct_GETVECTITEM :
+    handler_correct (handle_instr GETVECTITEM) (clight_of GETVECTITEM)
+      (fun e m s ard => instr_wfb GETVECTITEM = true /\ pre_of GETVECTITEM e m s ard)
+      (P_error_of GETVECTITEM) (P_halt_of GETVECTITEM) (P_ccall_of GETVECTITEM).
+  Admitted.
+
+  Definition correct_SETVECTITEM :
+    handler_correct (handle_instr SETVECTITEM) (clight_of SETVECTITEM)
+      (fun e m s ard => instr_wfb SETVECTITEM = true /\ pre_of SETVECTITEM e m s ard)
+      (P_error_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM).
+  Admitted.
+
+  Definition correct_GETBYTESCHAR :
+    handler_correct (handle_instr GETBYTESCHAR) (clight_of GETBYTESCHAR)
+      (fun e m s ard => instr_wfb GETBYTESCHAR = true /\ pre_of GETBYTESCHAR e m s ard)
+      (P_error_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR).
+  Admitted.
+
+  Definition correct_SETBYTESCHAR :
+    handler_correct (handle_instr SETBYTESCHAR) (clight_of SETBYTESCHAR)
+      (fun e m s ard => instr_wfb SETBYTESCHAR = true /\ pre_of SETBYTESCHAR e m s ard)
+      (P_error_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR).
+  Admitted.
+
+  Definition correct_GETSTRINGCHAR :
+    handler_correct (handle_instr GETSTRINGCHAR) (clight_of GETSTRINGCHAR)
+      (fun e m s ard => instr_wfb GETSTRINGCHAR = true /\ pre_of GETSTRINGCHAR e m s ard)
+      (P_error_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR).
+  Admitted.
+
+  Definition correct_BRANCH : forall z,
+    handler_correct (handle_instr (BRANCH z)) (clight_of (BRANCH z))
+      (fun e m s ard => instr_wfb (BRANCH z) = true /\ pre_of (BRANCH z) e m s ard)
+      (P_error_of (BRANCH z)) (P_halt_of (BRANCH z)) (P_ccall_of (BRANCH z)).
+  Admitted.
+
+  Definition correct_BRANCHIF : forall z,
+    handler_correct (handle_instr (BRANCHIF z)) (clight_of (BRANCHIF z))
+      (fun e m s ard => instr_wfb (BRANCHIF z) = true /\ pre_of (BRANCHIF z) e m s ard)
+      (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)).
+  Admitted.
+
+  Definition correct_BRANCHIFNOT : forall z,
+    handler_correct (handle_instr (BRANCHIFNOT z)) (clight_of (BRANCHIFNOT z))
+      (fun e m s ard => instr_wfb (BRANCHIFNOT z) = true /\ pre_of (BRANCHIFNOT z) e m s ard)
+      (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
+  Admitted.
+
+  Definition correct_SWITCH : forall n1 n2 l1 l2,
+    handler_correct (handle_instr (SWITCH n1 n2 l1 l2)) (clight_of (SWITCH n1 n2 l1 l2))
+      (fun e m s ard => instr_wfb (SWITCH n1 n2 l1 l2) = true /\ pre_of (SWITCH n1 n2 l1 l2) e m s ard)
+      (P_error_of (SWITCH n1 n2 l1 l2)) (P_halt_of (SWITCH n1 n2 l1 l2)) (P_ccall_of (SWITCH n1 n2 l1 l2)).
+  Admitted.
+
+  Definition correct_BOOLNOT :
+    handler_correct (handle_instr BOOLNOT) (clight_of BOOLNOT)
+      (fun e m s ard => instr_wfb BOOLNOT = true /\ pre_of BOOLNOT e m s ard)
+      (P_error_of BOOLNOT) (P_halt_of BOOLNOT) (P_ccall_of BOOLNOT).
+  Admitted.
+
+  Definition correct_PUSHTRAP : forall z,
+    handler_correct (handle_instr (PUSHTRAP z)) (clight_of (PUSHTRAP z))
+      (fun e m s ard => instr_wfb (PUSHTRAP z) = true /\ pre_of (PUSHTRAP z) e m s ard)
+      (P_error_of (PUSHTRAP z)) (P_halt_of (PUSHTRAP z)) (P_ccall_of (PUSHTRAP z)).
+  Admitted.
+
+  Definition correct_POPTRAP :
+    handler_correct (handle_instr POPTRAP) (clight_of POPTRAP)
+      (fun e m s ard => instr_wfb POPTRAP = true /\ pre_of POPTRAP e m s ard)
+      (P_error_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP).
+  Admitted.
+
+  Definition correct_RAISE :
+    handler_correct (handle_instr RAISE) (clight_of RAISE)
+      (fun e m s ard => instr_wfb RAISE = true /\ pre_of RAISE e m s ard)
+      (P_error_of RAISE) (P_halt_of RAISE) (P_ccall_of RAISE).
+  Admitted.
+
+  Definition correct_RERAISE :
+    handler_correct (handle_instr RERAISE) (clight_of RERAISE)
+      (fun e m s ard => instr_wfb RERAISE = true /\ pre_of RERAISE e m s ard)
+      (P_error_of RERAISE) (P_halt_of RERAISE) (P_ccall_of RERAISE).
+  Admitted.
+
+  Definition correct_RAISE_NOTRACE :
+    handler_correct (handle_instr RAISE_NOTRACE) (clight_of RAISE_NOTRACE)
+      (fun e m s ard => instr_wfb RAISE_NOTRACE = true /\ pre_of RAISE_NOTRACE e m s ard)
+      (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE).
+  Admitted.
+
+  Definition correct_CHECK_SIGNALS :
+    handler_correct (handle_instr CHECK_SIGNALS) (clight_of CHECK_SIGNALS)
+      (fun e m s ard => instr_wfb CHECK_SIGNALS = true /\ pre_of CHECK_SIGNALS e m s ard)
+      (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS).
+  Admitted.
+
+  Definition correct_C_CALL : forall n1 n2,
+    handler_correct (handle_instr (C_CALL n1 n2)) (clight_of (C_CALL n1 n2))
+      (fun e m s ard => instr_wfb (C_CALL n1 n2) = true /\ pre_of (C_CALL n1 n2) e m s ard)
+      (P_error_of (C_CALL n1 n2)) (P_halt_of (C_CALL n1 n2)) (P_ccall_of (C_CALL n1 n2)).
+  Admitted.
+
+  Definition correct_CONSTINT : forall z,
+    handler_correct (handle_instr (CONSTINT z)) (clight_of (CONSTINT z))
+      (fun e m s ard => instr_wfb (CONSTINT z) = true /\ pre_of (CONSTINT z) e m s ard)
+      (P_error_of (CONSTINT z)) (P_halt_of (CONSTINT z)) (P_ccall_of (CONSTINT z)).
+  Admitted.
+
+  Definition correct_PUSHCONSTINT : forall z,
+    handler_correct (handle_instr (PUSHCONSTINT z)) (clight_of (PUSHCONSTINT z))
+      (fun e m s ard => instr_wfb (PUSHCONSTINT z) = true /\ pre_of (PUSHCONSTINT z) e m s ard)
+      (P_error_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)).
+  Admitted.
+
+  Definition correct_NEGINT :
+    handler_correct (handle_instr NEGINT) (clight_of NEGINT)
+      (fun e m s ard => instr_wfb NEGINT = true /\ pre_of NEGINT e m s ard)
+      (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT).
+  Admitted.
+
+  Definition correct_ADDINT :
+    handler_correct (handle_instr ADDINT) (clight_of ADDINT)
+      (fun e m s ard => instr_wfb ADDINT = true /\ pre_of ADDINT e m s ard)
+      (P_error_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT).
+  Admitted.
+
+  Definition correct_SUBINT :
+    handler_correct (handle_instr SUBINT) (clight_of SUBINT)
+      (fun e m s ard => instr_wfb SUBINT = true /\ pre_of SUBINT e m s ard)
+      (P_error_of SUBINT) (P_halt_of SUBINT) (P_ccall_of SUBINT).
+  Admitted.
+
+  Definition correct_MULINT :
+    handler_correct (handle_instr MULINT) (clight_of MULINT)
+      (fun e m s ard => instr_wfb MULINT = true /\ pre_of MULINT e m s ard)
+      (P_error_of MULINT) (P_halt_of MULINT) (P_ccall_of MULINT).
+  Admitted.
+
+  Definition correct_DIVINT :
+    handler_correct (handle_instr DIVINT) (clight_of DIVINT)
+      (fun e m s ard => instr_wfb DIVINT = true /\ pre_of DIVINT e m s ard)
+      (P_error_of DIVINT) (P_halt_of DIVINT) (P_ccall_of DIVINT).
+  Admitted.
+
+  Definition correct_MODINT :
+    handler_correct (handle_instr MODINT) (clight_of MODINT)
+      (fun e m s ard => instr_wfb MODINT = true /\ pre_of MODINT e m s ard)
+      (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT).
+  Admitted.
+
+  Definition correct_ANDINT :
+    handler_correct (handle_instr ANDINT) (clight_of ANDINT)
+      (fun e m s ard => instr_wfb ANDINT = true /\ pre_of ANDINT e m s ard)
+      (P_error_of ANDINT) (P_halt_of ANDINT) (P_ccall_of ANDINT).
+  Admitted.
+
+  Definition correct_ORINT :
+    handler_correct (handle_instr ORINT) (clight_of ORINT)
+      (fun e m s ard => instr_wfb ORINT = true /\ pre_of ORINT e m s ard)
+      (P_error_of ORINT) (P_halt_of ORINT) (P_ccall_of ORINT).
+  Admitted.
+
+  Definition correct_XORINT :
+    handler_correct (handle_instr XORINT) (clight_of XORINT)
+      (fun e m s ard => instr_wfb XORINT = true /\ pre_of XORINT e m s ard)
+      (P_error_of XORINT) (P_halt_of XORINT) (P_ccall_of XORINT).
+  Admitted.
+
+  Definition correct_LSLINT :
+    handler_correct (handle_instr LSLINT) (clight_of LSLINT)
+      (fun e m s ard => instr_wfb LSLINT = true /\ pre_of LSLINT e m s ard)
+      (P_error_of LSLINT) (P_halt_of LSLINT) (P_ccall_of LSLINT).
+  Admitted.
+
+  Definition correct_LSRINT :
+    handler_correct (handle_instr LSRINT) (clight_of LSRINT)
+      (fun e m s ard => instr_wfb LSRINT = true /\ pre_of LSRINT e m s ard)
+      (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT).
+  Admitted.
+
+  Definition correct_ASRINT :
+    handler_correct (handle_instr ASRINT) (clight_of ASRINT)
+      (fun e m s ard => instr_wfb ASRINT = true /\ pre_of ASRINT e m s ard)
+      (P_error_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT).
+  Admitted.
+
+  Definition correct_EQ :
+    handler_correct (handle_instr EQ) (clight_of EQ)
+      (fun e m s ard => instr_wfb EQ = true /\ pre_of EQ e m s ard)
+      (P_error_of EQ) (P_halt_of EQ) (P_ccall_of EQ).
+  Admitted.
+
+  Definition correct_NEQ :
+    handler_correct (handle_instr NEQ) (clight_of NEQ)
+      (fun e m s ard => instr_wfb NEQ = true /\ pre_of NEQ e m s ard)
+      (P_error_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ).
+  Admitted.
+
+  Definition correct_LTINT :
+    handler_correct (handle_instr LTINT) (clight_of LTINT)
+      (fun e m s ard => instr_wfb LTINT = true /\ pre_of LTINT e m s ard)
+      (P_error_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT).
+  Admitted.
+
+  Definition correct_LEINT :
+    handler_correct (handle_instr LEINT) (clight_of LEINT)
+      (fun e m s ard => instr_wfb LEINT = true /\ pre_of LEINT e m s ard)
+      (P_error_of LEINT) (P_halt_of LEINT) (P_ccall_of LEINT).
+  Admitted.
+
+  Definition correct_GTINT :
+    handler_correct (handle_instr GTINT) (clight_of GTINT)
+      (fun e m s ard => instr_wfb GTINT = true /\ pre_of GTINT e m s ard)
+      (P_error_of GTINT) (P_halt_of GTINT) (P_ccall_of GTINT).
+  Admitted.
+
+  Definition correct_GEINT :
+    handler_correct (handle_instr GEINT) (clight_of GEINT)
+      (fun e m s ard => instr_wfb GEINT = true /\ pre_of GEINT e m s ard)
+      (P_error_of GEINT) (P_halt_of GEINT) (P_ccall_of GEINT).
+  Admitted.
+
+  Definition correct_OFFSETINT : forall z,
+    handler_correct (handle_instr (OFFSETINT z)) (clight_of (OFFSETINT z))
+      (fun e m s ard => instr_wfb (OFFSETINT z) = true /\ pre_of (OFFSETINT z) e m s ard)
+      (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)).
+  Admitted.
+
+  Definition correct_OFFSETREF : forall z,
+    handler_correct (handle_instr (OFFSETREF z)) (clight_of (OFFSETREF z))
+      (fun e m s ard => instr_wfb (OFFSETREF z) = true /\ pre_of (OFFSETREF z) e m s ard)
+      (P_error_of (OFFSETREF z)) (P_halt_of (OFFSETREF z)) (P_ccall_of (OFFSETREF z)).
+  Admitted.
+
+  Definition correct_ISINT :
+    handler_correct (handle_instr ISINT) (clight_of ISINT)
+      (fun e m s ard => instr_wfb ISINT = true /\ pre_of ISINT e m s ard)
+      (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT).
+  Admitted.
+
+  Definition correct_GETMETHOD :
+    handler_correct (handle_instr GETMETHOD) (clight_of GETMETHOD)
+      (fun e m s ard => instr_wfb GETMETHOD = true /\ pre_of GETMETHOD e m s ard)
+      (P_error_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD).
+  Admitted.
+
+  Definition correct_GETPUBMET : forall z,
+    handler_correct (handle_instr (GETPUBMET z)) (clight_of (GETPUBMET z))
+      (fun e m s ard => instr_wfb (GETPUBMET z) = true /\ pre_of (GETPUBMET z) e m s ard)
+      (P_error_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
+  Admitted.
+
+  Definition correct_GETDYNMET :
+    handler_correct (handle_instr GETDYNMET) (clight_of GETDYNMET)
+      (fun e m s ard => instr_wfb GETDYNMET = true /\ pre_of GETDYNMET e m s ard)
+      (P_error_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET).
+  Admitted.
+
+  Definition correct_BEQ : forall z1 z2,
+    handler_correct (handle_instr (BEQ z1 z2)) (clight_of (BEQ z1 z2))
+      (fun e m s ard => instr_wfb (BEQ z1 z2) = true /\ pre_of (BEQ z1 z2) e m s ard)
+      (P_error_of (BEQ z1 z2)) (P_halt_of (BEQ z1 z2)) (P_ccall_of (BEQ z1 z2)).
+  Admitted.
+
+  Definition correct_BNEQ : forall z1 z2,
+    handler_correct (handle_instr (BNEQ z1 z2)) (clight_of (BNEQ z1 z2))
+      (fun e m s ard => instr_wfb (BNEQ z1 z2) = true /\ pre_of (BNEQ z1 z2) e m s ard)
+      (P_error_of (BNEQ z1 z2)) (P_halt_of (BNEQ z1 z2)) (P_ccall_of (BNEQ z1 z2)).
+  Admitted.
+
+  Definition correct_BLTINT : forall z1 z2,
+    handler_correct (handle_instr (BLTINT z1 z2)) (clight_of (BLTINT z1 z2))
+      (fun e m s ard => instr_wfb (BLTINT z1 z2) = true /\ pre_of (BLTINT z1 z2) e m s ard)
+      (P_error_of (BLTINT z1 z2)) (P_halt_of (BLTINT z1 z2)) (P_ccall_of (BLTINT z1 z2)).
+  Admitted.
+
+  Definition correct_BLEINT : forall z1 z2,
+    handler_correct (handle_instr (BLEINT z1 z2)) (clight_of (BLEINT z1 z2))
+      (fun e m s ard => instr_wfb (BLEINT z1 z2) = true /\ pre_of (BLEINT z1 z2) e m s ard)
+      (P_error_of (BLEINT z1 z2)) (P_halt_of (BLEINT z1 z2)) (P_ccall_of (BLEINT z1 z2)).
+  Admitted.
+
+  Definition correct_BGTINT : forall z1 z2,
+    handler_correct (handle_instr (BGTINT z1 z2)) (clight_of (BGTINT z1 z2))
+      (fun e m s ard => instr_wfb (BGTINT z1 z2) = true /\ pre_of (BGTINT z1 z2) e m s ard)
+      (P_error_of (BGTINT z1 z2)) (P_halt_of (BGTINT z1 z2)) (P_ccall_of (BGTINT z1 z2)).
+  Admitted.
+
+  Definition correct_BGEINT : forall z1 z2,
+    handler_correct (handle_instr (BGEINT z1 z2)) (clight_of (BGEINT z1 z2))
+      (fun e m s ard => instr_wfb (BGEINT z1 z2) = true /\ pre_of (BGEINT z1 z2) e m s ard)
+      (P_error_of (BGEINT z1 z2)) (P_halt_of (BGEINT z1 z2)) (P_ccall_of (BGEINT z1 z2)).
+  Admitted.
+
+  Definition correct_ULTINT :
+    handler_correct (handle_instr ULTINT) (clight_of ULTINT)
+      (fun e m s ard => instr_wfb ULTINT = true /\ pre_of ULTINT e m s ard)
+      (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT).
+  Admitted.
+
+  Definition correct_UGEINT :
+    handler_correct (handle_instr UGEINT) (clight_of UGEINT)
+      (fun e m s ard => instr_wfb UGEINT = true /\ pre_of UGEINT e m s ard)
+      (P_error_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT).
+  Admitted.
+
+  Definition correct_BULTINT : forall z1 z2,
+    handler_correct (handle_instr (BULTINT z1 z2)) (clight_of (BULTINT z1 z2))
+      (fun e m s ard => instr_wfb (BULTINT z1 z2) = true /\ pre_of (BULTINT z1 z2) e m s ard)
+      (P_error_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2)).
+  Admitted.
+
+  Definition correct_BUGEINT : forall z1 z2,
+    handler_correct (handle_instr (BUGEINT z1 z2)) (clight_of (BUGEINT z1 z2))
+      (fun e m s ard => instr_wfb (BUGEINT z1 z2) = true /\ pre_of (BUGEINT z1 z2) e m s ard)
+      (P_error_of (BUGEINT z1 z2)) (P_halt_of (BUGEINT z1 z2)) (P_ccall_of (BUGEINT z1 z2)).
+  Admitted.
+
+  Definition correct_STOP :
+    handler_correct (handle_instr STOP) (clight_of STOP)
+      (fun e m s ard => instr_wfb STOP = true /\ pre_of STOP e m s ard)
+      (P_error_of STOP) (P_halt_of STOP) (P_ccall_of STOP).
+  Admitted.
 
   Section __.
   Set Printing All.
   Set Printing Fully Qualified.
   Set Printing Depth 10000000000.
   Set Printing Width 2000.
-  Goal True.
-    idtac "<correct_ACC0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC0>".
-  Abort.
-  Goal True.
-    idtac "<correct_ACC1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC1>".
-  Abort.
-  Goal True.
-    idtac "<correct_ACC2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC2>".
-  Abort.
-  Goal True.
-    idtac "<correct_ACC3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC3>".
-  Abort.
-  Goal True.
-    idtac "<correct_ACC4>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC4.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC4>".
-  Abort.
-  Goal True.
-    idtac "<correct_ACC5>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC5.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC5>".
-  Abort.
-  Goal True.
-    idtac "<correct_ACC6>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC6.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC6>".
-  Abort.
-  Goal True.
-    idtac "<correct_ACC7>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ACC7.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ACC7>".
-  Abort.
   Goal True.
     idtac "<correct_ACC>".
     idtac "<PrintAssumptions>".
@@ -457,18 +591,60 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_ACC>".
   Abort.
   Goal True.
-    idtac "<correct_ADDINT>".
+    idtac "<correct_PUSH>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_ADDINT.
+    Print Assumptions correct_PUSH.
     idtac "</PrintAssumptions>".
-    idtac "</correct_ADDINT>".
+    idtac "</correct_PUSH>".
   Abort.
   Goal True.
-    idtac "<correct_ANDINT>".
+    idtac "<correct_PUSHACC>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_ANDINT.
+    Print Assumptions correct_PUSHACC.
     idtac "</PrintAssumptions>".
-    idtac "</correct_ANDINT>".
+    idtac "</correct_PUSHACC>".
+  Abort.
+  Goal True.
+    idtac "<correct_POP>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_POP.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_POP>".
+  Abort.
+  Goal True.
+    idtac "<correct_ASSIGN>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ASSIGN.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ASSIGN>".
+  Abort.
+  Goal True.
+    idtac "<correct_ENVACC>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ENVACC.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ENVACC>".
+  Abort.
+  Goal True.
+    idtac "<correct_PUSHENVACC>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_PUSHENVACC.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_PUSHENVACC>".
+  Abort.
+  Goal True.
+    idtac "<correct_PUSH_RETADDR>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_PUSH_RETADDR.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_PUSH_RETADDR>".
+  Abort.
+  Goal True.
+    idtac "<correct_APPLY>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_APPLY.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_APPLY>".
   Abort.
   Goal True.
     idtac "<correct_APPLY1>".
@@ -492,11 +668,11 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_APPLY3>".
   Abort.
   Goal True.
-    idtac "<correct_APPLY>".
+    idtac "<correct_APPTERM>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_APPLY.
+    Print Assumptions correct_APPTERM.
     idtac "</PrintAssumptions>".
-    idtac "</correct_APPLY>".
+    idtac "</correct_APPTERM>".
   Abort.
   Goal True.
     idtac "<correct_APPTERM1>".
@@ -520,379 +696,18 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_APPTERM3>".
   Abort.
   Goal True.
-    idtac "<correct_APPTERM>".
+    idtac "<correct_RETURN>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_APPTERM.
+    Print Assumptions correct_RETURN.
     idtac "</PrintAssumptions>".
-    idtac "</correct_APPTERM>".
+    idtac "</correct_RETURN>".
   Abort.
   Goal True.
-    idtac "<correct_ASRINT>".
+    idtac "<correct_RESTART>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_ASRINT.
+    Print Assumptions correct_RESTART.
     idtac "</PrintAssumptions>".
-    idtac "</correct_ASRINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_ASSIGN>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ASSIGN.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ASSIGN>".
-  Abort.
-  Goal True.
-    idtac "<correct_ATOM0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ATOM0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ATOM0>".
-  Abort.
-  Goal True.
-    idtac "<correct_ATOM>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ATOM.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ATOM>".
-  Abort.
-  Goal True.
-    idtac "<correct_BEQ>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BEQ.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BEQ>".
-  Abort.
-  Goal True.
-    idtac "<correct_BGEINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BGEINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BGEINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_BGTINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BGTINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BGTINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_BLEINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BLEINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BLEINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_BLTINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BLTINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BLTINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_BNEQ>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BNEQ.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BNEQ>".
-  Abort.
-  Goal True.
-    idtac "<correct_BOOLNOT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BOOLNOT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BOOLNOT>".
-  Abort.
-  Goal True.
-    idtac "<correct_BRANCHIFNOT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BRANCHIFNOT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BRANCHIFNOT>".
-  Abort.
-  Goal True.
-    idtac "<correct_BRANCHIF>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BRANCHIF.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BRANCHIF>".
-  Abort.
-  Goal True.
-    idtac "<correct_BRANCH>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BRANCH.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BRANCH>".
-  Abort.
-  Goal True.
-  Abort.
-  Goal True.
-    idtac "<correct_BUGEINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BUGEINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BUGEINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_BULTINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_BULTINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_BULTINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_CHECK_SIGNALS>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CHECK_SIGNALS.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CHECK_SIGNALS>".
-  Abort.
-  Goal True.
-    idtac "<correct_CLOSUREREC>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CLOSUREREC.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CLOSUREREC>".
-  Abort.
-  Goal True.
-    idtac "<correct_CLOSURE>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CLOSURE.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CLOSURE>".
-  Abort.
-  Goal True.
-    idtac "<correct_CONST0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CONST0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CONST0>".
-  Abort.
-  Goal True.
-    idtac "<correct_CONST1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CONST1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CONST1>".
-  Abort.
-  Goal True.
-    idtac "<correct_CONST2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CONST2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CONST2>".
-  Abort.
-  Goal True.
-    idtac "<correct_CONST3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CONST3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CONST3>".
-  Abort.
-  Goal True.
-    idtac "<correct_CONSTINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_CONSTINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_CONSTINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_C_CALL1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_C_CALL1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_C_CALL1>".
-  Abort.
-  Goal True.
-    idtac "<correct_C_CALL2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_C_CALL2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_C_CALL2>".
-  Abort.
-  Goal True.
-    idtac "<correct_C_CALL3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_C_CALL3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_C_CALL3>".
-  Abort.
-  Goal True.
-    idtac "<correct_C_CALL4>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_C_CALL4.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_C_CALL4>".
-  Abort.
-  Goal True.
-    idtac "<correct_C_CALL5>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_C_CALL5.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_C_CALL5>".
-  Abort.
-  Goal True.
-    idtac "<correct_C_CALLN>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_C_CALLN.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_C_CALLN>".
-  Abort.
-  Goal True.
-    idtac "<correct_DIVINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_DIVINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_DIVINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_ENVACC1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ENVACC1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ENVACC1>".
-  Abort.
-  Goal True.
-    idtac "<correct_ENVACC2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ENVACC2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ENVACC2>".
-  Abort.
-  Goal True.
-    idtac "<correct_ENVACC3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ENVACC3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ENVACC3>".
-  Abort.
-  Goal True.
-    idtac "<correct_ENVACC4>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ENVACC4.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ENVACC4>".
-  Abort.
-  Goal True.
-    idtac "<correct_ENVACC>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ENVACC.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ENVACC>".
-  Abort.
-  Goal True.
-    idtac "<correct_EQ>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_EQ.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_EQ>".
-  Abort.
-  Goal True.
-  Abort.
-  Goal True.
-    idtac "<correct_GEINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GEINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GEINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETBYTESCHAR>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETBYTESCHAR.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETBYTESCHAR>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETDYNMET>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETDYNMET.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETDYNMET>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETFIELD0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETFIELD0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETFIELD0>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETFIELD1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETFIELD1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETFIELD1>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETFIELD2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETFIELD2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETFIELD2>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETFIELD3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETFIELD3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETFIELD3>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETFIELD>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETFIELD.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETFIELD>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETFLOATFIELD>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETFLOATFIELD.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETFLOATFIELD>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETGLOBALFIELD>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETGLOBALFIELD.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETGLOBALFIELD>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETGLOBAL>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETGLOBAL.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETGLOBAL>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETMETHOD>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETMETHOD.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETMETHOD>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETPUBMET>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETPUBMET.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETPUBMET>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETSTRINGCHAR>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETSTRINGCHAR.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETSTRINGCHAR>".
-  Abort.
-  Goal True.
-    idtac "<correct_GETVECTITEM>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_GETVECTITEM.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_GETVECTITEM>".
+    idtac "</correct_RESTART>".
   Abort.
   Goal True.
     idtac "<correct_GRAB>".
@@ -902,46 +717,88 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_GRAB>".
   Abort.
   Goal True.
-    idtac "<correct_GTINT>".
+    idtac "<correct_CLOSURE>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_GTINT.
+    Print Assumptions correct_CLOSURE.
     idtac "</PrintAssumptions>".
-    idtac "</correct_GTINT>".
+    idtac "</correct_CLOSURE>".
   Abort.
   Goal True.
-    idtac "<correct_ISINT>".
+    idtac "<correct_CLOSUREREC>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_ISINT.
+    Print Assumptions correct_CLOSUREREC.
     idtac "</PrintAssumptions>".
-    idtac "</correct_ISINT>".
+    idtac "</correct_CLOSUREREC>".
   Abort.
   Goal True.
-    idtac "<correct_LEINT>".
+    idtac "<correct_OFFSETCLOSURE>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_LEINT.
+    Print Assumptions correct_OFFSETCLOSURE.
     idtac "</PrintAssumptions>".
-    idtac "</correct_LEINT>".
+    idtac "</correct_OFFSETCLOSURE>".
   Abort.
   Goal True.
-    idtac "<correct_LSLINT>".
+    idtac "<correct_PUSHOFFSETCLOSURE>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_LSLINT.
+    Print Assumptions correct_PUSHOFFSETCLOSURE.
     idtac "</PrintAssumptions>".
-    idtac "</correct_LSLINT>".
+    idtac "</correct_PUSHOFFSETCLOSURE>".
   Abort.
   Goal True.
-    idtac "<correct_LSRINT>".
+    idtac "<correct_GETGLOBAL>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_LSRINT.
+    Print Assumptions correct_GETGLOBAL.
     idtac "</PrintAssumptions>".
-    idtac "</correct_LSRINT>".
+    idtac "</correct_GETGLOBAL>".
   Abort.
   Goal True.
-    idtac "<correct_LTINT>".
+    idtac "<correct_PUSHGETGLOBAL>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_LTINT.
+    Print Assumptions correct_PUSHGETGLOBAL.
     idtac "</PrintAssumptions>".
-    idtac "</correct_LTINT>".
+    idtac "</correct_PUSHGETGLOBAL>".
+  Abort.
+  Goal True.
+    idtac "<correct_GETGLOBALFIELD>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GETGLOBALFIELD.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GETGLOBALFIELD>".
+  Abort.
+  Goal True.
+    idtac "<correct_PUSHGETGLOBALFIELD>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_PUSHGETGLOBALFIELD.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_PUSHGETGLOBALFIELD>".
+  Abort.
+  Goal True.
+    idtac "<correct_SETGLOBAL>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_SETGLOBAL.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_SETGLOBAL>".
+  Abort.
+  Goal True.
+    idtac "<correct_ATOM>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ATOM.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ATOM>".
+  Abort.
+  Goal True.
+    idtac "<correct_PUSHATOM>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_PUSHATOM.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_PUSHATOM>".
+  Abort.
+  Goal True.
+    idtac "<correct_MAKEBLOCK>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_MAKEBLOCK.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_MAKEBLOCK>".
   Abort.
   Goal True.
     idtac "<correct_MAKEBLOCK1>".
@@ -965,13 +822,6 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_MAKEBLOCK3>".
   Abort.
   Goal True.
-    idtac "<correct_MAKEBLOCK>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_MAKEBLOCK.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_MAKEBLOCK>".
-  Abort.
-  Goal True.
     idtac "<correct_MAKEFLOATBLOCK>".
     idtac "<PrintAssumptions>".
     Print Assumptions correct_MAKEFLOATBLOCK.
@@ -979,369 +829,18 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_MAKEFLOATBLOCK>".
   Abort.
   Goal True.
-    idtac "<correct_MODINT>".
+    idtac "<correct_GETFIELD>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_MODINT.
+    Print Assumptions correct_GETFIELD.
     idtac "</PrintAssumptions>".
-    idtac "</correct_MODINT>".
+    idtac "</correct_GETFIELD>".
   Abort.
   Goal True.
-    idtac "<correct_MULINT>".
+    idtac "<correct_GETFLOATFIELD>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_MULINT.
+    Print Assumptions correct_GETFLOATFIELD.
     idtac "</PrintAssumptions>".
-    idtac "</correct_MULINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_NEGINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_NEGINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_NEGINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_NEQ>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_NEQ.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_NEQ>".
-  Abort.
-  Goal True.
-    idtac "<correct_OFFSETCLOSURE0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETCLOSURE0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETCLOSURE0>".
-  Abort.
-  Goal True.
-    idtac "<correct_OFFSETCLOSURE3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETCLOSURE3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETCLOSURE3>".
-  Abort.
-  Goal True.
-    idtac "<correct_OFFSETCLOSUREM3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETCLOSUREM3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETCLOSUREM3>".
-  Abort.
-  Goal True.
-    idtac "<correct_OFFSETCLOSURE>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETCLOSURE.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETCLOSURE>".
-  Abort.
-  Goal True.
-    idtac "<correct_OFFSETINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_OFFSETREF>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_OFFSETREF.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_OFFSETREF>".
-  Abort.
-  Goal True.
-    idtac "<correct_ORINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_ORINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_ORINT>".
-  Abort.
-  Goal True.
-  Abort.
-  Goal True.
-    idtac "<correct_POPTRAP>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_POPTRAP.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_POPTRAP>".
-  Abort.
-  Goal True.
-    idtac "<correct_POP>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_POP.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_POP>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHACC1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHACC1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHACC1>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHACC2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHACC2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHACC2>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHACC3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHACC3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHACC3>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHACC4>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHACC4.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHACC4>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHACC5>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHACC5.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHACC5>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHACC6>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHACC6.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHACC6>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHACC7>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHACC7.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHACC7>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHATOM0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHATOM0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHATOM0>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHATOM>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHATOM.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHATOM>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHCONST0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHCONST0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHCONST0>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHCONST1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHCONST1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHCONST1>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHCONST2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHCONST2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHCONST2>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHCONST3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHCONST3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHCONST3>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHCONSTINT>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHCONSTINT.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHCONSTINT>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHENVACC1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHENVACC1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHENVACC1>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHENVACC2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHENVACC2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHENVACC2>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHENVACC3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHENVACC3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHENVACC3>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHENVACC4>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHENVACC4.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHENVACC4>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHENVACC>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHENVACC.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHENVACC>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHGETGLOBALFIELD>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHGETGLOBALFIELD.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHGETGLOBALFIELD>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHGETGLOBAL>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHGETGLOBAL.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHGETGLOBAL>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHOFFSETCLOSURE0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHOFFSETCLOSURE0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHOFFSETCLOSURE0>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHOFFSETCLOSURE3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHOFFSETCLOSURE3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHOFFSETCLOSURE3>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHOFFSETCLOSUREM3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHOFFSETCLOSUREM3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHOFFSETCLOSUREM3>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHOFFSETCLOSURE>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHOFFSETCLOSURE.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHOFFSETCLOSURE>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSHTRAP>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSHTRAP.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSHTRAP>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSH_RETADDR>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSH_RETADDR.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSH_RETADDR>".
-  Abort.
-  Goal True.
-    idtac "<correct_PUSH>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_PUSH.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_PUSH>".
-  Abort.
-  Goal True.
-    idtac "<correct_RAISE_NOTRACE>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_RAISE_NOTRACE.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_RAISE_NOTRACE>".
-  Abort.
-  Goal True.
-    idtac "<correct_RAISE>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_RAISE.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_RAISE>".
-  Abort.
-  Goal True.
-  Abort.
-  Goal True.
-    idtac "<correct_RERAISE>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_RERAISE.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_RERAISE>".
-  Abort.
-  Goal True.
-    idtac "<correct_RESTART>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_RESTART.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_RESTART>".
-  Abort.
-  Goal True.
-  Abort.
-  Goal True.
-  Abort.
-  Goal True.
-    idtac "<correct_RETURN>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_RETURN.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_RETURN>".
-  Abort.
-  Goal True.
-    idtac "<correct_SETBYTESCHAR>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_SETBYTESCHAR.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_SETBYTESCHAR>".
-  Abort.
-  Goal True.
-    idtac "<correct_SETFIELD0>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_SETFIELD0.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_SETFIELD0>".
-  Abort.
-  Goal True.
-    idtac "<correct_SETFIELD1>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_SETFIELD1.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_SETFIELD1>".
-  Abort.
-  Goal True.
-    idtac "<correct_SETFIELD2>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_SETFIELD2.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_SETFIELD2>".
-  Abort.
-  Goal True.
-    idtac "<correct_SETFIELD3>".
-    idtac "<PrintAssumptions>".
-    Print Assumptions correct_SETFIELD3.
-    idtac "</PrintAssumptions>".
-    idtac "</correct_SETFIELD3>".
+    idtac "</correct_GETFLOATFIELD>".
   Abort.
   Goal True.
     idtac "<correct_SETFIELD>".
@@ -1358,11 +857,18 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_SETFLOATFIELD>".
   Abort.
   Goal True.
-    idtac "<correct_SETGLOBAL>".
+    idtac "<correct_VECTLENGTH>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_SETGLOBAL.
+    Print Assumptions correct_VECTLENGTH.
     idtac "</PrintAssumptions>".
-    idtac "</correct_SETGLOBAL>".
+    idtac "</correct_VECTLENGTH>".
+  Abort.
+  Goal True.
+    idtac "<correct_GETVECTITEM>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GETVECTITEM.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GETVECTITEM>".
   Abort.
   Goal True.
     idtac "<correct_SETVECTITEM>".
@@ -1372,18 +878,46 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_SETVECTITEM>".
   Abort.
   Goal True.
-    idtac "<correct_STOP>".
+    idtac "<correct_GETBYTESCHAR>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_STOP.
+    Print Assumptions correct_GETBYTESCHAR.
     idtac "</PrintAssumptions>".
-    idtac "</correct_STOP>".
+    idtac "</correct_GETBYTESCHAR>".
   Abort.
   Goal True.
-    idtac "<correct_SUBINT>".
+    idtac "<correct_SETBYTESCHAR>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_SUBINT.
+    Print Assumptions correct_SETBYTESCHAR.
     idtac "</PrintAssumptions>".
-    idtac "</correct_SUBINT>".
+    idtac "</correct_SETBYTESCHAR>".
+  Abort.
+  Goal True.
+    idtac "<correct_GETSTRINGCHAR>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GETSTRINGCHAR.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GETSTRINGCHAR>".
+  Abort.
+  Goal True.
+    idtac "<correct_BRANCH>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BRANCH.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BRANCH>".
+  Abort.
+  Goal True.
+    idtac "<correct_BRANCHIF>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BRANCHIF.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BRANCHIF>".
+  Abort.
+  Goal True.
+    idtac "<correct_BRANCHIFNOT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BRANCHIFNOT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BRANCHIFNOT>".
   Abort.
   Goal True.
     idtac "<correct_SWITCH>".
@@ -1393,11 +927,284 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_SWITCH>".
   Abort.
   Goal True.
-    idtac "<correct_UGEINT>".
+    idtac "<correct_BOOLNOT>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_UGEINT.
+    Print Assumptions correct_BOOLNOT.
     idtac "</PrintAssumptions>".
-    idtac "</correct_UGEINT>".
+    idtac "</correct_BOOLNOT>".
+  Abort.
+  Goal True.
+    idtac "<correct_PUSHTRAP>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_PUSHTRAP.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_PUSHTRAP>".
+  Abort.
+  Goal True.
+    idtac "<correct_POPTRAP>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_POPTRAP.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_POPTRAP>".
+  Abort.
+  Goal True.
+    idtac "<correct_RAISE>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_RAISE.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_RAISE>".
+  Abort.
+  Goal True.
+    idtac "<correct_RERAISE>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_RERAISE.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_RERAISE>".
+  Abort.
+  Goal True.
+    idtac "<correct_RAISE_NOTRACE>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_RAISE_NOTRACE.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_RAISE_NOTRACE>".
+  Abort.
+  Goal True.
+    idtac "<correct_CHECK_SIGNALS>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_CHECK_SIGNALS.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_CHECK_SIGNALS>".
+  Abort.
+  Goal True.
+    idtac "<correct_C_CALL>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_C_CALL.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_C_CALL>".
+  Abort.
+  Goal True.
+    idtac "<correct_CONSTINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_CONSTINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_CONSTINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_PUSHCONSTINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_PUSHCONSTINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_PUSHCONSTINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_NEGINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_NEGINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_NEGINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_ADDINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ADDINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ADDINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_SUBINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_SUBINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_SUBINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_MULINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_MULINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_MULINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_DIVINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_DIVINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_DIVINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_MODINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_MODINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_MODINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_ANDINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ANDINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ANDINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_ORINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ORINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ORINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_XORINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_XORINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_XORINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_LSLINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_LSLINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_LSLINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_LSRINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_LSRINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_LSRINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_ASRINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ASRINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ASRINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_EQ>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_EQ.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_EQ>".
+  Abort.
+  Goal True.
+    idtac "<correct_NEQ>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_NEQ.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_NEQ>".
+  Abort.
+  Goal True.
+    idtac "<correct_LTINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_LTINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_LTINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_LEINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_LEINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_LEINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_GTINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GTINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GTINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_GEINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GEINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GEINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_OFFSETINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_OFFSETINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_OFFSETINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_OFFSETREF>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_OFFSETREF.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_OFFSETREF>".
+  Abort.
+  Goal True.
+    idtac "<correct_ISINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_ISINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_ISINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_GETMETHOD>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GETMETHOD.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GETMETHOD>".
+  Abort.
+  Goal True.
+    idtac "<correct_GETPUBMET>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GETPUBMET.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GETPUBMET>".
+  Abort.
+  Goal True.
+    idtac "<correct_GETDYNMET>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_GETDYNMET.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_GETDYNMET>".
+  Abort.
+  Goal True.
+    idtac "<correct_BEQ>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BEQ.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BEQ>".
+  Abort.
+  Goal True.
+    idtac "<correct_BNEQ>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BNEQ.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BNEQ>".
+  Abort.
+  Goal True.
+    idtac "<correct_BLTINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BLTINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BLTINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_BLEINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BLEINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BLEINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_BGTINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BGTINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BGTINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_BGEINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BGEINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BGEINT>".
   Abort.
   Goal True.
     idtac "<correct_ULTINT>".
@@ -1407,18 +1214,32 @@ Module InstructVerification <: InstructVerificationFineGrainedSpec.
     idtac "</correct_ULTINT>".
   Abort.
   Goal True.
-    idtac "<correct_VECTLENGTH>".
+    idtac "<correct_UGEINT>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_VECTLENGTH.
+    Print Assumptions correct_UGEINT.
     idtac "</PrintAssumptions>".
-    idtac "</correct_VECTLENGTH>".
+    idtac "</correct_UGEINT>".
   Abort.
   Goal True.
-    idtac "<correct_XORINT>".
+    idtac "<correct_BULTINT>".
     idtac "<PrintAssumptions>".
-    Print Assumptions correct_XORINT.
+    Print Assumptions correct_BULTINT.
     idtac "</PrintAssumptions>".
-    idtac "</correct_XORINT>".
+    idtac "</correct_BULTINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_BUGEINT>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_BUGEINT.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_BUGEINT>".
+  Abort.
+  Goal True.
+    idtac "<correct_STOP>".
+    idtac "<PrintAssumptions>".
+    Print Assumptions correct_STOP.
+    idtac "</PrintAssumptions>".
+    idtac "</correct_STOP>".
   Abort.
   End __.
 End InstructVerification.
