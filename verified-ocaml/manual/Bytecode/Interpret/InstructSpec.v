@@ -17,9 +17,13 @@ From compcert Require Import AST.
 From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
-From OCamlInterp.Manual.Bytecode.Interpret Require Import Helpers Handlers Dispatch HandleInstrSpec.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import Helpers Dispatch HandleInstrSpec.
 From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
+
+Open Scope string_scope.
+Open Scope Z_scope.
+Open Scope list_scope.
 
 (* External function ident not produced by clightgen (caml_modify is a
    runtime helper referenced by SETFIELD / SETVECTITEM specs but not
@@ -3060,12 +3064,18 @@ Definition P_halt_of (i : instruction) (v : value) : Prop :=
 Definition P_ccall_of (i : instruction) (n : nat) (args : list value) (s : state) : Prop :=
   instr_wfb i = true /\ match i with C_CALL _ _ => True | _ => False end.
 
-(* Helper: extract error message from a step_result *)
-Definition error_of_step_result (r : step_result) : option string :=
-  match r with
-  | Error msg => Some msg
-  | _ => None
-  end.
+(* Helper: compute the error message that do_raise would produce, without
+   calling do_raise itself.  Returns [Some msg] when a raise would error
+   (no trap frame or malformed trap frame) and [None] when it would succeed. *)
+Definition error_message_of_raise (s : state) : option string :=
+  if Nat.eqb s.(trap_sp) 0 then Some "unhandled exception"
+  else
+    let k := Nat.sub (length s.(stack)) s.(trap_sp) in
+    let frame_top := skipn k s.(stack) in
+    match frame_top with
+    | Val_int _ :: Val_int _ :: _ :: Val_int _ :: _ => None
+    | _ => Some "RAISE: malformed trap frame"
+    end.
 
 (* Helper: scan method table for GETPUBMET/GETDYNMET *)
 Fixpoint scan_method_table (tag : value) (remaining : list value)
@@ -3469,9 +3479,9 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
     | _ :: Val_int _ :: _ :: _ :: _ => None
     | _ => Some "POPTRAP: malformed trap frame"
     end
-  (* RAISE/RERAISE/RAISE_NOTRACE: delegates to do_raise *)
+  (* RAISE/RERAISE/RAISE_NOTRACE: error when no trap frame or malformed *)
   | RAISE | RERAISE | RAISE_NOTRACE =>
-    error_of_step_result (do_raise s.(accu) s)
+    error_message_of_raise s
   (* CHECK_SIGNALS: never errors *)
   | CHECK_SIGNALS => None
   (* C_CALL: never errors (returns CCall_request) *)
@@ -3508,7 +3518,7 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
   | DIVINT =>
     match s.(accu), s.(stack) with
     | Val_int _, Val_int b :: _ =>
-      if Z.eqb b 0 then error_of_step_result (do_raise div_by_zero_exn s)
+      if Z.eqb b 0 then error_message_of_raise s
       else None
     | _, _ => Some "DIVINT: type error or stack underflow"
     end
@@ -3516,7 +3526,7 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
   | MODINT =>
     match s.(accu), s.(stack) with
     | Val_int _, Val_int b :: _ =>
-      if Z.eqb b 0 then error_of_step_result (do_raise div_by_zero_exn s)
+      if Z.eqb b 0 then error_message_of_raise s
       else None
     | _, _ => Some "MODINT: type error or stack underflow"
     end
