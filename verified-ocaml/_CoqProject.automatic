@@ -76,6 +76,7 @@ automatic/Bytecode/InstructVerification/C_CALL2_correct.v
 automatic/Bytecode/InstructVerification/C_CALL3_correct.v
 automatic/Bytecode/InstructVerification/C_CALL4_correct.v
 automatic/Bytecode/InstructVerification/C_CALL5_correct.v
+automatic/Bytecode/InstructVerification/C_CALL_correct.v
 automatic/Bytecode/InstructVerification/C_CALLN_correct.v
 automatic/Bytecode/InstructVerification/DIVINT_correct.v
 automatic/Bytecode/InstructVerification/ENVACC1_correct.v

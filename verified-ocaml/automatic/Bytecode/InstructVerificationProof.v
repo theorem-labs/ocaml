@@ -74,6 +74,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHTRAP
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSH_RETADDR_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETFLOATFIELD_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIFNOT_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import C_CALL_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -418,8 +419,8 @@ Definition correct_CHECK_SIGNALS :
 Definition correct_C_CALL : forall nargs prim_idx,
   handler_correct (handle_instr (C_CALL nargs prim_idx)) (clight_of (C_CALL nargs prim_idx))
     (pre_of (C_CALL nargs prim_idx))
-    (P_error_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)).
-Admitted.
+    (P_error_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx))
+  := C_CALL_correct.correct_C_CALL.
 
 Definition correct_CONSTINT : forall z,
   handler_correct (handle_instr (CONSTINT z)) (clight_of (CONSTINT z))
