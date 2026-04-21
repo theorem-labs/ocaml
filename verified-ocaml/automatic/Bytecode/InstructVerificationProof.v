@@ -66,6 +66,14 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETCL
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHGETGLOBAL_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import VECTLENGTH_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ENVACC_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETGLOBALFIELD_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETMETHOD_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEBLOCK1_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHENVACC_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHTRAP_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSH_RETADDR_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETFLOATFIELD_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BRANCHIFNOT_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -110,14 +118,14 @@ Definition correct_ENVACC : forall n,
 Definition correct_PUSHENVACC : forall n,
   handler_correct (handle_instr (PUSHENVACC n)) (clight_of (PUSHENVACC n))
     (pre_of (PUSHENVACC n))
-    (P_error_of (PUSHENVACC n)) (P_halt_of (PUSHENVACC n)) (P_ccall_of (PUSHENVACC n)).
-Admitted.
+    (P_error_of (PUSHENVACC n)) (P_halt_of (PUSHENVACC n)) (P_ccall_of (PUSHENVACC n))
+  := PUSHENVACC_correct.correct_PUSHENVACC.
 
 Definition correct_PUSH_RETADDR : forall z,
   handler_correct (handle_instr (PUSH_RETADDR z)) (clight_of (PUSH_RETADDR z))
     (pre_of (PUSH_RETADDR z))
-    (P_error_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)).
-Admitted.
+    (P_error_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z))
+  := PUSH_RETADDR_correct.correct_PUSH_RETADDR.
 
 Definition correct_APPLY : forall n,
   handler_correct (handle_instr (APPLY n)) (clight_of (APPLY n))
@@ -224,8 +232,8 @@ Definition correct_PUSHGETGLOBAL : forall n,
 Definition correct_GETGLOBALFIELD : forall n p,
   handler_correct (handle_instr (GETGLOBALFIELD n p)) (clight_of (GETGLOBALFIELD n p))
     (pre_of (GETGLOBALFIELD n p))
-    (P_error_of (GETGLOBALFIELD n p)) (P_halt_of (GETGLOBALFIELD n p)) (P_ccall_of (GETGLOBALFIELD n p)).
-Admitted.
+    (P_error_of (GETGLOBALFIELD n p)) (P_halt_of (GETGLOBALFIELD n p)) (P_ccall_of (GETGLOBALFIELD n p))
+  := GETGLOBALFIELD_correct.correct_GETGLOBALFIELD.
 
 Definition correct_PUSHGETGLOBALFIELD : forall n p,
   handler_correct (handle_instr (PUSHGETGLOBALFIELD n p)) (clight_of (PUSHGETGLOBALFIELD n p))
@@ -260,8 +268,8 @@ Admitted.
 Definition correct_MAKEBLOCK1 : forall n,
   handler_correct (handle_instr (MAKEBLOCK1 n)) (clight_of (MAKEBLOCK1 n))
     (pre_of (MAKEBLOCK1 n))
-    (P_error_of (MAKEBLOCK1 n)) (P_halt_of (MAKEBLOCK1 n)) (P_ccall_of (MAKEBLOCK1 n)).
-Admitted.
+    (P_error_of (MAKEBLOCK1 n)) (P_halt_of (MAKEBLOCK1 n)) (P_ccall_of (MAKEBLOCK1 n))
+  := MAKEBLOCK1_correct.correct_MAKEBLOCK1.
 
 Definition correct_MAKEBLOCK2 : forall n,
   handler_correct (handle_instr (MAKEBLOCK2 n)) (clight_of (MAKEBLOCK2 n))
@@ -302,8 +310,8 @@ Admitted.
 Definition correct_SETFLOATFIELD : forall n,
   handler_correct (handle_instr (SETFLOATFIELD n)) (clight_of (SETFLOATFIELD n))
     (pre_of (SETFLOATFIELD n))
-    (P_error_of (SETFLOATFIELD n)) (P_halt_of (SETFLOATFIELD n)) (P_ccall_of (SETFLOATFIELD n)).
-Admitted.
+    (P_error_of (SETFLOATFIELD n)) (P_halt_of (SETFLOATFIELD n)) (P_ccall_of (SETFLOATFIELD n))
+  := SETFLOATFIELD_correct.correct_SETFLOATFIELD.
 
 Definition correct_VECTLENGTH :
   handler_correct (handle_instr VECTLENGTH) (clight_of VECTLENGTH)
@@ -374,8 +382,8 @@ Definition correct_BOOLNOT :
 Definition correct_PUSHTRAP : forall z,
   handler_correct (handle_instr (PUSHTRAP z)) (clight_of (PUSHTRAP z))
     (pre_of (PUSHTRAP z))
-    (P_error_of (PUSHTRAP z)) (P_halt_of (PUSHTRAP z)) (P_ccall_of (PUSHTRAP z)).
-Admitted.
+    (P_error_of (PUSHTRAP z)) (P_halt_of (PUSHTRAP z)) (P_ccall_of (PUSHTRAP z))
+  := PUSHTRAP_correct.correct_PUSHTRAP.
 
 Definition correct_POPTRAP :
   handler_correct (handle_instr POPTRAP) (clight_of POPTRAP)
@@ -554,8 +562,8 @@ Definition correct_ISINT :
 Definition correct_GETMETHOD :
   handler_correct (handle_instr GETMETHOD) (clight_of GETMETHOD)
     (pre_of GETMETHOD)
-    (P_error_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD).
-Admitted.
+    (P_error_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD)
+  := GETMETHOD_correct.correct_GETMETHOD.
 
 Definition correct_GETPUBMET : forall z,
   handler_correct (handle_instr (GETPUBMET z)) (clight_of (GETPUBMET z))
