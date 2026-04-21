@@ -683,3 +683,48 @@ Proof.
     }
   }
 Qed.
+
+(* ================================================================== *)
+(* Wrapper with the exact type expected by InstructVerificationProof.v *)
+(* ================================================================== *)
+
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
+
+Definition correct_OFFSETREF : forall z,
+  handler_correct (handle_instr (OFFSETREF z)) (clight_of (OFFSETREF z))
+    (pre_of (OFFSETREF z))
+    (P_error_of (OFFSETREF z)) (P_halt_of (OFFSETREF z)) (P_ccall_of (OFFSETREF z)).
+Proof.
+  intro z.
+  intros e le m s.
+  change (handle_instr (OFFSETREF z) (Machine.pc s) s)
+    with (handle_OFFSETREF z (Machine.pc s) s).
+  unfold handle_OFFSETREF at 1.
+  destruct (Machine.accu s) eqn:Haccu.
+  - (* Val_int: Error case *)
+    unfold P_error_of. simpl. rewrite Haccu. reflexivity.
+  - (* Val_block: Error case *)
+    unfold P_error_of. simpl. rewrite Haccu. reflexivity.
+  - (* Val_ptr addr: nested match on heap_lookup *)
+    destruct (heap_lookup (Machine.hp s) n) as [[tag fields] |] eqn:Hheap.
+    + (* Some (tag, fields) *)
+      destruct fields as [| field0 rest].
+      * (* nil: Error *)
+        unfold P_error_of. simpl. rewrite Haccu, Hheap. reflexivity.
+      * destruct field0.
+        -- (* Val_int: Step case -- delegate to verify_OFFSETREF_correct *)
+           specialize (verify_OFFSETREF_correct z e le m s) as Hold.
+           unfold handler_correct, handle_OFFSETREF in Hold.
+           rewrite Haccu, Hheap in Hold. exact Hold.
+        -- (* Val_block: Error *)
+           unfold P_error_of. simpl. rewrite Haccu, Hheap. reflexivity.
+        -- (* Val_ptr: Error *)
+           unfold P_error_of. simpl. rewrite Haccu, Hheap. reflexivity.
+        -- (* Val_closure: Error *)
+           unfold P_error_of. simpl. rewrite Haccu, Hheap. reflexivity.
+    + (* None: Error *)
+      unfold P_error_of. simpl. rewrite Haccu, Hheap. reflexivity.
+  - (* Val_closure: Error case *)
+    unfold P_error_of. simpl. rewrite Haccu. reflexivity.
+Qed.
