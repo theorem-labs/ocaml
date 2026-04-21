@@ -98,6 +98,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETBYTES
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETDYNMET_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETPUBMET_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM1_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM2_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RAISE_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RAISE_NOTRACE_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import MAKEBLOCK_correct.
@@ -195,8 +196,8 @@ Definition correct_APPTERM1 : forall n,
 Definition correct_APPTERM2 : forall n,
   handler_correct (handle_instr (APPTERM2 n)) (clight_of (APPTERM2 n))
     (pre_of (APPTERM2 n))
-    (P_error_of (APPTERM2 n)) (P_halt_of (APPTERM2 n)) (P_ccall_of (APPTERM2 n)).
-Admitted.
+    (P_error_of (APPTERM2 n)) (P_halt_of (APPTERM2 n)) (P_ccall_of (APPTERM2 n))
+  := APPTERM2_correct.correct_APPTERM2.
 
 Definition correct_APPTERM3 : forall n,
   handler_correct (handle_instr (APPTERM3 n)) (clight_of (APPTERM3 n))
