@@ -576,8 +576,8 @@ Admitted.
 Definition correct_ULTINT :
   handler_correct (handle_instr ULTINT) (clight_of ULTINT)
     (pre_of ULTINT)
-    (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT).
-Admitted.
+    (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT)
+  := ULTINT_correct.correct_ULTINT.
 
 Definition correct_UGEINT :
   handler_correct (handle_instr UGEINT) (clight_of UGEINT)

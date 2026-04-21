@@ -318,3 +318,29 @@ Proof.
     destruct Huis as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
     rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr ULTINT / clight_of ULTINT / pre_of ULTINT are convertible
+   with handle_ULTINT / f_instr_ULTINT / unsigned_ints_safe.
+   P_halt_of and P_ccall_of are vacuously satisfied (ULTINT never halts or
+   issues a C call).  P_error_of requires matching error_message_of. *)
+Definition correct_ULTINT :
+    handler_correct (handle_instr ULTINT) (clight_of ULTINT)
+      (pre_of ULTINT)
+      (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT).
+Proof.
+  intros e le m s.
+  change (handle_instr ULTINT (Machine.pc s) s)
+    with (handle_ULTINT (Machine.pc s) s).
+  unfold handle_ULTINT at 1.
+  destruct (Machine.accu s) as [a| | |] eqn:Haccu;
+    destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk.
+  all: try (unfold P_error_of; simpl; rewrite Haccu; try rewrite Hstk; reflexivity).
+  all: destruct v_hd as [b| | |].
+  all: try (unfold P_error_of; simpl; rewrite Haccu, Hstk; reflexivity).
+  - (* Val_int a, Val_int b :: v_tl: Step case — delegate *)
+    specialize (verify_ULTINT_handler_correct e le m s) as Hold.
+    unfold handler_correct, handle_ULTINT in Hold.
+    rewrite Haccu, Hstk in Hold.
+    exact Hold.
+Qed.

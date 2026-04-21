@@ -269,3 +269,26 @@ Proof.
     destruct Hios as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
     unfold neq_int_range_pre. rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.
+
+(* Wrapper with the exact type required by InstructVerificationProof.v *)
+Local Notation NEQ := Bytecode.AST.NEQ.
+Theorem correct_NEQ :
+    handler_correct (handle_instr NEQ) (clight_of NEQ)
+      (pre_of NEQ)
+      (P_error_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ).
+Proof.
+  intros e le m s.
+  change (handle_instr NEQ) with handle_NEQ.
+  change (clight_of NEQ) with f_instr_NEQ.
+  change (pre_of NEQ) with (arith_safe arith_unsigned).
+  change (arith_safe arith_unsigned) with int_op_safe.
+  unfold handle_NEQ at 1.
+  destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk.
+  - (* Error case: stack is nil *)
+    unfold P_error_of, error_message_of. rewrite Hstk. reflexivity.
+  - (* Step case: delegate to verify_NEQ_handler_correct *)
+    pose proof (verify_NEQ_handler_correct e le m s) as H.
+    unfold handler_correct, handle_NEQ in H.
+    rewrite Hstk in H.
+    exact H.
+Qed.

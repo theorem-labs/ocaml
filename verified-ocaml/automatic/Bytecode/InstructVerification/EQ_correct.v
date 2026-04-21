@@ -264,3 +264,24 @@ Proof.
     destruct Hios as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
     unfold eq_int_range_pre. rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.
+
+(* Wrapper with the canonical type expected by InstructVerificationProof.v *)
+Theorem correct_EQ :
+  handler_correct (handle_instr Bytecode.AST.EQ) (clight_of Bytecode.AST.EQ)
+    (pre_of Bytecode.AST.EQ)
+    (P_error_of Bytecode.AST.EQ) (P_halt_of Bytecode.AST.EQ) (P_ccall_of Bytecode.AST.EQ).
+Proof.
+  intros e le m s.
+  unfold handler_correct.
+  change (handle_instr Bytecode.AST.EQ) with handle_EQ.
+  unfold handle_EQ.
+  destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hs.
+  - (* Error case: stack = nil *)
+    unfold P_error_of, error_message_of. rewrite Hs. reflexivity.
+  - (* Step case: stack = v_hd :: v_tl *)
+    pose proof (verify_EQ_handler_correct e le m s) as H.
+    unfold handler_correct, handle_EQ in H.
+    rewrite Hs in H.
+    change (pre_of Bytecode.AST.EQ) with int_op_safe.
+    exact H.
+Qed.

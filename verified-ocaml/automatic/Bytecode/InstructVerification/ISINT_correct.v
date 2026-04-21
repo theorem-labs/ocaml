@@ -35,7 +35,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -683,4 +683,13 @@ Proof.
   - exact H.
   - exact H.
   - exact H.
+Qed.
+
+(* Final wrapper with the exact type from InstructVerificationFineGrainedSpec. *)
+Theorem correct_ISINT :
+    handler_correct (handle_instr ISINT) (clight_of ISINT)
+      (pre_of ISINT)
+      (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT).
+Proof.
+  exact verify_ISINT_handler_correct.
 Qed.

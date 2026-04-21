@@ -247,3 +247,26 @@ Proof.
     destruct Hsio as (a & b & rest & Ha & Hs & Hra & Hrb & Hva & Hvb).
     unfold lt_int_range_pre. rewrite Ha, Hs. exact (conj Hra (conj Hrb (conj Hva Hvb))).
 Qed.
+
+(* ================================================================== *)
+(* Wrapper with canonical InstructSpec predicates                       *)
+(* ================================================================== *)
+
+Import Bytecode.AST.
+
+Theorem correct_LTINT :
+    handler_correct (handle_instr LTINT) (clight_of LTINT)
+      (pre_of LTINT)
+      (P_error_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT).
+Proof.
+  intros e le m s.
+  pose proof (verify_LTINT_handler_correct e le m s) as H.
+  change (handle_instr LTINT) with handle_LTINT.
+  unfold handle_LTINT, P_error_of, error_message_of in H |- *.
+  destruct (Machine.accu s) as [a| | |];
+    destruct (Machine.stack s) as [|v_hd v_tl];
+    try reflexivity;
+    try (destruct v_hd as [b| | |]; try reflexivity).
+  (* Only remaining case: Val_int a, Val_int b :: v_tl — the Step branch *)
+  exact H.
+Qed.
