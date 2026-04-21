@@ -96,6 +96,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import APPTERM3
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETFLOATFIELD_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETVECTITEM_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETBYTESCHAR_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETSTRINGCHAR_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import SETBYTESCHAR_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETDYNMET_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETPUBMET_correct.
@@ -379,8 +380,8 @@ Definition correct_SETBYTESCHAR :
 Definition correct_GETSTRINGCHAR :
   handler_correct (handle_instr GETSTRINGCHAR) (clight_of GETSTRINGCHAR)
     (pre_of GETSTRINGCHAR)
-    (P_error_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR).
-Admitted.
+    (P_error_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR)
+  := GETSTRINGCHAR_correct.correct_GETSTRINGCHAR.
 
 Definition correct_BRANCH : forall z,
   handler_correct (handle_instr (BRANCH z)) (clight_of (BRANCH z))
