@@ -1,13 +1,11 @@
-(* Dispatch.v - [TRUSTED] Concrete per-instruction dispatcher.  Ascribed to
-   HandleInstrSpec inside checker/Bytecode/InterpretChecker.v.  Currently
-   lives in manual/ because InstructSpec.v references each handle_<OP> by
-   name as a Module Type Parameter; a future refactor can move this (and
-   Handlers.v) into automatic/ once InstructSpec is restructured. *)
+(* Dispatch.v - [UNTRUSTED] Concrete per-instruction dispatcher.  Ascribed to
+   HandleInstrSpec inside checker/Bytecode/InterpretChecker.v.  Lives in
+   automatic/ alongside Handlers.v — implementation detail, not trusted spec. *)
 
 From Stdlib Require Import ZArith.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
-From OCamlInterp.Manual.Bytecode.Interpret Require Import Handlers.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Handlers.
 Open Scope Z_scope.
 
 Definition handle_instr (instr : instruction) (pc' : Z) (s : state) : step_result :=

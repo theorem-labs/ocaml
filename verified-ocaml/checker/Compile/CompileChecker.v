@@ -4,7 +4,8 @@
    (from semi-auto/), and the correctness proof (from automatic/). *)
 
 From OCamlInterp.Manual.Compile Require Import CompileSpec.
-From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec Dispatch.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.SemiAutomatic.Interpret Require Interpret.
 From OCamlInterp.Automatic.Compile Require Compile.
 From OCamlInterp.Automatic.Compile Require CompileProof.

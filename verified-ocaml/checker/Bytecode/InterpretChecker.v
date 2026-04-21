@@ -7,8 +7,9 @@
    Downstream code (checker/Bytecode/Main.v, checker/Extract.v, PBT
    harnesses) consumes the flat re-exports below. *)
 
-From OCamlInterp.Manual.Bytecode.Interpret Require Export Handlers.
-From OCamlInterp.Manual.Bytecode.Interpret Require HandleInstrSpec Run Dispatch.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Export Handlers.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Dispatch.
+From OCamlInterp.Manual.Bytecode.Interpret Require HandleInstrSpec Run.
 
 Module Check <: HandleInstrSpec.HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.

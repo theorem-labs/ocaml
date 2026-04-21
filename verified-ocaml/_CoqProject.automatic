@@ -7,9 +7,8 @@ manual/Bytecode/Encode.v
 manual/Bytecode/Generated/instruct_handlers.v
 manual/Bytecode/IO.v
 manual/Bytecode/InstructSpec.v
-manual/Bytecode/Interpret/Dispatch.v
 manual/Bytecode/Interpret/HandleInstrSpec.v
-manual/Bytecode/Interpret/Handlers.v
+manual/Bytecode/Interpret/Helpers.v
 manual/Bytecode/Interpret/MetaSpec.v
 manual/Bytecode/Interpret/Run.v
 manual/Bytecode/Machine.v
@@ -25,6 +24,8 @@ semi-auto/Interpret/Interpret.v
 semi-auto/LexParse/PrettyPrint.v
 automatic/Bytecode/Decode.v
 automatic/Bytecode/DecodeProof.v
+automatic/Bytecode/Interpret/Handlers.v
+automatic/Bytecode/Interpret/Dispatch.v
 automatic/Bytecode/HandlerLemmas.v
 automatic/Bytecode/MetaSpecProof.v
 automatic/Bytecode/InstructVerification/ACC0_correct.v

@@ -1,10 +1,10 @@
-(* Handlers.v - [TRUSTED] Per-instruction handlers of the OCaml bytecode
+(* Handlers.v - [UNTRUSTED] Per-instruction handlers of the OCaml bytecode
    interpreter plus the helpers they depend on.  Each handler corresponds
    one-to-one to a case in OCaml's runtime/interp.c.
 
    The top-level instruction dispatcher that routes an instruction to the
-   right handler lives in automatic/Bytecode/HandleInstr.v; the step/run
-   composition layer that consumes that dispatcher lives in
+   right handler lives in automatic/Bytecode/Interpret/Dispatch.v; the
+   step/run composition layer that consumes that dispatcher lives in
    manual/Bytecode/Interpret/Run.v as a functor. *)
 
 From Stdlib Require Import ZArith Bool PeanoNat.
