@@ -646,3 +646,30 @@ Proof.
     }
   }
 Qed.
+
+(* Wrapper with the uniform type expected by InstructVerificationProof.v.
+   handle_instr (PUSHENVACC n) / clight_of (PUSHENVACC n) / pre_of (PUSHENVACC n)
+   are convertible with handle_PUSHENVACC n / f_instr_PUSHENVACC /
+   pushenvacc_generic_step_pre n.
+   P_halt_of and P_ccall_of are vacuously satisfied (PUSHENVACC never halts or
+   issues a C call).  P_error_of requires a small computation bridge. *)
+Definition correct_PUSHENVACC : forall n,
+    handler_correct (handle_instr (Bytecode.AST.PUSHENVACC n)) (clight_of (Bytecode.AST.PUSHENVACC n))
+      (pre_of (Bytecode.AST.PUSHENVACC n))
+      (P_error_of (Bytecode.AST.PUSHENVACC n)) (P_halt_of (Bytecode.AST.PUSHENVACC n)) (P_ccall_of (Bytecode.AST.PUSHENVACC n)).
+Proof.
+  intro n.
+  unfold handler_correct.
+  intros e le m s.
+  change (handle_instr (Bytecode.AST.PUSHENVACC n) (Machine.pc s) s)
+    with (handle_PUSHENVACC n (Machine.pc s) s).
+  unfold handle_PUSHENVACC at 1.
+  destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
+  - (* Step case: field_or_heap = Some v — delegate to verify_PUSHENVACC_correct *)
+    pose proof (verify_PUSHENVACC_correct n) as H.
+    unfold handler_correct, handle_PUSHENVACC in H. specialize (H e le m s).
+    rewrite Hfoh in H.
+    exact H.
+  - (* Error case: field_or_heap = None *)
+    unfold P_error_of, error_message_of. rewrite Hfoh. reflexivity.
+Qed.
