@@ -17,7 +17,7 @@ From compcert Require Import AST.
 From RecordUpdate Require Import RecordUpdate.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
-From OCamlInterp.Manual.Bytecode.Interpret Require Import Helpers Handlers Dispatch.
+From OCamlInterp.Manual.Bytecode.Interpret Require Import Helpers Handlers Dispatch HandleInstrSpec.
 From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 
@@ -3061,7 +3061,548 @@ Definition P_ccall_of (i : instruction) (n : nat) (args : list value) (s : state
   instr_wfb i = true /\ match i with C_CALL _ _ => True | _ => False end.
 
 Definition P_error_of (i : instruction) (msg : string) (s : state) : Prop :=
-  handle_instr i s.(Machine.pc) s = Error msg.
+  match i with
+  (* ACC: stack underflow *)
+  | ACC n => nth_error s.(stack) n = None /\ msg = "ACC: stack underflow"
+  (* PUSH: never errors *)
+  | PUSH => False
+  (* PUSHACC: stack underflow *)
+  | PUSHACC n =>
+    nth_error (s.(accu) :: s.(stack)) n = None /\ msg = "PUSHACC: stack underflow"
+  (* POP: never errors *)
+  | POP _ => False
+  (* ASSIGN: stack underflow *)
+  | ASSIGN n => set_nth s.(stack) n s.(accu) = None /\ msg = "ASSIGN: stack underflow"
+  (* ENVACC: env access out of bounds *)
+  | ENVACC n => field_or_heap s s.(env) n = None /\ msg = "ENVACC: env access out of bounds"
+  (* PUSHENVACC: env access out of bounds *)
+  | PUSHENVACC n => field_or_heap s s.(env) n = None /\ msg = "PUSHENVACC: env access out of bounds"
+  (* PUSH_RETADDR: never errors *)
+  | PUSH_RETADDR _ => False
+  (* APPLY: accu is not a closure *)
+  | APPLY n => get_code_ptr_s s s.(accu) = None /\ msg = "APPLY: accu is not a closure"
+  (* APPLY1: stack underflow or accu not a closure *)
+  | APPLY1 =>
+    match s.(stack) with
+    | _ :: _ => get_code_ptr_s s s.(accu) = None /\ msg = "APPLY1: accu is not a closure"
+    | _ => msg = "APPLY1: stack underflow"
+    end
+  (* APPLY2: stack underflow or accu not a closure *)
+  | APPLY2 =>
+    match s.(stack) with
+    | _ :: _ :: _ => get_code_ptr_s s s.(accu) = None /\ msg = "APPLY2: accu is not a closure"
+    | _ => msg = "APPLY2: stack underflow"
+    end
+  (* APPLY3: stack underflow or accu not a closure *)
+  | APPLY3 =>
+    match s.(stack) with
+    | _ :: _ :: _ :: _ => get_code_ptr_s s s.(accu) = None /\ msg = "APPLY3: accu is not a closure"
+    | _ => msg = "APPLY3: stack underflow"
+    end
+  (* APPTERM: accu not a closure *)
+  | APPTERM _ _ => get_code_ptr_s s s.(accu) = None /\ msg = "APPTERM: accu is not a closure"
+  (* APPTERM1: stack underflow or accu not a closure *)
+  | APPTERM1 slotsize =>
+    match s.(stack) with
+    | _ :: _ => get_code_ptr_s s s.(accu) = None /\ msg = "APPTERM1: accu is not a closure"
+    | _ => msg = "APPTERM1: stack underflow"
+    end
+  (* APPTERM2: stack underflow or accu not a closure *)
+  | APPTERM2 slotsize =>
+    match s.(stack) with
+    | _ :: _ :: _ => get_code_ptr_s s s.(accu) = None /\ msg = "APPTERM2: accu is not a closure"
+    | _ => msg = "APPTERM2: stack underflow"
+    end
+  (* APPTERM3: stack underflow or accu not a closure *)
+  | APPTERM3 slotsize =>
+    match s.(stack) with
+    | _ :: _ :: _ :: _ => get_code_ptr_s s s.(accu) = None /\ msg = "APPTERM3: accu is not a closure"
+    | _ => msg = "APPTERM3: stack underflow"
+    end
+  (* RETURN: various error conditions *)
+  | RETURN stacksize =>
+    let stk := skipn stacksize s.(stack) in
+    if Nat.ltb 0 s.(extra_args) then
+      get_code_ptr_s s s.(accu) = None /\ msg = "RETURN: accu is not a closure"
+    else
+      match stk with
+      | Val_int _ :: _ :: Val_int _ :: _ => False
+      | _ => msg = "RETURN: malformed return frame"
+      end
+  (* RESTART: various error conditions *)
+  | RESTART =>
+    match s.(env) with
+    | Val_closure addr ofs =>
+      match heap_lookup s.(hp) addr with
+      | Some (t, all_fields) =>
+        if Nat.eqb t Closure_tag then
+          let fields := skipn ofs all_fields in
+          match nth_error fields 2 with
+          | Some _ => False
+          | None => msg = "RESTART: malformed closure"
+          end
+        else msg = "RESTART: env is not a closure"
+      | None => msg = "RESTART: dangling pointer"
+      end
+    | Val_block t fields =>
+      if Nat.eqb t Closure_tag then
+        match nth_error fields 2 with
+        | Some _ => False
+        | None => msg = "RESTART: malformed closure"
+        end
+      else msg = "RESTART: env is not a closure"
+    | _ => msg = "RESTART: env is not a block"
+    end
+  (* GRAB: malformed return frame *)
+  | GRAB required =>
+    if Nat.leb required s.(extra_args) then False
+    else
+      let num_args := S s.(extra_args) in
+      let rest_stack := skipn num_args s.(stack) in
+      match rest_stack with
+      | Val_int _ :: _ :: Val_int _ :: _ => False
+      | _ => msg = "GRAB: malformed return frame"
+      end
+  (* CLOSURE: never errors *)
+  | CLOSURE _ _ => False
+  (* CLOSUREREC: no code offsets *)
+  | CLOSUREREC _ _ code_offsets =>
+    match code_offsets with
+    | [] => msg = "CLOSUREREC: no code offsets"
+    | _ => False
+    end
+  (* OFFSETCLOSURE: errors when env is invalid *)
+  | OFFSETCLOSURE ofs =>
+    match s.(env) with
+    | Val_closure _ _ => False
+    | Val_block _ _ =>
+      if Z.eqb ofs 0 then False
+      else msg = "OFFSETCLOSURE: non-zero offset on non-closure env"
+    | _ => msg = "OFFSETCLOSURE: invalid env"
+    end
+  (* PUSHOFFSETCLOSURE: errors when env is invalid *)
+  | PUSHOFFSETCLOSURE ofs =>
+    match s.(env) with
+    | Val_closure _ _ => False
+    | Val_block _ _ =>
+      if Z.eqb ofs 0 then False
+      else msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"
+    | _ => msg = "PUSHOFFSETCLOSURE: invalid env"
+    end
+  (* GETGLOBAL: index out of bounds *)
+  | GETGLOBAL n => nth_error s.(global) n = None /\ msg = "GETGLOBAL: index out of bounds"
+  (* PUSHGETGLOBAL: index out of bounds *)
+  | PUSHGETGLOBAL n => nth_error s.(global) n = None /\ msg = "PUSHGETGLOBAL: index out of bounds"
+  (* GETGLOBALFIELD: index out of bounds or field access failed *)
+  | GETGLOBALFIELD n p =>
+    match nth_error s.(global) n with
+    | Some glob => field_or_heap s glob p = None /\ msg = "GETGLOBALFIELD: field access failed"
+    | None => msg = "GETGLOBALFIELD: index out of bounds"
+    end
+  (* PUSHGETGLOBALFIELD: index out of bounds or field access failed *)
+  | PUSHGETGLOBALFIELD n p =>
+    match nth_error s.(global) n with
+    | Some glob => field_or_heap s glob p = None /\ msg = "PUSHGETGLOBALFIELD: field access failed"
+    | None => msg = "PUSHGETGLOBALFIELD: index out of bounds"
+    end
+  (* SETGLOBAL: never errors *)
+  | SETGLOBAL _ => False
+  (* ATOM: never errors *)
+  | ATOM _ => False
+  (* PUSHATOM: never errors *)
+  | PUSHATOM _ => False
+  (* MAKEBLOCK: never errors *)
+  | MAKEBLOCK _ _ => False
+  (* MAKEBLOCK1: never errors *)
+  | MAKEBLOCK1 _ => False
+  (* MAKEBLOCK2: stack underflow *)
+  | MAKEBLOCK2 _ =>
+    match s.(stack) with
+    | _ :: _ => False
+    | _ => msg = "MAKEBLOCK2: stack underflow"
+    end
+  (* MAKEBLOCK3: stack underflow *)
+  | MAKEBLOCK3 _ =>
+    match s.(stack) with
+    | _ :: _ :: _ => False
+    | _ => msg = "MAKEBLOCK3: stack underflow"
+    end
+  (* MAKEFLOATBLOCK: never errors *)
+  | MAKEFLOATBLOCK _ => False
+  (* GETFIELD: access failed *)
+  | GETFIELD n => field_or_heap s s.(accu) n = None /\ msg = "GETFIELD: access failed"
+  (* GETFLOATFIELD: access failed *)
+  | GETFLOATFIELD n => field_or_heap s s.(accu) n = None /\ msg = "GETFLOATFIELD: access failed"
+  (* SETFIELD: various error cases *)
+  | SETFIELD n =>
+    match s.(stack) with
+    | newval :: _ =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          set_nth fields n newval = None /\ msg = "SETFIELD: index out of bounds"
+        | None => msg = "SETFIELD: dangling pointer"
+        end
+      | _ => msg = "SETFIELD: not a mutable block"
+      end
+    | _ => msg = "SETFIELD: stack underflow"
+    end
+  (* SETFLOATFIELD: various error cases *)
+  | SETFLOATFIELD n =>
+    match s.(stack) with
+    | newval :: _ =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          set_nth fields n newval = None /\ msg = "SETFLOATFIELD: index out of bounds"
+        | None => msg = "SETFLOATFIELD: dangling pointer"
+        end
+      | _ => msg = "SETFLOATFIELD: not a heap float array"
+      end
+    | _ => msg = "SETFLOATFIELD: stack underflow"
+    end
+  (* VECTLENGTH: not a block *)
+  | VECTLENGTH => size_or_heap s s.(accu) = None /\ msg = "VECTLENGTH: not a block"
+  (* GETVECTITEM: index out of bounds or stack underflow *)
+  | GETVECTITEM =>
+    match s.(stack) with
+    | Val_int idx :: _ =>
+      field_or_heap s s.(accu) (Z.to_nat idx) = None /\ msg = "GETVECTITEM: index out of bounds"
+    | _ => msg = "GETVECTITEM: bad index or stack underflow"
+    end
+  (* SETVECTITEM: various error cases *)
+  | SETVECTITEM =>
+    match s.(stack) with
+    | Val_int idx :: newval :: _ =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          set_nth fields (Z.to_nat idx) newval = None /\ msg = "SETVECTITEM: index out of bounds"
+        | None => msg = "SETVECTITEM: dangling pointer"
+        end
+      | _ => msg = "SETVECTITEM: not a heap block"
+      end
+    | _ => msg = "SETVECTITEM: stack underflow"
+    end
+  (* GETBYTESCHAR/GETSTRINGCHAR: index/stack issues *)
+  | GETBYTESCHAR | GETSTRINGCHAR =>
+    match s.(stack) with
+    | Val_int idx :: _ =>
+      match field_or_heap s s.(accu) (Z.to_nat idx) with
+      | Some (Val_int _) => False
+      | _ => msg = "GETSTRINGCHAR: index out of bounds or not a char"
+      end
+    | _ => msg = "GETSTRINGCHAR: stack underflow"
+    end
+  (* SETBYTESCHAR: various error cases *)
+  | SETBYTESCHAR =>
+    match s.(stack) with
+    | Val_int idx :: Val_int newchar :: _ =>
+      match s.(accu) with
+      | Val_ptr addr =>
+        match heap_lookup s.(hp) addr with
+        | Some (_, fields) =>
+          match set_nth fields (Z.to_nat idx) (Val_int newchar) with
+          | Some _ => False
+          | None => msg = "SETBYTESCHAR: index out of bounds"
+          end
+        | None => msg = "SETBYTESCHAR: dangling pointer"
+        end
+      | _ => msg = "SETBYTESCHAR: not a heap bytes"
+      end
+    | _ => msg = "SETBYTESCHAR: stack underflow"
+    end
+  (* BRANCH: never errors *)
+  | BRANCH _ => False
+  (* BRANCHIF: never errors *)
+  | BRANCHIF _ => False
+  (* BRANCHIFNOT: never errors *)
+  | BRANCHIFNOT _ => False
+  (* SWITCH: various error cases *)
+  | SWITCH _nc _nb const_targets block_targets =>
+    match s.(accu) with
+    | Val_int n =>
+      nth_error const_targets (Z.to_nat n) = None /\ msg = "SWITCH: constant index out of range"
+    | Val_block t _ =>
+      nth_error block_targets t = None /\ msg = "SWITCH: block tag out of range"
+    | Val_ptr _ | Val_closure _ _ =>
+      match tag_or_heap s s.(accu) with
+      | Some t =>
+        nth_error block_targets t = None /\ msg = "SWITCH: block tag out of range"
+      | None => msg = "SWITCH: dangling pointer"
+      end
+    end
+  (* BOOLNOT: never errors *)
+  | BOOLNOT => False
+  (* PUSHTRAP: never errors *)
+  | PUSHTRAP _ => False
+  (* POPTRAP: malformed trap frame *)
+  | POPTRAP =>
+    match s.(stack) with
+    | _ :: Val_int _ :: _ :: _ :: _ => False
+    | _ => msg = "POPTRAP: malformed trap frame"
+    end
+  (* RAISE/RERAISE/RAISE_NOTRACE: delegates to do_raise *)
+  | RAISE | RERAISE | RAISE_NOTRACE =>
+    do_raise s.(accu) s = Error msg
+  (* CHECK_SIGNALS: never errors *)
+  | CHECK_SIGNALS => False
+  (* C_CALL: never errors (returns CCall_request) *)
+  | C_CALL _ _ => False
+  (* CONSTINT: never errors *)
+  | CONSTINT _ => False
+  (* PUSHCONSTINT: never errors *)
+  | PUSHCONSTINT _ => False
+  (* NEGINT: not an integer *)
+  | NEGINT =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "NEGINT: not an integer"
+    end
+  (* ADDINT: type error or stack underflow *)
+  | ADDINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "ADDINT: type error or stack underflow"
+    end
+  (* SUBINT: type error or stack underflow *)
+  | SUBINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "SUBINT: type error or stack underflow"
+    end
+  (* MULINT: type error or stack underflow *)
+  | MULINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "MULINT: type error or stack underflow"
+    end
+  (* DIVINT: type error, stack underflow, or division-by-zero raise *)
+  | DIVINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int b :: _ =>
+      Z.eqb b 0 = true /\ do_raise div_by_zero_exn s = Error msg
+    | _, _ => msg = "DIVINT: type error or stack underflow"
+    end
+  (* MODINT: type error, stack underflow, or division-by-zero raise *)
+  | MODINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int b :: _ =>
+      Z.eqb b 0 = true /\ do_raise div_by_zero_exn s = Error msg
+    | _, _ => msg = "MODINT: type error or stack underflow"
+    end
+  (* ANDINT: type error or stack underflow *)
+  | ANDINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "ANDINT: type error or stack underflow"
+    end
+  (* ORINT: type error or stack underflow *)
+  | ORINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "ORINT: type error or stack underflow"
+    end
+  (* XORINT: type error or stack underflow *)
+  | XORINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "XORINT: type error or stack underflow"
+    end
+  (* LSLINT: type error or stack underflow *)
+  | LSLINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "LSLINT: type error or stack underflow"
+    end
+  (* LSRINT: type error or stack underflow *)
+  | LSRINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "LSRINT: type error or stack underflow"
+    end
+  (* ASRINT: type error or stack underflow *)
+  | ASRINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "ASRINT: type error or stack underflow"
+    end
+  (* EQ: stack underflow *)
+  | EQ =>
+    match s.(stack) with
+    | _ :: _ => False
+    | _ => msg = "EQ: stack underflow"
+    end
+  (* NEQ: stack underflow *)
+  | NEQ =>
+    match s.(stack) with
+    | _ :: _ => False
+    | _ => msg = "NEQ: stack underflow"
+    end
+  (* LTINT: type error or stack underflow *)
+  | LTINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "LTINT: type error or stack underflow"
+    end
+  (* LEINT: type error or stack underflow *)
+  | LEINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "LEINT: type error or stack underflow"
+    end
+  (* GTINT: type error or stack underflow *)
+  | GTINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "GTINT: type error or stack underflow"
+    end
+  (* GEINT: type error or stack underflow *)
+  | GEINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "GEINT: type error or stack underflow"
+    end
+  (* OFFSETINT: not an integer *)
+  | OFFSETINT _ =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "OFFSETINT: not an integer"
+    end
+  (* OFFSETREF: not a ref *)
+  | OFFSETREF _ =>
+    match s.(accu) with
+    | Val_ptr addr =>
+      match heap_lookup s.(hp) addr with
+      | Some (_, Val_int _ :: _) => False
+      | _ => msg = "OFFSETREF: not a ref"
+      end
+    | _ => msg = "OFFSETREF: not a ref"
+    end
+  (* ISINT: never errors *)
+  | ISINT => False
+  (* GETMETHOD: various error cases *)
+  | GETMETHOD =>
+    match s.(stack) with
+    | obj :: _ =>
+      match field_or_heap s obj 0 with
+      | Some class_tbl =>
+        match s.(accu) with
+        | Val_int n =>
+          field_or_heap s class_tbl (Z.to_nat n) = None /\ msg = "GETMETHOD: method not found"
+        | _ => msg = "GETMETHOD: not an integer index"
+        end
+      | None => msg = "GETMETHOD: no class table"
+      end
+    | _ => msg = "GETMETHOD: stack underflow"
+    end
+  (* GETPUBMET: errors when method not found or no class table *)
+  | GETPUBMET tag =>
+    match field_or_heap s s.(accu) 0 with
+    | Some class_tbl =>
+      let fields :=
+        match class_tbl with
+        | Val_block _ fs => fs
+        | Val_ptr addr => match heap_lookup s.(hp) addr with Some (_, fs) => fs | None => [] end
+        | _ => []
+        end
+      in
+      let fix scan (remaining : list value) : Prop :=
+        match remaining with
+        | [] => msg = "GETPUBMET: method not found"
+        | _ :: [] => msg = "GETPUBMET: method not found"
+        | _ :: tag_val :: rest =>
+          if value_eqb tag_val (Val_int tag) then False
+          else scan rest
+        end
+      in scan (skipn 2 fields)
+    | None => msg = "GETPUBMET: no class table"
+    end
+  (* GETDYNMET: errors when method not found, no class table, or stack underflow *)
+  | GETDYNMET =>
+    match s.(stack) with
+    | obj :: _ =>
+      let tag := s.(accu) in
+      match field_or_heap s obj 0 with
+      | Some class_tbl =>
+        let fields :=
+          match class_tbl with
+          | Val_block _ fs => fs
+          | Val_ptr addr => match heap_lookup s.(hp) addr with Some (_, fs) => fs | None => [] end
+          | _ => []
+          end
+        in
+        let fix scan (remaining : list value) : Prop :=
+          match remaining with
+          | [] => msg = "GETDYNMET: method not found"
+          | _ :: [] => msg = "GETDYNMET: method not found"
+          | _ :: tag_val :: rest =>
+            if value_eqb tag_val tag then False
+            else scan rest
+          end
+        in scan (skipn 2 fields)
+      | None => msg = "GETDYNMET: no class table"
+      end
+    | _ => msg = "GETDYNMET: stack underflow"
+    end
+  (* BEQ: never errors *)
+  | BEQ _ _ => False
+  (* BNEQ: never errors *)
+  | BNEQ _ _ => False
+  (* BLTINT: not an integer *)
+  | BLTINT _ _ =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "BLTINT: not an integer"
+    end
+  (* BLEINT: not an integer *)
+  | BLEINT _ _ =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "BLEINT: not an integer"
+    end
+  (* BGTINT: not an integer *)
+  | BGTINT _ _ =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "BGTINT: not an integer"
+    end
+  (* BGEINT: not an integer *)
+  | BGEINT _ _ =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "BGEINT: not an integer"
+    end
+  (* ULTINT: type error or stack underflow *)
+  | ULTINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "ULTINT: type error or stack underflow"
+    end
+  (* UGEINT: type error or stack underflow *)
+  | UGEINT =>
+    match s.(accu), s.(stack) with
+    | Val_int _, Val_int _ :: _ => False
+    | _, _ => msg = "UGEINT: type error or stack underflow"
+    end
+  (* BULTINT: not an integer *)
+  | BULTINT _ _ =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "BULTINT: not an integer"
+    end
+  (* BUGEINT: not an integer *)
+  | BUGEINT _ _ =>
+    match s.(accu) with
+    | Val_int _ => False
+    | _ => msg = "BUGEINT: not an integer"
+    end
+  (* STOP: never errors (returns Halt) *)
+  | STOP => False
+  end.
 
 Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
   match i with
@@ -3227,7 +3768,7 @@ Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data
 (* 94 uniform parameters (one per AST constructor).                     *)
 (* ================================================================== *)
 
-Module Type InstructVerificationFineGrainedSpec.
+Module Type InstructVerificationFineGrainedSpec (Import HI : HandleInstrSpec).
 
   Parameter correct_ACC : forall n,
     handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
@@ -3701,7 +4242,7 @@ Module Type InstructVerificationFineGrainedSpec.
 
 End InstructVerificationFineGrainedSpec.
 
-Module Type InstructVerificationSpec.
+Module Type InstructVerificationSpec (Import HI : HandleInstrSpec).
   Parameter handler_correct_all :
     forall i, handler_correct (handle_instr i) (clight_of i)
                 (pre_of i)
@@ -3709,7 +4250,8 @@ Module Type InstructVerificationSpec.
 End InstructVerificationSpec.
 
 Module InstructVerificationFromFineGrained
-       (Import FG : InstructVerificationFineGrainedSpec) <: InstructVerificationSpec.
+       (Import HI : HandleInstrSpec)
+       (Import FG : InstructVerificationFineGrainedSpec HI) <: InstructVerificationSpec HI.
 
     Lemma handler_correct_all :
       forall i, handler_correct (handle_instr i) (clight_of i)
