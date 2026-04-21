@@ -1,11 +1,10 @@
 (* MetaSpec.v - [TRUSTED] Module Type stating the uniqueness meta-theorem
    for bytecode instruction handlers.
 
-   The meta-theorem says: any two handlers satisfying the handler_correct
-   obligation packaged by [spec_of i pc'] agree on every input state up
-   to error-message strings.  See
-   manual/Bytecode/generator/META_SPEC_PLAN.md for the full design and
-   Phase 2/3 obligations that discharge this theorem.
+   The meta-theorem says: any two handlers satisfying the per-instruction
+   correctness obligation (packaged by the dispatch functions clight_of,
+   pre_of, P_error_of, P_halt_of, P_ccall_of) agree on every input state
+   up to error-message strings.
 
    This Phase 1 file declares the interface only.  The ascription in
    checker/Bytecode/MetaSpecChecker.v admits the meta-theorem so the
@@ -27,28 +26,22 @@ Inductive em_eq : step_result -> step_result -> Prop :=
       em_eq (CCall_request n args s') (CCall_request n args s')
   | em_Error : forall msg msg', em_eq (Error msg) (Error msg').
 
-(* A handler [h] "matches" a spec bundle [b] iff it satisfies the same
-   handler_correct obligation as [b.(hs_handler)].  This is the shape
-   the meta-theorem quantifies over. *)
-Definition handler_matches
-    (h : Z -> state -> step_result) (b : HandlerSpecBundle) : Prop :=
-  handler_correct h b.(hs_clight) b.(hs_step_pre)
-                  b.(hs_P_error) b.(hs_P_halt) b.(hs_P_ccall).
-
 Module Type MetaSpec.
 
   (* Uniqueness mod error-message strings.
 
-     For every instruction [i] and successor PC [pc'], any two handlers
-     that independently satisfy the spec bundle [spec_of i pc'] produce
-     observationally-equivalent results on every input state (agreeing
-     on the Step post-state, Halt value, and CCall_request triple;
-     potentially disagreeing only on the contents of Error messages). *)
+     For every instruction [i], any two handlers that independently
+     satisfy the spec dispatch functions produce observationally-
+     equivalent results on every input state (agreeing on the Step
+     post-state, Halt value, and CCall_request triple; potentially
+     disagreeing only on the contents of Error messages). *)
   Parameter handler_unique_mod_errors :
-    forall (i : instruction) (pc' : Z)
+    forall (i : instruction)
            (h1 h2 : Z -> state -> step_result),
-      handler_matches h1 (spec_of i pc') ->
-      handler_matches h2 (spec_of i pc') ->
-      forall s, em_eq (h1 pc' s) (h2 pc' s).
+      handler_correct h1 (clight_of i) (pre_of i)
+        (P_error_of i) (P_halt_of i) (P_ccall_of i) ->
+      handler_correct h2 (clight_of i) (pre_of i)
+        (P_error_of i) (P_halt_of i) (P_ccall_of i) ->
+      forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 
 End MetaSpec.

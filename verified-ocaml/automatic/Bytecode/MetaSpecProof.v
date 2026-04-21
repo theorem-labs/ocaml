@@ -9,10 +9,12 @@ From OCamlInterp.Manual.Bytecode Require Import AST Machine InstructSpec.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import MetaSpec.
 
 Lemma handler_unique_mod_errors :
-  forall (i : instruction) (pc' : Z)
+  forall (i : instruction)
          (h1 h2 : Z -> state -> step_result),
-    handler_matches h1 (spec_of i pc') ->
-    handler_matches h2 (spec_of i pc') ->
-    forall s, em_eq (h1 pc' s) (h2 pc' s).
+    handler_correct h1 (clight_of i) (pre_of i)
+      (P_error_of i) (P_halt_of i) (P_ccall_of i) ->
+    handler_correct h2 (clight_of i) (pre_of i)
+      (P_error_of i) (P_halt_of i) (P_ccall_of i) ->
+    forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
 Admitted.
