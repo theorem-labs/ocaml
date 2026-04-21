@@ -41,19 +41,8 @@ Definition clight_ge : Clight.genv :=
   {| genv_genv := Globalenvs.Genv.globalenv prog;
      genv_cenv := prog_comp_env prog |}.
 
-(* The struct type for interp_state.  Using a named struct tag in the C
-   source makes clightgen produce the stable identifier _interp_state. *)
-Definition t_interp_state := Tstruct _interp_state noattr.
-
 (* sizeof(code_t) = 4 bytes (int32_t in the C source) *)
 Definition sizeof_code_t : Z := 4.
-
-(* ================================================================== *)
-(* Value representation                                                *)
-(* ================================================================== *)
-
-Definition val_int_repr (z : Z) : val :=
-  Vlong (Int64.repr (z * 2 + 1)).
 
 (* ================================================================== *)
 (* Loop AST fragments used by step_pre definitions below and by        *)
@@ -428,12 +417,6 @@ Definition handler_correct
     | CCall_request nargs args s' => P_ccall nargs args s'
     end.
 
-Lemma abs_rel_iff_with_ard : forall e le m s,
-  abs_rel e le m s <-> exists ard, abs_rel_with_ard e le m s ard.
-Proof.
-  intros. unfold abs_rel, abs_rel_with_ard. reflexivity.
-Qed.
-
 (* ================================================================== *)
 (* Compositional precondition building blocks                          *)
 (*                                                                      *)
@@ -610,13 +593,6 @@ Definition stack_head_is_long : Clight.env -> mem -> state -> abs_rel_data -> Pr
         exists n, cv = Vlong n
     | nil => True
     end.
-
-(* Both accu and stack[0] are Val_int (tagged integers). *)
-Definition both_ints : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
-  fun _ _ s _ =>
-    exists a b rest,
-      s.(Machine.accu) = Val_int a /\
-      s.(Machine.stack) = Val_int b :: rest.
 
 (* Helper: Val_int value must have Vlong C representation (not vr_code_ptr). *)
 Definition int_vlong (ard : abs_rel_data) (n : Z) : Prop :=
@@ -1031,20 +1007,6 @@ Definition alloc_store_3
           (forall b ofs k p,
              Mem.perm m_alloc b ofs k p ->
              Mem.perm m_store2 b ofs k p))).
-
-(* 1-field store + perm: like alloc_store_1 but also preserves perms. *)
-Definition alloc_store_1_perm
-    (new_b : block) (new_ofs : ptrofs) (m_alloc : mem) : Prop :=
-  forall cv, exists m_store,
-    Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_store /\
-    Mem.load Mint64 m_store new_b (Ptrofs.unsigned new_ofs) =
-      Some (Val.load_result Mint64 cv) /\
-    (forall b ofs chunk v, b <> new_b ->
-       Mem.load chunk m_alloc b ofs = Some v ->
-       Mem.load chunk m_store b ofs = Some v) /\
-    (forall b ofs k p,
-       Mem.perm m_alloc b ofs k p ->
-       Mem.perm m_store b ofs k p).
 
 (* heap_alloc_pre with store chain: combines allocation + storability.
    Used by MAKEBLOCK1-3, CLOSURE, CLOSUREREC to avoid repeating both
@@ -1987,14 +1949,6 @@ Definition appterm3_step_pre (slotsize : nat)
   Z.of_nat (extra_args s) <= Int64.max_unsigned /\
   Z.of_nat (extra_args s) <= Int64.max_signed.
 
-Definition appterm_step_pre (nargs slotsize : nat)
-    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  get_code_ptr_s s s.(Machine.accu) <> None /\
-  (3 <= slotsize)%nat /\
-  (slotsize <= Datatypes.length (Machine.stack s))%nat /\
-  Z.of_nat (extra_args s) <= Int64.max_unsigned /\
-  Z.of_nat (extra_args s) <= Int64.max_signed.
-
 Definition assign_step_pre (n : nat)
     (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
   Mem.load Mint32 m (ar_code_base_block ard)
@@ -2117,97 +2071,6 @@ Definition closurerec_step_pre (code_ofs : Z)
      Ptrofs.unsigned sp_ofs >= 16 /\
      (align_chunk Mint64 | Ptrofs.unsigned sp_ofs - 8) /\
      Ptrofs.unsigned sp_ofs - 8 + 8 < Ptrofs.modulus).
-
-Definition closurerec_general_step_pre (nfuncs nvars : nat) (code_offsets : list Z)
-    (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  let sb := ar_sptr_block ard in
-  let so := ar_sptr_ofs ard in
-  let cb := ar_code_base_block ard in
-  let co := ar_code_base_ofs ard in
-  let gb := ar_global_block ard in
-  let sp_b := ar_stack_block ard in
-  let hm := ar_heap_map ard in
-  let blksize := (3 * nfuncs - 1 + nvars)%nat in
-  (* e does not bind heap_alloc *)
-  e ! _heap_alloc = None /\
-  (* Code buffer: nfuncs at current PC *)
-  Mem.load Mint32 m cb
-    (Ptrofs.unsigned (Ptrofs.add co
-       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-  = Some (Vint (Int.repr (Z.of_nat nfuncs))) /\
-  (* Code buffer: nvars at PC+1 *)
-  Mem.load Mint32 m cb
-    (Ptrofs.unsigned (Ptrofs.add co
-       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
-  = Some (Vint (Int.repr (Z.of_nat nvars))) /\
-  (* Code offsets match nfuncs in length *)
-  length code_offsets = nfuncs /\
-  (* Code buffer: code_offsets[i] at PC+2+i, each in signed int range *)
-  (forall i ofs, nth_error code_offsets i = Some ofs ->
-     Mem.load Mint32 m cb
-       (Ptrofs.unsigned (Ptrofs.add co
-          (Ptrofs.repr ((Machine.pc s + 2 + Z.of_nat i) * sizeof_code_t))))
-     = Some (Vint (Int.repr ofs)) /\
-     Int.min_signed <= ofs <= Int.max_signed) /\
-  (* nfuncs >= 1 *)
-  (nfuncs >= 1)%nat /\
-  (* blksize and nfuncs in int range *)
-  (0 <= Z.of_nat blksize <= Int.max_signed) /\
-  (0 <= Z.of_nat nfuncs <= Int.max_signed) /\
-  (0 <= Z.of_nat nvars <= Int.max_signed) /\
-  (* nvars bounded by stack length *)
-  (nvars <= S (length (Machine.stack s)))%nat /\
-  (* Heap map freshness *)
-  hm (next_addr s) = None /\
-  (* Global block valid *)
-  Mem.valid_block m gb /\
-  (* Genv lookup for heap_alloc *)
-  (exists b_ha,
-     Genv.find_symbol (genv_genv clight_ge) _heap_alloc = Some b_ha /\
-     Genv.find_funct (genv_genv clight_ge) (Vptr b_ha Ptrofs.zero) =
-       Some heap_alloc_fundef) /\
-  (* heap_alloc spec: allocate blksize fields with tag 247 *)
-  (forall m',
-     exists m_alloc new_b new_ofs,
-       external_call heap_alloc_ef
-         (Genv.to_senv (genv_genv clight_ge))
-         (Vptr sb so :: Vlong (Int64.repr (Z.of_nat blksize)) :: Vlong (Int64.repr 247) :: nil)
-         m' E0 (Vptr new_b new_ofs) m_alloc /\
-       (forall b, Mem.valid_block m' b -> new_b <> b) /\
-       (forall b ofs chunk v,
-          Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-          Mem.load chunk m_alloc b ofs = Some v) /\
-       (forall b ofs k p,
-          Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-          Mem.perm m_alloc b ofs k p) /\
-       (* Field 0 storable (code ptr) *)
-       (forall cv, exists m_s0,
-          Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
-          Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
-            Some (Val.load_result Mint64 cv) /\
-          (forall b ofs chunk v, b <> new_b ->
-             Mem.load chunk m_alloc b ofs = Some v ->
-             Mem.load chunk m_s0 b ofs = Some v) /\
-          (* Field 1 storable after field 0 (closinfo) *)
-          (forall cv1, exists m_s1,
-             Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
-             Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
-               Some (Val.load_result Mint64 cv1) /\
-             (* Load at field 0 preserved *)
-             (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
-                Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
-             (forall b ofs chunk v, b <> new_b ->
-                Mem.load chunk m_s0 b ofs = Some v ->
-                Mem.load chunk m_s1 b ofs = Some v) /\
-             (forall b ofs k p,
-                Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
-                Mem.perm m_s1 b ofs k p)))) /\
-  (* sp writable below current sp for pushes *)
-  (forall sp_b sp_ofs,
-     Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-     Ptrofs.unsigned sp_ofs >= 8 * Z.of_nat (nfuncs + 1) /\
-     (align_chunk Mint64 | Ptrofs.unsigned sp_ofs - 8) /\
-     Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)) < Ptrofs.modulus).
 
 Definition getfloatfield_step_pre (n : nat)
     (e : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
