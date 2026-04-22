@@ -743,13 +743,6 @@ Theorem verify_RESTART_correct :
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
-  (* Original proof broken by instruct_handlers.v migration (PTree.gss
-     rewrite no longer applies after Clight body change).  Admitted
-     pending proof repair; the wrapper correct_RESTART below delegates
-     the Step case here so the overall statement is still Admitted. *)
-Admitted.
-
-(* --- preserved original proof (commented out to unblock build) ---
   intros e le m s.
   unfold handle_RESTART.
 
@@ -1058,182 +1051,181 @@ Admitted.
              replace E0 with (E0 ** E0) by reflexivity.
              eapply exec_Sseq_1.
 
-             - (* Main computation — all terminates normally *)
+             - (* Pre1: t8 = s->env, t9 = *(env + (-1)), num_args = cast(t9>>10 - 3) *)
+               apply (eval_stmt_to_exec ge 20). eval_cbn.
+               rewrite Hle_s; eval_cbn.
+               rewrite Hco; eval_cbn.
+               assert (Henv_ofs : field_offset ge _env (co_members co_is) = Errors.OK (24, Full)).
+               { destruct interp_state_co_env as [co' [Hco' [Henv' _]]].
+                 assert (co_is = co') by congruence. subst. exact Henv'. }
+               rewrite Henv_ofs; eval_cbn.
+               try rewrite Mptr_Mint64; eval_cbn.
+               rewrite (ptrofs_add_unsigned so 24 ltac:(lia) ltac:(lia)).
+               fold uso. rewrite Henv_load; eval_cbn.
+               rewrite PTree.gss; eval_cbn.
+               rewrite sem_cast_long_to_ptr_vptr; eval_cbn.
+               rewrite sem_neg_int; eval_cbn.
+               rewrite sem_add_ptr_int_i; eval_cbn.
+               try rewrite Mptr_Mint64; eval_cbn.
+               change (Int.neg (Int.repr 1)) with (Int.repr (-1)).
+               rewrite ptrofs_of_int_signed_repr by (pose proof Int.min_signed_neg; lia).
+               change (Ptrofs.repr (-1)) with Ptrofs.mone.
+               rewrite Ptrofs.mul_mone.
+               rewrite <- Ptrofs.sub_add_opp.
+               unfold Ptrofs.sub.
+               replace (Ptrofs.unsigned (Ptrofs.repr 8)) with 8.
+               2: { symmetry. apply Ptrofs.unsigned_repr.
+                    assert (PM : Ptrofs.modulus = 18446744073709551616) by reflexivity.
+                    unfold Ptrofs.max_unsigned. lia. }
+               replace (Ptrofs.unsigned env_ptr_ofs - 8) with
+                 (Ptrofs.unsigned env_ofs + Z.of_nat ofs * 8 - 8) by
+                 (rewrite Henv_ptr_unsigned; lia).
+               rewrite Ptrofs.unsigned_repr.
+               2: { pose proof (Ptrofs.unsigned_range env_ofs).
+                    assert (PM : Ptrofs.modulus = 18446744073709551616) by reflexivity.
+                    unfold Ptrofs.max_unsigned. lia. }
+               rewrite Hhdr_load; eval_cbn.
+               rewrite PTree.gss; eval_cbn.
+               rewrite sem_shr_long_int_10; eval_cbn.
+               rewrite Hhdr_shift; eval_cbn.
+               rewrite sem_sub_long_int; eval_cbn.
+               rewrite sem_cast_long_to_int; eval_cbn.
+               replace (Int64.sub (Int64.repr (Z.of_nat (length fields))) (Int64.repr (Int.signed (Int.repr 3))))
+                 with (Int64.repr num_args_z).
+               2: { assert (IMS : Int.max_signed = 2147483647) by reflexivity.
+                    unfold num_args_z, num_args.
+                    rewrite Int.signed_repr by (pose proof Int.min_signed_neg; lia).
+                    unfold Int64.sub. f_equal.
+                    rewrite (Int64.unsigned_repr (Z.of_nat (length fields))).
+                    2: { split. { lia. }
+                         assert (PM64 : Int64.modulus = 18446744073709551616) by reflexivity.
+                         unfold Int64.max_unsigned. lia. }
+                    rewrite (Int64.unsigned_repr 3).
+                    2: { split. { lia. }
+                         assert (PM64 : Int64.modulus = 18446744073709551616) by reflexivity.
+                         unfold Int64.max_unsigned. lia. }
+                    rewrite Nat2Z.inj_sub by lia. reflexivity. }
+               replace (Int.repr (Int64.unsigned (Int64.repr num_args_z)))
+                 with (Int.repr num_args_z).
+               2: { f_equal. rewrite Int64.unsigned_repr.
+                    - reflexivity.
+                    - split. { unfold num_args_z. lia. }
+                      assert (IMS : Int.max_signed = 2147483647) by reflexivity.
+                      assert (PM64 : Int64.modulus = 18446744073709551616) by reflexivity.
+                      unfold Int64.max_unsigned. lia. }
+               reflexivity.
+
+             - (* Rest: pre2 + loop + post + return *)
                replace E0 with (E0 ** E0) by reflexivity.
                eapply exec_Sseq_1.
 
-               + (* Pre1: t8 = s->env, t9 = *(env + (-1)), num_args = cast(t9>>10 - 3) *)
-                 apply (eval_stmt_to_exec ge 20). eval_cbn.
-                 rewrite Hle_s; eval_cbn.
-                 rewrite Hco; eval_cbn.
-                 assert (Henv_ofs : field_offset ge _env (co_members co_is) = Errors.OK (24, Full)).
-                 { destruct interp_state_co_env as [co' [Hco' [Henv' _]]].
-                   assert (co_is = co') by congruence. subst. exact Henv'. }
-                 rewrite Henv_ofs; eval_cbn.
-                 try rewrite Mptr_Mint64; eval_cbn.
-                 rewrite (ptrofs_add_unsigned so 24 ltac:(lia) ltac:(lia)).
-                 fold uso. rewrite Henv_load; eval_cbn.
-                 rewrite PTree.gss; eval_cbn.
-                 rewrite sem_cast_long_to_ptr_vptr; eval_cbn.
-                 rewrite sem_neg_int; eval_cbn.
-                 rewrite sem_add_ptr_int_i; eval_cbn.
-                 try rewrite Mptr_Mint64; eval_cbn.
-                 change (Int.neg (Int.repr 1)) with (Int.repr (-1)).
-                 rewrite ptrofs_of_int_signed_repr by (pose proof Int.min_signed_neg; lia).
-                 change (Ptrofs.repr (-1)) with Ptrofs.mone.
-                 rewrite Ptrofs.mul_mone.
-                 rewrite <- Ptrofs.sub_add_opp.
-                 unfold Ptrofs.sub.
-                 replace (Ptrofs.unsigned (Ptrofs.repr 8)) with 8.
-                 2: { symmetry. apply Ptrofs.unsigned_repr.
-                      assert (PM : Ptrofs.modulus = 18446744073709551616) by reflexivity.
-                      unfold Ptrofs.max_unsigned. lia. }
-                 replace (Ptrofs.unsigned env_ptr_ofs - 8) with
-                   (Ptrofs.unsigned env_ofs + Z.of_nat ofs * 8 - 8) by
-                   (rewrite Henv_ptr_unsigned; lia).
-                 rewrite Ptrofs.unsigned_repr.
-                 2: { pose proof (Ptrofs.unsigned_range env_ofs).
-                      assert (PM : Ptrofs.modulus = 18446744073709551616) by reflexivity.
-                      unfold Ptrofs.max_unsigned. lia. }
-                 rewrite Hhdr_load; eval_cbn.
-                 rewrite PTree.gss; eval_cbn.
-                 rewrite sem_shr_long_int_10; eval_cbn.
-                 rewrite Hhdr_shift; eval_cbn.
-                 rewrite sem_sub_long_int; eval_cbn.
-                 rewrite sem_cast_long_to_int; eval_cbn.
-                 replace (Int64.sub (Int64.repr (Z.of_nat (length fields))) (Int64.repr (Int.signed (Int.repr 3))))
-                   with (Int64.repr num_args_z).
-                 2: { assert (IMS : Int.max_signed = 2147483647) by reflexivity.
-                      unfold num_args_z, num_args.
-                      rewrite Int.signed_repr by (pose proof Int.min_signed_neg; lia).
-                      unfold Int64.sub. f_equal.
-                      rewrite (Int64.unsigned_repr (Z.of_nat (length fields))).
-                      2: { split. { lia. }
-                           assert (PM64 : Int64.modulus = 18446744073709551616) by reflexivity.
-                           unfold Int64.max_unsigned. lia. }
-                      rewrite (Int64.unsigned_repr 3).
-                      2: { split. { lia. }
-                           assert (PM64 : Int64.modulus = 18446744073709551616) by reflexivity.
-                           unfold Int64.max_unsigned. lia. }
-                      rewrite Nat2Z.inj_sub by lia. reflexivity. }
-                 replace (Int.repr (Int64.unsigned (Int64.repr num_args_z)))
-                   with (Int.repr num_args_z).
-                 2: { f_equal. rewrite Int64.unsigned_repr.
-                      - reflexivity.
-                      - split. { unfold num_args_z. lia. }
-                        assert (IMS : Int.max_signed = 2147483647) by reflexivity.
-                        assert (PM64 : Int64.modulus = 18446744073709551616) by reflexivity.
-                        unfold Int64.max_unsigned. lia. }
-                 reflexivity.
+               + (* Pre2: t7 = s->sp, s->sp = t7 - num_args *)
+                 replace E0 with (E0 ** E0) by reflexivity.
+                 eapply exec_Sseq_1.
+                 * (* Sset _t'7 *)
+                   apply (eval_stmt_to_exec ge 10). eval_cbn.
+                   repeat (rewrite PTree.gso by (compute; congruence)).
+                   rewrite Hle_s; eval_cbn.
+                   rewrite Hco; eval_cbn. rewrite Hsp_offset; eval_cbn.
+                   try rewrite Mptr_Mint64; eval_cbn.
+                   rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+                   fold uso. rewrite Hsp_load; eval_cbn. reflexivity.
+                 * (* Sassign s->sp *)
+                   eapply exec_Sassign.
+                   -- eapply eval_Efield_struct.
+                      ++ eapply eval_Elvalue.
+                         ** eapply eval_Ederef. eapply eval_Etempvar.
+                            repeat (rewrite PTree.gso by (compute; congruence)).
+                            exact Hle_s.
+                         ** apply deref_loc_copy. simpl. reflexivity.
+                      ++ simpl. reflexivity.
+                      ++ exact Hco.
+                      ++ exact Hsp_offset.
+                   -- econstructor.
+                      ++ econstructor. rewrite PTree.gss. reflexivity.
+                      ++ econstructor.
+                         repeat (rewrite PTree.gso by (compute; congruence)).
+                         rewrite PTree.gss. reflexivity.
+                      ++ exact (sem_sub_ptr_int sp_b sp_ofs (Int.repr num_args_z) m).
+                   -- unfold sem_cast. simpl classify_cast. reflexivity.
+                   -- apply assign_loc_value with (chunk := Mint64).
+                      ++ simpl. reflexivity.
+                      ++ simpl. rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
+                         fold uso. exact Hsp_store.
 
-               + (* Rest: pre2 + loop + post *)
+               + (* Loop + post + return *)
                  replace E0 with (E0 ** E0) by reflexivity.
                  eapply exec_Sseq_1.
 
-                 * (* Pre2: t7 = s->sp, s->sp = t7 - num_args *)
+                 * (* Loop with init: i = 0; loop *)
                    replace E0 with (E0 ** E0) by reflexivity.
                    eapply exec_Sseq_1.
-                   -- (* Sset _t'7 *)
-                      apply (eval_stmt_to_exec ge 10). eval_cbn.
-                      repeat (rewrite PTree.gso by (compute; congruence)).
-                      rewrite Hle_s; eval_cbn.
-                      rewrite Hco; eval_cbn. rewrite Hsp_offset; eval_cbn.
-                      try rewrite Mptr_Mint64; eval_cbn.
-                      rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
-                      fold uso. rewrite Hsp_load; eval_cbn. reflexivity.
-                   -- (* Sassign s->sp *)
-                      eapply exec_Sassign.
-                      ++ eapply eval_Efield_struct.
-                         ** eapply eval_Elvalue.
-                            --- eapply eval_Ederef. eapply eval_Etempvar.
-                                repeat (rewrite PTree.gso by (compute; congruence)).
-                                exact Hle_s.
-                            --- apply deref_loc_copy. simpl. reflexivity.
-                         ** simpl. reflexivity.
-                         ** exact Hco.
-                         ** exact Hsp_offset.
-                      ++ econstructor.
-                         ** econstructor. rewrite PTree.gss. reflexivity.
-                         ** econstructor.
-                            repeat (rewrite PTree.gso by (compute; congruence)).
-                            rewrite PTree.gss. reflexivity.
-                         ** exact (sem_sub_ptr_int sp_b sp_ofs (Int.repr num_args_z) m).
-                      ++ unfold sem_cast. simpl classify_cast. reflexivity.
-                      ++ apply assign_loc_value with (chunk := Mint64).
-                         ** simpl. reflexivity.
-                         ** simpl. rewrite (ptrofs_add_unsigned so 16 ltac:(lia) ltac:(lia)).
-                            fold uso. exact Hsp_store.
+                   -- apply (eval_stmt_to_exec ge 2). eval_cbn. reflexivity.
+                   -- exact Hloop_exec.
 
-                 * (* Loop + post *)
+                 * (* Post: env update + extra_args update + return *)
                    replace E0 with (E0 ** E0) by reflexivity.
                    eapply exec_Sseq_1.
-
-                   -- (* Loop with init: i = 0; loop *)
+                   -- (* t2 = s->env, t3 = *(cast(t2) + 2), s->env = t3 *)
                       replace E0 with (E0 ** E0) by reflexivity.
                       eapply exec_Sseq_1.
-                      ++ apply (eval_stmt_to_exec ge 2). eval_cbn. reflexivity.
-                      ++ exact Hloop_exec.
-
-                   -- (* Post: env update + extra_args update *)
-                      replace E0 with (E0 ** E0) by reflexivity.
-                      eapply exec_Sseq_1.
-                      ++ (* t2 = s->env, t3 = *(cast(t2) + 2), s->env = t3 *)
+                      ++ (* Sset _t'2 *)
+                         assert (Henv_ofs2 : field_offset ge _env (co_members co_is) = Errors.OK (24, Full)).
+                         { destruct interp_state_co_env as [co' [Hco' [Henv' _]]].
+                           assert (co_is = co') by congruence. subst. exact Henv'. }
+                         apply (eval_stmt_to_exec ge 10). eval_cbn.
+                         repeat (rewrite PTree.gso by (compute; congruence)).
+                         rewrite Hle_s_loop; eval_cbn.
+                         rewrite Hco; eval_cbn.
+                         rewrite Henv_ofs2; eval_cbn.
+                         try rewrite Mptr_Mint64; eval_cbn.
+                         rewrite (ptrofs_add_unsigned so 24 ltac:(lia) ltac:(lia)).
+                         fold uso. rewrite Henv_field_mloop; eval_cbn.
+                         reflexivity.
+                      ++ (* Sset _t'3 ; Sassign s->env *)
                          replace E0 with (E0 ** E0) by reflexivity.
                          eapply exec_Sseq_1.
-                         ** (* Sset _t'2 *)
+                         ** (* Sset _t'3: load env[2] *)
+                            apply (eval_stmt_to_exec ge 6). eval_cbn.
+                            rewrite PTree.gss; eval_cbn.
+                            rewrite sem_cast_long_to_ptr_vptr; eval_cbn.
+                            rewrite sem_add_ptr_int_i; eval_cbn.
+                            try rewrite Mptr_Mint64; eval_cbn.
+                            rewrite ptrofs_of_int_signed_repr by (pose proof Int.min_signed_neg; lia).
+                            rewrite ptrofs_mul_8 by
+                              (unfold Ptrofs.max_unsigned; pose proof Ptrofs.modulus_pos; lia).
+                            rewrite ptrofs_add_unsigned by
+                              (try rewrite Henv_ptr_unsigned;
+                               pose proof (Ptrofs.unsigned_range env_ofs); lia).
+                            replace (Ptrofs.unsigned env_ptr_ofs + 2 * 8)
+                              with (Ptrofs.unsigned env_ofs + (Z.of_nat ofs + 2) * 8)
+                              by (rewrite Henv_ptr_unsigned; lia).
+                            rewrite Hsaved_load_mloop; eval_cbn.
+                            try rewrite (val_repr_load_result _ _ _ _ _ Hsaved_repr).
+                            reflexivity.
+                         ** (* Sassign s->env = t3 *)
                             assert (Henv_ofs2 : field_offset ge _env (co_members co_is) = Errors.OK (24, Full)).
                             { destruct interp_state_co_env as [co' [Hco' [Henv' _]]].
                               assert (co_is = co') by congruence. subst. exact Henv'. }
-                            apply (eval_stmt_to_exec ge 10). eval_cbn.
-                            repeat (rewrite PTree.gso by (compute; congruence)).
-                            rewrite Hle_s_loop; eval_cbn.
-                            rewrite Hco; eval_cbn.
-                            rewrite Henv_ofs2; eval_cbn.
-                            try rewrite Mptr_Mint64; eval_cbn.
-                            rewrite (ptrofs_add_unsigned so 24 ltac:(lia) ltac:(lia)).
-                            fold uso. rewrite Henv_field_mloop; eval_cbn.
-                            reflexivity.
-                         ** (* Sset _t'3 ; Sassign s->env *)
-                            replace E0 with (E0 ** E0) by reflexivity.
-                            eapply exec_Sseq_1.
-                            --- (* Sset _t'3: load env[2] *)
-                                apply (eval_stmt_to_exec ge 6). eval_cbn.
-                                rewrite PTree.gss; eval_cbn.
-                                rewrite sem_cast_long_to_ptr_vptr; eval_cbn.
-                                rewrite sem_add_ptr_int_i; eval_cbn.
-                                try rewrite Mptr_Mint64; eval_cbn.
-                                rewrite ptrofs_of_int_signed_repr by (pose proof Int.min_signed_neg; lia).
-                                rewrite ptrofs_mul_8 by
-                                  (unfold Ptrofs.max_unsigned; pose proof Ptrofs.modulus_pos; lia).
-                                rewrite ptrofs_add_unsigned by
-                                  (try rewrite Henv_ptr_unsigned;
-                                   pose proof (Ptrofs.unsigned_range env_ofs); lia).
-                                replace (Ptrofs.unsigned env_ptr_ofs + 2 * 8)
-                                  with (Ptrofs.unsigned env_ofs + (Z.of_nat ofs + 2) * 8)
-                                  by (rewrite Henv_ptr_unsigned; lia).
-                                rewrite Hsaved_load_mloop; eval_cbn.
-                                try rewrite (val_repr_load_result _ _ _ _ _ Hsaved_repr).
-                                reflexivity.
-                            --- (* Sassign s->env = t3 *)
-                                assert (Henv_ofs2 : field_offset ge _env (co_members co_is) = Errors.OK (24, Full)).
-                                { destruct interp_state_co_env as [co' [Hco' [Henv' _]]].
-                                  assert (co_is = co') by congruence. subst. exact Henv'. }
-                                eapply exec_Sassign.
-                                +++ eapply eval_Efield_struct.
-                                    *** eapply eval_Elvalue.
-                                        ---- eapply eval_Ederef. eapply eval_Etempvar.
-                                             repeat (rewrite PTree.gso by (compute; congruence)).
-                                             exact Hle_s_loop.
-                                        ---- apply deref_loc_copy. simpl. reflexivity.
-                                    *** simpl. reflexivity.
-                                    *** exact Hco.
-                                    *** rewrite Henv_ofs2. reflexivity.
-                                +++ econstructor. rewrite PTree.gss. reflexivity.
-                                +++ exact (sem_cast_long_val_repr _ _ _ _ _ m_loop Hsaved_repr).
-                                +++ apply assign_loc_value with (chunk := Mint64).
-                                    *** simpl. reflexivity.
-                                    *** simpl. rewrite (ptrofs_add_unsigned so 24 ltac:(lia) ltac:(lia)).
-                                        fold uso. exact Henv_store.
+                            eapply exec_Sassign.
+                            --- eapply eval_Efield_struct.
+                                +++ eapply eval_Elvalue.
+                                    *** eapply eval_Ederef. eapply eval_Etempvar.
+                                         repeat (rewrite PTree.gso by (compute; congruence)).
+                                         exact Hle_s_loop.
+                                    *** apply deref_loc_copy. simpl. reflexivity.
+                                +++ simpl. reflexivity.
+                                +++ exact Hco.
+                                +++ rewrite Henv_ofs2. reflexivity.
+                            --- econstructor. rewrite PTree.gss. reflexivity.
+                            --- exact (sem_cast_long_val_repr _ _ _ _ _ m_loop Hsaved_repr).
+                            --- apply assign_loc_value with (chunk := Mint64).
+                                +++ simpl. reflexivity.
+                                +++ simpl. rewrite (ptrofs_add_unsigned so 24 ltac:(lia) ltac:(lia)).
+                                    fold uso. exact Henv_store.
+                   -- (* t1 = s->extra_args, s->extra_args = t1 + num_args, return 0 *)
+                      replace E0 with (E0 ** E0) by reflexivity.
+                      eapply exec_Sseq_1.
                       ++ (* t1 = s->extra_args, s->extra_args = t1 + num_args *)
                          replace E0 with (E0 ** E0) by reflexivity.
                          eapply exec_Sseq_1.
@@ -1276,9 +1268,8 @@ Admitted.
                                 +++ simpl. reflexivity.
                                 +++ simpl. rewrite (ptrofs_add_unsigned so 32 ltac:(lia) ltac:(lia)).
                                     fold uso. exact Hea_store.
-
-             - (* Return 0 *)
-               econstructor. econstructor.
+                      ++ (* Return 0 *)
+                         econstructor. econstructor.
            }
 
            (* ============================================================ *)
@@ -1513,7 +1504,6 @@ Admitted.
       * reflexivity.
       * exists addr, ofs. exact (conj eq_refl Hlookup).
 Qed.
---- end preserved original proof *)
 
 (* Bridge lemma: when handle_RESTART returns Error, error_message_of
    returns the same message.  Both functions share the same case
@@ -1523,14 +1513,15 @@ Local Lemma handle_RESTART_error_implies_error_message : forall pc' s msg,
   error_message_of RESTART s = Some msg.
 Proof.
   intros pc' s msg H.
-  unfold handle_RESTART in H. unfold error_message_of. simpl.
+  unfold handle_RESTART in H.
+  unfold P_error_of, error_message_of.
   destruct (Machine.env s) as [z | t fields_v | addr | addr ofs].
   - (* Val_int *) inversion H. reflexivity.
   - (* Val_block *)
     destruct (Nat.eqb t Closure_tag) eqn:Htag.
-    + simpl skipn in H. simpl in H.
+    + change (skipn 0%nat fields_v) with fields_v in H.
       destruct (nth_error fields_v 2) as [saved_env|] eqn:Hnth.
-      * discriminate.
+      * congruence.
       * inversion H. reflexivity.
     + inversion H. reflexivity.
   - (* Val_ptr *) inversion H. reflexivity.
@@ -1538,7 +1529,7 @@ Proof.
     destruct (heap_lookup (Machine.hp s) addr) as [[ht all_fields]|] eqn:Hlookup.
     + destruct (Nat.eqb ht Closure_tag) eqn:Htag.
       * destruct (nth_error (skipn ofs all_fields) 2) as [saved_env|] eqn:Hnth.
-        -- discriminate.
+        -- congruence.
         -- inversion H. reflexivity.
       * inversion H. reflexivity.
     + inversion H. reflexivity.
@@ -1560,14 +1551,14 @@ Proof.
     with (handle_RESTART (Machine.pc s) s).
   pose proof (verify_RESTART_correct e le m s) as H.
   unfold handler_correct in H. simpl in H.
-  destruct (handle_RESTART (Machine.pc s) s) eqn:Hdo.
+  destruct (handle_RESTART (Machine.pc s) s) as [s' | hv | err_msg | nargs args s'] eqn:Hdo.
   - (* Step: delegate to existing proof *)
     exact H.
+  - (* Halt: impossible — handle_RESTART never returns Halt *)
+    contradiction.
   - (* Error: bridge P_error_of *)
     unfold P_error_of. simpl.
-    exact (handle_RESTART_error_implies_error_message (Machine.pc s) s s0 Hdo).
-  - (* Halt: impossible — handle_RESTART never returns Halt *)
-    destruct H as [_ HF]. contradiction.
+    exact (handle_RESTART_error_implies_error_message (Machine.pc s) s err_msg Hdo).
   - (* CCall: impossible — handle_RESTART never returns CCall_request *)
-    destruct H as [_ HF]. contradiction.
+    contradiction.
 Qed.
