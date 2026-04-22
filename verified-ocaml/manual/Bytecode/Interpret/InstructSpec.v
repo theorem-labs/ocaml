@@ -3653,24 +3653,22 @@ Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data
       exec_stmt function_entry1 clight_ge e le m (fn_body (clight_of i)) E0 le' m' out /\
       abs_rel e le' m' s''.
 
-Definition P_error_of (_ : instruction) : string -> state -> Prop :=
-  fun _ _ => True.
+Definition P_error_of (i : instruction) (msg : string) (s : state) : Prop :=
+  error_message_of i s = Some msg.
 
-Definition P_halt_of (_ : instruction) : value -> Prop :=
-  fun _ => True.
+Definition P_halt_of (i : instruction) (v : value) : Prop :=
+  instr_wfb i = true /\ match i with STOP => True | _ => False end.
 
-Definition P_ccall_of (_ : instruction) : nat -> list value -> state -> Prop :=
-  fun _ _ _ => True.
+Definition P_ccall_of (i : instruction) (n : nat) (args : list value) (s : state) : Prop :=
+  instr_wfb i = true /\ match i with C_CALL _ _ => True | _ => False end.
 
 (* ================================================================== *)
 (* Module Type                                                         *)
 (*                                                                      *)
-(* The four dispatch functions (pre_of, P_error_of, P_halt_of,         *)
-(* P_ccall_of) are all uniform/trivial: P_error_of, P_halt_of,        *)
-(* P_ccall_of are constantly True; pre_of is a weakest-precondition    *)
-(* that says the Clight body can execute under abs_rel.  This keeps    *)
-(* the trusted computing base minimal — no per-instruction logic in    *)
-(* the dispatch layer.                                                  *)
+(* pre_of is a uniform weakest-precondition: the Clight body can       *)
+(* execute under abs_rel.  P_error_of, P_halt_of, P_ccall_of are      *)
+(* per-instruction dispatch functions constraining error/halt/ccall    *)
+(* outcomes.                                                            *)
 (*                                                                      *)
 (* Each entry: handler_correct handler c_func pre err halt ccall       *)
 (* 94 uniform parameters (one per AST constructor).                     *)
