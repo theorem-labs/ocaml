@@ -4,9 +4,9 @@ manual/Bytecode/DecodeSpec.v
 manual/Bytecode/Encode.v
 manual/Bytecode/Generated/instruct_handlers.v
 manual/Bytecode/IO.v
-manual/Bytecode/InstructSpec.v
 manual/Bytecode/Interpret/HandleInstrSpec.v
 manual/Bytecode/Interpret/Helpers.v
+manual/Bytecode/Interpret/InstructSpec.v
 manual/Bytecode/Interpret/MetaSpec.v
 manual/Bytecode/Interpret/Run.v
 manual/Bytecode/Machine.v

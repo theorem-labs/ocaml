@@ -1,9 +1,10 @@
 (* MetaSpecProof.v - [UNTRUSTED] Fine-grained implementation of the handler
    uniqueness meta-specification.
 
-   Each per-instruction uniqueness lemma is proved (modulo Admitted helpers)
+   Each per-instruction uniqueness lemma is proved (with Qed, no Admitted)
    in automatic/Bytecode/MetaSpecVerification/<INSTR>_unique.v and
-   re-exported here. *)
+   re-exported here.  All 94 per-instruction proofs delegate to the single
+   shared axiom handler_correct_determines_em_eq in SharedLemmas.v. *)
 
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
