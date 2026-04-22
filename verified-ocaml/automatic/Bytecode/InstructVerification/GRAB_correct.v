@@ -13,8 +13,8 @@
      _required = *_t'1;        // read required from code buffer
      _t'3 = s->extra_args;     // read extra_args
      if (_t'3 >= _required)    // Oge: tlong >= tint
-       _t'17 = s->extra_args;
-       s->extra_args = _t'17 - _required;   // extra_args -= required
+       _t'21 = s->extra_args;
+       s->extra_args = _t'21 - _required;   // extra_args -= required
      else
        ... (complex closure building -- requires separate precondition)
      return 0;
@@ -338,7 +338,7 @@ Proof.
       as [m2 Hstore_ea].
 
     (* Witnesses *)
-    set (le' := PTree.set _t'17 (Vlong (Int64.repr (Z.of_nat (extra_args s))))
+    set (le' := PTree.set _t'21 (Vlong (Int64.repr (Z.of_nat (extra_args s))))
                (PTree.set _t'3 (Vlong (Int64.repr (Z.of_nat (extra_args s))))
                (PTree.set _required (Vint (Int.repr (Z.of_nat required)))
                (PTree.set _t'1 (Vptr cb pc_ofs) le)))).
@@ -426,10 +426,10 @@ Proof.
         rewrite Hextra_load_m1; eval_cbn.
         reflexivity. }
 
-      (* S6: (then branch) Sset _t'17 (s->extra_args) *)
-      set (le4 := PTree.set _t'17 (Vlong (Int64.repr (Z.of_nat (extra_args s)))) le3).
+      (* S6: (then branch) Sset _t'21 (s->extra_args) *)
+      set (le4 := PTree.set _t'21 (Vlong (Int64.repr (Z.of_nat (extra_args s)))) le3).
       assert (Hexec_S6 : exec_stmt function_entry1 clight_ge e le3 m1
-          (Sset _t'17
+          (Sset _t'21
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _extra_args tlong))
@@ -447,13 +447,13 @@ Proof.
         rewrite Hextra_load_m1; eval_cbn.
         reflexivity. }
 
-      (* S7: Sassign (s->extra_args) (_t'17 - _required) *)
+      (* S7: Sassign (s->extra_args) (_t'21 - _required) *)
       assert (Hexec_S7 : exec_stmt function_entry1 clight_ge e le4 m1
           (Sassign
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _extra_args tlong)
-            (Ebinop Osub (Etempvar _t'17 tlong) (Etempvar _required tint)
+            (Ebinop Osub (Etempvar _t'21 tlong) (Etempvar _required tint)
               tlong))
           E0 le4 m2 Out_normal).
       { apply (eval_stmt_to_exec clight_ge 10).
@@ -483,20 +483,20 @@ Proof.
       { subst le' le4 le3 le2 le1. reflexivity. }
       rewrite Hle'_eq.
 
-      (* Compose: outer Ssequence = (preamble ; Sifthenelse) ; Sreturn *)
-      apply exec_Sseq_1 with (t1 := E0) (le1 := le4) (m1 := m2).
+      (* Compose: outer Ssequence = preamble ; (S4+IF ; Sreturn) *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le2) (m1 := m1).
 
-      (* Inner: preamble (S1-S3) ; (S4 ; Sifthenelse) *)
-      { apply exec_Sseq_1 with (t1 := E0) (le1 := le2) (m1 := m1).
+      (* Preamble: (S1 ; S2) ; S3 *)
+      { apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m1).
+        (* S1 ; S2 *)
+        { apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m).
+          - exact Hexec_S1.
+          - exact Hexec_S2. }
+        (* S3 *)
+        { exact Hexec_S3. } }
 
-        (* Preamble: (S1 ; S2) ; S3 *)
-        { apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m1).
-          (* S1 ; S2 *)
-          { apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m).
-            - exact Hexec_S1.
-            - exact Hexec_S2. }
-          (* S3 *)
-          { exact Hexec_S3. } }
+      (* (S4 ; Sifthenelse) ; Sreturn *)
+      { apply exec_Sseq_1 with (t1 := E0) (le1 := le4) (m1 := m2).
 
         (* S4 ; Sifthenelse *)
         { apply exec_Sseq_1 with (t1 := E0) (le1 := le3) (m1 := m1).
@@ -524,10 +524,10 @@ Proof.
               (* Then branch: Ssequence S6 S7 *)
               apply exec_Sseq_1 with (t1 := E0) (le1 := le4) (m1 := m1).
               + exact Hexec_S6.
-              + exact Hexec_S7. } } }
+              + exact Hexec_S7. } }
 
-      (* S8: Sreturn 0 *)
-      { apply exec_Sreturn_some. eapply eval_Econst_int. }
+        (* S8: Sreturn 0 *)
+        { apply exec_Sreturn_some. eapply eval_Econst_int. } }
     }
 
     (* ============================================================== *)
@@ -772,8 +772,8 @@ Proof.
              try (inversion Herr; reflexivity).
            destruct v2 as [z2 | | |];
              try (inversion Herr; reflexivity).
-           (* v0 = Val_int z0, v2 = Val_int z2 => handle_GRAB returns Step *)
-           discriminate.
+           (* v0 = Val_int z0, v2 = Val_int z2 => handle_GRAB returns Step;
+              inversion Herr closes this case automatically *)
 Qed.
 
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
@@ -795,25 +795,31 @@ Proof.
   intros e le m s.
   pose proof (verify_GRAB_correct n) as H.
   unfold handler_correct in H. specialize (H e le m s).
-  destruct (handle_GRAB n (Machine.pc s) s) eqn:Hres.
+  destruct (handle_GRAB n (Machine.pc s) s) as [s' | v | msg | nargs args s'] eqn:Hres.
   - (* Step: delegate to existing proof *)
     intros ard Habs Hpre.
-    apply H; assumption.
-  - (* Error: bridge P_error_of *)
-    unfold P_error_of. simpl.
-    exact (handle_GRAB_error_implies_error_message n (Machine.pc s) s s0 Hres).
+    exact (H ard Habs Hpre).
   - (* Halt: impossible — handle_GRAB never returns Halt *)
     exfalso.
     unfold handle_GRAB in Hres.
-    destruct (Nat.leb n (extra_args s)); discriminate.
+    destruct (Nat.leb n (extra_args s)); [discriminate|].
+    destruct (heap_alloc _ _ _) as [s'' bp].
+    destruct bp; simpl in Hres;
+      repeat match type of Hres with
+             | context [match ?x with _ => _ end] =>
+               destruct x; simpl in Hres; try discriminate
+             end.
+  - (* Error: bridge P_error_of *)
+    unfold P_error_of. simpl.
+    exact (handle_GRAB_error_implies_error_message n (Machine.pc s) s msg Hres).
   - (* CCall: impossible — handle_GRAB never returns CCall_request *)
     exfalso.
     unfold handle_GRAB in Hres.
-    destruct (Nat.leb n (extra_args s)); try discriminate.
-    destruct (skipn (S (extra_args s)) (Machine.stack s)) as [| v0 rest0];
-      try discriminate.
-    destruct rest0 as [| v1 rest1]; try discriminate.
-    destruct rest1 as [| v2 rest2]; try discriminate.
-    destruct v0; try discriminate.
-    destruct v2; try discriminate.
+    destruct (Nat.leb n (extra_args s)); [discriminate|].
+    destruct (heap_alloc _ _ _) as [s'' bp].
+    destruct bp; simpl in Hres;
+      repeat match type of Hres with
+             | context [match ?x with _ => _ end] =>
+               destruct x; simpl in Hres; try discriminate
+             end.
 Qed.
