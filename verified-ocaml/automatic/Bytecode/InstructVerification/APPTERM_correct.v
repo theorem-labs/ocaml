@@ -88,10 +88,26 @@ Qed.
    handle_instr (APPTERM nargs slotsize) = handle_APPTERM nargs slotsize
    and clight_of (APPTERM nargs slotsize) = f_instr_APPTERM by computation.
    pre_of (APPTERM nargs slotsize) is convertible with the precondition
-   above.  The P_error/P_halt/P_ccall predicates differ from the verify
-   theorem's versions only propositionally, so we Admit for now. *)
+   above.  P_error_of bridges via error_message_of; P_halt_of / P_ccall_of
+   are vacuously False since APPTERM is neither STOP nor C_CALL. *)
 Definition correct_APPTERM : forall nargs slotsize,
-  handler_correct (Dispatch.handle_instr (APPTERM nargs slotsize)) (clight_of (APPTERM nargs slotsize))
-    (pre_of (APPTERM nargs slotsize))
-    (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)).
-Admitted.
+  handler_correct (Dispatch.handle_instr (Bytecode.AST.APPTERM nargs slotsize)) (clight_of (Bytecode.AST.APPTERM nargs slotsize))
+    (pre_of (Bytecode.AST.APPTERM nargs slotsize))
+    (P_error_of (Bytecode.AST.APPTERM nargs slotsize)) (P_halt_of (Bytecode.AST.APPTERM nargs slotsize)) (P_ccall_of (Bytecode.AST.APPTERM nargs slotsize)).
+Proof.
+  intros nargs slotsize. intros e le m s.
+  change (Dispatch.handle_instr (Bytecode.AST.APPTERM nargs slotsize))
+    with (fun (pc' : Z) (s0 : Machine.state) => handle_APPTERM nargs slotsize s0).
+  unfold handler_correct. simpl.
+  unfold handle_APPTERM at 1.
+  destruct (get_code_ptr_s s s.(Machine.accu)) as [target_pc|] eqn:Hgcp.
+  - (* Step case: delegate to verify_APPTERM_correct *)
+    pose proof (verify_APPTERM_correct nargs slotsize) as H.
+    unfold handler_correct in H. specialize (H e le m s).
+    change ((fun _ s0 => handle_APPTERM nargs slotsize s0) (Machine.pc s) s)
+      with (handle_APPTERM nargs slotsize s) in H.
+    unfold handle_APPTERM at 1 in H. rewrite Hgcp in H.
+    exact H.
+  - (* Error: accu is not a closure *)
+    unfold P_error_of. simpl. rewrite Hgcp. reflexivity.
+Qed.
