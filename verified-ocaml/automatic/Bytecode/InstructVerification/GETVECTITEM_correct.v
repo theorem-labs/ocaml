@@ -607,7 +607,10 @@ Proof.
         specialize (verify_GETVECTITEM_correct e le m s) as Hold.
         unfold handler_correct, handle_GETVECTITEM in Hold.
         rewrite Hstk in Hold. rewrite Hfoh in Hold.
-        exact Hold.
+        intros ard Habs Hpre.
+        unfold pre_of, getvectitem_step_pre in Hpre.
+        rewrite Hstk in Hpre.
+        exact (Hold ard Habs Hpre).
       * (* None: Error case *)
         unfold P_error_of, error_message_of. rewrite Hstk. rewrite Hfoh. reflexivity.
     + (* Val_block *)
