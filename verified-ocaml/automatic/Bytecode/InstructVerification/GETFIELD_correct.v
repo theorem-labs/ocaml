@@ -181,6 +181,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_GETFIELD_correct : forall n,
+    Int.min_signed <= Z.of_nat n <= Int.max_signed ->
     handler_correct (handle_GETFIELD n) f_instr_GETFIELD
       (fun e m s ard =>
          heap_field_loadable n e m s ard /\
@@ -194,9 +195,13 @@ Theorem verify_GETFIELD_correct : forall n,
       (fun _ s => field_or_heap s s.(Machine.accu) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro n.
+  intro n. intro Hn_range_top.
   intros e le m s.
   unfold handler_correct, handle_GETFIELD.
+  (* Discharge the range guard using the top-level hypothesis *)
+  assert (Hwfb : ((Int.min_signed <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z = true).
+  { apply andb_true_intro. split; apply Z.leb_le; lia. }
+  rewrite Hwfb.
   destruct (field_or_heap s s.(Machine.accu) n) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)
@@ -548,7 +553,7 @@ Definition GETFIELD_correct_for_spec : forall n, Int.min_signed <= Z.of_nat n <=
   Proof.
     intros n Hrange.
     eapply handler_correct_weaken.
-    - exact (verify_GETFIELD_correct n).
+    - exact (verify_GETFIELD_correct n Hrange).
     - intros e le m s ard _ [Hhfl Hcode]. exact (conj Hhfl (conj Hcode Hrange)).
   Qed.
 
@@ -575,18 +580,19 @@ Proof.
   change (handle_instr (GETFIELD n) (Machine.pc s) s)
     with (handle_GETFIELD n (Machine.pc s) s).
   unfold handle_GETFIELD at 1.
-  destruct (field_or_heap s s.(Machine.accu) n) as [v|] eqn:Hfoh.
-  - (* Step case: field_or_heap = Some v *)
-    destruct (Z_le_dec Int.min_signed (Z.of_nat n)) as [Hlo | Hlo];
-      [destruct (Z_le_dec (Z.of_nat n) Int.max_signed) as [Hhi | Hhi] |].
-    + (* n in range: delegate to GETFIELD_correct_for_spec *)
+  (* Case-split on the instr_wfb range guard first *)
+  destruct ((Int.min_signed <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z eqn:Hwfb.
+  - (* In range *)
+    pose proof Hwfb as Hwfb'.
+    apply andb_prop in Hwfb'. destruct Hwfb' as [Hlo Hhi].
+    apply Z.leb_le in Hlo. apply Z.leb_le in Hhi.
+    destruct (field_or_heap s s.(Machine.accu) n) as [v|] eqn:Hfoh.
+    + (* Step case: field_or_heap = Some v, n in range *)
       specialize (GETFIELD_correct_for_spec n (conj Hlo Hhi) e le m s) as H.
       unfold handler_correct, handle_GETFIELD in H.
-      rewrite Hfoh in H. exact H.
-    + (* n > Int.max_signed: out of range *)
-      admit.
-    + (* n < Int.min_signed: out of range *)
-      admit.
-  - (* Error case: field_or_heap = None *)
-    unfold P_error_of, error_message_of. simpl. rewrite Hfoh. reflexivity.
-Admitted.
+      rewrite Hwfb, Hfoh in H. exact H.
+    + (* Error case: field_or_heap = None *)
+      unfold P_error_of, error_message_of. rewrite Hwfb. rewrite Hfoh. reflexivity.
+  - (* Out of range: handler returns Error, P_error_of follows from error_message_of *)
+    unfold P_error_of, error_message_of. rewrite Hwfb. reflexivity.
+Qed.
