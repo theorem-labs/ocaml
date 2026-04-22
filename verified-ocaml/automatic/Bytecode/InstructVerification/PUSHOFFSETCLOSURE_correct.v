@@ -1193,4 +1193,4 @@ Proof.
     intros ard Habs Hpre.
     unfold pre_of, pushoffsetclosure_step_pre in Hpre. rewrite Henv in Hpre.
     exact (Hold ard Habs Hpre).
-Admitted.
+Qed.
