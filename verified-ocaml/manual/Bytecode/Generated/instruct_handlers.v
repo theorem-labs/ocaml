@@ -4322,7 +4322,7 @@ Definition f_instr_RETURN := {|
                 (Efield
                   (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _pc (tptr tint))
-                (Ecast (Etempvar _t'9 tlong) tint))))
+                (Ecast (Etempvar _t'9 tlong) (tptr tint)))))
           (Ssequence
             (Ssequence
               (Sset _t'6
@@ -4686,7 +4686,7 @@ Definition f_instr_GRAB := {|
                                   (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                   (Tstruct _interp_state noattr)) _pc
                                 (tptr tint))
-                              (Ecast (Etempvar _t'10 tlong) tint))))
+                              (Ecast (Etempvar _t'10 tlong) (tptr tint)))))
                         (Ssequence
                           (Ssequence
                             (Sset _t'7

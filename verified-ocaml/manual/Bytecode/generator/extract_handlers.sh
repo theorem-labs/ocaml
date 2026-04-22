@@ -37,7 +37,8 @@ typedef intptr_t intnat;
 typedef uintptr_t uintnat;
 typedef uintptr_t mlsize_t;
 typedef unsigned char tag_t;
-typedef int32_t code_t;
+typedef int32_t opcode_t;
+typedef opcode_t * code_t;
 
 #define STATUS_STEP  0
 #define STATUS_HALT  1
@@ -57,7 +58,7 @@ typedef int32_t code_t;
 #define Tag_val(x)     (((unsigned char*)(x))[-sizeof(value)] & 0xFF)
 #define Wosize_val(x)  (((intptr_t*)(x))[-1] >> 10)
 #define Field(x,i)     (((value*)(x))[i])
-#define Code_val(x)    (((code_t**)(x))[0])
+#define Code_val(x)    (((code_t *)(x))[0])
 #define Byte_u(x,i)    (((unsigned char*)(x))[i])
 #define Closure_tag    247
 #define Infix_tag      249
@@ -67,7 +68,7 @@ typedef int32_t code_t;
 #define Atom(tag)      ((value)((tag) << 10))
 
 /* Trap frame accessors */
-#define Trap_pc(sp)            (((code_t **)(sp))[0])
+#define Trap_pc(sp)            (((code_t *)(sp))[0])
 #define Trap_link_offset(sp)   (((value *)(sp))[1])
 
 /* Closinfo encoding (simplified — arity=0, start_env=start) */
@@ -90,7 +91,7 @@ typedef int32_t code_t;
 /* Use a named struct tag so clightgen preserves the identifier as
    _interp_state (stable) rather than generating __NNN (brittle). */
 struct interp_state {
-    code_t *pc;
+    code_t  pc;
     value   accu;
     value  *sp;
     value   env;
