@@ -247,6 +247,7 @@ Local Ltac read_pc_from_struct Hle co_is Hco Hpc_offset Hload :=
 (* ================================================================== *)
 
 Theorem verify_BGTINT_correct : forall n target,
+    Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BGTINT n target) f_instr_BGTINT
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
@@ -273,8 +274,12 @@ Theorem verify_BGTINT_correct : forall n target,
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
       (fun msg s => msg = "BGTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros n target e le m s.
+  intros n target Hn_range e le m s.
   unfold handle_BGTINT.
+  (* Discharge the instr_wfb guard using the range hypothesis *)
+  assert (Hwfb : ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z = true).
+  { apply andb_true_intro. split; apply Z.leb_le; lia. }
+  rewrite Hwfb.
   destruct (Machine.accu s) as [a | tag fields | addr | addr ofs_cl] eqn:Haccu_eq.
 
   (* ================================================================ *)
@@ -300,7 +305,7 @@ Proof.
         [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne]]]] &
         [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
       subst sp_ptr.
-      destruct Hstep_pre as (Hcb_ne_sb & Hn_range & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range & Hval_repr_vlong).
+      destruct Hstep_pre as (Hcb_ne_sb & Hn_range' & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range & Hval_repr_vlong).
       pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
       destruct interp_state_co_bgtint as [co_is [Hco [Hpc_offset Haccu_offset]]].
@@ -436,7 +441,7 @@ Proof.
                       * eapply eval_Econst_int.
                       * apply sem_shr_long_int_1.
                     + apply sem_cast_long_vlong.
-                  - apply (bgtint_cmp_true n a m1 Haccu_range Hn_range Hcmp). }
+                  - apply (bgtint_cmp_true n a m1 Haccu_range Hn_range' Hcmp). }
 
                 { (* bool_val *)
                   apply bool_val_of_bool. }
@@ -598,7 +603,7 @@ Proof.
         [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne]]]] &
         [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
       subst sp_ptr.
-      destruct Hstep_pre as (Hcb_ne_sb & Hn_range & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range & Hval_repr_vlong).
+      destruct Hstep_pre as (Hcb_ne_sb & Hn_range' & Hcode_n & [ofs_int [Hcode_ofs Hofs_eq]] & Haccu_range & Hval_repr_vlong).
       pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
       pose proof (Ptrofs.unsigned_range so) as [Hso_pos _].
       destruct interp_state_co_bgtint as [co_is [Hco [Hpc_offset Haccu_offset]]].
@@ -690,7 +695,7 @@ Proof.
                       * eapply eval_Econst_int.
                       * apply sem_shr_long_int_1.
                     + apply sem_cast_long_vlong.
-                  - apply (bgtint_cmp_false n a m1 Haccu_range Hn_range Hcmp). }
+                  - apply (bgtint_cmp_false n a m1 Haccu_range Hn_range' Hcmp). }
                 { apply bool_val_of_bool. }
                 { simpl.
                   set (le4 := PTree.set _t'4 (Vptr cb pc1) le3).
@@ -811,24 +816,20 @@ Theorem verify_BGTINT_handler_correct : forall n target,
 Proof.
   intros n target Hn.
   eapply handler_correct_weaken.
-  - exact (verify_BGTINT_correct n target).
+  - exact (verify_BGTINT_correct n target Hn).
   - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
     exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
 Qed.
 
 (* Wrapper with the canonical type expected by InstructVerificationProof.v.
 
-   The existing proof (verify_BGTINT_handler_correct) requires
-   Int.min_signed <= z1 <= Int.max_signed.  The canonical pre_of
-   does not include this guard; when z1 is outside Int range,
-   Int.repr wraps and the C comparison disagrees with the Rocq
-   handler's Z.gtb, so the Step case cannot be closed without
-   assuming the range.  In practice the bytecode decoder only
-   produces in-range operands.
+   The handler checks instr_wfb (BGTINT z1 z2) = ((min_signed <=? z1) &&
+   (z1 <=? max_signed))%Z.  When that guard is false the handler returns
+   Error "BGTINT: malformed operand", which matches P_error_of because
+   error_message_of checks the identical boolean.  When the guard is true
+   we have the signed-range assumption needed by the inner proof.
 
-   Error cases (non-integer accu) are fully proved.  The Step
-   case delegates to verify_BGTINT_handler_correct after asserting
-   the range (Admitted). *)
+   Non-integer accu error cases are fully proved via error_message_of. *)
 Theorem correct_BGTINT : forall z1 z2,
   handler_correct (handle_instr (Bytecode.AST.BGTINT z1 z2)) (clight_of (Bytecode.AST.BGTINT z1 z2))
     (pre_of (Bytecode.AST.BGTINT z1 z2))
@@ -837,25 +838,30 @@ Proof.
   intros z1 z2 e le m s.
   change (handle_instr (Bytecode.AST.BGTINT z1 z2)) with (handle_BGTINT z1 z2).
   unfold handle_BGTINT.
-  destruct (Machine.accu s) eqn:Haccu.
-  - (* Val_int z — Step case; need z1 range for C comparison correctness *)
-    assert (Hn : Int.min_signed <= z1 <= Int.max_signed).
-    { (* TODO: the canonical pre_of does not include this guard;
-         it should be supplied by instr_wfb or the bytecode loader.
-         Admitted for now. *)
-      admit. }
-    destruct (Z.gtb z1 z) eqn:Hcmp; simpl;
-    (intros ard Hrel Hpre;
-     pose proof (verify_BGTINT_handler_correct z1 z2 Hn) as Hvc;
-     specialize (Hvc e le m s);
-     unfold handler_correct, handle_BGTINT in Hvc;
-     rewrite Haccu, Hcmp in Hvc; simpl in Hvc;
-     exact (Hvc ard Hrel Hpre)).
-  - (* Val_block — Error *)
-    destruct l as [| h t];
-      (unfold P_error_of, error_message_of; rewrite Haccu; reflexivity).
-  - (* Val_ptr — Error *)
-    unfold P_error_of, error_message_of; rewrite Haccu; reflexivity.
-  - (* Val_closure — Error *)
-    unfold P_error_of, error_message_of; rewrite Haccu; reflexivity.
-Admitted.
+  (* Case-split on the instr_wfb range guard first *)
+  destruct ((Int.min_signed <=? z1) && (z1 <=? Int.max_signed))%Z eqn:Hwfb.
+  - (* In range *)
+    pose proof Hwfb as Hwfb'.
+    apply andb_prop in Hwfb'. destruct Hwfb' as [Hlo Hhi].
+    apply Z.leb_le in Hlo. apply Z.leb_le in Hhi.
+    assert (Hn : Int.min_signed <= z1 <= Int.max_signed) by lia.
+    destruct (Machine.accu s) eqn:Haccu.
+    + (* Val_int z *)
+      destruct (Z.gtb z1 z) eqn:Hcmp; simpl;
+      (intros ard Hrel Hpre;
+       pose proof (verify_BGTINT_handler_correct z1 z2 Hn) as Hvc;
+       specialize (Hvc e le m s);
+       unfold handler_correct, handle_BGTINT in Hvc;
+       rewrite Hwfb in Hvc; simpl in Hvc;
+       rewrite Haccu, Hcmp in Hvc; simpl in Hvc;
+       exact (Hvc ard Hrel Hpre)).
+    + (* Val_block — Error: not an integer *)
+      destruct l as [| h t];
+        (unfold P_error_of, error_message_of; rewrite Hwfb, Haccu; reflexivity).
+    + (* Val_ptr — Error: not an integer *)
+      unfold P_error_of, error_message_of; rewrite Hwfb, Haccu; reflexivity.
+    + (* Val_closure — Error: not an integer *)
+      unfold P_error_of, error_message_of; rewrite Hwfb, Haccu; reflexivity.
+  - (* Out of range: handler returns Error, P_error_of follows from error_message_of *)
+    unfold P_error_of, error_message_of. rewrite Hwfb. reflexivity.
+Qed.
