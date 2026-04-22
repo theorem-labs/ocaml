@@ -606,10 +606,10 @@ Qed.
    by computation.  pre_of (POP n) = (code_at ... /\p code_ne_struct) /\p
    stack_length_ge n, matching verify_POP_handler_correct's precondition.
 
-   The Step case delegates to verify_POP_handler_correct after asserting
-   Z.of_nat n < Int.half_modulus (Admitted).  In practice the bytecode
-   decoder only produces in-range operands; the canonical pre_of does not
-   include this guard. *)
+   The Step case delegates to verify_POP_handler_correct after showing
+   Z.of_nat n < Int.half_modulus via Z.ltb_spec.  The Error case
+   (n >= half_modulus) is discharged by reflexivity since handle_POP
+   returns Error and P_error_of is trivially satisfied. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
