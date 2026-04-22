@@ -224,13 +224,19 @@ Theorem verify_MAKEBLOCK2_correct : forall t,
                     (forall b ofs k p,
                        Mem.perm m_alloc b ofs k p ->
                        Mem.perm m_store1 b ofs k p)))))
-      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
+      (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro t.
   intros e le m s.
   unfold handle_MAKEBLOCK2. simpl.
 
+  (* Case-split on the range guard (added by wfb migration) *)
+  destruct ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z eqn:Hwfb.
+  2:{ (* Guard false: Error "malformed operand" — trivial *)
+      exact I. }
+
+  (* Guard true: proceed with original proof *)
   (* Destruct the stack *)
   destruct (Machine.stack s) as [| v1 rest] eqn:Hstk.
   - (* Empty stack: Error case *)
@@ -986,8 +992,21 @@ Proof.
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
-      (* Seq: sp_advance; store_accu *)
-      assert (Hexec_sp_accu :
+      (* Seq: store_accu; return *)
+      assert (Hexec_accu_return :
+        exec_stmt function_entry1 clight_ge e le9 m2
+          (Ssequence
+            (Sassign
+              (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                       (Tstruct _interp_state noattr)) _accu tlong)
+              (Etempvar _block tlong))
+            (Sreturn (Some (Econst_int (Int.repr 0) tint))))
+          E0 le9 m3 (Out_return (Some (Vint (Int.repr 0), tint)))).
+      { replace E0 with (E0 ** E0) by reflexivity.
+        eapply exec_Sseq_1; eauto. }
+
+      (* Seq: sp_advance; store_accu; return *)
+      assert (Hexec_sp_accu_return :
         exec_stmt function_entry1 clight_ge e le8 m_f1
           (Ssequence
             (Ssequence
@@ -999,16 +1018,18 @@ Proof.
                          (Tstruct _interp_state noattr)) _sp (tptr tlong))
                 (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
                   (Econst_int (Int.repr 1) tint) (tptr tlong))))
-            (Sassign
-              (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                       (Tstruct _interp_state noattr)) _accu tlong)
-              (Etempvar _block tlong)))
-          E0 le9 m3 Out_normal).
+            (Ssequence
+              (Sassign
+                (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                         (Tstruct _interp_state noattr)) _accu tlong)
+                (Etempvar _block tlong))
+              (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
+          E0 le9 m3 (Out_return (Some (Vint (Int.repr 0), tint)))).
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
-      (* Seq: read_store_f0; read_sp_store_f1; sp_accu *)
-      assert (Hexec_fields_sp_accu :
+      (* Seq: read_store_f0; read_sp_store_f1; sp_accu_return *)
+      assert (Hexec_fields_sp_accu_return :
         exec_stmt function_entry1 clight_ge e le5 m_alloc
           (Ssequence
             (Ssequence
@@ -1045,18 +1066,20 @@ Proof.
                              (Tstruct _interp_state noattr)) _sp (tptr tlong))
                     (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
                       (Econst_int (Int.repr 1) tint) (tptr tlong))))
-                (Sassign
-                  (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                           (Tstruct _interp_state noattr)) _accu tlong)
-                  (Etempvar _block tlong)))))
-          E0 le9 m3 Out_normal).
+                (Ssequence
+                  (Sassign
+                    (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                             (Tstruct _interp_state noattr)) _accu tlong)
+                    (Etempvar _block tlong))
+                  (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))
+          E0 le9 m3 (Out_return (Some (Vint (Int.repr 0), tint)))).
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto.
         replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
-      (* Seq: alloc_block; fields_sp_accu *)
-      assert (Hexec_alloc_rest :
+      (* Seq: alloc_block; fields_sp_accu_return *)
+      assert (Hexec_alloc_rest_return :
         exec_stmt function_entry1 clight_ge e le3 m1
           (Ssequence
             (Ssequence
@@ -1102,152 +1125,89 @@ Proof.
                                (Tstruct _interp_state noattr)) _sp (tptr tlong))
                       (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
                         (Econst_int (Int.repr 1) tint) (tptr tlong))))
-                  (Sassign
-                    (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                             (Tstruct _interp_state noattr)) _accu tlong)
-                    (Etempvar _block tlong))))))
-          E0 le9 m3 Out_normal).
-      { replace E0 with (E0 ** E0) by reflexivity.
-        eapply exec_Sseq_1; eauto. }
-
-      (* The full pre-return body *)
-      assert (Hexec_body_pre_return :
-        exec_stmt function_entry1 clight_ge e le m
-          (Ssequence
-            (Ssequence
-              (Ssequence
-                (Sset _t'1 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                             (Tstruct _interp_state noattr)) _pc (tptr tint)))
-                (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                           (Tstruct _interp_state noattr)) _pc (tptr tint))
-                  (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-                    (Econst_int (Int.repr 1) tint) (tptr tint))))
-              (Ssequence
-                (Sset _t'7 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-                (Sset _tag (Ecast (Etempvar _t'7 tint) tuchar))))
-            (Ssequence
-              (Ssequence
-                (Scall (Some _t'2)
-                  (Evar _heap_alloc (Tfunction
-                    ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
-                    tlong cc_default))
-                  ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-                   (Econst_int (Int.repr 2) tint) :: (Etempvar _tag tuchar) :: nil))
-                (Sset _block (Etempvar _t'2 tlong)))
-              (Ssequence
-                (Ssequence
-                  (Sset _t'6
-                    (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                             (Tstruct _interp_state noattr)) _accu tlong))
-                  (Sassign
-                    (Ederef
-                      (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                        (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-                    (Etempvar _t'6 tlong)))
-                (Ssequence
                   (Ssequence
-                    (Sset _t'4
-                      (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                               (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                    (Ssequence
-                      (Sset _t'5
-                        (Ederef
-                          (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                      (Sassign
-                        (Ederef
-                          (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                            (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                        (Etempvar _t'5 tlong))))
-                  (Ssequence
-                    (Ssequence
-                      (Sset _t'3
-                        (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                 (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                      (Sassign
-                        (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                 (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                        (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
-                          (Econst_int (Int.repr 1) tint) (tptr tlong))))
                     (Sassign
                       (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                (Tstruct _interp_state noattr)) _accu tlong)
-                      (Etempvar _block tlong)))))))
-          E0 le9 m3 Out_normal).
+                      (Etempvar _block tlong))
+                    (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))
+          E0 le9 m3 (Out_return (Some (Vint (Int.repr 0), tint)))).
       { replace E0 with (E0 ** E0) by reflexivity.
-        eapply exec_Sseq_1; eauto. }
+        eapply exec_Sseq_1.
+        - exact Hexec_alloc_block.
+        - exact Hexec_fields_sp_accu_return. }
 
-      (* Full body = pre_return; return *)
+      (* Full body = pc_tag; alloc_rest_return *)
       change (fn_body f_instr_MAKEBLOCK2) with
         (Ssequence
           (Ssequence
             (Ssequence
-              (Ssequence
-                (Sset _t'1
-                  (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
-                (Sassign
-                  (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint))
-                  (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-                    (Econst_int (Int.repr 1) tint) (tptr tint))))
-              (Ssequence
-                (Sset _t'7 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-                (Sset _tag (Ecast (Etempvar _t'7 tint) tuchar))))
+              (Sset _t'1
+                (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Sassign
+                (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint))
+                (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+                  (Econst_int (Int.repr 1) tint) (tptr tint))))
+            (Ssequence
+              (Sset _t'7 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+              (Sset _tag (Ecast (Etempvar _t'7 tint) tuchar))))
+          (Ssequence
+            (Ssequence
+              (Scall (Some _t'2)
+                (Evar _heap_alloc (Tfunction
+                  ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
+                  tlong cc_default))
+                ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+                 (Econst_int (Int.repr 2) tint) :: (Etempvar _tag tuchar) :: nil))
+              (Sset _block (Etempvar _t'2 tlong)))
             (Ssequence
               (Ssequence
-                (Scall (Some _t'2)
-                  (Evar _heap_alloc (Tfunction
-                    ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
-                    tlong cc_default))
-                  ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-                   (Econst_int (Int.repr 2) tint) :: (Etempvar _tag tuchar) :: nil))
-                (Sset _block (Etempvar _t'2 tlong)))
+                (Sset _t'6
+                  (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                           (Tstruct _interp_state noattr)) _accu tlong))
+                (Sassign
+                  (Ederef
+                    (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                      (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
+                  (Etempvar _t'6 tlong)))
               (Ssequence
                 (Ssequence
-                  (Sset _t'6
+                  (Sset _t'4
                     (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                             (Tstruct _interp_state noattr)) _accu tlong))
-                  (Sassign
-                    (Ederef
-                      (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                        (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong)
-                    (Etempvar _t'6 tlong)))
+                             (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+                  (Ssequence
+                    (Sset _t'5
+                      (Ederef
+                        (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
+                          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+                    (Sassign
+                      (Ederef
+                        (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
+                          (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
+                      (Etempvar _t'5 tlong))))
                 (Ssequence
                   (Ssequence
-                    (Sset _t'4
+                    (Sset _t'3
                       (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                    (Ssequence
-                      (Sset _t'5
-                        (Ederef
-                          (Ebinop Oadd (Etempvar _t'4 (tptr tlong))
-                            (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                      (Sassign
-                        (Ederef
-                          (Ebinop Oadd (Ecast (Etempvar _block tlong) (tptr tlong))
-                            (Econst_int (Int.repr 1) tint) (tptr tlong)) tlong)
-                        (Etempvar _t'5 tlong))))
+                    (Sassign
+                      (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                               (Tstruct _interp_state noattr)) _sp (tptr tlong))
+                      (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
+                        (Econst_int (Int.repr 1) tint) (tptr tlong))))
                   (Ssequence
-                    (Ssequence
-                      (Sset _t'3
-                        (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                 (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                      (Sassign
-                        (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                                 (Tstruct _interp_state noattr)) _sp (tptr tlong))
-                        (Ebinop Oadd (Etempvar _t'3 (tptr tlong))
-                          (Econst_int (Int.repr 1) tint) (tptr tlong))))
                     (Sassign
                       (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                                (Tstruct _interp_state noattr)) _accu tlong)
-                      (Etempvar _block tlong)))))))
-          (Sreturn (Some (Econst_int (Int.repr 0) tint)))).
+                      (Etempvar _block tlong))
+                    (Sreturn (Some (Econst_int (Int.repr 0) tint))))))))).
 
       replace E0 with (E0 ** E0) by reflexivity.
       eapply exec_Sseq_1.
-      - exact Hexec_body_pre_return.
-      - exact Hexec_return.
+      - exact Hexec_pc_tag.
+      - exact Hexec_alloc_rest_return.
     }
 
     (* ============================================================== *)
@@ -1514,7 +1474,7 @@ Definition MAKEBLOCK2_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
     handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
       (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
        /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ s => match s.(Machine.stack) with _ :: _ => False | _ => True end)
+      (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
     intros t Hrange. eapply handler_correct_weaken.
@@ -1541,20 +1501,43 @@ Definition MAKEBLOCK2_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
 (* Canonical wrapper bridging to the InstructSpec signature             *)
 (*                                                                      *)
 (* handle_instr (MAKEBLOCK2 n) computes to handle_MAKEBLOCK2 n.        *)
-(* MAKEBLOCK2 has both Step and Error branches (stack underflow).       *)
+(* MAKEBLOCK2 has both Step and Error branches (stack underflow +       *)
+(* malformed operand).                                                  *)
 (*                                                                      *)
-(* The existing proof (MAKEBLOCK2_correct_for_spec) requires            *)
-(* 0 <= Z.of_nat n <= 255 because the C handler casts the tag          *)
-(* to unsigned char, truncating tags > 255.  The canonical pre_of       *)
-(* does not include this guard; in practice the bytecode decoder        *)
-(* only produces in-range tags.  The range is admitted.                 *)
-(*                                                                      *)
-(* NOTE: The underlying verify_MAKEBLOCK2_correct proof has a           *)
-(* pre-existing build issue (eauto fails to close a subgoal in the      *)
-(* exec_stmt derivation).  This wrapper is therefore Admitted directly  *)
-(* rather than delegating to MAKEBLOCK2_correct_for_spec. *)
+(* The range guard (0 <= Z.of_nat n <= 255) is obtained by              *)
+(* case-splitting on the boolean guard in handle_MAKEBLOCK2.  When the  *)
+(* guard is false the handler returns Error which matches P_error_of    *)
+(* via error_message_of.  When true, the range assumption feeds         *)
+(* MAKEBLOCK2_correct_for_spec; the stack-empty Error is likewise       *)
+(* discharged via error_message_of.                                     *)
+(* ================================================================== *)
 Definition correct_MAKEBLOCK2 : forall n,
     handler_correct (handle_instr (Bytecode.AST.MAKEBLOCK2 n)) (clight_of (Bytecode.AST.MAKEBLOCK2 n))
       (pre_of (Bytecode.AST.MAKEBLOCK2 n))
       (P_error_of (Bytecode.AST.MAKEBLOCK2 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK2 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK2 n)).
-Admitted.
+Proof.
+  intro n.
+  intros e le m s.
+  change (handle_instr (Bytecode.AST.MAKEBLOCK2 n)) with (handle_MAKEBLOCK2 n).
+  unfold handle_MAKEBLOCK2.
+  (* Case-split on the range guard *)
+  destruct ((0 <=? Z.of_nat n) && (Z.of_nat n <=? 255))%Z eqn:Hwfb.
+  - (* Range guard true *)
+    pose proof Hwfb as Hwfb'.
+    apply andb_prop in Hwfb'. destruct Hwfb' as [Hlo Hhi].
+    apply Z.leb_le in Hlo. apply Z.leb_le in Hhi.
+    assert (Hn : 0 <= Z.of_nat n <= 255) by lia.
+    (* Case-split on stack *)
+    destruct (Machine.stack s) as [| v1 rest] eqn:Hstk.
+    + (* Stack empty: Error "MAKEBLOCK2: stack underflow" *)
+      unfold P_error_of, error_message_of. rewrite Hwfb, Hstk. reflexivity.
+    + (* Stack v1 :: rest: Step case *)
+      intros ard Hrel Hpre.
+      pose proof (MAKEBLOCK2_correct_for_spec n Hn) as Hvc.
+      specialize (Hvc e le m s).
+      unfold handle_MAKEBLOCK2 in Hvc.
+      rewrite Hwfb in Hvc. rewrite Hstk in Hvc.
+      exact (Hvc ard Hrel Hpre).
+  - (* Range guard false: Error "MAKEBLOCK2: malformed operand" *)
+    unfold P_error_of, error_message_of. rewrite Hwfb. reflexivity.
+Qed.
