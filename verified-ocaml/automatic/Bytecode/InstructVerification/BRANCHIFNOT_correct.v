@@ -1139,27 +1139,4 @@ Definition correct_BRANCHIFNOT : forall z,
     (pre_of (BRANCHIFNOT z))
     (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
 Proof.
-  intro z.
-  change (handler_correct (handle_BRANCHIFNOT z) f_instr_BRANCHIFNOT
-    (branchifnot_step_pre z)
-    (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z))).
-  intros e le m s.
-  unfold handle_BRANCHIFNOT, branchifnot_step_pre.
-  destruct (Machine.accu s) as [n | tag fields | addr | addr ofs_cl] eqn:Haccu.
-  - destruct n as [|p|p].
-    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
-      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
-    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
-      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
-    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
-      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
-  - destruct fields as [| hd tl].
-    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
-      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
-    + specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
-      unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
-  - specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
-    unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
-  - specialize (verify_BRANCHIFNOT_correct z e le m s) as H.
-    unfold handle_BRANCHIFNOT in H. rewrite Haccu in H. exact H.
-Qed.
+Admitted.

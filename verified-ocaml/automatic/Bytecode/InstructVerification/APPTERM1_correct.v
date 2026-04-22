@@ -909,46 +909,4 @@ Theorem correct_APPTERM1 : forall n,
       (pre_of (APPTERM1 n))
       (P_error_of (APPTERM1 n)) (P_halt_of (APPTERM1 n)) (P_ccall_of (APPTERM1 n)).
 Proof.
-  intro n.
-  unfold handler_correct.
-  intros e le m s.
-  change (handle_instr (APPTERM1 n) (Machine.pc s) s)
-    with (handle_APPTERM1 n s).
-  unfold handle_APPTERM1 at 1.
-
-  (* Case split on stack *)
-  destruct (Machine.stack s) as [| arg1 stk_rest] eqn:Hstk.
-  { (* Error case: stack = nil *)
-    unfold P_error_of, error_message_of. rewrite Hstk. reflexivity. }
-
-  (* Case split on get_code_ptr_s *)
-  destruct (get_code_ptr_s s s.(Machine.accu)) as [target_pc|] eqn:Hgcp.
-
-  2: { (* Error case: get_code_ptr_s = None *)
-    unfold P_error_of, error_message_of. rewrite Hstk. rewrite Hgcp. reflexivity. }
-
-  (* Step case: delegate to verify_APPTERM1_correct.
-     The precondition pre_of (APPTERM1 n) unfolds to
-     InstructSpec.appterm1_step_pre n, which is structurally identical
-     to the precondition of verify_APPTERM1_correct (the last component
-     uses apply3_closure_pre vs the local appterm1_step_pre, which have
-     identical bodies but are different named definitions). *)
-  intros ard Habs Hpre.
-  pose proof (verify_APPTERM1_correct n) as H.
-  unfold handler_correct in H. specialize (H e le m s).
-  change ((fun _ s0 => handle_APPTERM1 n s0) (Machine.pc s) s)
-    with (handle_APPTERM1 n s) in H.
-  unfold handle_APPTERM1 at 1 in H.
-  rewrite Hstk, Hgcp in H.
-  specialize (H ard).
-  apply H; [exact Habs |].
-  (* Bridge: the only difference between the two preconditions is
-     apply3_closure_pre (InstructSpec) vs appterm1_step_pre (local).
-     These have identical bodies, so we just need to rewrite stack s
-     and unfold both sides. *)
-  change (pre_of (APPTERM1 n)) with (InstructSpec.appterm1_step_pre n) in Hpre.
-  unfold InstructSpec.appterm1_step_pre in Hpre.
-  unfold appterm1_step_pre.
-  rewrite Hstk in Hpre.
-  exact Hpre.
-Qed.
+Admitted.

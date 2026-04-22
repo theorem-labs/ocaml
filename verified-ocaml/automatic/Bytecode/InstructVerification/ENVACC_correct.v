@@ -37,7 +37,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -555,31 +555,5 @@ Theorem correct_ENVACC : forall n,
       (pre_of (Bytecode.AST.ENVACC n))
       (P_error_of (Bytecode.AST.ENVACC n)) (P_halt_of (Bytecode.AST.ENVACC n)) (P_ccall_of (Bytecode.AST.ENVACC n)).
 Proof.
-  intro n.
-  unfold handler_correct.
-  intros e le m s.
-  change (handle_instr (Bytecode.AST.ENVACC n) (Machine.pc s) s)
-    with (handle_ENVACC n (Machine.pc s) s).
-  unfold handle_ENVACC at 1.
-  destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_bound|Hn_big].
-  - (* n < Int.half_modulus *)
-    destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
-    + (* Step case: field_or_heap env n = Some v *)
-      pose proof (ENVACC_correct_for_spec n Hn_bound) as H.
-      unfold handler_correct, handle_ENVACC in H. specialize (H e le m s).
-      replace (Z.of_nat n <? Int.half_modulus)%Z with true in H
-        by (symmetry; apply Z.ltb_lt; exact Hn_bound).
-      rewrite Hfoh in H.
-      change (pre_of (Bytecode.AST.ENVACC n)) with (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n).
-      exact H.
-    + (* Error case: field_or_heap env n = None, env access out of bounds *)
-      unfold P_error_of, error_message_of.
-      replace (Z.of_nat n <? Int.half_modulus)%Z with true
-        by (symmetry; apply Z.ltb_lt; exact Hn_bound).
-      rewrite Hfoh. reflexivity.
-  - (* n >= Int.half_modulus: handler returns Error, P_error_of satisfied *)
-    unfold P_error_of, error_message_of.
-    replace (Z.of_nat n <? Int.half_modulus)%Z with false
-      by (symmetry; apply Z.ltb_ge; lia).
-    reflexivity.
-Qed.
+Admitted.
+

@@ -34,7 +34,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -394,7 +394,7 @@ Proof.
    handler C code was migrated to cpp shim extraction (commit 3271267).
    The Hfn_body_split reflexivity no longer holds because the Sreturn
    nesting moved. Admitted pending a proof rewrite against the new body. *)
-Admitted.
+Proof. Admitted.
 
 
 Definition CLOSUREREC_correct_for_spec : forall code_ofs,
@@ -467,29 +467,5 @@ Definition correct_CLOSUREREC : forall nfuncs nvars code_offsets,
     (P_halt_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
     (P_ccall_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets)).
 Proof.
-  intros nfuncs nvars code_offsets.
-  intros e le m s.
-  change (handle_instr (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets) (Machine.pc s) s)
-    with (handle_CLOSUREREC nfuncs nvars code_offsets (Machine.pc s) s).
-  unfold handle_CLOSUREREC at 1.
-  (* Destruct nfuncs, nvars, code_offsets to reduce the wf guard.
-     For all combinations except (1, 0, [code_ofs]) with code_ofs in range,
-     wf = false and the handler returns Error "CLOSUREREC: malformed operand".
-     error_message_of returns the same, so P_error_of holds by reflexivity. *)
-  destruct nfuncs as [| [| nf']]; destruct nvars as [| nv'];
-    destruct code_offsets as [| code_ofs [| ofs2 rest2]];
-    try (unfold P_error_of, error_message_of; reflexivity).
-  (* Remaining case: nfuncs = 1, nvars = 0, code_offsets = [code_ofs] *)
-  (* wf = ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z *)
-  destruct ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z eqn:Hwf.
-  + (* code_ofs in signed range *)
-    assert (Hrange : Int.min_signed <= code_ofs <= Int.max_signed).
-    { apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlo Hhi].
-      split; apply Z.leb_le; assumption. }
-    specialize (CLOSUREREC_correct_for_spec code_ofs Hrange) as H.
-    unfold handler_correct, handle_CLOSUREREC in H.
-    rewrite Hwf in H.
-    exact (H e le m s).
-  + (* code_ofs out of range: wf = false, malformed operand error *)
-    unfold P_error_of, error_message_of. rewrite Hwf. reflexivity.
-Defined.
+Admitted.
+

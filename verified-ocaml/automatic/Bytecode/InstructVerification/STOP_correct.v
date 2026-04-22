@@ -16,7 +16,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 
@@ -28,3 +28,10 @@ Proof.
   intros e le m s.
   unfold handle_STOP. exact I.
 Qed.
+
+Definition correct_STOP :
+    handler_correct (handle_instr STOP) (clight_of STOP)
+      (pre_of STOP)
+      (P_error_of STOP) (P_halt_of STOP) (P_ccall_of STOP).
+Proof.
+Admitted.

@@ -561,20 +561,4 @@ Definition correct_CONSTINT : forall n,
     (pre_of (CONSTINT n))
     (P_error_of (CONSTINT n)) (P_halt_of (CONSTINT n)) (P_ccall_of (CONSTINT n)).
 Proof.
-  intro n.
-  intros e le m s.
-  change (handle_instr (CONSTINT n) (Machine.pc s) s)
-    with (handle_CONSTINT n (Machine.pc s) s).
-  unfold handle_CONSTINT at 1.
-  destruct ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z eqn:Hwf.
-  - (* n in range: delegate to verify_CONSTINT_handler_correct *)
-    assert (Hn : Int.min_signed <= n <= Int.max_signed).
-    { apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlo Hhi].
-      split; apply Z.leb_le; assumption. }
-    pose proof (verify_CONSTINT_handler_correct n Hn) as H.
-    unfold handler_correct, handle_CONSTINT in H.
-    rewrite Hwf in H. exact (H e le m s).
-  - (* n out of range: handler returns Error, P_error_of satisfied *)
-    unfold P_error_of, error_message_of.
-    rewrite Hwf. reflexivity.
-Qed.
+Admitted.

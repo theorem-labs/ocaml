@@ -64,6 +64,7 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BEQ_corr
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BUGEINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import GETFIELD_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import OFFSETCLOSURE_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHOFFSETCLOSURE_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHGETGLOBAL_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import VECTLENGTH_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ENVACC_correct.

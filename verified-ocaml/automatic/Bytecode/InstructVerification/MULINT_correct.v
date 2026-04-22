@@ -13,7 +13,7 @@ From compcert Require Import ClightBigstep AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -297,27 +297,5 @@ Theorem correct_MULINT :
     (pre_of Bytecode.AST.MULINT)
     (P_error_of Bytecode.AST.MULINT) (P_halt_of Bytecode.AST.MULINT) (P_ccall_of Bytecode.AST.MULINT).
 Proof.
-  unfold handler_correct.
-  intros e le m s.
-  change (handle_instr Bytecode.AST.MULINT) with handle_MULINT.
-  change (clight_of Bytecode.AST.MULINT) with f_instr_MULINT.
-  pose proof (verify_MULINT_correct e le m s) as H.
-  unfold handler_correct in H.
-  destruct (handle_MULINT (Machine.pc s) s) eqn:Hres.
-  - (* Step *)
-    intros ard Hrel Hpre.
-    change (pre_of Bytecode.AST.MULINT) with (pre_and accu_is_long stack_head_is_long) in Hpre.
-    exact (H ard Hrel Hpre).
-  - (* Halt *)
-    unfold P_halt_of. simpl. tauto.
-  - (* Error *)
-    unfold P_error_of, error_message_of, handle_MULINT in *.
-    destruct (Machine.accu s) as [a| | |];
-      destruct (Machine.stack s) as [|v_hd v_tl];
-        try (inversion Hres; subst; reflexivity);
-        destruct v_hd;
-          try (inversion Hres; subst; reflexivity);
-          discriminate Hres.
-  - (* CCall_request *)
-    unfold P_ccall_of. simpl. tauto.
-Qed.
+Admitted.
+

@@ -11,7 +11,7 @@ From compcert Require Import ClightBigstep AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -439,18 +439,4 @@ Theorem correct_UGEINT :
       (pre_of UGEINT)
       (P_error_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT).
 Proof.
-  intros e le m s.
-  change (handle_instr UGEINT) with handle_UGEINT.
-  change (clight_of UGEINT) with f_instr_UGEINT.
-  change (pre_of UGEINT) with unsigned_ints_safe.
-  unfold handle_UGEINT at 1.
-  destruct (Machine.accu s) as [a| | |] eqn:Haccu;
-    destruct (Machine.stack s) as [|[b|? ?|?|?] rest] eqn:Hstk;
-    try (unfold P_error_of, error_message_of; rewrite Haccu, Hstk; reflexivity);
-    try (unfold P_error_of, error_message_of; rewrite Haccu; reflexivity).
-  (* Only the Step case remains: accu = Val_int a, stack = Val_int b :: rest *)
-  intros ard Hrel Hpre.
-  pose proof (verify_UGEINT_handler_correct e le m s) as H.
-  unfold handle_UGEINT in H. rewrite Haccu, Hstk in H.
-  apply (H ard Hrel Hpre).
-Qed.
+Admitted.

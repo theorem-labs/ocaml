@@ -51,7 +51,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -318,7 +318,7 @@ Theorem verify_SWITCH_correct :
    (cpp shim migration, commit 3271267). The proof script below assumed
    a different Ssequence nesting. Admit for now; will be repaired once
    the handler body stabilizes. *)
-Admitted.
+Proof. Admitted.
 
 (* Wrapper with the exact type expected by InstructVerificationProof.v.
    handle_instr (SWITCH n1 n2 l1 l2) computes to
@@ -331,5 +331,5 @@ Definition correct_SWITCH : forall n1 n2 l1 l2,
   handler_correct (handle_instr (Bytecode.AST.SWITCH n1 n2 l1 l2)) (clight_of (Bytecode.AST.SWITCH n1 n2 l1 l2))
     (pre_of (Bytecode.AST.SWITCH n1 n2 l1 l2))
     (P_error_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_halt_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_ccall_of (Bytecode.AST.SWITCH n1 n2 l1 l2)).
-Admitted.
+Proof. Admitted.
 

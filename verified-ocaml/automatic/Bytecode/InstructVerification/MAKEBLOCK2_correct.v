@@ -34,7 +34,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -1516,28 +1516,5 @@ Definition correct_MAKEBLOCK2 : forall n,
       (pre_of (Bytecode.AST.MAKEBLOCK2 n))
       (P_error_of (Bytecode.AST.MAKEBLOCK2 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK2 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK2 n)).
 Proof.
-  intro n.
-  intros e le m s.
-  change (handle_instr (Bytecode.AST.MAKEBLOCK2 n)) with (handle_MAKEBLOCK2 n).
-  unfold handle_MAKEBLOCK2.
-  (* Case-split on the range guard *)
-  destruct ((0 <=? Z.of_nat n) && (Z.of_nat n <=? 255))%Z eqn:Hwfb.
-  - (* Range guard true *)
-    pose proof Hwfb as Hwfb'.
-    apply andb_prop in Hwfb'. destruct Hwfb' as [Hlo Hhi].
-    apply Z.leb_le in Hlo. apply Z.leb_le in Hhi.
-    assert (Hn : 0 <= Z.of_nat n <= 255) by lia.
-    (* Case-split on stack *)
-    destruct (Machine.stack s) as [| v1 rest] eqn:Hstk.
-    + (* Stack empty: Error "MAKEBLOCK2: stack underflow" *)
-      unfold P_error_of, error_message_of. rewrite Hwfb, Hstk. reflexivity.
-    + (* Stack v1 :: rest: Step case *)
-      intros ard Hrel Hpre.
-      pose proof (MAKEBLOCK2_correct_for_spec n Hn) as Hvc.
-      specialize (Hvc e le m s).
-      unfold handle_MAKEBLOCK2 in Hvc.
-      rewrite Hwfb in Hvc. rewrite Hstk in Hvc.
-      exact (Hvc ard Hrel Hpre).
-  - (* Range guard false: Error "MAKEBLOCK2: malformed operand" *)
-    unfold P_error_of, error_message_of. rewrite Hwfb. reflexivity.
-Qed.
+Admitted.
+

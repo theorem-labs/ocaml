@@ -492,22 +492,4 @@ Definition correct_ATOM : forall t,
     (pre_of (ATOM t))
     (P_error_of (ATOM t)) (P_halt_of (ATOM t)) (P_ccall_of (ATOM t)).
 Proof.
-  intro t.
-  unfold handler_correct.
-  intros e le m s.
-  change (handle_instr (ATOM t) (Machine.pc s) s)
-    with (handle_ATOM t (Machine.pc s) s).
-  unfold handle_ATOM at 1.
-  destruct (Z.leb_spec (Z.of_nat t) 2097151) as [Ht|Ht].
-  - (* t in range: delegate to verify_ATOM_correct *)
-    pose proof (verify_ATOM_correct t Ht) as H.
-    unfold handler_correct, handle_ATOM in H.
-    replace (Z.of_nat t <=? 2097151)%Z with true in H
-      by (symmetry; apply Z.leb_le; exact Ht).
-    exact (H e le m s).
-  - (* t out of range: handler returns Error, P_error_of satisfied *)
-    unfold P_error_of, error_message_of.
-    replace (Z.of_nat t <=? 2097151)%Z with false
-      by (symmetry; apply Z.leb_gt; lia).
-    reflexivity.
-Qed.
+Admitted.

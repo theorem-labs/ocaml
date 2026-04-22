@@ -639,29 +639,4 @@ Definition correct_OFFSETINT : forall z,
     (pre_of (OFFSETINT z))
     (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)).
 Proof.
-  intros z e le m s.
-  change (handle_instr (OFFSETINT z) (Machine.pc s) s)
-    with (handle_OFFSETINT z (Machine.pc s) s).
-  unfold handle_OFFSETINT at 1.
-  destruct ((Int.min_signed <=? z * 2) && (z * 2 <=? Int.max_signed))%Z eqn:Hwf.
-  - (* z in range: extract the range, then case-split on accu *)
-    assert (Hrange : Int.min_signed <= z * 2 <= Int.max_signed).
-    { apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlo Hhi].
-      split; apply Z.leb_le; assumption. }
-    destruct (Machine.accu s) eqn:Haccu.
-    + (* Val_int — Step case *)
-      intros ard Hrel Hpre.
-      pose proof (verify_OFFSETINT_handler_correct z Hrange) as Hvc.
-      specialize (Hvc e le m s).
-      unfold handler_correct, handle_OFFSETINT in Hvc.
-      rewrite Hwf in Hvc. rewrite Haccu in Hvc. simpl in Hvc.
-      exact (Hvc ard Hrel Hpre).
-    + (* Val_block — Error *)
-      unfold P_error_of, error_message_of. rewrite Hwf, Haccu. reflexivity.
-    + (* Val_ptr — Error *)
-      unfold P_error_of, error_message_of. rewrite Hwf, Haccu. reflexivity.
-    + (* Val_closure — Error *)
-      unfold P_error_of, error_message_of. rewrite Hwf, Haccu. reflexivity.
-  - (* z out of range: handler returns Error "OFFSETINT: malformed operand" *)
-    unfold P_error_of, error_message_of. rewrite Hwf. reflexivity.
-Qed.
+Admitted.

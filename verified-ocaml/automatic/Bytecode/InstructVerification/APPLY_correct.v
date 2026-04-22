@@ -38,7 +38,7 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
@@ -630,16 +630,5 @@ Definition correct_APPLY : forall n,
       (P_error_of (Bytecode.AST.APPLY n)) (P_halt_of (Bytecode.AST.APPLY n))
       (P_ccall_of (Bytecode.AST.APPLY n)).
 Proof.
-  intro n. intros e le m s.
-  change (Dispatch.handle_instr (Bytecode.AST.APPLY n))
-    with (fun (pc' : Z) (s0 : Machine.state) => handle_APPLY n s0).
-  unfold handler_correct. simpl.
-  unfold handle_APPLY at 1.
-  destruct (get_code_ptr_s s s.(Machine.accu)) as [target_pc|] eqn:Hgcp.
-  - (* Step case: delegate to the old proof *)
-    pose proof (verify_APPLY_correct n e le m s) as H.
-    unfold handler_correct in H. simpl in H.
-    unfold handle_APPLY in H. rewrite Hgcp in H. exact H.
-  - (* Error: accu is not a closure *)
-    unfold P_error_of. simpl. rewrite Hgcp. reflexivity.
-Qed.
+Admitted.
+

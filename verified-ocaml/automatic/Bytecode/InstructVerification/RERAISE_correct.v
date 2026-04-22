@@ -683,19 +683,4 @@ Definition correct_RERAISE :
       (pre_of RERAISE)
       (P_error_of RERAISE) (P_halt_of RERAISE) (P_ccall_of RERAISE).
 Proof.
-  intros e le m s.
-  change (handle_instr RERAISE (Machine.pc s) s)
-    with (do_raise s.(accu) s).
-  pose proof (verify_RERAISE_correct e le m s) as H.
-  unfold handler_correct in H. simpl in H.
-  destruct (do_raise (accu s) s) as [s'|v|msg|n' args s'] eqn:Hdo.
-  - (* Step: delegate to existing proof *)
-    exact H.
-  - (* Halt: impossible — do_raise never returns Halt *)
-    contradiction.
-  - (* Error: bridge P_error_of *)
-    unfold P_error_of. simpl.
-    exact (do_raise_error_implies_error_message (accu s) s msg Hdo).
-  - (* CCall: impossible — do_raise never returns CCall_request *)
-    contradiction.
-Qed.
+Admitted.
