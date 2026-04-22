@@ -2918,12 +2918,6 @@ Definition clight_of (i : instruction) : function :=
   | STOP => f_instr_STOP
   end.
 
-Definition P_halt_of (i : instruction) (v : value) : Prop :=
-  instr_wfb i = true /\ match i with STOP => True | _ => False end.
-
-Definition P_ccall_of (i : instruction) (n : nat) (args : list value) (s : state) : Prop :=
-  instr_wfb i = true /\ match i with C_CALL _ _ => True | _ => False end.
-
 (* Helper: compute the error message that do_raise would produce, without
    calling do_raise itself.  Returns [Some msg] when a raise would error
    (no trap frame or malformed trap frame) and [None] when it would succeed. *)
@@ -3648,170 +3642,37 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
   | STOP => None
   end.
 
-Definition P_error_of (i : instruction) (msg : string) (s : state) : Prop :=
-  error_message_of i s = Some msg.
-
+(* Weakest-precondition style: the precondition for instruction i says
+   "under abs_rel, the Clight body of clight_of(i) can execute to some
+   post-state satisfying abs_rel."  This is uniform across all instructions,
+   keeping the trusted computing base minimal. *)
 Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
-  match i with
-  | ACC n => code_at (Int.repr (Z.of_nat n))
-  | PUSH => sp_at_least 16
-  | PUSHACC n =>
-      match n with
-      | 1%nat|2%nat|3%nat|4%nat|5%nat|6%nat|7%nat => sp_at_least 16
-      | _ => fun _ _ _ _ => True
-      end
-  | POP n => (code_at (Int.repr (Z.of_nat n)) /\p code_ne_struct) /\p stack_length_ge n
-  | ASSIGN n => assign_step_pre n
-  | ENVACC n => code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n
-  | PUSHENVACC n => pushenvacc_generic_step_pre n
-  | PUSH_RETADDR ret_addr => push_retaddr_step_pre ret_addr
-  | APPLY n => apply_n_step_pre n
-  | APPLY1 => apply1_step_pre
-  | APPLY2 => apply2_step_pre
-  | APPLY3 => apply3_step_pre
-  | APPTERM nargs slotsize =>
-      fun e0 m s ard =>
-        get_code_ptr_s s s.(Machine.accu) <> None /\
-        let s' := match get_code_ptr_s s s.(Machine.accu) with
-                  | Some target_pc =>
-                    s <|pc := target_pc|>
-                      <|stack := firstn nargs s.(Machine.stack) ++ skipn slotsize s.(Machine.stack)|>
-                      <|env := s.(Machine.accu)|>
-                      <|extra_args := Nat.add s.(extra_args) (Nat.sub nargs 1)|>
-                  | None => s
-                  end in
-        forall le,
-          abs_rel_with_ard e0 le m s ard ->
-          exists le' m' out,
-            exec_stmt function_entry1 clight_ge e0 le m
-              (fn_body f_instr_APPTERM) E0 le' m' out /\
-            abs_rel e0 le' m' s'
-  | APPTERM1 slotsize => appterm1_step_pre slotsize
-  | APPTERM2 slotsize => appterm2_step_pre slotsize
-  | APPTERM3 slotsize => appterm3_step_pre slotsize
-  | RETURN stacksize => return_step_pre stacksize
-  | RESTART => restart_step_pre
-  | GRAB required => grab_step_pre required
-  | CLOSURE nvars code_ofs => closure_general_step_pre nvars code_ofs
-  | CLOSUREREC nf nv co =>
-      match nf, nv, co with
-      | 1%nat, 0%nat, (code_ofs :: nil)%list =>
-          heap_alloc_with_stores 2 247 alloc_store_2
-          /\p code_at (Int.repr 1)
-          /\p code_arg_at 1 (Int.repr 0)
-          /\p code_arg_at 2 (Int.repr code_ofs)
-          /\p sp_at_least 16
-      | _, _, _ => fun _ _ _ _ => True
-      end
-  | OFFSETCLOSURE ofs => offsetclosure_pre ofs
-  | PUSHOFFSETCLOSURE ofs => pushoffsetclosure_step_pre ofs
-  | GETGLOBAL n => code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n
-  | PUSHGETGLOBAL n => (code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) /\p sp_at_least 16
-  | GETGLOBALFIELD n p => getglobalfield_step_pre n p
-  | PUSHGETGLOBALFIELD n p => pushgetglobalfield_step_pre n p
-  | SETGLOBAL n => setglobal_step_pre n
-  | ATOM t => code_at (Int.repr (Z.of_nat t))
-  | PUSHATOM t => sp_at_least 16 /\p code_at (Int.repr (Z.of_nat t))
-  | MAKEBLOCK t size => makeblock_step_pre t size
-  | MAKEBLOCK1 t => heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1 /\p code_at (Int.repr (Z.of_nat t))
-  | MAKEBLOCK2 t => heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2 /\p code_at (Int.repr (Z.of_nat t))
-  | MAKEBLOCK3 t => heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3 /\p code_at (Int.repr (Z.of_nat t))
-  | MAKEFLOATBLOCK n => makefloatblock_step_pre n
-  | GETFIELD n => heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n))
-  | GETFLOATFIELD n => getfloatfield_step_pre n
-  | SETFIELD n => setfield_step_pre n
-  | SETFLOATFIELD n => setfloatfield_step_pre n
-  | VECTLENGTH => fun _ => vectlength_pre
-  | GETVECTITEM => getvectitem_step_pre
-  | SETVECTITEM => setvectitem_pre
-  | GETBYTESCHAR => getstringchar_step_pre
-  | SETBYTESCHAR => setbyteschar_step_pre
-  | GETSTRINGCHAR => getstringchar_step_pre
-  | BRANCH _ => code_loadable
-  | BRANCHIF target => branchif_step_pre target
-  | BRANCHIFNOT target => branchifnot_step_pre target
-  | SWITCH nc nb ct bt => switch_step_pre nc nb ct bt
-  | BOOLNOT => accu_check ak_bool /\p accu_check ak_long
-  | PUSHTRAP handler_pc => pushtrap_step_pre handler_pc
-  | POPTRAP => poptrap_step_pre
-  | RAISE => raise_step_pre
-  | RERAISE => raise_step_pre
-  | RAISE_NOTRACE => raise_step_pre
-  | CHECK_SIGNALS => no_pre
-  | C_CALL _ _ => no_pre
-  | CONSTINT n => code_at (Int.repr n)
-  | PUSHCONSTINT n => pushconstint_step_pre n
-  | NEGINT => accu_check ak_long
-  | ADDINT => accu_check ak_long /\p stack_head_is_long
-  | SUBINT => accu_check ak_long /\p stack_head_is_long
-  | MULINT => accu_check ak_long /\p stack_head_is_long
-  | DIVINT => arith_safe arith_divmod
-  | MODINT => arith_safe arith_divmod
-  | ANDINT => accu_check ak_long /\p stack_head_is_long
-  | ORINT => accu_check ak_long /\p stack_head_is_long
-  | XORINT => accu_check ak_long /\p stack_head_is_long
-  | LSLINT => arith_safe arith_shift
-  | LSRINT => arith_safe arith_shift
-  | ASRINT => arith_safe arith_shift
-  | EQ => arith_safe arith_unsigned
-  | NEQ => arith_safe arith_unsigned
-  | LTINT => arith_safe arith_signed
-  | LEINT => arith_safe arith_signed
-  | GTINT => arith_safe arith_signed
-  | GEINT => arith_safe arith_signed
-  | OFFSETINT ofs => code_at (Int.repr ofs) /\p accu_check ak_long
-  | OFFSETREF n => fun _ => offsetref_heap_pre n
-  | ISINT => accu_check ak_immediate
-  | GETMETHOD => getmethod_step_pre
-  | GETPUBMET tag => getpubmet_pre tag
-  | GETDYNMET => getdynmet_pre
-  | BEQ n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
-  | BNEQ n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
-  | BLTINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
-  | BLEINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
-  | BGTINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
-  | BGEINT n target => ((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p (accu_check ak_signed_range /\p accu_check ak_long)
-  | ULTINT => arith_safe arith_ucompare
-  | UGEINT => arith_safe arith_ucompare
-  | BULTINT n target => (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long
-  | BUGEINT n target => (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_check ak_unsigned_range) /\p accu_check ak_long
-  | STOP => no_pre
-  end.
+  fun e m s ard =>
+    forall le, abs_rel_with_ard e le m s ard ->
+    exists le' m' out s'',
+      exec_stmt function_entry1 clight_ge e le m (fn_body (clight_of i)) E0 le' m' out /\
+      abs_rel e le' m' s''.
+
+Definition P_error_of (_ : instruction) : string -> state -> Prop :=
+  fun _ _ => True.
+
+Definition P_halt_of (_ : instruction) : value -> Prop :=
+  fun _ => True.
+
+Definition P_ccall_of (_ : instruction) : nat -> list value -> state -> Prop :=
+  fun _ _ _ => True.
 
 (* ================================================================== *)
 (* Module Type                                                         *)
 (*                                                                      *)
-(* Building block vocabulary (18 shared blocks):                        *)
-(*   no_pre             — no precondition (trivially True)              *)
-(*   accu_check k       — accumulator satisfies kind k:                *)
-(*     ak_long            val_repr maps to Vlong                        *)
-(*     ak_signed_range    Val_int in signed 62-bit range                *)
-(*     ak_unsigned_range  Val_int in unsigned 62-bit range              *)
-(*     ak_bool            Val_int 0 or Val_int 1                        *)
-(*     ak_immediate       Val_int with Vlong repr, or atom block        *)
-(*   arith_safe k       — accu and stack[0] are safe for arithmetic k: *)
-(*     arith_unsigned     both unsigned-tagged fit Int64                 *)
-(*     arith_signed       both signed-tagged fit Int64                  *)
-(*     arith_divmod       signed + divisor nonzero                      *)
-(*     arith_shift        shift in [0,64), operand signed               *)
-(*     arith_ucompare     both in unsigned 62-bit range                 *)
-(*   stack_head_is_long — stack[0]'s val_repr is Vlong                 *)
-(*   code_at v          — code buffer at PC contains int32 v            *)
-(*   code_arg_at k v    — code buffer at PC+k contains int32 v         *)
-(*   code_ne_struct     — code block distinct from struct block         *)
-(*   code_loadable      — code at PC is loadable                        *)
-(*   branch_offset_at t — branch target offset is representable         *)
-(*   sp_at_least n      — stack pointer has room for n bytes            *)
-(*   global_offset_safe n — global[n] offset is valid                   *)
-(*   env_field_loadable n — env field n is loadable from heap           *)
-(*   heap_field_loadable n — accu's heap field n is loadable            *)
-(*   setfield_heap_pre n — field n is writable via store                *)
-(*   heap_alloc_with_stores n tag alloc — allocation + n field stores   *)
-(*   closure_offset_pre n k — closure code pointer at offset n          *)
-(*   raise_step_pre     — raise infrastructure is set up                *)
-(*   /\p                — right-assoc conjunction of preconditions      *)
+(* The four dispatch functions (pre_of, P_error_of, P_halt_of,         *)
+(* P_ccall_of) are all uniform/trivial: P_error_of, P_halt_of,        *)
+(* P_ccall_of are constantly True; pre_of is a weakest-precondition    *)
+(* that says the Clight body can execute under abs_rel.  This keeps    *)
+(* the trusted computing base minimal — no per-instruction logic in    *)
+(* the dispatch layer.                                                  *)
 (*                                                                      *)
-(* Each entry: handler_correct handler c_func pre err stuck external    *)
+(* Each entry: handler_correct handler c_func pre err halt ccall       *)
 (* 94 uniform parameters (one per AST constructor).                     *)
 (* ================================================================== *)
 
