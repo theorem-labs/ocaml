@@ -773,6 +773,8 @@ Proof.
   }
 Qed.
 
+Import Bytecode.AST.
+
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Definition correct_SETBYTESCHAR :
     handler_correct (handle_instr SETBYTESCHAR) (clight_of SETBYTESCHAR)
@@ -808,10 +810,15 @@ Proof.
     2: { (* set_nth = None => Error "index out of bounds" *)
       unfold P_error_of, error_message_of. rewrite Hstk, Haccu_eq, Hlookup, Hset. reflexivity. }
     (* Step case: delegate to verify_SETBYTESCHAR_correct *)
-    specialize (verify_SETBYTESCHAR_correct e le m s) as Hold.
-    unfold handler_correct, handle_SETBYTESCHAR in Hold.
-    rewrite Hstk, Haccu_eq, Hlookup, Hset in Hold.
-    exact Hold.
+    intros ard Harel Hpre.
+    unfold pre_of, setbyteschar_step_pre in Hpre.
+    rewrite Hstk in Hpre.
+    change InstructSpec.setbyteschar_heap_pre with setbyteschar_heap_pre in Hpre.
+    pose proof (verify_SETBYTESCHAR_correct e le m s) as H.
+    unfold handler_correct, handle_SETBYTESCHAR in H.
+    rewrite Hstk, Haccu_eq, Hlookup, Hset in H.
+    cbv beta in H.
+    exact (H ard Harel Hpre).
   - (* Val_closure => Error "not a heap bytes" *)
     unfold P_error_of, error_message_of. rewrite Hstk, Haccu_eq. reflexivity.
 Qed.
