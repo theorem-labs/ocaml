@@ -173,6 +173,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_ENVACC_correct : forall n,
+    Z.of_nat n < Int.half_modulus ->
     handler_correct (handle_ENVACC n) f_instr_ENVACC
       (fun e m s ard =>
          (* The code buffer contains Int.repr (Z.of_nat n) at the current PC position *)
@@ -180,25 +181,17 @@ Theorem verify_ENVACC_correct : forall n,
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
               (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
          = Some (Vint (Int.repr (Z.of_nat n))) /\
-         (* n fits in the signed int32 range *)
-         Z.of_nat n < Int.half_modulus /\
          (* env field n is loadable in C memory *)
          env_field_loadable n e m s ard)
       (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro n.
+  intros n Hn_range.
   intros e le m s.
   unfold handler_correct, handle_ENVACC.
-
-  (* The Z.ltb guard is outermost; destruct it first *)
-  destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_lt|Hn_ge].
-
-  2: {
-    (* n >= Int.half_modulus: handler returns Error "malformed operand",
-       P_error is trivially True *)
-    exact I.
-  }
+  (* Resolve the well-formedness guard using the range hypothesis *)
+  replace (Z.of_nat n <? Int.half_modulus)%Z with true
+    by (symmetry; apply Z.ltb_lt; lia).
 
   (* Case split on field_or_heap *)
   destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
@@ -231,7 +224,8 @@ Proof.
       [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable).
     subst sp_ptr.
 
-    destruct Hstep_pre as (Hcode_load & Hn_bound & Hefl).
+    destruct Hstep_pre as (Hcode_load & Hefl).
+    pose proof Hn_range as Hn_bound.
 
     (* Structural invariants *)
     pose proof (sptr_ofs_representable ard) as Hso_bound. fold so in Hso_bound.
@@ -546,8 +540,8 @@ Definition ENVACC_correct_for_spec : forall n, Z.of_nat n < Int.half_modulus ->
   Proof.
     intros n Hrange.
     eapply handler_correct_weaken.
-    - exact (verify_ENVACC_correct n).
-    - intros e le m s ard _ [Hcode Henv]. exact (conj Hcode (conj Hrange Henv)).
+    - exact (verify_ENVACC_correct n Hrange).
+    - intros e le m s ard _ [Hcode Henv]. exact (conj Hcode Henv).
   Qed.
 
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
