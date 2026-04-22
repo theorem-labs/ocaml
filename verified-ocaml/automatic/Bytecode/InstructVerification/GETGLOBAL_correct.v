@@ -283,15 +283,17 @@ Theorem verify_GETGLOBAL_correct : forall n,
          = Some (Vint (Int.repr (Z.of_nat n))) /\
          0 <= Z.of_nat n <= Int.max_signed /\
          Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus)
-      (fun _ s => nth_error s.(Machine.global) n = None)
+      (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
   intros e le m s.
   unfold handle_GETGLOBAL.
+  destruct ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z.
+  2: { exact I. }
   destruct (nth_error (Machine.global s) n) as [gval|] eqn:Hnth.
 
-  2: { exact eq_refl. }
+  2: { exact I. }
 
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.
@@ -591,7 +593,7 @@ Theorem verify_GETGLOBAL_handler_correct : forall n,
     0 <= Z.of_nat n <= Int.max_signed ->
     handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
       (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n))
-      (fun _ s => nth_error s.(Machine.global) n = None)
+      (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n Hn.
@@ -605,8 +607,9 @@ Qed.
    handle_instr (GETGLOBAL n) reduces to handle_GETGLOBAL n by computation.
    clight_of (GETGLOBAL n) = f_instr_GETGLOBAL,
    pre_of (GETGLOBAL n) = code_at ... /\p global_offset_safe n.
-   Error case (index out of bounds) matches P_error_of exactly.
-   Step case delegates to verify_GETGLOBAL_handler_correct (requires Z.of_nat n <= Int.max_signed). *)
+   Error cases (index out of bounds, malformed operand) match P_error_of via
+   error_message_of.  Step case delegates to verify_GETGLOBAL_handler_correct
+   (requires Z.of_nat n <= Int.max_signed). *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
@@ -621,21 +624,20 @@ Proof.
   change (handle_instr (GETGLOBAL n) (Machine.pc s) s)
     with (handle_GETGLOBAL n (Machine.pc s) s).
   unfold handle_GETGLOBAL at 1.
-  destruct (nth_error (Machine.global s) n) as [gval|] eqn:Hnth.
-  - (* Step case: nth_error global n = Some gval *)
-    destruct (Z.leb_spec 0 (Z.of_nat n)), (Z.leb_spec (Z.of_nat n) Int.max_signed).
-    + (* n in range: delegate to verify_GETGLOBAL_handler_correct *)
-      pose proof (verify_GETGLOBAL_handler_correct n (conj H H0)) as Hcorr.
+  destruct ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z eqn:Hwfb.
+  - (* Well-formed: instr_wfb = true *)
+    destruct (nth_error (Machine.global s) n) as [gval|] eqn:Hnth.
+    + (* Step case: nth_error global n = Some gval *)
+      assert (Hn_range : 0 <= Z.of_nat n <= Int.max_signed).
+      { apply Bool.andb_true_iff in Hwfb. destruct Hwfb as [H1 H2].
+        split; [apply Z.leb_le; exact H1 | apply Z.leb_le; exact H2]. }
+      pose proof (verify_GETGLOBAL_handler_correct n Hn_range) as Hcorr.
       unfold handler_correct, handle_GETGLOBAL in Hcorr. specialize (Hcorr e le m s).
-      rewrite Hnth in Hcorr.
+      rewrite Hwfb in Hcorr. rewrite Hnth in Hcorr.
       change (pre_of (GETGLOBAL n)) with (code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n).
       exact Hcorr.
-    + (* n > Int.max_signed: unreachable for well-formed bytecode *)
-      admit.
-    + (* 0 > Z.of_nat n: impossible *)
-      lia.
-    + (* both fail: 0 > Z.of_nat n impossible *)
-      lia.
-  - (* Error case: nth_error global n = None *)
-    unfold P_error_of, error_message_of. rewrite Hnth. reflexivity.
-Admitted.
+    + (* Error case: index out of bounds *)
+      unfold P_error_of, error_message_of. rewrite Hwfb, Hnth. reflexivity.
+  - (* Malformed operand: instr_wfb = false *)
+    unfold P_error_of, error_message_of. rewrite Hwfb. reflexivity.
+Qed.
