@@ -173,7 +173,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_MAKEBLOCK1_correct : forall t,
+Theorem verify_MAKEBLOCK1_correct : forall t, 0 <= Z.of_nat t <= 255 ->
     handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
@@ -227,9 +227,13 @@ Theorem verify_MAKEBLOCK1_correct : forall t,
                     Mem.load chunk m_store b ofs = Some v))))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro t.
+  intros t Ht_range_hyp.
   intros e le m s.
-  unfold handle_MAKEBLOCK1. simpl.
+  unfold handle_MAKEBLOCK1.
+  (* Rewrite the boolean guard to true using the range hypothesis *)
+  assert (Hwf_true : ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z = true).
+  { apply Bool.andb_true_iff. split; apply Z.leb_le; lia. }
+  rewrite Hwf_true. simpl.
 
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.
@@ -1142,7 +1146,7 @@ Definition MAKEBLOCK1_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
   Proof.
     intros t Hrange. eapply handler_correct_weaken.
-    - exact (verify_MAKEBLOCK1_correct t).
+    - exact (verify_MAKEBLOCK1_correct t Hrange).
     - intros e le m s ard _ [[Hhap Hsu] Hcode].
       unfold heap_alloc_pre in Hhap.
       destruct Hhap as (H0 & H2 & H3 & H4 & H5).
@@ -1157,14 +1161,10 @@ Definition MAKEBLOCK1_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
 
 (* Wrapper with the canonical type expected by InstructVerificationProof.v.
 
-   handle_instr (MAKEBLOCK1 n) computes to handle_MAKEBLOCK1 n,
-   which always returns Step (no error/halt/ccall cases).
-
-   The existing proof (MAKEBLOCK1_correct_for_spec) requires
-   0 <= Z.of_nat n <= 255 because the C handler casts the tag
-   to unsigned char, truncating tags > 255.  The canonical pre_of
-   does not include this guard; in practice the bytecode decoder
-   only produces in-range tags.  The range is admitted. *)
+   handle_instr (MAKEBLOCK1 n) computes to handle_MAKEBLOCK1 n.
+   The handler checks instr_wfb (tag in 0..255):
+   - true  -> returns Step; delegate to MAKEBLOCK1_correct_for_spec
+   - false -> returns Error; P_error_of is satisfied by error_message_of *)
 Definition correct_MAKEBLOCK1 : forall n,
     handler_correct (handle_instr (Bytecode.AST.MAKEBLOCK1 n)) (clight_of (Bytecode.AST.MAKEBLOCK1 n))
       (pre_of (Bytecode.AST.MAKEBLOCK1 n))
@@ -1175,19 +1175,19 @@ Proof.
   change (handle_instr (Bytecode.AST.MAKEBLOCK1 n) (Machine.pc s) s)
     with (handle_MAKEBLOCK1 n (Machine.pc s) s).
   unfold handle_MAKEBLOCK1 at 1.
-  (* let '(s', ptr) := heap_alloc s n [accu s] in Step (...)
-     always produces Step; reduce to expose the Step branch *)
-  simpl.
-  (* Now in the Step branch of handler_correct *)
-  assert (Hn : 0 <= Z.of_nat n <= 255).
-  { (* TODO: the canonical pre_of does not include this guard;
-       it should be supplied by instr_wfb or the bytecode loader.
-       Admitted for now. *)
-    admit. }
-  intros ard Hrel Hpre.
-  pose proof (MAKEBLOCK1_correct_for_spec n Hn) as Hvc.
-  specialize (Hvc e le m s).
-  unfold handler_correct, handle_MAKEBLOCK1 in Hvc.
-  simpl in Hvc.
-  exact (Hvc ard Hrel Hpre).
-Admitted.
+  destruct ((0 <=? Z.of_nat n) && (Z.of_nat n <=? 255))%Z eqn:Hwf.
+  - (* Tag in range: delegate to MAKEBLOCK1_correct_for_spec *)
+    unfold heap_alloc. simpl.
+    assert (Hn : 0 <= Z.of_nat n <= 255).
+    { apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlo Hhi].
+      split; [apply Z.leb_le; exact Hlo | apply Z.leb_le; exact Hhi]. }
+    intros ard Hrel Hpre.
+    pose proof (MAKEBLOCK1_correct_for_spec n Hn) as Hvc.
+    specialize (Hvc e le m s).
+    unfold handler_correct, handle_MAKEBLOCK1 in Hvc.
+    rewrite Hwf in Hvc. unfold heap_alloc in Hvc. simpl in Hvc.
+    exact (Hvc ard Hrel Hpre).
+  - (* Tag out of range: handler returns Error, P_error_of satisfied *)
+    unfold P_error_of, error_message_of.
+    rewrite Hwf. reflexivity.
+Qed.
