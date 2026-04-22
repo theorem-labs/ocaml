@@ -236,6 +236,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_OFFSETINT_correct : forall ofs,
+    Int.min_signed <= ofs * 2 <= Int.max_signed ->
     handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
       (fun e m s ard =>
          (exists (i : int),
@@ -249,9 +250,14 @@ Theorem verify_OFFSETINT_correct : forall ofs,
       (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro ofs.
+  intro ofs. intro Hrange_ofs.
   intros e le m s.
   unfold handler_correct, handle_OFFSETINT.
+
+  (* The wfb guard is true by Hrange_ofs *)
+  assert (Hwf : ((Int.min_signed <=? ofs * 2) && (ofs * 2 <=? Int.max_signed))%Z = true).
+  { apply Bool.andb_true_iff. split; apply Z.leb_le; lia. }
+  rewrite Hwf.
 
   (* Case split on accu *)
   destruct (Machine.accu s) as [a | | | ] eqn:Haccu_eq;
@@ -595,7 +601,7 @@ Proof.
          Int.signed i = ofs /\
          Int.min_signed <= Int.signed i * 2 <= Int.max_signed) /\
        accu_is_long e m s ard).
-  - exact (verify_OFFSETINT_correct ofs).
+  - exact (verify_OFFSETINT_correct ofs Hrange).
   - intros e le m s ard _ Hca.
     unfold pre_and in Hca. destruct Hca as [Hcode Haccu_long].
     unfold code_at in Hcode.
@@ -619,13 +625,12 @@ Qed.
    are convertible with handle_OFFSETINT z / f_instr_OFFSETINT /
    pre_and (code_at (Int.repr z)) accu_is_long.
 
-   The Step case (accu = Val_int) delegates to verify_OFFSETINT_handler_correct
-   after asserting the range constraint Int.min_signed <= z * 2 <= Int.max_signed.
-   This is Admitted because pre_of does not include the range guard; in practice
-   the bytecode decoder only produces in-range operands and instr_wfb filters
-   out-of-range values.
-
-   Error cases (non-integer accu) are fully proved. *)
+   The proof destructs the instr_wfb boolean guard first:
+   - When z * 2 is in range: the Step case (accu = Val_int) delegates to
+     verify_OFFSETINT_handler_correct. Error cases (non-integer accu) are
+     proved via P_error_of / error_message_of reflexivity.
+   - When z * 2 is out of range: the handler returns Error "OFFSETINT:
+     malformed operand", matching error_message_of exactly. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
@@ -638,23 +643,25 @@ Proof.
   change (handle_instr (OFFSETINT z) (Machine.pc s) s)
     with (handle_OFFSETINT z (Machine.pc s) s).
   unfold handle_OFFSETINT at 1.
-  destruct (Machine.accu s) eqn:Haccu.
-  - (* Val_int z0 — Step case; need z range for C shift correctness *)
+  destruct ((Int.min_signed <=? z * 2) && (z * 2 <=? Int.max_signed))%Z eqn:Hwf.
+  - (* z in range: extract the range, then case-split on accu *)
     assert (Hrange : Int.min_signed <= z * 2 <= Int.max_signed).
-    { (* TODO: the canonical pre_of does not include this guard;
-         it should be supplied by instr_wfb or the bytecode loader.
-         Admitted for now. *)
-      admit. }
-    intros ard Hrel Hpre.
-    pose proof (verify_OFFSETINT_handler_correct z Hrange) as Hvc.
-    specialize (Hvc e le m s).
-    unfold handler_correct, handle_OFFSETINT in Hvc.
-    rewrite Haccu in Hvc. simpl in Hvc.
-    exact (Hvc ard Hrel Hpre).
-  - (* Val_block — Error *)
-    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
-  - (* Val_ptr — Error *)
-    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
-  - (* Val_closure — Error *)
-    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
-Admitted.
+    { apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlo Hhi].
+      split; apply Z.leb_le; assumption. }
+    destruct (Machine.accu s) eqn:Haccu.
+    + (* Val_int — Step case *)
+      intros ard Hrel Hpre.
+      pose proof (verify_OFFSETINT_handler_correct z Hrange) as Hvc.
+      specialize (Hvc e le m s).
+      unfold handler_correct, handle_OFFSETINT in Hvc.
+      rewrite Hwf in Hvc. rewrite Haccu in Hvc. simpl in Hvc.
+      exact (Hvc ard Hrel Hpre).
+    + (* Val_block — Error *)
+      unfold P_error_of, error_message_of. rewrite Hwf, Haccu. reflexivity.
+    + (* Val_ptr — Error *)
+      unfold P_error_of, error_message_of. rewrite Hwf, Haccu. reflexivity.
+    + (* Val_closure — Error *)
+      unfold P_error_of, error_message_of. rewrite Hwf, Haccu. reflexivity.
+  - (* z out of range: handler returns Error "OFFSETINT: malformed operand" *)
+    unfold P_error_of, error_message_of. rewrite Hwf. reflexivity.
+Qed.
