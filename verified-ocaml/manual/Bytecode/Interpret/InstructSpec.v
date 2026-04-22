@@ -2956,34 +2956,44 @@ Fixpoint scan_method_table (tag : value) (remaining : list value)
    and [None] when it does not error. *)
 Definition error_message_of (i : instruction) (s : state) : option string :=
   match i with
-  (* ACC: stack underflow *)
+  (* ACC: malformed operand or stack underflow *)
   | ACC n =>
-    match nth_error s.(stack) n with
-    | Some _ => None
-    | None => Some "ACC: stack underflow"
-    end
+    if (Z.of_nat n <? Int.half_modulus)%Z then
+      match nth_error s.(stack) n with
+      | Some _ => None
+      | None => Some "ACC: stack underflow"
+      end
+    else Some "ACC: malformed operand"
   (* PUSH: never errors *)
   | PUSH => None
-  (* PUSHACC: stack underflow *)
+  (* PUSHACC: malformed operand or stack underflow *)
   | PUSHACC n =>
-    match nth_error (s.(accu) :: s.(stack)) n with
-    | Some _ => None
-    | None => Some "PUSHACC: stack underflow"
+    match n with
+    | 1%nat|2%nat|3%nat|4%nat|5%nat|6%nat|7%nat =>
+      match nth_error (s.(accu) :: s.(stack)) n with
+      | Some _ => None
+      | None => Some "PUSHACC: stack underflow"
+      end
+    | _ => Some "PUSHACC: malformed operand"
     end
-  (* POP: never errors *)
-  | POP _ => None
+  (* POP: malformed operand *)
+  | POP n =>
+    if (Z.of_nat n <? Int.half_modulus)%Z then None
+    else Some "POP: malformed operand"
   (* ASSIGN: stack underflow *)
   | ASSIGN n =>
     match set_nth s.(stack) n s.(accu) with
     | Some _ => None
     | None => Some "ASSIGN: stack underflow"
     end
-  (* ENVACC: env access out of bounds *)
+  (* ENVACC: malformed operand or env access out of bounds *)
   | ENVACC n =>
-    match field_or_heap s s.(env) n with
-    | Some _ => None
-    | None => Some "ENVACC: env access out of bounds"
-    end
+    if (Z.of_nat n <? Int.half_modulus)%Z then
+      match field_or_heap s s.(env) n with
+      | Some _ => None
+      | None => Some "ENVACC: env access out of bounds"
+      end
+    else Some "ENVACC: malformed operand"
   (* PUSHENVACC: env access out of bounds *)
   | PUSHENVACC n =>
     match field_or_heap s s.(env) n with
@@ -3111,14 +3121,25 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
       | Val_int _ :: _ :: Val_int _ :: _ => None
       | _ => Some "GRAB: malformed return frame"
       end
-  (* CLOSURE: never errors *)
-  | CLOSURE _ _ => None
-  (* CLOSUREREC: no code offsets *)
-  | CLOSUREREC _ _ code_offsets =>
-    match code_offsets with
-    | [] => Some "CLOSUREREC: no code offsets"
-    | _ => None
-    end
+  (* CLOSURE: malformed operand *)
+  | CLOSURE nvars code_ofs =>
+    if ((0 <=? Z.of_nat (2 + nvars)) && (Z.of_nat (2 + nvars) <=? Int.max_signed) &&
+        (Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z then None
+    else Some "CLOSURE: malformed operand"
+  (* CLOSUREREC: malformed operand or no code offsets *)
+  | CLOSUREREC nf nv code_offsets =>
+    let wf :=
+      match nf, nv, code_offsets with
+      | 1%nat, 0%nat, (code_ofs :: nil)%list =>
+          ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
+      | _, _, _ => false
+      end in
+    if wf then
+      match code_offsets with
+      | [] => Some "CLOSUREREC: no code offsets"
+      | _ => None
+      end
+    else Some "CLOSUREREC: malformed operand"
   (* OFFSETCLOSURE: errors when env is invalid *)
   | OFFSETCLOSURE ofs =>
     match s.(env) with
@@ -3137,18 +3158,22 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
       else Some "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"
     | _ => Some "PUSHOFFSETCLOSURE: invalid env"
     end
-  (* GETGLOBAL: index out of bounds *)
+  (* GETGLOBAL: malformed operand or index out of bounds *)
   | GETGLOBAL n =>
-    match nth_error s.(global) n with
-    | Some _ => None
-    | None => Some "GETGLOBAL: index out of bounds"
-    end
-  (* PUSHGETGLOBAL: index out of bounds *)
+    if ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z then
+      match nth_error s.(global) n with
+      | Some _ => None
+      | None => Some "GETGLOBAL: index out of bounds"
+      end
+    else Some "GETGLOBAL: malformed operand"
+  (* PUSHGETGLOBAL: malformed operand or index out of bounds *)
   | PUSHGETGLOBAL n =>
-    match nth_error s.(global) n with
-    | Some _ => None
-    | None => Some "PUSHGETGLOBAL: index out of bounds"
-    end
+    if ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z then
+      match nth_error s.(global) n with
+      | Some _ => None
+      | None => Some "PUSHGETGLOBAL: index out of bounds"
+      end
+    else Some "PUSHGETGLOBAL: malformed operand"
   (* GETGLOBALFIELD: index out of bounds or field access failed *)
   | GETGLOBALFIELD n p =>
     match nth_error s.(global) n with
@@ -3171,34 +3196,50 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
     end
   (* SETGLOBAL: never errors *)
   | SETGLOBAL _ => None
-  (* ATOM: never errors *)
-  | ATOM _ => None
-  (* PUSHATOM: never errors *)
-  | PUSHATOM _ => None
-  (* MAKEBLOCK: never errors *)
-  | MAKEBLOCK _ _ => None
-  (* MAKEBLOCK1: never errors *)
-  | MAKEBLOCK1 _ => None
-  (* MAKEBLOCK2: stack underflow *)
-  | MAKEBLOCK2 _ =>
-    match s.(stack) with
-    | _ :: _ => None
-    | _ => Some "MAKEBLOCK2: stack underflow"
-    end
-  (* MAKEBLOCK3: stack underflow *)
-  | MAKEBLOCK3 _ =>
-    match s.(stack) with
-    | _ :: _ :: _ => None
-    | _ => Some "MAKEBLOCK3: stack underflow"
-    end
-  (* MAKEFLOATBLOCK: never errors *)
-  | MAKEFLOATBLOCK _ => None
-  (* GETFIELD: access failed *)
+  (* ATOM: malformed operand *)
+  | ATOM t =>
+    if (Z.of_nat t <=? 2097151)%Z then None
+    else Some "ATOM: malformed operand"
+  (* PUSHATOM: malformed operand *)
+  | PUSHATOM t =>
+    if (Z.of_nat t <=? 2097151)%Z then None
+    else Some "PUSHATOM: malformed operand"
+  (* MAKEBLOCK: malformed operand *)
+  | MAKEBLOCK _ size =>
+    if (1 <=? size)%nat then None
+    else Some "MAKEBLOCK: malformed operand"
+  (* MAKEBLOCK1: malformed operand *)
+  | MAKEBLOCK1 t =>
+    if ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z then None
+    else Some "MAKEBLOCK1: malformed operand"
+  (* MAKEBLOCK2: malformed operand or stack underflow *)
+  | MAKEBLOCK2 t =>
+    if ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z then
+      match s.(stack) with
+      | _ :: _ => None
+      | _ => Some "MAKEBLOCK2: stack underflow"
+      end
+    else Some "MAKEBLOCK2: malformed operand"
+  (* MAKEBLOCK3: malformed operand or stack underflow *)
+  | MAKEBLOCK3 t =>
+    if ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z then
+      match s.(stack) with
+      | _ :: _ :: _ => None
+      | _ => Some "MAKEBLOCK3: stack underflow"
+      end
+    else Some "MAKEBLOCK3: malformed operand"
+  (* MAKEFLOATBLOCK: malformed operand *)
+  | MAKEFLOATBLOCK n =>
+    if (1 <=? n)%nat then None
+    else Some "MAKEFLOATBLOCK: malformed operand"
+  (* GETFIELD: malformed operand or access failed *)
   | GETFIELD n =>
-    match field_or_heap s s.(accu) n with
-    | Some _ => None
-    | None => Some "GETFIELD: access failed"
-    end
+    if ((Int.min_signed <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z then
+      match field_or_heap s s.(accu) n with
+      | Some _ => None
+      | None => Some "GETFIELD: access failed"
+      end
+    else Some "GETFIELD: malformed operand"
   (* GETFLOATFIELD: access failed *)
   | GETFLOATFIELD n =>
     match field_or_heap s s.(accu) n with
@@ -3349,8 +3390,10 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
   | CHECK_SIGNALS => None
   (* C_CALL: never errors (returns CCall_request) *)
   | C_CALL _ _ => None
-  (* CONSTINT: never errors *)
-  | CONSTINT _ => None
+  (* CONSTINT: malformed operand *)
+  | CONSTINT n =>
+    if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then None
+    else Some "CONSTINT: malformed operand"
   (* PUSHCONSTINT: never errors *)
   | PUSHCONSTINT _ => None
   (* NEGINT: not an integer *)
@@ -3465,12 +3508,14 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
     | Val_int _, Val_int _ :: _ => None
     | _, _ => Some "GEINT: type error or stack underflow"
     end
-  (* OFFSETINT: not an integer *)
-  | OFFSETINT _ =>
-    match s.(accu) with
-    | Val_int _ => None
-    | _ => Some "OFFSETINT: not an integer"
-    end
+  (* OFFSETINT: malformed operand or not an integer *)
+  | OFFSETINT ofs =>
+    if ((Int.min_signed <=? ofs * 2) && (ofs * 2 <=? Int.max_signed))%Z then
+      match s.(accu) with
+      | Val_int _ => None
+      | _ => Some "OFFSETINT: not an integer"
+      end
+    else Some "OFFSETINT: malformed operand"
   (* OFFSETREF: not a ref *)
   | OFFSETREF _ =>
     match s.(accu) with
@@ -3534,34 +3579,46 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
       end
     | _ => Some "GETDYNMET: stack underflow"
     end
-  (* BEQ: never errors *)
-  | BEQ _ _ => None
-  (* BNEQ: never errors *)
-  | BNEQ _ _ => None
-  (* BLTINT: not an integer *)
-  | BLTINT _ _ =>
-    match s.(accu) with
-    | Val_int _ => None
-    | _ => Some "BLTINT: not an integer"
-    end
-  (* BLEINT: not an integer *)
-  | BLEINT _ _ =>
-    match s.(accu) with
-    | Val_int _ => None
-    | _ => Some "BLEINT: not an integer"
-    end
-  (* BGTINT: not an integer *)
-  | BGTINT _ _ =>
-    match s.(accu) with
-    | Val_int _ => None
-    | _ => Some "BGTINT: not an integer"
-    end
-  (* BGEINT: not an integer *)
-  | BGEINT _ _ =>
-    match s.(accu) with
-    | Val_int _ => None
-    | _ => Some "BGEINT: not an integer"
-    end
+  (* BEQ: malformed operand *)
+  | BEQ n _ =>
+    if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then None
+    else Some "BEQ: malformed operand"
+  (* BNEQ: malformed operand *)
+  | BNEQ n _ =>
+    if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then None
+    else Some "BNEQ: malformed operand"
+  (* BLTINT: malformed operand or not an integer *)
+  | BLTINT n _ =>
+    if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+      match s.(accu) with
+      | Val_int _ => None
+      | _ => Some "BLTINT: not an integer"
+      end
+    else Some "BLTINT: malformed operand"
+  (* BLEINT: malformed operand or not an integer *)
+  | BLEINT n _ =>
+    if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+      match s.(accu) with
+      | Val_int _ => None
+      | _ => Some "BLEINT: not an integer"
+      end
+    else Some "BLEINT: malformed operand"
+  (* BGTINT: malformed operand or not an integer *)
+  | BGTINT n _ =>
+    if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+      match s.(accu) with
+      | Val_int _ => None
+      | _ => Some "BGTINT: not an integer"
+      end
+    else Some "BGTINT: malformed operand"
+  (* BGEINT: malformed operand or not an integer *)
+  | BGEINT n _ =>
+    if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+      match s.(accu) with
+      | Val_int _ => None
+      | _ => Some "BGEINT: not an integer"
+      end
+    else Some "BGEINT: malformed operand"
   (* ULTINT: type error or stack underflow *)
   | ULTINT =>
     match s.(accu), s.(stack) with
@@ -3574,18 +3631,22 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
     | Val_int _, Val_int _ :: _ => None
     | _, _ => Some "UGEINT: type error or stack underflow"
     end
-  (* BULTINT: not an integer *)
-  | BULTINT _ _ =>
-    match s.(accu) with
-    | Val_int _ => None
-    | _ => Some "BULTINT: not an integer"
-    end
-  (* BUGEINT: not an integer *)
-  | BUGEINT _ _ =>
-    match s.(accu) with
-    | Val_int _ => None
-    | _ => Some "BUGEINT: not an integer"
-    end
+  (* BULTINT: malformed operand or not an integer *)
+  | BULTINT n _ =>
+    if ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+      match s.(accu) with
+      | Val_int _ => None
+      | _ => Some "BULTINT: not an integer"
+      end
+    else Some "BULTINT: malformed operand"
+  (* BUGEINT: malformed operand or not an integer *)
+  | BUGEINT n _ =>
+    if ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+      match s.(accu) with
+      | Val_int _ => None
+      | _ => Some "BUGEINT: not an integer"
+      end
+    else Some "BUGEINT: malformed operand"
   (* STOP: never errors (returns Halt) *)
   | STOP => None
   end.
