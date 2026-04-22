@@ -217,6 +217,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_POP_correct : forall n,
+    Z.of_nat n < Int.half_modulus ->
     handler_correct (handle_POP n) f_instr_POP
       (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
@@ -237,9 +238,12 @@ Theorem verify_POP_correct : forall n,
          (n <= Datatypes.length (Machine.stack s))%nat)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro n.
+  intro n. intro Hn_range_hyp.
   intros e le m s.
-  unfold handler_correct, handle_POP. simpl.
+  unfold handler_correct, handle_POP.
+  replace (Z.of_nat n <? Int.half_modulus)%Z with true.
+  2: { symmetry. apply Z.ltb_lt. exact Hn_range_hyp. }
+  simpl.
 
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.
@@ -581,7 +585,7 @@ Theorem verify_POP_handler_correct : forall n,
 Proof.
   intros n Hn.
   eapply handler_correct_weaken.
-  - exact (verify_POP_correct n).
+  - exact (verify_POP_correct n Hn).
   - intros e le m s ard Hrel [[Hca Hne] Hslg].
     unfold stack_length_ge in Hslg.
     split. { exact Hca. }
@@ -618,15 +622,16 @@ Proof.
   intros e le m s.
   change (handle_instr (POP n)) with (handle_POP n).
   unfold handle_POP.
-  (* handle_POP always returns Step, so Error/Halt/CCall branches are dead *)
-  intros ard Hrel Hpre.
-  assert (Hn : Z.of_nat n < Int.half_modulus).
-  { (* TODO: the canonical pre_of does not include this guard;
-       it should be supplied by instr_wfb or the bytecode loader.
-       Admitted for now. *)
-    admit. }
-  pose proof (verify_POP_handler_correct n Hn) as Hvc.
-  specialize (Hvc e le m s).
-  unfold handler_correct, handle_POP in Hvc.
-  exact (Hvc ard Hrel Hpre).
-Admitted.
+  destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn|Hn].
+  - (* n < half_modulus: delegate to verify_POP_handler_correct *)
+    pose proof (verify_POP_handler_correct n Hn) as Hvc.
+    unfold handler_correct, handle_POP in Hvc. specialize (Hvc e le m s).
+    replace (Z.of_nat n <? Int.half_modulus)%Z with true in Hvc
+      by (symmetry; apply Z.ltb_lt; exact Hn).
+    exact Hvc.
+  - (* n >= half_modulus: handler returns Error, P_error_of satisfied *)
+    unfold P_error_of, error_message_of.
+    replace (Z.of_nat n <? Int.half_modulus)%Z with false.
+    + reflexivity.
+    + symmetry. apply Z.ltb_ge. lia.
+Qed.

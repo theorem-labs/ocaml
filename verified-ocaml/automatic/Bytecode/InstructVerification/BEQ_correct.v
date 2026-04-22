@@ -239,6 +239,7 @@ Local Ltac read_pc_from_struct Hle co_is Hco Hpc_offset Hload :=
 (* ================================================================== *)
 
 Theorem verify_BEQ_correct : forall n target,
+    Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BEQ n target) f_instr_BEQ
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
@@ -265,8 +266,11 @@ Theorem verify_BEQ_correct : forall n target,
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros n target e le m s.
+  intros n target Hn_range_hyp. intros e le m s.
   unfold handle_BEQ.
+  replace ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z with true.
+  2: { symmetry. apply Bool.andb_true_iff. split;
+       apply Z.leb_le; lia. }
   destruct (Machine.accu s) as [a | tag fields | addr | addr ofs_cl] eqn:Haccu_eq.
 
   (* ================================================================ *)
@@ -804,7 +808,7 @@ Theorem verify_BEQ_handler_correct : forall n target,
 Proof.
   intros n target Hn.
   eapply handler_correct_weaken.
-  - exact (verify_BEQ_correct n target).
+  - exact (verify_BEQ_correct n target Hn).
   - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
     exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
 Qed.
@@ -825,24 +829,20 @@ Proof.
   intros z1 z2. intros e le m s.
   change (handle_instr (Bytecode.AST.BEQ z1 z2)) with (handle_BEQ z1 z2).
   unfold handle_BEQ at 1.
-  destruct (Machine.accu s) eqn:Haccu;
-    [ destruct (z =? z1)%Z eqn:Heqb | | | ];
-    simpl;
-    try (intros ard _ Hpre;
-         destruct Hpre as [_ [Hai _]];
-         unfold accu_check, accu_signed_int in Hai;
-         rewrite Haccu in Hai;
-         contradiction).
-  - (* Val_int z, z = z1: branch taken *)
-    assert (Hn : Int.min_signed <= z1 <= Int.max_signed) by admit.
-    pose proof (verify_BEQ_handler_correct z1 z2 Hn e le m s) as H.
-    unfold handler_correct, handle_BEQ in H.
-    rewrite Haccu in H. rewrite Heqb in H.
-    exact H.
-  - (* Val_int z, z <> z1: fall through *)
-    assert (Hn : Int.min_signed <= z1 <= Int.max_signed) by admit.
-    pose proof (verify_BEQ_handler_correct z1 z2 Hn e le m s) as H.
-    unfold handler_correct, handle_BEQ in H.
-    rewrite Haccu in H. rewrite Heqb in H.
-    exact H.
-Admitted.
+  destruct ((Int.min_signed <=? z1) && (z1 <=? Int.max_signed))%Z eqn:Hwf.
+  - (* z1 in signed range: delegate to verify_BEQ_handler_correct *)
+    assert (Hn : Int.min_signed <= z1 <= Int.max_signed).
+    { apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlo Hhi].
+      split; [apply Z.leb_le; exact Hlo | apply Z.leb_le; exact Hhi]. }
+    destruct (Machine.accu s) eqn:Haccu;
+      [ destruct (z =? z1)%Z eqn:Heqb | | | ];
+      (pose proof (verify_BEQ_handler_correct z1 z2 Hn e le m s) as H;
+       unfold handler_correct, handle_BEQ in H;
+       rewrite Hwf in H;
+       rewrite Haccu in H;
+       try rewrite Heqb in H;
+       exact H).
+  - (* z1 out of signed range: handler returns Error, P_error_of satisfied *)
+    unfold P_error_of, error_message_of.
+    rewrite Hwf. reflexivity.
+Qed.

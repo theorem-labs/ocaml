@@ -205,7 +205,10 @@ Theorem verify_ATOM_correct : forall t,
 Proof.
   intros t Ht_range.
   intros e le m s.
-  unfold handle_ATOM. simpl.
+  unfold handle_ATOM.
+  replace (Z.of_nat t <=? 2097151)%Z with true.
+  2: { symmetry. apply Z.leb_le. exact Ht_range. }
+  simpl.
 
   intros ard Hpre Hcode_load.
   unfold abs_rel_with_ard in Hpre.
@@ -495,11 +498,16 @@ Proof.
   change (handle_instr (ATOM t) (Machine.pc s) s)
     with (handle_ATOM t (Machine.pc s) s).
   unfold handle_ATOM at 1.
-  (* Goal is now the Step-case obligation *)
-  destruct (Z_le_dec (Z.of_nat t) 2097151) as [Ht|Ht].
+  destruct (Z.leb_spec (Z.of_nat t) 2097151) as [Ht|Ht].
   - (* t in range: delegate to verify_ATOM_correct *)
     pose proof (verify_ATOM_correct t Ht) as H.
-    unfold handler_correct, handle_ATOM in H. exact (H e le m s).
-  - (* t out of range: unreachable for well-formed bytecode *)
-    admit.
-Admitted.
+    unfold handler_correct, handle_ATOM in H.
+    replace (Z.of_nat t <=? 2097151)%Z with true in H
+      by (symmetry; apply Z.leb_le; exact Ht).
+    exact (H e le m s).
+  - (* t out of range: handler returns Error, P_error_of satisfied *)
+    unfold P_error_of, error_message_of.
+    replace (Z.of_nat t <=? 2097151)%Z with false
+      by (symmetry; apply Z.leb_gt; lia).
+    reflexivity.
+Qed.

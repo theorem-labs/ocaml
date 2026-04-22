@@ -220,6 +220,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_ACC_correct : forall n,
+    Z.of_nat n < Int.half_modulus ->
     handler_correct (handle_ACC n) f_instr_ACC
       (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
@@ -237,9 +238,11 @@ Theorem verify_ACC_correct : forall n,
       (fun _ s => nth_error s.(Machine.stack) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro n.
+  intro n. intro Hn_range_hyp.
   intros e le m s.
   unfold handler_correct, handle_ACC.
+  replace (Z.of_nat n <? Int.half_modulus)%Z with true.
+  2: { symmetry. apply Z.ltb_lt. exact Hn_range_hyp. }
 
   (* Case split on nth_error *)
   destruct (nth_error (Machine.stack s) n) as [v|] eqn:Hnth.
@@ -585,7 +588,7 @@ Theorem verify_ACC_handler_correct : forall n,
 Proof.
   intros n Hn.
   eapply handler_correct_weaken_step.
-  - exact (verify_ACC_correct n).
+  - exact (verify_ACC_correct n Hn).
   - intros e le m s s' ard Hstep Hrel Hca.
     split. { exact Hca. }
     split. { exact Hn. }
@@ -593,6 +596,8 @@ Proof.
     intros sp_b sp_ofs Hsp_load.
     (* From Step case: n < length stack *)
     unfold handle_ACC in Hstep.
+    replace (Z.of_nat n <? Int.half_modulus)%Z with true in Hstep
+      by (symmetry; apply Z.ltb_lt; exact Hn).
     destruct (nth_error (Machine.stack s) n) eqn:Hnth; [|discriminate].
     assert (Hn_lt : (n < length (Machine.stack s))%nat).
     { apply nth_error_Some. congruence. }
@@ -622,17 +627,25 @@ Proof.
   change (handle_instr (ACC n) (Machine.pc s) s)
     with (handle_ACC n (Machine.pc s) s).
   unfold handle_ACC at 1.
-  destruct (nth_error (Machine.stack s) n) as [v|] eqn:Hnth.
-  - (* Step case: nth_error stack n = Some v *)
-    destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_bound|Hn_big].
-    + (* n < Int.half_modulus: delegate to verify_ACC_handler_correct *)
+  destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_bound|Hn_big].
+  - (* n < Int.half_modulus *)
+    destruct (nth_error (Machine.stack s) n) as [v|] eqn:Hnth.
+    + (* Step case: nth_error stack n = Some v *)
       pose proof (verify_ACC_handler_correct n Hn_bound) as H.
       unfold handler_correct, handle_ACC in H. specialize (H e le m s).
+      replace (Z.of_nat n <? Int.half_modulus)%Z with true in H
+        by (symmetry; apply Z.ltb_lt; exact Hn_bound).
       rewrite Hnth in H.
       change (pre_of (ACC n)) with (code_at (Int.repr (Z.of_nat n))).
       exact H.
-    + (* n >= Int.half_modulus: unreachable for well-formed bytecode *)
-      admit.
-  - (* Error case: nth_error stack n = None *)
-    unfold P_error_of, error_message_of. rewrite Hnth. reflexivity.
-Admitted.
+    + (* Error case: nth_error stack n = None, stack underflow *)
+      unfold P_error_of, error_message_of.
+      replace (Z.of_nat n <? Int.half_modulus)%Z with true
+        by (symmetry; apply Z.ltb_lt; exact Hn_bound).
+      rewrite Hnth. reflexivity.
+  - (* n >= Int.half_modulus: handler returns Error, P_error_of satisfied *)
+    unfold P_error_of, error_message_of.
+    replace (Z.of_nat n <? Int.half_modulus)%Z with false
+      by (symmetry; apply Z.ltb_ge; lia).
+    reflexivity.
+Qed.

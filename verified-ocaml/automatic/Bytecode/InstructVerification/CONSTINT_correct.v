@@ -187,6 +187,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_CONSTINT_correct : forall n,
+    Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_CONSTINT n) f_instr_CONSTINT
       (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
@@ -198,9 +199,13 @@ Theorem verify_CONSTINT_correct : forall n,
          Int.min_signed <= n <= Int.max_signed)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro n.
+  intro n. intro Hn_range_hyp.
   intros e le m s.
-  unfold handler_correct, handle_CONSTINT. simpl.
+  unfold handler_correct, handle_CONSTINT.
+  replace ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z with true.
+  2: { symmetry. apply Bool.andb_true_iff. split;
+       apply Z.leb_le; lia. }
+  simpl.
 
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.
@@ -533,7 +538,7 @@ Proof.
             (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
        = Some (Vint (Int.repr n)) /\
        Int.min_signed <= n <= Int.max_signed).
-  - exact (verify_CONSTINT_correct n).
+  - exact (verify_CONSTINT_correct n Hn).
   - intros e le m s ard _ Hca.
     unfold code_at in Hca.
     exact (conj Hca Hn).
@@ -561,15 +566,15 @@ Proof.
   change (handle_instr (CONSTINT n) (Machine.pc s) s)
     with (handle_CONSTINT n (Machine.pc s) s).
   unfold handle_CONSTINT at 1.
-  (* Goal is now the Step-case obligation: forall ard, abs_rel -> pre -> exists ... *)
-  (* Delegate to the old proof. It requires n in signed range. *)
-  destruct (Z_le_dec Int.min_signed n) as [Hlo | Hlo];
-    [destruct (Z_le_dec n Int.max_signed) as [Hhi | Hhi] |].
-  - (* n in range: use verify_CONSTINT_handler_correct *)
-    specialize (verify_CONSTINT_handler_correct n (conj Hlo Hhi)) as H.
-    unfold handler_correct, handle_CONSTINT in H. exact (H e le m s).
-  - (* n > Int.max_signed: out of range; admitted *)
-    admit.
-  - (* n < Int.min_signed: out of range; admitted *)
-    admit.
-Admitted.
+  destruct ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z eqn:Hwf.
+  - (* n in range: delegate to verify_CONSTINT_handler_correct *)
+    assert (Hn : Int.min_signed <= n <= Int.max_signed).
+    { apply Bool.andb_true_iff in Hwf. destruct Hwf as [Hlo Hhi].
+      split; apply Z.leb_le; assumption. }
+    pose proof (verify_CONSTINT_handler_correct n Hn) as H.
+    unfold handler_correct, handle_CONSTINT in H.
+    rewrite Hwf in H. exact (H e le m s).
+  - (* n out of range: handler returns Error, P_error_of satisfied *)
+    unfold P_error_of, error_message_of.
+    rewrite Hwf. reflexivity.
+Qed.
