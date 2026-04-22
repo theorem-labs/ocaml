@@ -432,3 +432,29 @@ Proof.
     }
   }
 Qed.
+
+(* Wrapper bridging the raw proof to P_error_of / P_halt_of / P_ccall_of.
+   The inner proof uses a direct error predicate; this wrapper shows
+   P_error_of (PUSHENVACC 1) holds in the error branch and delegates
+   the step branch to verify_PUSHENVACC1_correct.
+   P_halt_of and P_ccall_of are vacuously False (PUSHENVACC never halts
+   or issues a C call). *)
+Definition correct_PUSHENVACC1 :
+    handler_correct (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
+      (pushenvacc_step_pre 1)
+      (P_error_of (Bytecode.AST.PUSHENVACC 1))
+      (P_halt_of (Bytecode.AST.PUSHENVACC 1))
+      (P_ccall_of (Bytecode.AST.PUSHENVACC 1)).
+Proof.
+  unfold handler_correct.
+  intros e le m s.
+  unfold handle_PUSHENVACC at 1.
+  destruct (field_or_heap s s.(Machine.env) 1) as [v|] eqn:Hfoh.
+  - (* Step case: delegate to verify_PUSHENVACC1_correct *)
+    pose proof verify_PUSHENVACC1_correct as H.
+    unfold handler_correct, handle_PUSHENVACC in H. specialize (H e le m s).
+    rewrite Hfoh in H.
+    exact H.
+  - (* Error case: P_error_of (PUSHENVACC 1) *)
+    unfold P_error_of, error_message_of. rewrite Hfoh. reflexivity.
+Qed.
