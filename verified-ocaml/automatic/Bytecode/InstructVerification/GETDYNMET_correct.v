@@ -663,8 +663,9 @@ Proof.
       (* We need to construct the exec_stmt for the full body.
          The body structure from f_instr_GETDYNMET is:
          Ssequence
-           (Ssequence <setup + loop + final load/store>)
-           (Sreturn ...)
+           (Ssequence <setup 1-3>)
+           (Ssequence _li (Ssequence (_t4; _hi) (Ssequence while
+             (Ssequence (Ssequence _t1 assign) (Sreturn ...)))))
 
          We'll build this using exec_Sseq_1 for Ssequence and
          the individual statement derivations. *)
@@ -673,27 +674,27 @@ Proof.
       change (fn_body f_instr_GETDYNMET) with
         (Ssequence
           (Ssequence
+            (Sset _t'5
+              (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _sp (tptr tlong)))
             (Ssequence
-              (Sset _t'5
-                (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                  (Tstruct _interp_state noattr)) _sp (tptr tlong)))
+              (Sset _t'6
+                (Ederef (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
+              (Sset _meths
+                (Ederef (Ebinop Oadd (Ecast (Etempvar _t'6 tlong) (tptr tlong))
+                  (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
+          (Ssequence
+            (Sset _li (Econst_int (Int.repr 3) tint))
+            (Ssequence
               (Ssequence
-                (Sset _t'6
-                  (Ederef (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
+                (Sset _t'4
+                  (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
                     (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                (Sset _meths
-                  (Ederef (Ebinop Oadd (Ecast (Etempvar _t'6 tlong) (tptr tlong))
-                    (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
-            (Ssequence
-              (Sset _li (Econst_int (Int.repr 3) tint))
+                (Sset _hi (Ecast (Etempvar _t'4 tlong) tint)))
               (Ssequence
+                getdynmet_while
                 (Ssequence
-                  (Sset _t'4
-                    (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-                      (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                  (Sset _hi (Ecast (Etempvar _t'4 tlong) tint)))
-                (Ssequence
-                  getdynmet_while
                   (Ssequence
                     (Sset _t'1
                       (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
@@ -702,8 +703,8 @@ Proof.
                     (Sassign
                       (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                         (Tstruct _interp_state noattr)) _accu tlong)
-                      (Etempvar _t'1 tlong)))))))
-          (Sreturn (Some (Econst_int (Int.repr 0) tint)))).
+                      (Etempvar _t'1 tlong)))
+                  (Sreturn (Some (Econst_int (Int.repr 0) tint)))))))).
 
       (* Build steps 1-5 using the evaluator *)
       (* Steps 1-5 result: le1 as defined above, m unchanged, Out_normal *)
@@ -763,152 +764,108 @@ Proof.
              (Ssequence
                 getdynmet_while
                 (Ssequence
-                  (Sset _t'1
-                    (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-                      (Ebinop Osub (Etempvar _li tint) (Econst_int (Int.repr 1) tint) tint)
-                      (tptr tlong)) tlong))
-                  (Sassign
-                    (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _accu tlong)
-                    (Etempvar _t'1 tlong))))
-             E0 le' m' Out_normal).
+                  (Ssequence
+                    (Sset _t'1
+                      (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
+                        (Ebinop Osub (Etempvar _li tint) (Econst_int (Int.repr 1) tint) tint)
+                        (tptr tlong)) tlong))
+                    (Sassign
+                      (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                        (Tstruct _interp_state noattr)) _accu tlong)
+                      (Etempvar _t'1 tlong)))
+                  (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
+             E0 le' m' (Out_return (Some (Vint (Int.repr 0), tint)))).
       {
-        (* Compose: loop then final load + store *)
+        (* Compose: loop then final load + store + return *)
         apply exec_Sseq_1 with (t1 := E0) (le1 := le_post) (m1 := m) (t2 := E0).
         - exact Hloop.
-        - (* After loop: load method and store to accu *)
-          apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m) (t2 := E0).
-          + (* Sset _t'1 = meths[li-1] *)
-            apply exec_Sset.
-            (* Evaluate: deref(cast(meths) + (li - 1)) *)
-            eapply eval_Elvalue.
-            * eapply eval_Ederef.
-              eapply eval_Ebinop.
-              { (* cast(meths) *)
-                eapply eval_Ecast.
-                eapply eval_Etempvar. exact Hpost_meths.
-                simpl. unfold sem_cast. simpl classify_cast. reflexivity. }
-              { (* li - 1 *)
+        - (* After loop: load method, store to accu, return *)
+          apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m') (t2 := E0).
+          + (* Ssequence: Sset _t'1 then Sassign *)
+            apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m) (t2 := E0).
+            * (* Sset _t'1 = meths[li-1] *)
+              apply exec_Sset.
+              eapply eval_Elvalue.
+              { eapply eval_Ederef.
                 eapply eval_Ebinop.
-                eapply eval_Etempvar. exact Hpost_li.
-                eapply eval_Econst_int.
-                unfold sem_binary_operation, sem_sub.
-                change (classify_sub tint tint) with sub_default.
-                unfold sem_binarith.
-                change (classify_binarith tint tint) with (bin_case_i Signed).
-                simpl. reflexivity. }
-              { unfold sem_binary_operation, sem_add.
-                simpl classify_add. unfold sem_add_ptr_int. simpl. reflexivity. }
-            * (* deref_loc *)
-              apply deref_loc_value with (chunk := Mint64).
-              { simpl. reflexivity. }
-              { simpl. exact Hmeth_load. }
-          + (* Sassign s->accu = t'1 *)
-            apply exec_Sassign with (loc := sb)
-                    (ofs := Ptrofs.add so (Ptrofs.repr 8))
-                    (bf := Full) (v2 := meth_cv) (v := meth_cv).
-            * (* Lvalue: s->accu *)
-              eapply eval_Efield_struct.
-              { eapply eval_Elvalue.
-                - eapply eval_Ederef.
-                  eapply eval_Etempvar. subst le'. rewrite PTree.gso by (compute; congruence). exact Hpost_s.
-                - apply deref_loc_copy. simpl. reflexivity. }
-              { reflexivity. }
-              { exact Hco. }
-              { exact Haccu_offset. }
-            * (* Rvalue: _t'1 *)
-              eapply eval_Etempvar.
-              subst le'. rewrite PTree.gss. reflexivity.
-            * (* sem_cast *)
-              rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hmeth_repr). reflexivity.
-            * (* assign_loc / Store *)
-              apply assign_loc_value with (chunk := Mint64).
-              { reflexivity. }
-              { simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)). exact Hstore. }
+                { eapply eval_Ecast.
+                  eapply eval_Etempvar. exact Hpost_meths.
+                  simpl. unfold sem_cast. simpl classify_cast. reflexivity. }
+                { eapply eval_Ebinop.
+                  eapply eval_Etempvar. exact Hpost_li.
+                  eapply eval_Econst_int.
+                  unfold sem_binary_operation, sem_sub.
+                  change (classify_sub tint tint) with sub_default.
+                  unfold sem_binarith.
+                  change (classify_binarith tint tint) with (bin_case_i Signed).
+                  simpl. reflexivity. }
+                { unfold sem_binary_operation, sem_add.
+                  simpl classify_add. unfold sem_add_ptr_int. simpl. reflexivity. } }
+              { apply deref_loc_value with (chunk := Mint64).
+                { simpl. reflexivity. }
+                { simpl. exact Hmeth_load. } }
+            * (* Sassign s->accu = t'1 *)
+              apply exec_Sassign with (loc := sb)
+                      (ofs := Ptrofs.add so (Ptrofs.repr 8))
+                      (bf := Full) (v2 := meth_cv) (v := meth_cv).
+              { eapply eval_Efield_struct.
+                { eapply eval_Elvalue.
+                  - eapply eval_Ederef.
+                    eapply eval_Etempvar. subst le'. rewrite PTree.gso by (compute; congruence). exact Hpost_s.
+                  - apply deref_loc_copy. simpl. reflexivity. }
+                { reflexivity. }
+                { exact Hco. }
+                { exact Haccu_offset. } }
+              { eapply eval_Etempvar.
+                subst le'. rewrite PTree.gss. reflexivity. }
+              { rewrite (sem_cast_long_val_repr _ _ _ _ _ _ Hmeth_repr). reflexivity. }
+              { apply assign_loc_value with (chunk := Mint64).
+                { reflexivity. }
+                { simpl. rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)). exact Hstore. } }
+          + (* Sreturn *)
+            apply exec_Sreturn_some.
+            apply eval_Econst_int.
       }
 
-      (* Combine steps 1-5 with 6-8 *)
-      assert (Hsteps_all_pre_return :
-        exec e le m
-             (Ssequence
-                (Ssequence
-                  (Sset _t'5
-                    (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                      (Tstruct _interp_state noattr)) _sp (tptr tlong)))
-                  (Ssequence
-                    (Sset _t'6
-                      (Ederef (Ebinop Oadd (Etempvar _t'5 (tptr tlong))
-                        (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                    (Sset _meths
-                      (Ederef (Ebinop Oadd (Ecast (Etempvar _t'6 tlong) (tptr tlong))
-                        (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))))
-                (Ssequence
-                  (Sset _li (Econst_int (Int.repr 3) tint))
-                  (Ssequence
-                    (Ssequence
-                      (Sset _t'4
-                        (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-                          (Econst_int (Int.repr 0) tint) (tptr tlong)) tlong))
-                      (Sset _hi (Ecast (Etempvar _t'4 tlong) tint)))
-                    (Ssequence
-                      getdynmet_while
-                      (Ssequence
-                        (Sset _t'1
-                          (Ederef (Ebinop Oadd (Ecast (Etempvar _meths tlong) (tptr tlong))
-                            (Ebinop Osub (Etempvar _li tint) (Econst_int (Int.repr 1) tint) tint)
-                            (tptr tlong)) tlong))
-                        (Sassign
-                          (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                            (Tstruct _interp_state noattr)) _accu tlong)
-                          (Etempvar _t'1 tlong)))))))
-             E0 le' m' Out_normal).
-      {
+      (* Combine steps 1-3 (setup) with 4-8+return *)
+      apply exec_Sseq_1 with (t1 := E0) (le1 := le_setup) (m1 := m) (t2 := E0).
+      - exact Hsteps_1_3.
+      - (* Ssequence: Sset _li then rest *)
         set (le_li := PTree.set _li (Vint (Int.repr 3)) le_setup).
         set (le_t4 := PTree.set _t'4 (Vlong hi_v) le_li).
-
-        apply exec_Sseq_1 with (t1 := E0) (le1 := le_setup) (m1 := m) (t2 := E0).
-        - exact Hsteps_1_3.
-        - (* Ssequence: Sset _li then rest *)
-          apply exec_Sseq_1 with (t1 := E0) (le1 := le_li) (m1 := m) (t2 := E0).
-          + apply exec_Sset.
-            apply eval_Econst_int.
-          + (* Ssequence: (Sset _t'4; Sset _hi) then (while; load; store) *)
-            apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m) (t2 := E0).
-            * (* Sset _t'4 and Sset _hi *)
-              apply exec_Sseq_1 with (t1 := E0) (le1 := le_t4) (m1 := m) (t2 := E0).
-              { apply exec_Sset.
-                eapply eval_Elvalue.
-                - eapply eval_Ederef.
-                  eapply eval_Ebinop.
-                  + eapply eval_Ecast.
-                    eapply eval_Etempvar.
-                    subst le_li le_setup.
-                    rewrite PTree.gso by (compute; congruence).
-                    rewrite PTree.gss. reflexivity.
-                    unfold sem_cast. simpl classify_cast. reflexivity.
-                  + eapply eval_Econst_int.
-                  + unfold sem_binary_operation, sem_add. simpl classify_add.
-                    unfold sem_add_ptr_int. simpl. reflexivity.
-                - apply deref_loc_value with (chunk := Mint64).
-                  + reflexivity.
-                  + simpl.
-                    change (Ptrofs.of_ints (Int.repr 0)) with Ptrofs.zero.
-                    rewrite Ptrofs.mul_zero, Ptrofs.add_zero.
-                    exact Hhi_load. }
-              { apply exec_Sset.
-                eapply eval_Ecast.
-                eapply eval_Etempvar.
-                subst le_t4. rewrite PTree.gss. reflexivity.
-                unfold sem_cast. simpl classify_cast.
-                rewrite ptr64_true. reflexivity. }
-            * exact Hsteps_6_8.
-      }
-
-      (* Finally, wrap with Sreturn *)
-      apply exec_Sseq_1 with (t1 := E0) (le1 := le') (m1 := m') (t2 := E0).
-      - exact Hsteps_all_pre_return.
-      - apply exec_Sreturn_some.
-        apply eval_Econst_int.
+        apply exec_Sseq_1 with (t1 := E0) (le1 := le_li) (m1 := m) (t2 := E0).
+        + apply exec_Sset.
+          apply eval_Econst_int.
+        + (* Ssequence: (Sset _t'4; Sset _hi) then (while; load; store; return) *)
+          apply exec_Sseq_1 with (t1 := E0) (le1 := le1) (m1 := m) (t2 := E0).
+          * (* Sset _t'4 and Sset _hi *)
+            apply exec_Sseq_1 with (t1 := E0) (le1 := le_t4) (m1 := m) (t2 := E0).
+            { apply exec_Sset.
+              eapply eval_Elvalue.
+              - eapply eval_Ederef.
+                eapply eval_Ebinop.
+                + eapply eval_Ecast.
+                  eapply eval_Etempvar.
+                  subst le_li le_setup.
+                  rewrite PTree.gso by (compute; congruence).
+                  rewrite PTree.gss. reflexivity.
+                  unfold sem_cast. simpl classify_cast. reflexivity.
+                + eapply eval_Econst_int.
+                + unfold sem_binary_operation, sem_add. simpl classify_add.
+                  unfold sem_add_ptr_int. simpl. reflexivity.
+              - apply deref_loc_value with (chunk := Mint64).
+                + reflexivity.
+                + simpl.
+                  change (Ptrofs.of_ints (Int.repr 0)) with Ptrofs.zero.
+                  rewrite Ptrofs.mul_zero, Ptrofs.add_zero.
+                  exact Hhi_load. }
+            { apply exec_Sset.
+              eapply eval_Ecast.
+              eapply eval_Etempvar.
+              subst le_t4. rewrite PTree.gss. reflexivity.
+              unfold sem_cast. simpl classify_cast.
+              rewrite ptr64_true. reflexivity. }
+          * exact Hsteps_6_8.
     }
 
     (* ============================================================== *)
@@ -1062,33 +1019,7 @@ Qed.
 (* custom precondition) to the uniform P_error_of / pre_of interface.  *)
 (* ================================================================== *)
 
-(* Helper: scan_method_table returns Some msg iff the local scan returns
-   Error msg.  This is the key bridging lemma for error cases. *)
-Local Lemma scan_method_table_scan_equiv :
-  forall (tag : value) (remaining : list value),
-    scan_method_table tag remaining "GETDYNMET: method not found" =
-    match (fix scan (r : list value) : step_result :=
-       match r with
-       | [] => Error "GETDYNMET: method not found"
-       | _ :: [] => Error "GETDYNMET: method not found"
-       | method_fn :: tag_val :: rest =>
-         if value_eqb tag_val tag then
-           Step (mk_state 0 method_fn [] [] 0 [] 0 [] 0)
-         else scan rest
-       end) remaining
-    with
-    | Step _ => None
-    | Error msg => Some msg
-    | _ => None
-    end.
-Proof.
-  intros tag.
-  fix IH 1.
-  intros [|r1 [|r2 rest]].
-  - reflexivity.
-  - reflexivity.
-  - simpl. destruct (value_eqb r2 tag); [reflexivity | exact (IH rest)].
-Qed.
+Import Bytecode.AST.
 
 Definition correct_GETDYNMET :
     handler_correct (handle_instr GETDYNMET) (clight_of GETDYNMET)
@@ -1102,11 +1033,15 @@ Proof.
   (* Case split on stack *)
   destruct (Machine.stack s) as [| obj stk_tl] eqn:Hstk.
   { (* stack = nil => Error "GETDYNMET: stack underflow" *)
-    unfold P_error_of. simpl. rewrite Hstk. reflexivity. }
+    unfold P_error_of.
+    change (error_message_of GETDYNMET s = Some "GETDYNMET: stack underflow"%string).
+    unfold error_message_of. rewrite Hstk. reflexivity. }
   (* stack = obj :: stk_tl *)
   destruct (field_or_heap s obj 0) as [class_tbl|] eqn:Hclass.
   2: { (* field_or_heap = None => Error "GETDYNMET: no class table" *)
-    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass. reflexivity. }
+    unfold P_error_of.
+    change (error_message_of GETDYNMET s = Some "GETDYNMET: no class table"%string).
+    unfold error_message_of. rewrite Hstk. rewrite Hclass. reflexivity. }
   (* field_or_heap obj 0 = Some class_tbl *)
   set (tag := Machine.accu s).
   set (fields :=
@@ -1124,7 +1059,8 @@ Proof.
         Step (s <|pc := pc s|> <|accu := method_fn|>)
       else scan rest
     end).
-  destruct (scan (skipn 2 fields)) as [s'|msg| |] eqn:Hscan.
+  (* step_result constructors: Step, Halt, Error, CCall_request *)
+  destruct (scan (skipn 2 fields)) as [s'|halt_v|msg| ] eqn:Hscan.
 
   - (* Step case: delegate to verify_GETDYNMET_correct *)
     intros ard Habs Hpre.
@@ -1135,32 +1071,6 @@ Proof.
     rewrite Hscan in Hold.
     exact (Hold ard Habs Hpre).
 
-  - (* Error case from scan *)
-    unfold P_error_of. simpl. rewrite Hstk. rewrite Hclass.
-    (* error_message_of GETDYNMET s computes through scan_method_table *)
-    (* We need to show scan_method_table tag (skipn 2 fields) "..." = Some msg *)
-    (* where scan (skipn 2 fields) = Error msg *)
-    subst scan. subst fields.
-    change (error_message_of GETDYNMET s = Some msg).
-    unfold error_message_of. rewrite Hstk. rewrite Hclass.
-    (* Now both sides use scan_method_table / local scan on same data *)
-    set (flds := match class_tbl with
-      | Val_block _ fs => fs
-      | Val_ptr addr => match heap_lookup (hp s) addr with Some (_, fs) => fs | None => [] end
-      | _ => []
-      end).
-    set (remaining := skipn 2 flds).
-    (* We need a general lemma connecting scan_method_table and the local scan *)
-    clearbody remaining. revert msg Hscan. revert remaining.
-    fix IH 1.
-    intros [|r1 [|r2 rest]] msg Hsc.
-    + simpl in Hsc. injection Hsc as <-. reflexivity.
-    + simpl in Hsc. injection Hsc as <-. reflexivity.
-    + simpl in Hsc. simpl.
-      destruct (value_eqb r2 tag) eqn:Heqb.
-      * discriminate.
-      * exact (IH rest msg Hsc).
-
   - (* Halt: impossible *)
     exfalso.
     subst scan.
@@ -1168,6 +1078,25 @@ Proof.
     revert Hscan. revert rf.
     fix IH 1. intros [|? [|? ?]]; simpl; try (intro; discriminate).
     destruct (value_eqb _ tag); [intro; discriminate | intro; exact (IH _ Hscan)].
+
+  - (* Error case from scan *)
+    (* Hypothesis Hscan: scan (skipn 2 fields) = Error msg *)
+    (* Goal: P_error_of GETDYNMET msg s *)
+    (* which unfolds to: error_message_of GETDYNMET s = Some msg *)
+    (* error_message_of GETDYNMET uses scan_method_table on the same list *)
+    (* We prove: for all l, scan l = Error m -> scan_method_table tag l "..." = Some m *)
+    assert (Hbridge : forall l m0,
+      scan l = Error m0 ->
+      scan_method_table tag l "GETDYNMET: method not found" = Some m0).
+    { subst scan. fix IH 1. intros [|r1 [|r2 rest]] m0 Hsc.
+      - simpl in *. congruence.
+      - simpl in *. congruence.
+      - simpl in Hsc |- *.
+        destruct (value_eqb r2 tag); [discriminate | exact (IH rest m0 Hsc)]. }
+    unfold P_error_of.
+    change (error_message_of GETDYNMET s = Some msg).
+    unfold error_message_of. rewrite Hstk. rewrite Hclass.
+    exact (Hbridge _ _ Hscan).
 
   - (* CCall_request: impossible *)
     exfalso.
