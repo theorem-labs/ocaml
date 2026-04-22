@@ -951,4 +951,4 @@ Proof.
   unfold appterm1_step_pre.
   rewrite Hstk in Hpre.
   exact Hpre.
-Admitted.
+Qed.
