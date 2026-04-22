@@ -269,6 +269,8 @@ Local Ltac eval_s_field_lvalue solve_le co_is Hco Hfld :=
 (* ================================================================== *)
 
 Theorem verify_BUGEINT_correct : forall n target,
+    0 <= n ->
+    Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
@@ -296,8 +298,14 @@ Theorem verify_BUGEINT_correct : forall n target,
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
       (fun msg s => msg = "BUGEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros n target e le m s.
+  intros n target Hn_nonneg0 Hn_range0 e le m s.
   unfold handle_BUGEINT.
+  (* Discharge the instr_wfb guard using the range hypotheses *)
+  assert (Hwfb : ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z = true).
+  { apply andb_true_intro. split.
+    - apply andb_true_intro. split; apply Z.leb_le; lia.
+    - apply Z.leb_le; lia. }
+  rewrite Hwfb.
   destruct (Machine.accu s) as [a | tag fields | addr | addr ofs_cl] eqn:Haccu_eq.
 
   (* ================================================================ *)
@@ -811,24 +819,22 @@ Theorem verify_BUGEINT_handler_correct : forall n target,
 Proof.
   intros n target Hn0 Hn.
   eapply handler_correct_weaken.
-  - exact (verify_BUGEINT_correct n target).
+  - exact (verify_BUGEINT_correct n target Hn0 Hn).
   - intros e le m s ard _ [[[[Hne Hca] Hbo] Hai] Hal].
     exact (conj Hne (conj Hn0 (conj Hn (conj Hca (conj Hbo (conj Hai Hal)))))).
 Qed.
 
 (* Wrapper with the canonical type expected by InstructVerificationProof.v.
 
-   The existing proof (verify_BUGEINT_handler_correct) requires
-   0 <= z1 and Int.min_signed <= z1 <= Int.max_signed.  The canonical
-   pre_of does not include this guard; when z1 is outside Int range,
-   Int.repr wraps and the C comparison disagrees with the Rocq
-   handler's Z.geb on z_flip_sign, so the Step case cannot be closed
-   without assuming the range.  In practice the bytecode decoder only
-   produces in-range operands.
+   The handler checks instr_wfb (BUGEINT z1 z2) = ((0 <=? z1) &&
+   (min_signed <=? z1) && (z1 <=? max_signed))%Z.  When that guard is
+   false the handler returns Error "BUGEINT: malformed operand", which
+   matches P_error_of because error_message_of checks the identical
+   boolean.  When the guard is true we have the range assumptions needed
+   by the inner proof.
 
-   Error cases (non-integer accu) are fully proved.  The Step
-   case delegates to verify_BUGEINT_handler_correct after asserting
-   the range (Admitted). *)
+   Non-integer accu cases are trivially true because pre_of includes
+   accu_check ak_unsigned_range which is False for non-integer accu. *)
 Theorem correct_BUGEINT : forall z1 z2,
   handler_correct (handle_instr (Bytecode.AST.BUGEINT z1 z2)) (clight_of (Bytecode.AST.BUGEINT z1 z2))
     (pre_of (Bytecode.AST.BUGEINT z1 z2))
@@ -837,27 +843,32 @@ Proof.
   intros z1 z2 e le m s.
   change (handle_instr (Bytecode.AST.BUGEINT z1 z2)) with (handle_BUGEINT z1 z2).
   unfold handle_BUGEINT.
-  destruct (Machine.accu s) eqn:Haccu.
-  - (* Val_int z — Step case; need z1 range for C comparison correctness *)
-    assert (Hn0 : 0 <= z1).
-    { (* TODO: the canonical pre_of does not include this guard;
-         it should be supplied by instr_wfb or the bytecode loader.
-         Admitted for now. *)
-      admit. }
-    assert (Hn : Int.min_signed <= z1 <= Int.max_signed).
-    { admit. }
-    destruct (Z.geb (z_flip_sign z1) (z_flip_sign z)) eqn:Hcmp; simpl;
-    (intros ard Hrel Hpre;
-     pose proof (verify_BUGEINT_handler_correct z1 z2 Hn0 Hn) as Hvc;
-     specialize (Hvc e le m s);
-     unfold handler_correct, handle_BUGEINT in Hvc;
-     rewrite Haccu, Hcmp in Hvc; simpl in Hvc;
-     exact (Hvc ard Hrel Hpre)).
-  - (* Val_block — Error *)
-    destruct l as [| h t];
-      (unfold P_error_of, error_message_of; rewrite Haccu; reflexivity).
-  - (* Val_ptr — Error *)
-    unfold P_error_of, error_message_of; rewrite Haccu; reflexivity.
-  - (* Val_closure — Error *)
-    unfold P_error_of, error_message_of; rewrite Haccu; reflexivity.
-Admitted.
+  (* Case-split on the instr_wfb range guard first *)
+  destruct ((0 <=? z1) && (Int.min_signed <=? z1) && (z1 <=? Int.max_signed))%Z eqn:Hwfb.
+  - (* In range: extract the range facts from Hwfb *)
+    pose proof Hwfb as Hwfb'.
+    apply andb_prop in Hwfb'. destruct Hwfb' as [Hlo_mid Hhi].
+    apply andb_prop in Hlo_mid. destruct Hlo_mid as [Hnn Hlo].
+    apply Z.leb_le in Hnn. apply Z.leb_le in Hlo. apply Z.leb_le in Hhi.
+    assert (Hn0 : 0 <= z1) by lia.
+    assert (Hn : Int.min_signed <= z1 <= Int.max_signed) by lia.
+    destruct (Machine.accu s) eqn:Haccu.
+    + (* Val_int z *)
+      destruct (Z.geb (z_flip_sign z1) (z_flip_sign z)) eqn:Hcmp; simpl;
+      (intros ard Hrel Hpre;
+       pose proof (verify_BUGEINT_handler_correct z1 z2 Hn0 Hn) as Hvc;
+       specialize (Hvc e le m s);
+       unfold handler_correct, handle_BUGEINT in Hvc;
+       rewrite Hwfb in Hvc; simpl in Hvc;
+       rewrite Haccu, Hcmp in Hvc; simpl in Hvc;
+       exact (Hvc ard Hrel Hpre)).
+    + (* Val_block — Error *)
+      destruct l as [| h t];
+      (unfold P_error_of, error_message_of; rewrite Hwfb, Haccu; reflexivity).
+    + (* Val_ptr — Error *)
+      unfold P_error_of, error_message_of; rewrite Hwfb, Haccu; reflexivity.
+    + (* Val_closure — Error *)
+      unfold P_error_of, error_message_of; rewrite Hwfb, Haccu; reflexivity.
+  - (* Out of range: handler returns Error, P_error_of follows from error_message_of *)
+    unfold P_error_of, error_message_of. rewrite Hwfb. reflexivity.
+Qed.
