@@ -1,0 +1,8 @@
+GENERATOR_DIR := manual/Bytecode/generator
+GENERATOR_DEPS := \
+  $(GENERATOR_DIR)/extract_handlers.sh \
+  $(GENERATOR_DIR)/extract_shim.h \
+  $(GENERATOR_DIR)/inline_fallthroughs.awk
+
+manual/Bytecode/Generated/instruct_handlers.v: $(GENERATOR_DEPS)
+	$(MAKE) -C $(GENERATOR_DIR) ../Generated/instruct_handlers.v
