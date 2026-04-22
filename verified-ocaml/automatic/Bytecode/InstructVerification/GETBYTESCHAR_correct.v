@@ -104,8 +104,13 @@ Proof.
   destruct foh_v as [c | | |].
   2-4: (unfold P_error_of, error_message_of; rewrite Hstk; rewrite Hfoh; reflexivity).
   (* Step case: stack = Val_int idx :: _, field_or_heap = Some (Val_int c) *)
-  - pose proof (verify_GETBYTESCHAR_correct e le m s) as H.
+  - intros ard Harel Hpre.
+    unfold pre_of, getstringchar_step_pre in Hpre.
+    rewrite Hstk in Hpre. rewrite Hfoh in Hpre.
+    change InstructSpec.getstringchar_heap_pre with getstringchar_heap_pre in Hpre.
+    pose proof (verify_GETBYTESCHAR_correct e le m s) as H.
     unfold handler_correct, handle_GETSTRINGCHAR in H.
     rewrite Hstk in H. rewrite Hfoh in H.
-    exact H.
+    cbv beta in H.
+    exact (H ard Harel Hpre).
 Qed.
