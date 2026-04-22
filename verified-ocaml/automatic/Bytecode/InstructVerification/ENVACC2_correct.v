@@ -226,3 +226,29 @@ Proof.
     }
   }
 Qed.
+
+(* Wrapper bridging the inner proof to uniform P_error_of / P_halt_of / P_ccall_of.
+   instr_wfb (ENVACC 2) is trivially true (2 < Int.half_modulus), so we just
+   unfold handle_ENVACC, let the wfb guard compute away, case-split on
+   field_or_heap, and delegate Step to the inner proof / close Error via
+   P_error_of matching error_message_of. *)
+Definition correct_ENVACC2 :
+    handler_correct (handle_ENVACC 2) f_instr_ENVACC2
+      env_field_loadable_2
+      (P_error_of (Bytecode.AST.ENVACC 2))
+      (P_halt_of (Bytecode.AST.ENVACC 2))
+      (P_ccall_of (Bytecode.AST.ENVACC 2)).
+Proof.
+  unfold handler_correct.
+  intros e le m s.
+  unfold handle_ENVACC at 1.
+  (* Z.of_nat 2 <? Int.half_modulus computes to true, if-guard reduces *)
+  destruct (field_or_heap s s.(Machine.env) 2) as [v|] eqn:Hfoh.
+  - (* Step case: delegate to verify_ENVACC2_with_pre *)
+    pose proof verify_ENVACC2_with_pre as H.
+    unfold handler_correct, handle_ENVACC in H. specialize (H e le m s).
+    rewrite Hfoh in H.
+    exact H.
+  - (* Error case: P_error_of (ENVACC 2) *)
+    unfold P_error_of, error_message_of. rewrite Hfoh. reflexivity.
+Qed.
