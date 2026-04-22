@@ -11,6 +11,7 @@ From Stdlib Require Import ZArith Bool PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String.
 From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
+From compcert Require Import Integers.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Export Helpers.
@@ -65,23 +66,33 @@ Definition do_raise (exn : value) (s : state) : step_result :=
 (* ------------------------------------------------------------------ *)
 
 Definition handle_ACC (n : nat) (pc' : Z) (s : state) : step_result :=
-  match nth_error s.(stack) n with
-  | Some v => Step (s <|pc := pc'|> <|accu := v|>)
-  | None => Error "ACC: stack underflow"
-  end.
+  if (Z.of_nat n <? Int.half_modulus)%Z then
+    match nth_error s.(stack) n with
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
+    | None => Error "ACC: stack underflow"
+    end
+  else
+    Error "ACC: malformed operand".
 
 Definition handle_PUSH (pc' : Z) (s : state) : step_result :=
   Step (s <|pc := pc'|> <|stack := s.(accu) :: s.(stack)|>).
 
 Definition handle_PUSHACC (n : nat) (pc' : Z) (s : state) : step_result :=
-  let new_stack := s.(accu) :: s.(stack) in
-  match nth_error new_stack n with
-  | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
-  | None => Error "PUSHACC: stack underflow"
+  match n with
+  | 1%nat | 2%nat | 3%nat | 4%nat | 5%nat | 6%nat | 7%nat =>
+    let new_stack := s.(accu) :: s.(stack) in
+    match nth_error new_stack n with
+    | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
+    | None => Error "PUSHACC: stack underflow"
+    end
+  | _ => Error "PUSHACC: malformed operand"
   end.
 
 Definition handle_POP (n : nat) (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|> <|stack := skipn n s.(stack)|>).
+  if (Z.of_nat n <? Int.half_modulus)%Z then
+    Step (s <|pc := pc'|> <|stack := skipn n s.(stack)|>)
+  else
+    Error "POP: malformed operand".
 
 Definition handle_ASSIGN (n : nat) (pc' : Z) (s : state) : step_result :=
   match set_nth s.(stack) n s.(accu) with
@@ -90,10 +101,13 @@ Definition handle_ASSIGN (n : nat) (pc' : Z) (s : state) : step_result :=
   end.
 
 Definition handle_ENVACC (n : nat) (pc' : Z) (s : state) : step_result :=
-  match field_or_heap s s.(env) n with
-  | Some v => Step (s <|pc := pc'|> <|accu := v|>)
-  | None => Error "ENVACC: env access out of bounds"
-  end.
+  if (Z.of_nat n <? Int.half_modulus)%Z then
+    match field_or_heap s s.(env) n with
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
+    | None => Error "ENVACC: env access out of bounds"
+    end
+  else
+    Error "ENVACC: malformed operand".
 
 Definition handle_PUSHENVACC (n : nat) (pc' : Z) (s : state) : step_result :=
   let new_stack := s.(accu) :: s.(stack) in
@@ -272,55 +286,68 @@ Definition handle_GRAB (required : nat) (pc' : Z) (s : state) : step_result :=
 (* CLOSURE n ofs: build closure of n+1 fields [code, closinfo, v0, ..., vn-1].
    If n > 0 the accumulator is pushed first (it becomes v0). *)
 Definition handle_CLOSURE (nvars : nat) (code_ofs : Z) (pc' : Z) (s : state) : step_result :=
-  let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
-  let vars := firstn nvars stk in
-  let rest := skipn nvars stk in
-  let closinfo := Val_int 0 in
-  let fields := Val_int code_ofs :: closinfo :: vars in
-  let '(s', base_ptr) := heap_alloc s Closure_tag fields in
-  let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
-  let closure := Val_closure addr 0%nat in
-  Step (s' <|pc := pc'|> <|accu := closure|> <|stack := rest|>).
+  if ((0 <=? Z.of_nat (2 + nvars)) && (Z.of_nat (2 + nvars) <=? Int.max_signed) &&
+      (Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z then
+    let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
+    let vars := firstn nvars stk in
+    let rest := skipn nvars stk in
+    let closinfo := Val_int 0 in
+    let fields := Val_int code_ofs :: closinfo :: vars in
+    let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+    let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+    let closure := Val_closure addr 0%nat in
+    Step (s' <|pc := pc'|> <|accu := closure|> <|stack := rest|>)
+  else
+    Error "CLOSURE: malformed operand".
 
 (* CLOSUREREC nf nv [ofs0;ofs1;...]: build flat closure block of
    (nf*3-1+nv) fields.  Layout: [code0,ci0, infix,code1,ci1, ..., v0,v1,...]
    Each closure_i is pushed as Val_closure(addr, 3*i). *)
 Definition handle_CLOSUREREC (nfuncs nvars : nat) (code_offsets : list Z) (pc' : Z) (s : state) : step_result :=
-  let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
-  let vars := firstn nvars stk in
-  let rest := skipn nvars stk in
-  match code_offsets with
-  | [] => Error "CLOSUREREC: no code offsets"
-  | _ =>
-    let closinfo := Val_int 0 in
-    let infix_hdr := Val_block Infix_tag [] in
-    let fix build_closure_fields (i : nat) (offsets : list Z) : list value :=
-      match offsets with
-      | [] => vars
-      | ofs :: rest_ofs =>
-        if Nat.eqb i 0 then
-          Val_int ofs :: closinfo :: build_closure_fields 1%nat rest_ofs
-        else
-          infix_hdr :: Val_int ofs :: closinfo :: build_closure_fields (S i) rest_ofs
-      end in
-    let fields := build_closure_fields 0%nat code_offsets in
-    let '(s', base_ptr) := heap_alloc s Closure_tag fields in
-    let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
-    let closure_at (i : nat) : value :=
-      if Nat.eqb i 0 then Val_closure addr 0%nat
-      else Val_closure addr (3 * i) in
-    (* Push closures: closure_{nf-1} on top, closure_0 at bottom.
-       After this instruction accu = closure_0. *)
-    let fix push_closures (i : nat) (stk : list value) : list value :=
-      match i with
-      | O => stk
-      | S i' =>
-        let stk' := push_closures i' stk in
-        closure_at i' :: stk'
-      end in
-    let new_stack := push_closures nfuncs rest in
-    Step (s' <|pc := pc'|> <|accu := closure_at 0%nat|> <|stack := new_stack|>)
-  end.
+  let wf :=
+    match nfuncs, nvars, code_offsets with
+    | 1%nat, 0%nat, (code_ofs :: nil)%list =>
+        ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
+    | _, _, _ => false
+    end in
+  if wf then
+    let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
+    let vars := firstn nvars stk in
+    let rest := skipn nvars stk in
+    match code_offsets with
+    | [] => Error "CLOSUREREC: no code offsets"
+    | _ =>
+      let closinfo := Val_int 0 in
+      let infix_hdr := Val_block Infix_tag [] in
+      let fix build_closure_fields (i : nat) (offsets : list Z) : list value :=
+        match offsets with
+        | [] => vars
+        | ofs :: rest_ofs =>
+          if Nat.eqb i 0 then
+            Val_int ofs :: closinfo :: build_closure_fields 1%nat rest_ofs
+          else
+            infix_hdr :: Val_int ofs :: closinfo :: build_closure_fields (S i) rest_ofs
+        end in
+      let fields := build_closure_fields 0%nat code_offsets in
+      let '(s', base_ptr) := heap_alloc s Closure_tag fields in
+      let addr := match base_ptr with Val_ptr a => a | _ => 0%nat end in
+      let closure_at (i : nat) : value :=
+        if Nat.eqb i 0 then Val_closure addr 0%nat
+        else Val_closure addr (3 * i) in
+      (* Push closures: closure_{nf-1} on top, closure_0 at bottom.
+         After this instruction accu = closure_0. *)
+      let fix push_closures (i : nat) (stk : list value) : list value :=
+        match i with
+        | O => stk
+        | S i' =>
+          let stk' := push_closures i' stk in
+          closure_at i' :: stk'
+        end in
+      let new_stack := push_closures nfuncs rest in
+      Step (s' <|pc := pc'|> <|accu := closure_at 0%nat|> <|stack := new_stack|>)
+    end
+  else
+    Error "CLOSUREREC: malformed operand".
 
 (* OFFSETCLOSURE n: accu := env offset by n fields (within the same heap block). *)
 Definition handle_OFFSETCLOSURE (ofs : Z) (pc' : Z) (s : state) : step_result :=
@@ -349,17 +376,23 @@ Definition handle_PUSHOFFSETCLOSURE (ofs : Z) (pc' : Z) (s : state) : step_resul
   end.
 
 Definition handle_GETGLOBAL (n : nat) (pc' : Z) (s : state) : step_result :=
-  match nth_error s.(global) n with
-  | Some v => Step (s <|pc := pc'|> <|accu := v|>)
-  | None => Error "GETGLOBAL: index out of bounds"
-  end.
+  if ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z then
+    match nth_error s.(global) n with
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
+    | None => Error "GETGLOBAL: index out of bounds"
+    end
+  else
+    Error "GETGLOBAL: malformed operand".
 
 Definition handle_PUSHGETGLOBAL (n : nat) (pc' : Z) (s : state) : step_result :=
-  let new_stack := s.(accu) :: s.(stack) in
-  match nth_error s.(global) n with
-  | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
-  | None => Error "PUSHGETGLOBAL: index out of bounds"
-  end.
+  if ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z then
+    let new_stack := s.(accu) :: s.(stack) in
+    match nth_error s.(global) n with
+    | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
+    | None => Error "PUSHGETGLOBAL: index out of bounds"
+    end
+  else
+    Error "PUSHGETGLOBAL: malformed operand".
 
 Definition handle_GETGLOBALFIELD (n p : nat) (pc' : Z) (s : state) : step_result :=
   match nth_error s.(global) n with
@@ -393,54 +426,78 @@ Definition handle_ATOM0 (pc' : Z) (s : state) : step_result :=
   Step (s <|accu := Val_block 0 []|>).
 
 Definition handle_ATOM (t : nat) (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|> <|accu := Val_block t []|>).
+  if (Z.of_nat t <=? 2097151)%Z then
+    Step (s <|pc := pc'|> <|accu := Val_block t []|>)
+  else
+    Error "ATOM: malformed operand".
 
 Definition handle_PUSHATOM0 (pc' : Z) (s : state) : step_result :=
   Step (s <|accu := Val_block 0 []|> <|stack := s.(accu) :: s.(stack)|>).
 
 Definition handle_PUSHATOM (t : nat) (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|> <|accu := Val_block t []|> <|stack := s.(accu) :: s.(stack)|>).
+  if (Z.of_nat t <=? 2097151)%Z then
+    Step (s <|pc := pc'|> <|accu := Val_block t []|> <|stack := s.(accu) :: s.(stack)|>)
+  else
+    Error "PUSHATOM: malformed operand".
 
 (* MAKEBLOCK tag size: accu=field0, pop (size-1) from stack. *)
 Definition handle_MAKEBLOCK (t size : nat) (pc' : Z) (s : state) : step_result :=
-  let fields := s.(accu) :: firstn (Nat.sub size 1) s.(stack) in
-  let new_stack := skipn (Nat.sub size 1) s.(stack) in
-  let '(s', ptr) := heap_alloc s t fields in
-  Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>).
+  if (1 <=? size)%nat then
+    let fields := s.(accu) :: firstn (Nat.sub size 1) s.(stack) in
+    let new_stack := skipn (Nat.sub size 1) s.(stack) in
+    let '(s', ptr) := heap_alloc s t fields in
+    Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>)
+  else
+    Error "MAKEBLOCK: malformed operand".
 
 Definition handle_MAKEBLOCK1 (t : nat) (pc' : Z) (s : state) : step_result :=
-  let '(s', ptr) := heap_alloc s t [s.(accu)] in
-  Step (s' <|pc := pc'|> <|accu := ptr|>).
+  if ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z then
+    let '(s', ptr) := heap_alloc s t [s.(accu)] in
+    Step (s' <|pc := pc'|> <|accu := ptr|>)
+  else
+    Error "MAKEBLOCK1: malformed operand".
 
 Definition handle_MAKEBLOCK2 (t : nat) (pc' : Z) (s : state) : step_result :=
-  match s.(stack) with
-  | v1 :: rest =>
-    let '(s', ptr) := heap_alloc s t [s.(accu); v1] in
-    Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := rest|>)
-  | _ => Error "MAKEBLOCK2: stack underflow"
-  end.
+  if ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z then
+    match s.(stack) with
+    | v1 :: rest =>
+      let '(s', ptr) := heap_alloc s t [s.(accu); v1] in
+      Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := rest|>)
+    | _ => Error "MAKEBLOCK2: stack underflow"
+    end
+  else
+    Error "MAKEBLOCK2: malformed operand".
 
 Definition handle_MAKEBLOCK3 (t : nat) (pc' : Z) (s : state) : step_result :=
-  match s.(stack) with
-  | v1 :: v2 :: rest =>
-    let '(s', ptr) := heap_alloc s t [s.(accu); v1; v2] in
-    Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := rest|>)
-  | _ => Error "MAKEBLOCK3: stack underflow"
-  end.
+  if ((0 <=? Z.of_nat t) && (Z.of_nat t <=? 255))%Z then
+    match s.(stack) with
+    | v1 :: v2 :: rest =>
+      let '(s', ptr) := heap_alloc s t [s.(accu); v1; v2] in
+      Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := rest|>)
+    | _ => Error "MAKEBLOCK3: stack underflow"
+    end
+  else
+    Error "MAKEBLOCK3: malformed operand".
 
 (* MAKEFLOATBLOCK n: accu=field0, pop (n-1) from stack.
    Use tag 254 (double array) to hold float fields. *)
 Definition handle_MAKEFLOATBLOCK (n : nat) (pc' : Z) (s : state) : step_result :=
-  let fields := s.(accu) :: firstn (Nat.sub n 1) s.(stack) in
-  let new_stack := skipn (Nat.sub n 1) s.(stack) in
-  let '(s', ptr) := heap_alloc s 254 fields in
-  Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>).
+  if (1 <=? n)%nat then
+    let fields := s.(accu) :: firstn (Nat.sub n 1) s.(stack) in
+    let new_stack := skipn (Nat.sub n 1) s.(stack) in
+    let '(s', ptr) := heap_alloc s 254 fields in
+    Step (s' <|pc := pc'|> <|accu := ptr|> <|stack := new_stack|>)
+  else
+    Error "MAKEFLOATBLOCK: malformed operand".
 
 Definition handle_GETFIELD (n : nat) (pc' : Z) (s : state) : step_result :=
-  match field_or_heap s s.(accu) n with
-  | Some v => Step (s <|pc := pc'|> <|accu := v|>)
-  | None => Error "GETFIELD: access failed"
-  end.
+  if ((Int.min_signed <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z then
+    match field_or_heap s s.(accu) n with
+    | Some v => Step (s <|pc := pc'|> <|accu := v|>)
+    | None => Error "GETFIELD: access failed"
+    end
+  else
+    Error "GETFIELD: malformed operand".
 
 (* GETFLOATFIELD n: accu is a float array (tag 254), get field n. *)
 Definition handle_GETFLOATFIELD (n : nat) (pc' : Z) (s : state) : step_result :=
@@ -629,7 +686,10 @@ Definition handle_C_CALL (nargs : nat) (prim_idx : nat) (pc' : Z) (s : state) : 
   CCall_request prim_idx args cont.
 
 Definition handle_CONSTINT (n : Z) (pc' : Z) (s : state) : step_result :=
-  Step (s <|pc := pc'|> <|accu := Val_int n|>).
+  if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    Step (s <|pc := pc'|> <|accu := Val_int n|>)
+  else
+    Error "CONSTINT: malformed operand".
 
 Definition handle_PUSHCONSTINT (n : Z) (pc' : Z) (s : state) : step_result :=
   let new_stack := s.(accu) :: s.(stack) in
@@ -748,10 +808,13 @@ Definition handle_GEINT (pc' : Z) (s : state) : step_result :=
   end.
 
 Definition handle_OFFSETINT (n : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => Step (s <|pc := pc'|> <|accu := Val_int (a + n)|>)
-  | _ => Error "OFFSETINT: not an integer"
-  end.
+  if ((Int.min_signed <=? n * 2) && (n * 2 <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => Step (s <|pc := pc'|> <|accu := Val_int (a + n)|>)
+    | _ => Error "OFFSETINT: not an integer"
+    end
+  else
+    Error "OFFSETINT: malformed operand".
 
 Definition handle_OFFSETREF (n : Z) (pc' : Z) (s : state) : step_result :=
   match s.(accu) with
@@ -856,51 +919,69 @@ Definition handle_GETDYNMET (pc' : Z) (s : state) : step_result :=
 (* B-comparison instructions: the spec says "increments pc by ofs-1 if val CMP accu".
    In interp.c the operand is an absolute instruction index (after decode). *)
 Definition handle_BEQ (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.eqb a n then Step (s <|pc := target|>)
-                 else Step (s <|pc := pc'|>)
-  (* Non-integer values are never equal to Val_int n, so don't branch *)
-  | _ => Step (s <|pc := pc'|>)
-  end.
+  if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.eqb a n then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
+    (* Non-integer values are never equal to Val_int n, so don't branch *)
+    | _ => Step (s <|pc := pc'|>)
+    end
+  else
+    Error "BEQ: malformed operand".
 
 Definition handle_BNEQ (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.eqb a n then Step (s <|pc := pc'|>)
-                 else Step (s <|pc := target|>)
-  (* Non-integer values are never equal to Val_int n, so always branch *)
-  | _ => Step (s <|pc := target|>)
-  end.
+  if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.eqb a n then Step (s <|pc := pc'|>)
+                   else Step (s <|pc := target|>)
+    (* Non-integer values are never equal to Val_int n, so always branch *)
+    | _ => Step (s <|pc := target|>)
+    end
+  else
+    Error "BNEQ: malformed operand".
 
 (* B-comparison instructions: semantics is *pc++ CMP Long_val(accu),
    i.e., the OPERAND is on the LEFT and ACCU on the RIGHT. *)
 
 Definition handle_BLTINT (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.ltb n a then Step (s <|pc := target|>)
-                 else Step (s <|pc := pc'|>)
-  | _ => Error "BLTINT: not an integer"
-  end.
+  if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.ltb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
+    | _ => Error "BLTINT: not an integer"
+    end
+  else
+    Error "BLTINT: malformed operand".
 
 Definition handle_BLEINT (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.leb n a then Step (s <|pc := target|>)
-                 else Step (s <|pc := pc'|>)
-  | _ => Error "BLEINT: not an integer"
-  end.
+  if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.leb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
+    | _ => Error "BLEINT: not an integer"
+    end
+  else
+    Error "BLEINT: malformed operand".
 
 Definition handle_BGTINT (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.gtb n a then Step (s <|pc := target|>)
-                 else Step (s <|pc := pc'|>)
-  | _ => Error "BGTINT: not an integer"
-  end.
+  if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.gtb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
+    | _ => Error "BGTINT: not an integer"
+    end
+  else
+    Error "BGTINT: malformed operand".
 
 Definition handle_BGEINT (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.geb n a then Step (s <|pc := target|>)
-                 else Step (s <|pc := pc'|>)
-  | _ => Error "BGEINT: not an integer"
-  end.
+  if ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.geb n a then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
+    | _ => Error "BGEINT: not an integer"
+    end
+  else
+    Error "BGEINT: malformed operand".
 
 Definition handle_ULTINT (pc' : Z) (s : state) : step_result :=
   match s.(accu), s.(stack) with
@@ -918,18 +999,24 @@ Definition handle_UGEINT (pc' : Z) (s : state) : step_result :=
    BUGEINT(n, target): branch if n >= accu (unsigned). "n is UGE the integer accu."
    Like signed B-ops (which use n CMP accu), both use z_flip_sign for unsigned order. *)
 Definition handle_BULTINT (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.ltb (z_flip_sign n) (z_flip_sign a) then Step (s <|pc := target|>)
-                 else Step (s <|pc := pc'|>)
-  | _ => Error "BULTINT: not an integer"
-  end.
+  if ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.ltb (z_flip_sign n) (z_flip_sign a) then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
+    | _ => Error "BULTINT: not an integer"
+    end
+  else
+    Error "BULTINT: malformed operand".
 
 Definition handle_BUGEINT (n : Z) (target : Z) (pc' : Z) (s : state) : step_result :=
-  match s.(accu) with
-  | Val_int a => if Z.geb (z_flip_sign n) (z_flip_sign a) then Step (s <|pc := target|>)
-                 else Step (s <|pc := pc'|>)
-  | _ => Error "BUGEINT: not an integer"
-  end.
+  if ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z then
+    match s.(accu) with
+    | Val_int a => if Z.geb (z_flip_sign n) (z_flip_sign a) then Step (s <|pc := target|>)
+                   else Step (s <|pc := pc'|>)
+    | _ => Error "BUGEINT: not an integer"
+    end
+  else
+    Error "BUGEINT: malformed operand".
 
 Definition handle_STOP (s : state) : step_result :=
   Halt s.(accu).
