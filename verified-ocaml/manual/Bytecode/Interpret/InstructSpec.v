@@ -2547,32 +2547,29 @@ Definition pushoffsetclosure_step_pre (ofs : Z)
   end.
 
 Definition return_step_pre (stacksize : nat)
-    (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
-  Mem.load Mint32 m (ar_code_base_block ard)
-    (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-       (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-  = Some (Vint (Int.repr (Z.of_nat stacksize))) /\
-  Z.of_nat stacksize < Int.half_modulus /\
-  Z.of_nat (extra_args s) <= Int64.max_signed /\
-  (forall sp_b sp_ofs,
-     Mem.load Mint64 m (ar_sptr_block ard)
-       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-     Ptrofs.unsigned sp_ofs + Z.of_nat stacksize * 8 < Ptrofs.modulus) /\
-  (stacksize <= Datatypes.length (Machine.stack s))%nat /\
-  (Nat.ltb 0 (extra_args s) = true ->
-   forall sp_b sp_ofs,
-     Mem.load Mint64 m (ar_sptr_block ard)
-       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-     return_tailcall_pre m s ard sp_b) /\
-  (Nat.ltb 0 (extra_args s) = false ->
-   forall sp_b sp_ofs ret_pc saved_env saved_ea rest,
-     Mem.load Mint64 m (ar_sptr_block ard)
-       (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-     skipn stacksize (Machine.stack s) =
-       Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest ->
-     return_frame_pre m s ard sp_b
-       (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat stacksize * 8)))
-       ret_pc saved_env saved_ea rest).
+    (e0 : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
+  let stk := skipn stacksize s.(Machine.stack) in
+  let s' :=
+    if Nat.ltb 0 s.(extra_args) then
+      match get_code_ptr_s s s.(Machine.accu) with
+      | Some target_pc =>
+        s <|pc := target_pc|> <|stack := stk|> <|env := s.(Machine.accu)|>
+          <|extra_args := Nat.sub s.(extra_args) 1|>
+      | None => s
+      end
+    else
+      match stk with
+      | Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest =>
+        s <|pc := ret_pc|> <|stack := rest|> <|env := saved_env|>
+          <|extra_args := Z.to_nat saved_ea|>
+      | _ => s
+      end in
+  forall le,
+    abs_rel_with_ard e0 le m s ard ->
+    exists le' m' out,
+      exec_stmt function_entry1 clight_ge e0 le m
+        (fn_body f_instr_RETURN) E0 le' m' out /\
+      abs_rel e0 le' m' s'.
 
 Definition setbyteschar_step_pre
     (_ : Clight.env) (m : mem) (s : Machine.state) (ard : abs_rel_data) : Prop :=
