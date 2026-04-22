@@ -188,7 +188,6 @@ Definition getmethod_heap_pre
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-#[warnings="-not-a-closed-proof"]
 Theorem verify_GETMETHOD_correct :
     handler_correct handle_GETMETHOD f_instr_GETMETHOD
       (fun _ m s ard =>
