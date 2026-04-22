@@ -219,7 +219,6 @@ Definition getstringchar_heap_pre
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-#[warnings="-not-a-closed-proof"]
 Theorem verify_GETSTRINGCHAR_correct :
     handler_correct handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
       (fun _ m s ard =>
