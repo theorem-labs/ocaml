@@ -352,7 +352,7 @@ Proof.
       as [accu_b [accu_ofs [fv [Haccu_is_ptr [Haccu_ne_sb Hfloat_load]]]]].
     subst accu_v.
 
-    (* Store 1: pc field *)
+    (* Store 1: pc field at (sb, uso+0) <- new_pc_v *)
     destruct (store_succeeds_sb m sb so 0 (Vptr cb pc_ofs) Hsb_writable Hpc_load ltac:(lia) ltac:(lia) new_pc_v)
       as [m1 Hstore_pc].
     pose proof (sb_writable_after_store _ _ _ _ _ _ _ _ Hstore_pc Hsb_writable) as Hsb_writable_m1.
@@ -376,7 +376,7 @@ Proof.
       - exact Hstore_pc.
       - left. exact Haccu_ne_sb. }
 
-    (* heap_alloc *)
+    (* heap_alloc on m1 *)
     destruct (Halloc_spec_all m1 fv)
       as [m_alloc [new_b [new_ofs
            (Hext_call & Hnew_fresh &
@@ -401,48 +401,69 @@ Proof.
     { apply Hnew_fresh.
       eapply Mem.store_valid_block_1. exact Hstore_pc. exact Hgb_valid. }
 
-    assert (Hstruct_preserved : forall ofs0 v0,
-      Mem.load Mint64 m1 sb ofs0 = Some v0 ->
-      Mem.load Mint64 m_alloc sb ofs0 = Some v0).
-    { intros ofs0 v0 Hld. apply Halloc_load_pres; auto. }
+    (* accu load survives heap_alloc *)
+    assert (Haccu_load_alloc : Mem.load Mint64 m_alloc sb (Ptrofs.unsigned so + 8) = Some (Vptr accu_b accu_ofs)).
+    { apply Halloc_load_pres; auto. }
 
-    assert (Hstruct_preserved2 : forall ofs0 v0,
-      Mem.load Mint64 m1 sb ofs0 = Some v0 ->
-      Mem.load Mint64 m_fstore sb ofs0 = Some v0).
-    { intros ofs0 v0 Hld.
-      apply Hfstore_load_pres.
-      - intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq).
-      - apply Hstruct_preserved. exact Hld. }
-
-    assert (Haccu_load_fstore : Mem.load Mint64 m_fstore sb (Ptrofs.unsigned so + 8) = Some (Vptr accu_b accu_ofs)).
-    { apply Hstruct_preserved2. exact Haccu_load_m1. }
-
-    (* Store 2: accu field *)
+    (* Store 2: accu field at (sb, uso+8) <- block_v *)
     set (block_v := Vptr new_b new_ofs).
 
-    assert (Hsb_writable_fstore :
-      Mem.range_perm m_fstore sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
-    { intros ofs0 Hofs0. eapply Hfstore_perm_pres.
+    assert (Hsb_writable_alloc :
+      Mem.range_perm m_alloc sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56) Cur Writable).
+    { intros ofs0 Hofs0.
       eapply Halloc_perm_pres.
       - eapply Mem.perm_valid_block.
         apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
         apply (Hsb_writable (Ptrofs.unsigned so)). lia.
       - apply Hsb_writable_m1. exact Hofs0. }
 
-    destruct (store_succeeds_sb m_fstore sb so 8 (Vptr accu_b accu_ofs) Hsb_writable_fstore Haccu_load_fstore ltac:(lia) ltac:(lia) block_v)
-      as [m2 Hstore_accu].
+    destruct (store_succeeds_sb m_alloc sb so 8 (Vptr accu_b accu_ofs) Hsb_writable_alloc Haccu_load_alloc ltac:(lia) ltac:(lia) block_v)
+      as [m_store_accu Hstore_accu].
+
+    (* block_v load from m_store_accu at uso+8 *)
+    assert (Hblock_load_store_accu : Mem.load Mint64 m_store_accu sb (Ptrofs.unsigned so + 8) = Some block_v).
+    { pose proof (load_after_store_same m_alloc m_store_accu sb (Ptrofs.unsigned so + 8) block_v Hstore_accu) as Htmp.
+      unfold block_v in Htmp |- *. rewrite load_result_vptr_local in Htmp. exact Htmp. }
+
+    (* Store 3: float to new block *)
+    (* We need m_fstore but based on m_alloc, and here we stored accu in between.
+       The alloc_spec gives us m_fstore based on m_alloc directly.
+       But in the new C code, the float store happens AFTER the accu store.
+       We need to re-derive: the float store should work on m_store_accu. *)
+    (* Actually, the alloc_spec's m_fstore is computed from m_alloc, not m_store_accu.
+       In the new code, the float store happens on m_store_accu, not m_alloc.
+       So we need to get a store on m_store_accu instead. *)
+
+    (* The precondition gives us: for any m', exists m_fstore s.t.
+       Mem.store Mfloat64 m_alloc new_b ... = Some m_fstore.
+       But we need the store on m_store_accu, not m_alloc.
+       Since new_b is fresh and the accu store is to sb (different block),
+       the store to new_b should also succeed on m_store_accu. *)
+    assert (Hfloat_va : Mem.valid_access m_store_accu Mfloat64 new_b (Ptrofs.unsigned new_ofs) Writable).
+    { eapply Mem.store_valid_access_1. exact Hstore_accu.
+      eapply Mem.store_valid_access_3. exact Hfstore. }
+    destruct (Mem.valid_access_store _ _ _ _ (Vfloat fv) Hfloat_va) as [m2 Hstore_float].
 
     (* Extended heap map *)
     destruct (Hval_repr_post v new_b new_ofs eq_refl)
       as [hm' [Hval_repr_new [Hval_repr_ext [Hstack_repr_ext Hglobal_repr_ext]]]].
 
-    (* Temp env *)
+    (* Temp env — matches the new C body:
+       _t'1 = s->pc,
+       _t'4 = s->accu (was _t'3 in old code),
+       _t'5 = *_t'1 (was _t'4 in old code),
+       _d = float field,
+       _t'2 = heap_alloc result,
+       _t'3 = re-read s->accu (was not in old code) *)
     set (le1 := PTree.set _t'1 (Vptr cb pc_ofs) le).
-    set (le2 := PTree.set _t'3 (Vptr accu_b accu_ofs) le1).
-    set (le3 := PTree.set _t'4 (Vint (Int.repr (Z.of_nat n))) le2).
+    set (le2 := PTree.set _t'4 (Vptr accu_b accu_ofs) le1).
+    set (le3 := PTree.set _t'5 (Vint (Int.repr (Z.of_nat n))) le2).
     set (le4 := PTree.set _d (Vfloat fv) le3).
     set (le5 := PTree.set _t'2 block_v le4).
-    set (le6 := PTree.set _block block_v le5).
+    (* Phase 7: s->accu = _t'2 (no temp env change, only memory) *)
+    (* Phase 8: _t'3 = s->accu (re-read from struct) *)
+    set (le6 := PTree.set _t'3 block_v le5).
+    (* Phase 9: deref _t'3 = _d (no temp env change, only memory) *)
     set (le' := le6).
 
     exists le'. exists m2.
@@ -452,6 +473,18 @@ Proof.
 
     (* ============================================================== *)
     (* Part 1: exec_stmt derivation                                    *)
+    (*                                                                  *)
+    (* New C body execution order:                                      *)
+    (*   _t'1 = s->pc             (read PC pointer)                    *)
+    (*   s->pc = _t'1 + 1         (advance PC -> m1)                   *)
+    (*   _t'4 = s->accu           (read accu from m1)                  *)
+    (*   _t'5 = *_t'1             (read n from code buffer in m1)      *)
+    (*   _d = deref(cast(_t'4)+_t'5*...) (read float field in m1)     *)
+    (*   _t'2 = heap_alloc(...)   (allocate -> m_alloc)                *)
+    (*   s->accu = _t'2           (store block to accu -> m_store_accu)*)
+    (*   _t'3 = s->accu           (re-read accu from m_store_accu)     *)
+    (*   deref _t'3 = _d           (store float -> m2)                  *)
+    (*   return 0                                                      *)
     (* ============================================================== *)
     {
       (* Phase 1: Sset _t'1 (s->pc) *)
@@ -495,9 +528,9 @@ Proof.
         fold new_pc_v. rewrite Hstore_pc; eval_cbn.
         reflexivity. }
 
-      (* Phase 3: Sset _t'3 (s->accu) *)
+      (* Phase 3: Sset _t'4 (s->accu) — note: _t'4 in new code, was _t'3 *)
       assert (Hexec_read_accu : exec_stmt function_entry1 clight_ge e le1 m1
-          (Sset _t'3
+          (Sset _t'4
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _accu tlong))
@@ -513,9 +546,9 @@ Proof.
         rewrite Haccu_load_m1; eval_cbn.
         reflexivity. }
 
-      (* Phase 4: Sset _t'4 (deref _t'1) *)
+      (* Phase 4: Sset _t'5 (deref _t'1) — note: _t'5 in new code, was _t'4 *)
       assert (Hexec_read_n : exec_stmt function_entry1 clight_ge e le2 m1
-          (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+          (Sset _t'5 (Ederef (Etempvar _t'1 (tptr tint)) tint))
           E0 le3 m1 Out_normal).
       { apply (eval_stmt_to_exec clight_ge 10).
         eval_cbn.
@@ -526,11 +559,8 @@ Proof.
         rewrite Hcode_load_m1; eval_cbn.
         reflexivity. }
 
-      (* Phase 5: Sset _d -- read float field.
-         This involves sizeof expressions which interact badly with eval_cbn.
-         We construct the exec_stmt manually using eval_Sset + eval_Elvalue. *)
-
-      (* First establish what the complex expression evaluates to *)
+      (* Phase 5: Sset _d — read float field.
+         Uses _t'4 for accu ptr, _t'5 for index (new temp names). *)
       assert (Hsize_div : sem_binary_operation (genv_cenv ge) Odiv
                 (Vptrofs (Ptrofs.repr (sizeof (genv_cenv ge) tdouble))) tulong
                 (Vptrofs (Ptrofs.repr (sizeof (genv_cenv ge) tlong))) tulong m1
@@ -564,32 +594,26 @@ Proof.
           (Sset _d
             (Ederef
               (Ecast
-                (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                  (Ebinop Omul (Etempvar _t'4 tint)
+                (Ebinop Oadd (Ecast (Etempvar _t'4 tlong) (tptr tlong))
+                  (Ebinop Omul (Etempvar _t'5 tint)
                     (Ebinop Odiv (Esizeof tdouble tulong)
                       (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
                 (tptr tdouble)) tdouble))
           E0 le4 m1 Out_normal).
       { eapply exec_Sset.
         eapply eval_Elvalue.
-        - (* eval_lvalue: Ederef (Ecast ...) *)
-          eapply eval_Ederef.
-          (* eval_expr: Ecast (Ebinop Oadd ...) *)
+        - eapply eval_Ederef.
           eapply eval_Ecast.
-          + (* eval_expr: Ebinop Oadd *)
-            eapply eval_Ebinop.
-            * (* eval_expr: Ecast (Etempvar _t'3 tlong) (tptr tlong) *)
-              eapply eval_Ecast.
+          + eapply eval_Ebinop.
+            * eapply eval_Ecast.
               -- econstructor.
                  unfold le3. rewrite PTree.gso by (compute; congruence).
                  unfold le2. rewrite PTree.gss. reflexivity.
               -- exact (sem_cast_long_to_ptr_vptr accu_b accu_ofs m1).
-            * (* eval_expr: Ebinop Omul *)
-              eapply eval_Ebinop.
+            * eapply eval_Ebinop.
               -- econstructor.
                  unfold le3. rewrite PTree.gss. reflexivity.
-              -- (* eval_expr: Ebinop Odiv (Esizeof ...) (Esizeof ...) *)
-                 eapply eval_Ebinop.
+              -- eapply eval_Ebinop.
                  ++ econstructor.
                  ++ econstructor.
                  ++ exact Hsize_div.
@@ -597,8 +621,7 @@ Proof.
             * exact Hadd_ptr.
           + exact (sem_cast_ptr_tlong_to_ptr_tdouble accu_b
                      (Ptrofs.add accu_ofs (Ptrofs.repr (Z.of_nat n * 8))) m1).
-        - (* deref_loc tdouble *)
-          apply deref_loc_value with (chunk := Mfloat64).
+        - apply deref_loc_value with (chunk := Mfloat64).
           + simpl. reflexivity.
           + simpl. exact Hfloat_load_m1.
       }
@@ -650,52 +673,18 @@ Proof.
         - eapply eval_funcall_external. exact Hext_call.
       }
 
-      (* Phase 7: Sset _block _t'2 *)
-      assert (Hexec_set_block : exec_stmt function_entry1 clight_ge e le5 m_alloc
-          (Sset _block (Etempvar _t'2 tlong))
-          E0 le6 m_alloc Out_normal).
-      { apply (eval_stmt_to_exec clight_ge 10).
-        eval_cbn.
-        unfold le5. rewrite PTree.gss; eval_cbn.
-        reflexivity. }
-
-      (* Phase 8: store float to new block *)
-      assert (Hexec_store_float : exec_stmt function_entry1 clight_ge e le6 m_alloc
-          (Sassign
-            (Ederef (Ecast (Etempvar _block tlong) (tptr tdouble)) tdouble)
-            (Etempvar _d tdouble))
-          E0 le6 m_fstore Out_normal).
-      { eapply exec_Sassign.
-        - (* eval_lvalue: Ederef (Ecast (Etempvar _block tlong) (tptr tdouble)) *)
-          eapply eval_Ederef.
-          eapply eval_Ecast.
-          + econstructor.
-            unfold le6. rewrite PTree.gss. reflexivity.
-          + exact (sem_cast_long_to_ptr_tdouble new_b new_ofs m_alloc).
-        - (* eval_expr: Etempvar _d tdouble *)
-          econstructor.
-          unfold le6. rewrite PTree.gso by (compute; congruence).
-          unfold le5. rewrite PTree.gso by (compute; congruence).
-          unfold le4. rewrite PTree.gss. reflexivity.
-        - (* sem_cast Vfloat from tdouble to tdouble *)
-          exact (sem_cast_tdouble_tdouble fv m_alloc).
-        - (* assign_loc: store float *)
-          apply assign_loc_value with (chunk := Mfloat64).
-          + simpl. reflexivity.
-          + simpl. exact Hfstore. }
-
-      (* Phase 9: store accu *)
-      assert (Hexec_store_accu : exec_stmt function_entry1 clight_ge e le6 m_fstore
+      (* Phase 7: Sassign s->accu = _t'2 *)
+      assert (Hexec_store_accu : exec_stmt function_entry1 clight_ge e le5 m_alloc
           (Sassign
             (Efield
               (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                 (Tstruct _interp_state noattr)) _accu tlong)
-            (Etempvar _block tlong))
-          E0 le6 m2 Out_normal).
+            (Etempvar _t'2 tlong))
+          E0 le5 m_store_accu Out_normal).
       { apply (eval_stmt_to_exec clight_ge 10).
         eval_cbn.
-        unfold le6. rewrite PTree.gso by (compute; congruence).
-        unfold le5. rewrite PTree.gso by (compute; congruence).
+        unfold le5.
+        rewrite PTree.gso by (compute; congruence).
         unfold le4. rewrite PTree.gso by (compute; congruence).
         unfold le3. rewrite PTree.gso by (compute; congruence).
         unfold le2. rewrite PTree.gso by (compute; congruence).
@@ -703,13 +692,56 @@ Proof.
         rewrite Hle_s; eval_cbn.
         rewrite Hco; eval_cbn.
         rewrite Haccu_offset; eval_cbn.
-        unfold le6. rewrite PTree.gss; eval_cbn.
+        unfold le5. rewrite PTree.gss; eval_cbn.
         fold block_v.
         unfold block_v at 1.
-        rewrite (sem_cast_long_vptr new_b new_ofs m_fstore); eval_cbn.
+        rewrite (sem_cast_long_vptr new_b new_ofs m_alloc); eval_cbn.
         rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
         fold block_v. rewrite Hstore_accu; eval_cbn.
         reflexivity. }
+
+      (* Phase 8: Sset _t'3 (s->accu) — re-read accu from struct *)
+      assert (Hexec_reread_accu : exec_stmt function_entry1 clight_ge e le5 m_store_accu
+          (Sset _t'3
+            (Efield
+              (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                (Tstruct _interp_state noattr)) _accu tlong))
+          E0 le6 m_store_accu Out_normal).
+      { apply (eval_stmt_to_exec clight_ge 10).
+        eval_cbn.
+        unfold le5.
+        rewrite PTree.gso by (compute; congruence).
+        unfold le4. rewrite PTree.gso by (compute; congruence).
+        unfold le3. rewrite PTree.gso by (compute; congruence).
+        unfold le2. rewrite PTree.gso by (compute; congruence).
+        unfold le1. rewrite PTree.gso by (compute; congruence).
+        rewrite Hle_s; eval_cbn.
+        rewrite Hco; eval_cbn.
+        rewrite Haccu_offset; eval_cbn.
+        rewrite (ptrofs_add_unsigned so 8 ltac:(lia) ltac:(lia)).
+        rewrite Hblock_load_store_accu; eval_cbn.
+        reflexivity. }
+
+      (* Phase 9: Sassign deref _t'3 = _d -- store float to new block *)
+      assert (Hexec_store_float : exec_stmt function_entry1 clight_ge e le6 m_store_accu
+          (Sassign
+            (Ederef (Ecast (Etempvar _t'3 tlong) (tptr tdouble)) tdouble)
+            (Etempvar _d tdouble))
+          E0 le6 m2 Out_normal).
+      { eapply exec_Sassign.
+        - eapply eval_Ederef.
+          eapply eval_Ecast.
+          + econstructor.
+            unfold le6. rewrite PTree.gss. reflexivity.
+          + exact (sem_cast_long_to_ptr_tdouble new_b new_ofs m_store_accu).
+        - econstructor.
+          unfold le6. rewrite PTree.gso by (compute; congruence).
+          unfold le5. rewrite PTree.gso by (compute; congruence).
+          unfold le4. rewrite PTree.gss. reflexivity.
+        - exact (sem_cast_tdouble_tdouble fv m_store_accu).
+        - apply assign_loc_value with (chunk := Mfloat64).
+          + simpl. reflexivity.
+          + simpl. exact Hstore_float. }
 
       (* Phase 10: return 0 *)
       assert (Hexec_return : exec_stmt function_entry1 clight_ge e le6 m2
@@ -717,7 +749,8 @@ Proof.
           E0 le6 m2 (Out_return (Some (Vint (Int.repr 0), tint)))).
       { apply (eval_stmt_to_exec clight_ge 10). reflexivity. }
 
-      (* Combine using exec_Sseq_1 bottom-up *)
+      (* Combine phases bottom-up using exec_Sseq_1 *)
+      (* Phases 1+2 *)
       assert (Hexec_12 :
         exec_stmt function_entry1 clight_ge e le m
           (Ssequence
@@ -731,31 +764,34 @@ Proof.
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
+      (* Phases 4+5 *)
       assert (Hexec_45 :
         exec_stmt function_entry1 clight_ge e le2 m1
           (Ssequence
-            (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-            (Sset _d (Ederef (Ecast (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                (Ebinop Omul (Etempvar _t'4 tint) (Ebinop Odiv (Esizeof tdouble tulong)
+            (Sset _t'5 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+            (Sset _d (Ederef (Ecast (Ebinop Oadd (Ecast (Etempvar _t'4 tlong) (tptr tlong))
+                (Ebinop Omul (Etempvar _t'5 tint) (Ebinop Odiv (Esizeof tdouble tulong)
                   (Esizeof tlong tulong) tulong) tulong) (tptr tlong)) (tptr tdouble)) tdouble)))
           E0 le4 m1 Out_normal).
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
+      (* Phases 3+4+5 *)
       assert (Hexec_345 :
         exec_stmt function_entry1 clight_ge e le1 m1
           (Ssequence
-            (Sset _t'3 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+            (Sset _t'4 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                          (Tstruct _interp_state noattr)) _accu tlong))
             (Ssequence
-              (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-              (Sset _d (Ederef (Ecast (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                  (Ebinop Omul (Etempvar _t'4 tint) (Ebinop Odiv (Esizeof tdouble tulong)
+              (Sset _t'5 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+              (Sset _d (Ederef (Ecast (Ebinop Oadd (Ecast (Etempvar _t'4 tlong) (tptr tlong))
+                  (Ebinop Omul (Etempvar _t'5 tint) (Ebinop Odiv (Esizeof tdouble tulong)
                     (Esizeof tlong tulong) tulong) tulong) (tptr tlong)) (tptr tdouble)) tdouble))))
           E0 le4 m1 Out_normal).
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
+      (* Phases 1-5 (first half) *)
       assert (Hexec_12345 :
         exec_stmt function_entry1 clight_ge e le m
           (Ssequence
@@ -767,17 +803,18 @@ Proof.
                 (Ebinop Oadd (Etempvar _t'1 (tptr tint))
                   (Econst_int (Int.repr 1) tint) (tptr tint))))
             (Ssequence
-              (Sset _t'3 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+              (Sset _t'4 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                            (Tstruct _interp_state noattr)) _accu tlong))
               (Ssequence
-                (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-                (Sset _d (Ederef (Ecast (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                    (Ebinop Omul (Etempvar _t'4 tint) (Ebinop Odiv (Esizeof tdouble tulong)
+                (Sset _t'5 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+                (Sset _d (Ederef (Ecast (Ebinop Oadd (Ecast (Etempvar _t'4 tlong) (tptr tlong))
+                    (Ebinop Omul (Etempvar _t'5 tint) (Ebinop Odiv (Esizeof tdouble tulong)
                       (Esizeof tlong tulong) tulong) tulong) (tptr tlong)) (tptr tdouble)) tdouble)))))
           E0 le4 m1 Out_normal).
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
+      (* Phases 6+7 (call + store accu) *)
       assert (Hexec_67 :
         exec_stmt function_entry1 clight_ge e le4 m1
           (Ssequence
@@ -788,23 +825,26 @@ Proof.
               ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
                (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong) tulong) ::
                (Econst_int (Int.repr 253) tint) :: nil))
-            (Sset _block (Etempvar _t'2 tlong)))
-          E0 le6 m_alloc Out_normal).
+            (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                       (Tstruct _interp_state noattr)) _accu tlong)
+              (Etempvar _t'2 tlong)))
+          E0 le5 m_store_accu Out_normal).
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
+      (* Phases 8+9 (re-read accu + store float) *)
       assert (Hexec_89 :
-        exec_stmt function_entry1 clight_ge e le6 m_alloc
+        exec_stmt function_entry1 clight_ge e le5 m_store_accu
           (Ssequence
-            (Sassign (Ederef (Ecast (Etempvar _block tlong) (tptr tdouble)) tdouble)
-              (Etempvar _d tdouble))
-            (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                       (Tstruct _interp_state noattr)) _accu tlong)
-              (Etempvar _block tlong)))
+            (Sset _t'3 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                         (Tstruct _interp_state noattr)) _accu tlong))
+            (Sassign (Ederef (Ecast (Etempvar _t'3 tlong) (tptr tdouble)) tdouble)
+              (Etempvar _d tdouble)))
           E0 le6 m2 Out_normal).
       { replace E0 with (E0 ** E0) by reflexivity.
         eapply exec_Sseq_1; eauto. }
 
+      (* Phases 6-9 (second half before return) *)
       assert (Hexec_6789 :
         exec_stmt function_entry1 clight_ge e le4 m1
           (Ssequence
@@ -816,102 +856,72 @@ Proof.
                 ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
                  (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong) tulong) ::
                  (Econst_int (Int.repr 253) tint) :: nil))
-              (Sset _block (Etempvar _t'2 tlong)))
-            (Ssequence
-              (Sassign (Ederef (Ecast (Etempvar _block tlong) (tptr tdouble)) tdouble)
-                (Etempvar _d tdouble))
               (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                          (Tstruct _interp_state noattr)) _accu tlong)
-                (Etempvar _block tlong))))
-          E0 le6 m2 Out_normal).
-      { replace E0 with (E0 ** E0) by reflexivity.
-        eapply exec_Sseq_1; eauto. }
-
-      assert (Hexec_pre_return :
-        exec_stmt function_entry1 clight_ge e le m
-          (Ssequence
+                (Etempvar _t'2 tlong)))
             (Ssequence
-              (Ssequence
-                (Sset _t'1 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                             (Tstruct _interp_state noattr)) _pc (tptr tint)))
-                (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                           (Tstruct _interp_state noattr)) _pc (tptr tint))
-                  (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-                    (Econst_int (Int.repr 1) tint) (tptr tint))))
               (Ssequence
                 (Sset _t'3 (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                              (Tstruct _interp_state noattr)) _accu tlong))
-                (Ssequence
-                  (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-                  (Sset _d (Ederef (Ecast (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                      (Ebinop Omul (Etempvar _t'4 tint) (Ebinop Odiv (Esizeof tdouble tulong)
-                        (Esizeof tlong tulong) tulong) tulong) (tptr tlong)) (tptr tdouble)) tdouble)))))
-            (Ssequence
-              (Ssequence
-                (Scall (Some _t'2)
-                  (Evar _heap_alloc (Tfunction
-                    ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
-                    tlong cc_default))
-                  ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-                   (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong) tulong) ::
-                   (Econst_int (Int.repr 253) tint) :: nil))
-                (Sset _block (Etempvar _t'2 tlong)))
-              (Ssequence
-                (Sassign (Ederef (Ecast (Etempvar _block tlong) (tptr tdouble)) tdouble)
-                  (Etempvar _d tdouble))
-                (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                           (Tstruct _interp_state noattr)) _accu tlong)
-                  (Etempvar _block tlong)))))
-          E0 le6 m2 Out_normal).
+                (Sassign (Ederef (Ecast (Etempvar _t'3 tlong) (tptr tdouble)) tdouble)
+                  (Etempvar _d tdouble)))
+              (Sreturn (Some (Econst_int (Int.repr 0) tint)))))
+          E0 le6 m2 (Out_return (Some (Vint (Int.repr 0), tint)))).
       { replace E0 with (E0 ** E0) by reflexivity.
-        eapply exec_Sseq_1; eauto. }
+        eapply exec_Sseq_1.
+        - exact Hexec_67.
+        - replace E0 with (E0 ** E0) by reflexivity.
+          eapply exec_Sseq_1.
+          + exact Hexec_89.
+          + exact Hexec_return. }
 
-      (* Full body = pre_return; return *)
+      (* Full body = phases 1-5; phases 6-9+return *)
       change (fn_body f_instr_GETFLOATFIELD) with
         (Ssequence
           (Ssequence
             (Ssequence
+              (Sset _t'1
+                (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint)))
+              (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _pc (tptr tint))
+                (Ebinop Oadd (Etempvar _t'1 (tptr tint))
+                  (Econst_int (Int.repr 1) tint) (tptr tint))))
+            (Ssequence
+              (Sset _t'4
+                (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong))
               (Ssequence
-                (Sset _t'1
-                  (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint)))
-                (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _pc (tptr tint))
-                  (Ebinop Oadd (Etempvar _t'1 (tptr tint))
-                    (Econst_int (Int.repr 1) tint) (tptr tint))))
+                (Sset _t'5 (Ederef (Etempvar _t'1 (tptr tint)) tint))
+                (Sset _d
+                  (Ederef
+                    (Ecast
+                      (Ebinop Oadd (Ecast (Etempvar _t'4 tlong) (tptr tlong))
+                        (Ebinop Omul (Etempvar _t'5 tint)
+                          (Ebinop Odiv (Esizeof tdouble tulong)
+                            (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
+                      (tptr tdouble)) tdouble)))))
+          (Ssequence
+            (Ssequence
+              (Scall (Some _t'2)
+                (Evar _heap_alloc (Tfunction
+                  ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
+                  tlong cc_default))
+                ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
+                 (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong) tulong) ::
+                 (Econst_int (Int.repr 253) tint) :: nil))
+              (Sassign (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
+                  (Tstruct _interp_state noattr)) _accu tlong)
+                (Etempvar _t'2 tlong)))
+            (Ssequence
               (Ssequence
                 (Sset _t'3
                   (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
                     (Tstruct _interp_state noattr)) _accu tlong))
-                (Ssequence
-                  (Sset _t'4 (Ederef (Etempvar _t'1 (tptr tint)) tint))
-                  (Sset _d
-                    (Ederef
-                      (Ecast
-                        (Ebinop Oadd (Ecast (Etempvar _t'3 tlong) (tptr tlong))
-                          (Ebinop Omul (Etempvar _t'4 tint)
-                            (Ebinop Odiv (Esizeof tdouble tulong)
-                              (Esizeof tlong tulong) tulong) tulong) (tptr tlong))
-                        (tptr tdouble)) tdouble)))))
-            (Ssequence
-              (Ssequence
-                (Scall (Some _t'2)
-                  (Evar _heap_alloc (Tfunction
-                    ((tptr (Tstruct _interp_state noattr)) :: tlong :: tlong :: nil)
-                    tlong cc_default))
-                  ((Etempvar _s (tptr (Tstruct _interp_state noattr))) ::
-                   (Ebinop Odiv (Esizeof tdouble tulong) (Esizeof tlong tulong) tulong) ::
-                   (Econst_int (Int.repr 253) tint) :: nil))
-                (Sset _block (Etempvar _t'2 tlong)))
-              (Ssequence
                 (Sassign
-                  (Ederef (Ecast (Etempvar _block tlong) (tptr tdouble)) tdouble)
-                  (Etempvar _d tdouble))
-                (Sassign
-                  (Efield (Ederef (Etempvar _s (tptr (Tstruct _interp_state noattr)))
-                    (Tstruct _interp_state noattr)) _accu tlong)
-                  (Etempvar _block tlong)))))
-          (Sreturn (Some (Econst_int (Int.repr 0) tint)))).
+                  (Ederef (Ecast (Etempvar _t'3 tlong) (tptr tdouble)) tdouble)
+                  (Etempvar _d tdouble)))
+              (Sreturn (Some (Econst_int (Int.repr 0) tint)))))).
 
       replace E0 with (E0 ** E0) by reflexivity.
       eapply exec_Sseq_1; eauto.
@@ -919,6 +929,9 @@ Proof.
 
     (* ============================================================== *)
     (* Part 2: abs_rel for post-state                                  *)
+    (*                                                                  *)
+    (* Memory transitions: m -> m1 (store PC) -> m_alloc (heap_alloc)  *)
+    (*   -> m_store_accu (store accu) -> m2 (store float)              *)
     (* ============================================================== *)
     {
       set (new_co := Ptrofs.add co (Ptrofs.repr sizeof_code_t)).
@@ -932,20 +945,37 @@ Proof.
 
       set (uso := Ptrofs.unsigned so) in *.
 
+      (* Helper: struct fields survive m1 -> m_alloc -> m_store_accu -> m2 *)
+      (* For fields other than accu (offset 8), they survive all stores *)
+
       assert (Hpc_load_m1 : Mem.load Mint64 m1 sb (uso + 0) = Some new_pc_v).
       { pose proof (load_after_store_same m m1 sb (uso + 0) new_pc_v Hstore_pc) as Htmp.
         unfold new_pc_v in Htmp |- *. rewrite load_result_vptr_local in Htmp. exact Htmp. }
 
+      (* pc in m_alloc *)
+      assert (Hpc_load_alloc : Mem.load Mint64 m_alloc sb (uso + 0) = Some new_pc_v).
+      { apply Halloc_load_pres; auto. }
+
+      (* pc in m_store_accu: different offset than accu store *)
+      assert (Hpc_load_store_accu : Mem.load Mint64 m_store_accu sb (uso + 0) = Some new_pc_v).
+      { apply (load_after_store_other m_alloc m_store_accu sb (uso + 8) (uso + 0)
+                 block_v new_pc_v Hstore_accu Hpc_load_alloc). left. lia. }
+
+      (* pc in m2: float store is to new_b, different block *)
       assert (Hpc_load2 : Mem.load Mint64 m2 sb (uso + 0) = Some new_pc_v).
-      { apply (load_after_store_other m_fstore m2 sb (uso + 8) (uso + 0)
-                 block_v new_pc_v Hstore_accu).
-        - apply Hstruct_preserved2. exact Hpc_load_m1.
-        - left. lia. }
+      { erewrite Mem.load_store_other.
+        - exact Hpc_load_store_accu.
+        - exact Hstore_float.
+        - left. intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq). }
 
+      (* accu in m2: accu store wrote block_v, float store doesn't affect it *)
       assert (Haccu_load2 : Mem.load Mint64 m2 sb (uso + 8) = Some block_v).
-      { pose proof (load_after_store_same m_fstore m2 sb (uso + 8) block_v Hstore_accu) as Htmp.
-        unfold block_v in Htmp |- *. rewrite load_result_vptr_local in Htmp. exact Htmp. }
+      { erewrite Mem.load_store_other.
+        - exact Hblock_load_store_accu.
+        - exact Hstore_float.
+        - left. intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq). }
 
+      (* Helper for fields at offset >= 16: survive all 4 stores *)
       assert (Hfield_survive : forall field_ofs v0,
         field_ofs >= 16 ->
         Mem.load Mint64 m sb (uso + field_ofs) = Some v0 ->
@@ -954,10 +984,15 @@ Proof.
         assert (H1 : Mem.load Mint64 m1 sb (uso + fo) = Some v0).
         { apply (load_after_store_other m m1 sb (uso + 0) (uso + fo)
                    new_pc_v v0 Hstore_pc Hload). right. lia. }
-        assert (H3 : Mem.load Mint64 m_fstore sb (uso + fo) = Some v0).
-        { apply Hstruct_preserved2. exact H1. }
-        apply (load_after_store_other m_fstore m2 sb (uso + 8) (uso + fo)
-                 block_v v0 Hstore_accu H3). right. lia. }
+        assert (H2 : Mem.load Mint64 m_alloc sb (uso + fo) = Some v0).
+        { apply Halloc_load_pres; auto. }
+        assert (H3 : Mem.load Mint64 m_store_accu sb (uso + fo) = Some v0).
+        { apply (load_after_store_other m_alloc m_store_accu sb (uso + 8) (uso + fo)
+                   block_v v0 Hstore_accu H2). right. lia. }
+        erewrite Mem.load_store_other.
+        - exact H3.
+        - exact Hstore_float.
+        - left. intro Heq; symmetry in Heq; exact (Hnew_ne_sb Heq). }
 
       assert (Hsp_load2 : Mem.load Mint64 m2 sb (uso + 16) = Some (Vptr sp_b sp_ofs)).
       { apply Hfield_survive; [lia | exact Hsp_load]. }
@@ -975,7 +1010,7 @@ Proof.
       assert (Hts_load2 : Mem.load Mint64 m2 sb (uso + 48) = Some ts_ptr).
       { apply Hfield_survive; [lia | exact Hts_load]. }
 
-      (* Stack repr *)
+      (* Stack repr through m -> m1 -> m_alloc -> m_store_accu -> m2 *)
       assert (Hstack_m1 : stack_repr hm cb co m1 (Machine.stack s) sp_b sp_ofs).
       { eapply (stack_repr_store_other_block hm cb co); eauto. }
 
@@ -993,19 +1028,22 @@ Proof.
           + exact Hvr.
           + apply IH. exact Hsp_ne_new. }
 
-      assert (Hstack_fstore : stack_repr hm cb co m_fstore (Machine.stack s) sp_b sp_ofs).
-      { clear -Hstack_alloc Hfstore_load_pres Hsp_ne_new.
-        induction Hstack_alloc as [| v0 vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
+      assert (Hstack_store_accu : stack_repr hm cb co m_store_accu (Machine.stack s) sp_b sp_ofs).
+      { eapply (stack_repr_store_other_block hm cb co); eauto. }
+
+      assert (Hstack2 : stack_repr hm cb co m2 (Machine.stack s) sp_b sp_ofs).
+      { clear -Hstack_store_accu Hstore_float Hsp_ne_new.
+        induction Hstack_store_accu as [| v0 vs sp_b0 sp_ofs0 cv Hld Hvr Htl IH].
         - constructor.
         - econstructor.
-          + apply Hfstore_load_pres. exact Hsp_ne_new. exact Hld.
+          + erewrite Mem.load_store_other.
+            * exact Hld.
+            * exact Hstore_float.
+            * left. exact Hsp_ne_new.
           + exact Hvr.
           + apply IH. exact Hsp_ne_new. }
 
-      assert (Hstack2 : stack_repr hm cb co m2 (Machine.stack s) sp_b sp_ofs).
-      { eapply (stack_repr_store_other_block hm cb co); eauto. }
-
-      (* Global repr *)
+      (* Global repr through m -> m1 -> m_alloc -> m_store_accu -> m2 *)
       assert (Hglobal_m1 : global_repr hm cb co m1 (Machine.global s) gb go0).
       { eapply (global_repr_store_other_block hm cb co); eauto. }
 
@@ -1018,17 +1056,20 @@ Proof.
           + exact Hvr.
           + apply IH. exact Hgb_ne_new. }
 
-      assert (Hglobal_fstore : global_repr hm cb co m_fstore (Machine.global s) gb go0).
-      { clear -Hglobal_alloc Hfstore_load_pres Hgb_ne_new.
-        induction Hglobal_alloc as [| v0 vs gb0 gofs0 cv Hld Hvr Htl IH].
-        - constructor.
-        - econstructor.
-          + apply Hfstore_load_pres. exact Hgb_ne_new. exact Hld.
-          + exact Hvr.
-          + apply IH. exact Hgb_ne_new. }
+      assert (Hglobal_store_accu : global_repr hm cb co m_store_accu (Machine.global s) gb go0).
+      { eapply (global_repr_store_other_block hm cb co); eauto. }
 
       assert (Hglobal2 : global_repr hm cb co m2 (Machine.global s) gb go0).
-      { eapply (global_repr_store_other_block hm cb co); eauto. }
+      { clear -Hglobal_store_accu Hstore_float Hgb_ne_new.
+        induction Hglobal_store_accu as [| v0 vs gb0 gofs0 cv Hld Hvr Htl IH].
+        - constructor.
+        - econstructor.
+          + erewrite Mem.load_store_other.
+            * exact Hld.
+            * exact Hstore_float.
+            * left. exact Hgb_ne_new.
+          + exact Hvr.
+          + apply IH. exact Hgb_ne_new. }
 
       split; [| split; [| split; [| split; [| split; [| split; [| split; [| split]]]]]]].
 
@@ -1060,8 +1101,8 @@ Proof.
         - exact Hsp_ge8.
         - exact Hsp_rep.
         - intros ofs0 Hofs0.
+          eapply Mem.perm_store_1. exact Hstore_float.
           eapply Mem.perm_store_1. exact Hstore_accu.
-          eapply Hfstore_perm_pres.
           eapply Halloc_perm_pres.
           + eapply Mem.perm_valid_block.
             apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
@@ -1092,8 +1133,8 @@ Proof.
 
       (* 9. sb_writable *)
       { intros ofs0 Hofs0.
+        eapply Mem.perm_store_1. exact Hstore_float.
         eapply Mem.perm_store_1. exact Hstore_accu.
-        eapply Hfstore_perm_pres.
         eapply Halloc_perm_pres.
         - eapply Mem.perm_valid_block.
           apply (Mem.perm_store_1 _ _ _ _ _ _ Hstore_pc).
@@ -1128,10 +1169,9 @@ Import Bytecode.AST.
    clight_of (GETFLOATFIELD n) = f_instr_GETFLOATFIELD by computation.
    pre_of (GETFLOATFIELD n) = getfloatfield_step_pre n by computation.
    P_error_of (GETFLOATFIELD n) = error_message_of (GETFLOATFIELD n) s = Some msg.
-   P_halt_of (GETFLOATFIELD n) and P_ccall_of (GETFLOATFIELD n) are vacuously False
-   (GETFLOATFIELD is neither STOP nor C_CALL).
-   The Step case delegates to GETFLOATFIELD_correct_for_spec, which requires
-   n in Int.min_signed..Int.max_signed — the same guard enforced by instr_wfb.
+   P_halt_of (GETFLOATFIELD n) and P_ccall_of (GETFLOATFIELD n) are vacuously False.
+   The Step case extracts the range bound from the precondition and
+   delegates to GETFLOATFIELD_correct_for_spec.
    The Error case follows from error_message_of computation. *)
 Definition correct_GETFLOATFIELD : forall n,
   handler_correct (handle_instr (GETFLOATFIELD n)) (clight_of (GETFLOATFIELD n))
@@ -1145,16 +1185,13 @@ Proof.
   unfold handle_GETFLOATFIELD at 1.
   destruct (field_or_heap s s.(Machine.accu) n) as [v|] eqn:Hfoh.
   - (* Step case: field_or_heap = Some v *)
-    destruct (Z_le_dec Int.min_signed (Z.of_nat n)) as [Hlo | Hlo];
-      [destruct (Z_le_dec (Z.of_nat n) Int.max_signed) as [Hhi | Hhi] |].
-    + (* n in range: delegate to GETFLOATFIELD_correct_for_spec *)
-      specialize (GETFLOATFIELD_correct_for_spec n (conj Hlo Hhi) e le m s) as H.
-      unfold handler_correct, handle_GETFLOATFIELD in H.
-      rewrite Hfoh in H. exact H.
-    + (* n > Int.max_signed: out of range *)
-      admit.
-    + (* n < Int.min_signed: out of range *)
-      admit.
+    intros ard Hpre Hstep_pre.
+    (* Extract range bound from getfloatfield_step_pre *)
+    destruct Hstep_pre as (He_ha & Hffl & Hcode & Hn_range & Hrest).
+    specialize (GETFLOATFIELD_correct_for_spec n Hn_range e le m s) as H.
+    unfold handler_correct, handle_GETFLOATFIELD in H.
+    rewrite Hfoh in H.
+    exact (H ard Hpre (conj He_ha (conj Hffl (conj Hcode (conj Hn_range Hrest))))).
   - (* Error case: field_or_heap = None *)
     unfold P_error_of, error_message_of. simpl. rewrite Hfoh. reflexivity.
-Admitted.
+Qed.
