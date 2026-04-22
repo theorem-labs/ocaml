@@ -277,6 +277,8 @@ Local Ltac read_pc_from_struct Hle co_is Hco Hpc_offset Hload :=
 (* ================================================================== *)
 
 Theorem verify_BULTINT_correct : forall n target,
+    0 <= n ->
+    Int.min_signed <= n <= Int.max_signed ->
     handler_correct (handle_BULTINT n target) f_instr_BULTINT
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
@@ -304,8 +306,14 @@ Theorem verify_BULTINT_correct : forall n target,
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
       (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros n target e le m s.
+  intros n target Hn_nonneg0 Hn_range0 e le m s.
   unfold handle_BULTINT.
+  (* Discharge the instr_wfb guard using the range hypotheses *)
+  assert (Hwfb : ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z = true).
+  { apply andb_true_intro. split.
+    - apply andb_true_intro. split; apply Z.leb_le; lia.
+    - apply Z.leb_le; lia. }
+  rewrite Hwfb.
   destruct (Machine.accu s) as [a | tag fields | addr | addr ofs_cl] eqn:Haccu_eq.
 
   (* ================================================================ *)
@@ -832,7 +840,7 @@ Theorem verify_BULTINT_handler_correct : forall n target,
 Proof.
   intros n target Hn0 Hn.
   eapply handler_correct_weaken.
-  - exact (verify_BULTINT_correct n target).
+  - exact (verify_BULTINT_correct n target Hn0 Hn).
   - intros e le m s ard _ [[[[Hne Hca] Hbo] Hai] Hal].
     exact (conj Hne (conj Hn0 (conj Hn (conj Hca (conj Hbo (conj Hai Hal)))))).
 Qed.
@@ -841,56 +849,48 @@ Qed.
    handle_instr (BULTINT n target) reduces to handle_BULTINT n target.
    clight_of (BULTINT n target) = f_instr_BULTINT by computation.
    pre_of (BULTINT n target) = (((code_ne_struct /\p code_at (Int.repr n)) /\p branch_offset_at target) /\p accu_unsigned_int) /\p accu_is_long.
-   Error cases (non-integer accu) match P_error_of exactly.
-   Step case delegates to verify_BULTINT_handler_correct (requires 0 <= n <= Int.max_signed). *)
+
+   The handler checks instr_wfb (BULTINT n _) = ((0 <=? n) && (min_signed <=? n)
+   && (n <=? max_signed))%Z.  When that guard is false the handler returns
+   Error "BULTINT: malformed operand", which matches P_error_of because
+   error_message_of checks the identical boolean.  When the guard is true
+   we have the range assumptions needed by the inner proof.
+
+   Non-integer accu cases are trivially true because pre_of
+   includes accu_unsigned_int which is False for non-integer accu. *)
 Theorem correct_BULTINT : forall n target,
     handler_correct (handle_instr (Bytecode.AST.BULTINT n target)) (clight_of (Bytecode.AST.BULTINT n target))
       (pre_of (Bytecode.AST.BULTINT n target))
       (P_error_of (Bytecode.AST.BULTINT n target)) (P_halt_of (Bytecode.AST.BULTINT n target)) (P_ccall_of (Bytecode.AST.BULTINT n target)).
 Proof.
-  intros n target.
-  unfold handler_correct.
-  intros e le m s.
-  change (handle_instr (Bytecode.AST.BULTINT n target) (Machine.pc s) s)
-    with (handle_BULTINT n target (Machine.pc s) s).
-  unfold handle_BULTINT at 1.
-  destruct (Machine.accu s) as [a | tag fields | addr | addr ofs_cl] eqn:Haccu.
-  - (* Val_int a: Step case — delegate to verify_BULTINT_handler_correct *)
-    destruct (Z.ltb (z_flip_sign n) (z_flip_sign a)) eqn:Hcmp;
-    (* Both if-branches return Step, so the outer match reduces *)
-    simpl.
-    all: destruct (Z_le_dec 0 n) as [Hn0 | Hn_neg];
-    [destruct (Z_le_dec n Int.max_signed) as [Hmax | Hmax_fail] |].
-    + (* branch taken, 0 <= n <= Int.max_signed *)
-      assert (Hn : Int.min_signed <= n <= Int.max_signed).
-      { split; [| exact Hmax]. change Int.min_signed with (-2147483648)%Z. lia. }
-      specialize (verify_BULTINT_handler_correct n target Hn0 Hn) as H.
-      unfold handler_correct in H. specialize (H e le m s).
-      unfold handle_BULTINT at 1 in H. rewrite Haccu, Hcmp in H. simpl in H.
-      change (pre_of (Bytecode.AST.BULTINT n target)) with
-        (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long).
-      change (clight_of (Bytecode.AST.BULTINT n target)) with f_instr_BULTINT.
-      exact H.
-    + (* branch taken, n > Int.max_signed: unreachable for well-formed bytecode *)
-      admit.
-    + (* branch taken, n < 0: unreachable for well-formed BULTINT *)
-      admit.
-    + (* fall through, 0 <= n <= Int.max_signed *)
-      assert (Hn : Int.min_signed <= n <= Int.max_signed).
-      { split; [| exact Hmax]. change Int.min_signed with (-2147483648)%Z. lia. }
-      specialize (verify_BULTINT_handler_correct n target Hn0 Hn) as H.
-      unfold handler_correct in H. specialize (H e le m s).
-      unfold handle_BULTINT at 1 in H. rewrite Haccu, Hcmp in H. simpl in H.
-      change (pre_of (Bytecode.AST.BULTINT n target)) with
-        (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long).
-      change (clight_of (Bytecode.AST.BULTINT n target)) with f_instr_BULTINT.
-      exact H.
-    + (* fall through, n > Int.max_signed: unreachable for well-formed bytecode *)
-      admit.
-    + (* fall through, n < 0: unreachable for well-formed BULTINT *)
-      admit.
-  - (* Non-integer accu: Error case *)
-    unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
-  - unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
-  - unfold P_error_of, error_message_of. rewrite Haccu. reflexivity.
-Admitted.
+  intros n target e le m s.
+  change (handle_instr (Bytecode.AST.BULTINT n target)) with (handle_BULTINT n target).
+  unfold handle_BULTINT.
+  (* Case-split on the instr_wfb range guard first *)
+  destruct ((0 <=? n) && (Int.min_signed <=? n) && (n <=? Int.max_signed))%Z eqn:Hwfb.
+  - (* In range: extract the range facts from Hwfb *)
+    pose proof Hwfb as Hwfb'.
+    apply andb_prop in Hwfb'. destruct Hwfb' as [Hlo_mid Hhi].
+    apply andb_prop in Hlo_mid. destruct Hlo_mid as [Hlo Hmid].
+    apply Z.leb_le in Hlo. apply Z.leb_le in Hmid. apply Z.leb_le in Hhi.
+    assert (Hn0 : 0 <= n) by lia.
+    assert (Hn : Int.min_signed <= n <= Int.max_signed) by lia.
+    destruct (Machine.accu s) eqn:Haccu.
+    + (* Val_int z *)
+      destruct (Z.ltb (z_flip_sign n) (z_flip_sign z)) eqn:Hcmp; simpl;
+      (intros ard Hrel Hpre;
+       pose proof (verify_BULTINT_handler_correct n target Hn0 Hn) as Hvc;
+       specialize (Hvc e le m s);
+       unfold handler_correct, handle_BULTINT in Hvc;
+       rewrite Hwfb in Hvc; simpl in Hvc;
+       rewrite Haccu, Hcmp in Hvc; simpl in Hvc;
+       exact (Hvc ard Hrel Hpre)).
+    + (* Val_block -- Error case *)
+      simpl. unfold P_error_of, error_message_of. rewrite Hwfb, Haccu. reflexivity.
+    + (* Val_ptr -- Error case *)
+      simpl. unfold P_error_of, error_message_of. rewrite Hwfb, Haccu. reflexivity.
+    + (* Val_closure -- Error case *)
+      simpl. unfold P_error_of, error_message_of. rewrite Hwfb, Haccu. reflexivity.
+  - (* Out of range: handler returns Error, P_error_of follows from error_message_of *)
+    unfold P_error_of, error_message_of. rewrite Hwfb. reflexivity.
+Qed.
