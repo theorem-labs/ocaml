@@ -272,6 +272,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSHGETGLOBAL_correct : forall n,
+    0 <= Z.of_nat n <= Int.max_signed ->
     handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
       (fun _ m s ard =>
          (* code memory at pc contains n *)
@@ -279,8 +280,6 @@ Theorem verify_PUSHGETGLOBAL_correct : forall n,
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
               (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
            = Some (Vint (Int.repr (Z.of_nat n))) /\
-         (* n fits in int32 signed range *)
-         0 <= Z.of_nat n <= Int.max_signed /\
          (* global offset arithmetic stays in ptrofs range *)
          Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus /\
          (* sp has room for a push: new sp after push must still be >= 8 *)
@@ -291,9 +290,11 @@ Theorem verify_PUSHGETGLOBAL_correct : forall n,
       (fun _ s => nth_error s.(Machine.global) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro n.
+  intro n. intro Hn_range.
   intros e le m s.
   unfold handle_PUSHGETGLOBAL.
+  replace ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z with true.
+  2: { symmetry. apply Bool.andb_true_iff. split; apply Z.leb_le; lia. }
   set (new_stack := Machine.accu s :: Machine.stack s).
   destruct (nth_error (Machine.global s) n) as [gval|] eqn:Hnth.
 
@@ -301,7 +302,7 @@ Proof.
 
   intros ard Hpre Hstep_pre.
 
-  destruct Hstep_pre as (Hcode_load & Hn_range & Hgo_bound & Hsp_ge16).
+  destruct Hstep_pre as (Hcode_load & Hgo_bound & Hsp_ge16).
 
   (* Unpack abs_rel_with_ard *)
   set (sb := ar_sptr_block ard) in *.
@@ -871,10 +872,9 @@ Theorem verify_PUSHGETGLOBAL_handler_correct : forall n,
 Proof.
   intros n Hn.
   eapply handler_correct_weaken.
-  - exact (verify_PUSHGETGLOBAL_correct n).
+  - exact (verify_PUSHGETGLOBAL_correct n Hn).
   - intros e le m s ard _ [[Hca Hgs] Hsp].
     split. { exact Hca. }
-    split. { exact Hn. }
     split. { exact Hgs. }
     intros sp_b sp_ofs Hload.
     destruct Hsp as [sp_b0 [sp_ofs0 [Hload0 Hge0]]].
@@ -907,16 +907,27 @@ Proof.
     + (* n in range: delegate to verify_PUSHGETGLOBAL_handler_correct *)
       pose proof (verify_PUSHGETGLOBAL_handler_correct n (conj H H0)) as Hcorr.
       unfold handler_correct, handle_PUSHGETGLOBAL in Hcorr. specialize (Hcorr e le m s).
+      replace ((0 <=? Z.of_nat n)%Z) with true in Hcorr
+        by (symmetry; apply Z.leb_le; exact H).
+      replace ((Z.of_nat n <=? Int.max_signed)%Z) with true in Hcorr
+        by (symmetry; apply Z.leb_le; exact H0).
+      simpl (_ && _)%bool in Hcorr.
       rewrite Hnth in Hcorr.
       change (pre_of (PUSHGETGLOBAL n))
         with ((code_at (Int.repr (Z.of_nat n)) /\p global_offset_safe n) /\p sp_at_least 16).
       exact Hcorr.
-    + (* n > Int.max_signed: unreachable for well-formed bytecode *)
-      admit.
+    + (* n > Int.max_signed: handler returns Error, P_error_of satisfied *)
+      unfold P_error_of, error_message_of.
+      replace ((0 <=? Z.of_nat n)%Z) with true
+        by (symmetry; apply Z.leb_le; lia).
+      replace ((Z.of_nat n <=? Int.max_signed)%Z) with false
+        by (symmetry; apply Z.leb_gt; lia).
+      reflexivity.
     + (* 0 > Z.of_nat n: impossible *)
       lia.
     + (* both fail: 0 > Z.of_nat n impossible *)
       lia.
   - (* Error case: nth_error global n = None *)
-    unfold P_error_of, error_message_of. rewrite Hnth. reflexivity.
-Admitted.
+    unfold P_error_of, error_message_of. rewrite Hnth.
+    destruct (_ && _)%bool; reflexivity.
+Qed.
