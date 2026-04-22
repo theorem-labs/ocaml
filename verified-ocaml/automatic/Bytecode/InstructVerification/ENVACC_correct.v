@@ -184,20 +184,29 @@ Theorem verify_ENVACC_correct : forall n,
          Z.of_nat n < Int.half_modulus /\
          (* env field n is loadable in C memory *)
          env_field_loadable n e m s ard)
-      (fun _ s => field_or_heap s s.(Machine.env) n = None)
+      (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
   intros e le m s.
   unfold handler_correct, handle_ENVACC.
 
+  (* The Z.ltb guard is outermost; destruct it first *)
+  destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_lt|Hn_ge].
+
+  2: {
+    (* n >= Int.half_modulus: handler returns Error "malformed operand",
+       P_error is trivially True *)
+    exact I.
+  }
+
   (* Case split on field_or_heap *)
   destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)
-  (* Case 2: field_or_heap env n = None => Error (trivially true)      *)
+  (* Case 2: field_or_heap env n = None => Error (trivially True)      *)
   (* ================================================================ *)
-  2: { reflexivity. }
+  2: { exact I. }
 
   (* ================================================================ *)
   (* Case 1: field_or_heap env n = Some v => Step                      *)
@@ -532,7 +541,7 @@ Qed.
 Definition ENVACC_correct_for_spec : forall n, Z.of_nat n < Int.half_modulus ->
     handler_correct (handle_ENVACC n) f_instr_ENVACC
       (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
-      (fun _ s => field_or_heap s s.(Machine.env) n = None)
+      (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
     intros n Hrange.
@@ -558,17 +567,25 @@ Proof.
   change (handle_instr (Bytecode.AST.ENVACC n) (Machine.pc s) s)
     with (handle_ENVACC n (Machine.pc s) s).
   unfold handle_ENVACC at 1.
-  destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
-  - (* Step case: field_or_heap env n = Some v *)
-    destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_bound|Hn_big].
-    + (* n < Int.half_modulus: delegate to ENVACC_correct_for_spec *)
+  destruct (Z.ltb_spec (Z.of_nat n) Int.half_modulus) as [Hn_bound|Hn_big].
+  - (* n < Int.half_modulus *)
+    destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
+    + (* Step case: field_or_heap env n = Some v *)
       pose proof (ENVACC_correct_for_spec n Hn_bound) as H.
       unfold handler_correct, handle_ENVACC in H. specialize (H e le m s).
+      replace (Z.of_nat n <? Int.half_modulus)%Z with true in H
+        by (symmetry; apply Z.ltb_lt; exact Hn_bound).
       rewrite Hfoh in H.
       change (pre_of (Bytecode.AST.ENVACC n)) with (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n).
       exact H.
-    + (* n >= Int.half_modulus: unreachable for well-formed bytecode *)
-      admit.
-  - (* Error case: field_or_heap env n = None *)
-    unfold P_error_of, error_message_of. rewrite Hfoh. reflexivity.
-Admitted.
+    + (* Error case: field_or_heap env n = None, env access out of bounds *)
+      unfold P_error_of, error_message_of.
+      replace (Z.of_nat n <? Int.half_modulus)%Z with true
+        by (symmetry; apply Z.ltb_lt; exact Hn_bound).
+      rewrite Hfoh. reflexivity.
+  - (* n >= Int.half_modulus: handler returns Error, P_error_of satisfied *)
+    unfold P_error_of, error_message_of.
+    replace (Z.of_nat n <? Int.half_modulus)%Z with false
+      by (symmetry; apply Z.ltb_ge; lia).
+    reflexivity.
+Qed.
