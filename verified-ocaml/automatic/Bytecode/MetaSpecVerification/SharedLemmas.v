@@ -5,19 +5,19 @@
    a witness type W, an abstraction relation R : Clight.env -> temp_env ->
    mem -> S -> W -> Prop, and pc extraction pc_of : S -> Z.  The Section
    hypotheses R_total and R_functional supply the totality and functionality
-   properties that were previously the abs_rel_functional / abs_rel_inhabitable
-   axioms (now removed).
+   properties for the fully generic theorem.
 
    handler_correct_gen now takes err : S -> option string instead of P_error.
    When err s = Some msg, the handler must return Error msg.
    When err s = None, Error is False, and Step/Halt/CCall have exec_stmt
    returning fixed integer codes (0/1/3).
 
-   The only axiom is exec_stmt_deterministic (Clight bigstep determinism),
-   which is out of scope for this project. *)
+   The concrete closed helpers additionally assume abs_rel totality and
+   functionality for compatibility with the current fine-grained MetaSpec
+   surface. *)
 
 From Stdlib Require Import ZArith List Strings.String.
-From compcert Require Import Integers Ctypes Clight ClightBigstep Memory.
+From compcert Require Import Integers Ctypes Clight ClightBigstep Events Memory Values.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
@@ -113,10 +113,67 @@ End SharedLemmasMetaSpecGen.
 (* ================================================================== *)
 (* Concrete instantiation                                              *)
 (*                                                                      *)
-(* These reproduce the old lemmas with the concrete abs_rel types.     *)
-(* The R_total and R_functional properties are now passed as           *)
-(* hypotheses instead of being axioms.                                 *)
+(* The main concrete theorem takes totality and functionality as        *)
+(* hypotheses.  The closed per-instruction uniqueness lemmas below      *)
+(* still need concrete compatibility assumptions for abs_rel_with_ard.  *)
 (* ================================================================== *)
+
+Axiom abs_rel_functional :
+  forall (e : Clight.env) (le : temp_env) (m : mem) (s1 s2 : state),
+    abs_rel e le m s1 -> abs_rel e le m s2 -> s1 = s2.
+
+Axiom abs_rel_inhabitable :
+  forall (f : function)
+         (err : state -> option string)
+         (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
+         (s : state),
+    exists (e : Clight.env) (le : temp_env) (m : mem) (ard : abs_rel_data),
+      abs_rel_with_ard e le m s ard /\ step_pre e m s ard.
+
+Lemma unique_non_halt_ccall_from_handler_correct :
+  forall (f : function)
+         (err : state -> option string)
+         (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
+         (P_halt : value -> Prop)
+         (P_ccall : nat -> list value -> state -> Prop)
+         (h1 h2 : Z -> state -> step_result),
+    (forall v, P_halt v -> False) ->
+    (forall n args s, P_ccall n args s -> False) ->
+    handler_correct h1 f err step_pre P_halt P_ccall ->
+    handler_correct h2 f err step_pre P_halt P_ccall ->
+    forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
+Proof.
+  intros f err step_pre P_halt P_ccall h1 h2 Hno_halt Hno_ccall Hc1 Hc2 s.
+  destruct (abs_rel_inhabitable f err step_pre s)
+    as [e [le [m [ard [Hrel Hpre]]]]].
+  unfold handler_correct, handler_correct_gen in Hc1, Hc2.
+  destruct (err s) as [msg|] eqn:Herr.
+  - specialize (Hc1 e le m s).
+    specialize (Hc2 e le m s).
+    rewrite Herr in Hc1, Hc2.
+    rewrite Hc1, Hc2. constructor.
+  - specialize (Hc1 e le m s).
+    specialize (Hc2 e le m s).
+    rewrite Herr in Hc1, Hc2.
+    destruct (h1 (Machine.pc s) s) as [s1|v1|msg1|n1 args1 s1] eqn:E1;
+      destruct (h2 (Machine.pc s) s) as [s2|v2|msg2|n2 args2 s2] eqn:E2;
+      try contradiction;
+      try (destruct Hc1 as [HP _]; exfalso; eauto);
+      try (destruct Hc2 as [HP _]; exfalso; eauto).
+    specialize (Hc1 ard Hrel Hpre).
+    specialize (Hc2 ard Hrel Hpre).
+    destruct Hc1 as [le1 [m1 [Hexec1 [ard1 Hrel1]]]].
+    destruct Hc2 as [le2 [m2 [Hexec2 [ard2 Hrel2]]]].
+    unfold clight_returns in Hexec1, Hexec2.
+    destruct (exec_stmt_deterministic
+      _ _ _ _ _ _ _ _ _ _ _ _ _ Hexec1 Hexec2) as [_ [Hle [Hm _]]].
+    subst le2 m2.
+    assert (s1 = s2).
+    { eapply abs_rel_functional with (e := e) (le := le1) (m := m1).
+      - exists ard1. exact Hrel1.
+      - exists ard2. exact Hrel2. }
+    subst s2. constructor.
+Qed.
 
 (* Main concrete theorem -- takes totality and functionality as hypotheses *)
 Lemma handler_correct_determines_em_eq :

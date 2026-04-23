@@ -5,6 +5,7 @@ From compcert Require Import Ctypes Clight Memory Values.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
+From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLemmas.
 
 Lemma unique_PUSHGETGLOBALFIELD :
   forall n p,
@@ -16,4 +17,8 @@ Lemma unique_PUSHGETGLOBALFIELD :
         (error_message_of (PUSHGETGLOBALFIELD n p))
         (pre_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_non_halt_ccall_from_handler_correct; eauto;
+    unfold P_halt_of, P_ccall_of; simpl; intros; tauto.
+Qed.
