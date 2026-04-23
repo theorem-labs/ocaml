@@ -217,6 +217,11 @@ Section Generic.
   Definition R_ex (e : Clight.env) (le : temp_env) (m : mem) (s : S) : Prop :=
     exists w, R e le m s w.
 
+  Definition clight_returns (f : function) (retcode : Z)
+      (e : Clight.env) (le : temp_env) (m : mem) (le' : temp_env) (m' : mem) : Prop :=
+    exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m'
+      (Out_return (Some (Vint (Int.repr retcode), tint))).
+
   Definition handler_correct_gen
       (handler : Z -> S -> step_result_gen S)
       (f : function)
@@ -235,8 +240,7 @@ Section Generic.
               R e le m s w ->
               step_pre e m s w ->
               exists le' m',
-                exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m'
-                  (Out_return (Some (Vint (Int.repr 0), tint))) /\
+                clight_returns f 0 e le m le' m' /\
                 R_ex e le' m' s'
           | Error _ => False
           | Halt v =>
@@ -244,15 +248,13 @@ Section Generic.
               (forall w,
                R e le m s w ->
                exists le' m',
-                 exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m'
-                   (Out_return (Some (Vint (Int.repr 1), tint))))
+                 clight_returns f 1 e le m le' m')
           | CCall_request n args s' =>
               P_ccall n args s' /\
               (forall w,
                R e le m s w ->
                exists le' m',
-                 exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m'
-                   (Out_return (Some (Vint (Int.repr 3), tint))))
+                 clight_returns f 3 e le m le' m')
           end
       end.
 
@@ -1744,4 +1746,3 @@ Module InstructVerificationFromFineGrained
       | apply correct_BULTINT | apply correct_BUGEINT | apply correct_STOP ].
     Qed.
 End InstructVerificationFromFineGrained.
-
