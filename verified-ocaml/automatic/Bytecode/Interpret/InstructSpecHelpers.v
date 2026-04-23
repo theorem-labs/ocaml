@@ -198,15 +198,17 @@ Infix "/\p" := pre_and (at level 80, right associativity).
 
 (* Weaken a handler_correct proof: if abs_rel + weak_pre implies strong_pre,
    then handler_correct with strong_pre implies handler_correct with weak_pre. *)
-Lemma handler_correct_weaken handler f sp wp pe ph pc :
-  handler_correct handler f sp pe ph pc ->
+Lemma handler_correct_weaken handler f err sp wp ph pc :
+  handler_correct handler f err sp ph pc ->
   (forall e le m s ard,
      abs_rel_with_ard e le m s ard -> wp e m s ard -> sp e m s ard) ->
-  handler_correct handler f wp pe ph pc.
+  handler_correct handler f err wp ph pc.
 Proof.
-  unfold handler_correct. intros Hstrong Himp e le m s.
+  unfold handler_correct, handler_correct_gen. intros Hstrong Himp e le m s.
   specialize (Hstrong e le m s).
-  destruct (handler (Machine.pc s) s); auto.
+  destruct (err s); [exact Hstrong|].
+  destruct (handler (Machine.pc s) s); try exact Hstrong.
+  (* Step case: need to weaken step_pre *)
   intros ard Hrel Hwp.
   eapply Hstrong; eauto.
 Qed.
@@ -215,16 +217,18 @@ Qed.
    the handler returns Step.  Useful when the weakened precondition
    can only be derived with knowledge of the handler outcome
    (e.g. stack-index bounds from nth_error success). *)
-Lemma handler_correct_weaken_step handler f sp wp pe ph pc :
-  handler_correct handler f sp pe ph pc ->
+Lemma handler_correct_weaken_step handler f err sp wp ph pc :
+  handler_correct handler f err sp ph pc ->
   (forall e le m s s' ard,
      handler s.(Machine.pc) s = Step s' ->
      abs_rel_with_ard e le m s ard -> wp e m s ard -> sp e m s ard) ->
-  handler_correct handler f wp pe ph pc.
+  handler_correct handler f err wp ph pc.
 Proof.
-  unfold handler_correct. intros Hstrong Himp e le m s.
+  unfold handler_correct, handler_correct_gen. intros Hstrong Himp e le m s.
   specialize (Hstrong e le m s).
-  destruct (handler (Machine.pc s) s) eqn:Heq; auto.
+  destruct (err s); [exact Hstrong|].
+  destruct (handler (Machine.pc s) s) eqn:Heq; try exact Hstrong.
+  (* Step case *)
   intros ard Hrel Hwp.
   eapply Hstrong; eauto.
 Qed.
