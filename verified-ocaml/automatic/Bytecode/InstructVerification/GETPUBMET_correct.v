@@ -610,10 +610,9 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_GETPUBMET_correct : forall tag,
-    handler_correct_v1 (handle_GETPUBMET tag) f_instr_GETPUBMET
+    handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
+      (fun _ => None)
       (getpubmet_pre tag)
-      (fun msg _ => msg = "GETPUBMET: no class table"%string \/
-        msg = "GETPUBMET: method not found"%string)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
 Admitted.

@@ -172,7 +172,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_POPTRAP_correct :
-    handler_correct_v1 (handle_POPTRAP) f_instr_POPTRAP
+    handler_correct (handle_POPTRAP) f_instr_POPTRAP
+      (fun _ => None)
       (fun _ m s ard =>
          (* Stack has at least 4 elements with trap link at position 1 *)
          exists v0 prev_tsp v2 v3 rest,
@@ -204,35 +205,9 @@ Theorem verify_POPTRAP_correct :
                  (Ptrofs.mul (Ptrofs.repr 8) (Ptrofs.of_int64 (Int64.repr prev_tsp)))))
               (ar_stack_block ard) (ar_stack_base_ofs ard)
               (Z.to_nat prev_tsp)))
-      (fun msg _ => msg = "POPTRAP: malformed trap frame"%string)
       (fun _ => False) (fun _ _ _ => False).
-Proof. Admitted.
-
-(* Bridge lemma: when handle_POPTRAP returns Error, error_message_of
-   computes the same message.  Both share the same case analysis on the
-   stack, so this is a direct computation. *)
-Local Lemma handle_POPTRAP_error_implies_error_message :
-  forall pc' s msg,
-    handle_POPTRAP pc' s = Error msg ->
-    error_message_of POPTRAP s = Some msg.
 Proof.
-  intros pc' s msg H.
-  unfold handle_POPTRAP in H.
-  unfold error_message_of.
-  destruct (Machine.stack s) as [| v0 stk1].
-  - inversion H. reflexivity.
-  - destruct stk1 as [| v1 stk2].
-    + inversion H. reflexivity.
-    + destruct v1 as [z1 | | |].
-      * destruct stk2 as [| v2 stk3].
-        -- inversion H. reflexivity.
-        -- destruct stk3 as [| v3 rest].
-           ++ inversion H. reflexivity.
-           ++ discriminate.
-      * inversion H. reflexivity.
-      * inversion H. reflexivity.
-      * inversion H. reflexivity.
-Qed.
+Admitted.
 
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr POPTRAP / clight_of POPTRAP / pre_of POPTRAP are

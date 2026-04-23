@@ -180,19 +180,9 @@ Definition setvectitem_pre
 (* ================================================================== *)
 
 Theorem verify_SETVECTITEM_correct :
-    handler_correct_v1 handle_SETVECTITEM f_instr_SETVECTITEM
+    handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
+      (fun _ => None)
       (fun e m s ard => setvectitem_pre e m s ard)
-      (fun _ s => match s.(Machine.stack) with
-                  | Val_int idx :: newval :: _ =>
-                    match s.(Machine.accu) with
-                    | Val_ptr addr =>
-                      match heap_lookup s.(Machine.hp) addr with
-                      | Some (_, fields) => set_nth fields (Z.to_nat idx) newval = None
-                      | None => True
-                      end
-                    | _ => True
-                    end
-                  | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
 Admitted.

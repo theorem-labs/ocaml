@@ -839,7 +839,8 @@ Proof. exact I. Qed.
 
 Theorem verify_MAKEBLOCK_correct : forall (t size : nat),
     (size >= 1)%nat ->
-    handler_correct_v1 (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
+    handler_correct (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
+      (fun _ => None)
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -941,7 +942,7 @@ Theorem verify_MAKEBLOCK_correct : forall (t size : nat),
                  b <> sb -> b <> sp_b -> b <> new_b ->
                  Mem.load chunk m_field0 b ofs = Some v ->
                  Mem.load chunk m_loop b ofs = Some v)))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False) (fun _ _ _ => False).
 Proof. Admitted.
 
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.

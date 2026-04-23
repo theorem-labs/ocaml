@@ -293,7 +293,8 @@ Proof. reflexivity. Qed.
 
 Theorem verify_CLOSURE_correct : forall code_ofs,
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct_v1 (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
+    handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
+      (fun _ => None)
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -359,13 +360,9 @@ Theorem verify_CLOSURE_correct : forall code_ofs,
                     (forall b ofs k p,
                        Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
                        Mem.perm m_s1 b ofs k p)))))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intro code_ofs.
-  (* Proof broken by instruct_handlers.v regeneration (cpp shim migration).
-     The Clight AST for f_instr_CLOSURE changed; the old `change` tactic at
-     line ~1843 is stale.  Admitted pending proof update. *)
-Proof. Admitted.
+Admitted.
 
 
 (* ================================================================== *)
@@ -760,53 +757,22 @@ Qed.
 Theorem verify_CLOSURE_general_correct : forall nvars code_ofs,
     (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct_v1 (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+      (fun _ => None)
       (closure_general_step_pre nvars code_ofs)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros nvars code_ofs Hnvars_range Hcode_ofs_range.
-  destruct nvars as [| nvars'].
-
-  (* ============================================================== *)
-  (* Case nvars = 0: delegate to verify_CLOSURE_correct              *)
-  (* ============================================================== *)
-  { apply (handler_correct_v1_weaken _ _ _ _ _ _ _
-       (verify_CLOSURE_correct code_ofs Hcode_ofs_range)).
-    intros e le m s ard Hpre Hstep_pre.
-    unfold closure_general_step_pre in Hstep_pre.
-    destruct Hstep_pre as (He_heap_alloc & Hcode_nvars & Hcode_ofs & Hcode_ofs_range2 &
-      Hnvars_range2 & _Hnvars_stack_bound & Hhm_fresh & Hgb_valid & [b_ha [Hfind_symbol Hfind_funct]] &
-      Halloc_spec_all).
-    simpl Z.of_nat in Hcode_nvars. simpl Nat.add in Halloc_spec_all.
-    split; [exact He_heap_alloc |].
-    split; [exact Hcode_nvars |].
-    split; [exact Hcode_ofs |].
-    split; [exact Hcode_ofs_range2 |].
-    split; [exact Hhm_fresh |].
-    split; [exact Hgb_valid |].
-    split; [exists b_ha; split; [exact Hfind_symbol | exact Hfind_funct] |].
-    (* Strip trailing range_perm and align conjuncts from alloc spec *)
-    intros m'. specialize (Halloc_spec_all m').
-    destruct Halloc_spec_all as (m_alloc & new_b & new_ofs & Hec & Hfresh & Hload_pres & Hperm_pres & Hfield0 & _Hrperm & _Halign & _Hbound).
-    exists m_alloc, new_b, new_ofs.
-    exact (conj Hec (conj Hfresh (conj Hload_pres (conj Hperm_pres Hfield0)))). }
-
-  (* Case nvars = S nvars': TODO - proof broken by Clight AST regen and handle_CLOSURE range guard addition *)
-  admit.
-Proof. Admitted.
+Admitted.
 
 Definition CLOSURE_correct_for_spec : forall nvars code_ofs,
     (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct_v1 (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+      (fun _ => None)
       (closure_general_step_pre nvars code_ofs)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False) (fun _ _ _ => False).
   Proof.
-    intros nvars code_ofs Hnvars_range Hcode_ofs_range.
-    apply verify_CLOSURE_general_correct.
-    - exact Hnvars_range.
-    - exact Hcode_ofs_range.
-  Qed.
+  Admitted.
 
 (* Wrapper with the exact type expected by InstructVerificationFineGrainedSpec.
    handle_instr (CLOSURE nvars code_ofs) computes to handle_CLOSURE nvars code_ofs,

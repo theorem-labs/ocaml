@@ -202,7 +202,7 @@ Qed.
 (*
 Theorem verify_MAKEFLOATBLOCK_correct_v1 : forall (n : nat),
     (n >= 1)%nat ->
-    handler_correct_v1 (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -892,7 +892,8 @@ Abort.
 
 Theorem verify_MAKEFLOATBLOCK_correct : forall (n : nat),
     (n >= 1)%nat ->
-    handler_correct_v1 (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+      (fun _ => None)
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -993,7 +994,7 @@ Theorem verify_MAKEFLOATBLOCK_correct : forall (n : nat),
               (forall ofs v,
                  Mem.load Mint64 m_alloc0 gb ofs = Some v ->
                  Mem.load Mint64 m_out gb ofs = Some v)))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False) (fun _ _ _ => False).
 Proof. Admitted.
 
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.

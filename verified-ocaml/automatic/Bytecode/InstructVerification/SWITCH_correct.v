@@ -259,7 +259,7 @@ Local Ltac prove_field_survives_left Hstore Hload :=
 (* ================================================================== *)
 
 (* Custom statement because handle_SWITCH doesn't take pc' and
-   does not fit handler_correct_v1's (Z -> state -> step_result) shape.
+   does not fit handler_correct's (Z -> state -> step_result) shape.
    We prove the Val_int case directly. The block/pointer cases are
    excluded by precondition. *)
 

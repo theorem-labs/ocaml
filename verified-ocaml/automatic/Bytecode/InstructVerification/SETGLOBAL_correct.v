@@ -51,9 +51,10 @@ Local Notation ge := clight_ge.
 (* ================================================================== *)
 
 Theorem verify_SETGLOBAL_correct : forall n,
-    handler_correct_v1 (handle_SETGLOBAL n) f_instr_SETGLOBAL
+    handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
+      (fun _ => None)
       (setglobal_step_pre n)
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+      (fun _ => False) (fun _ _ _ => False).
 Proof.
 Admitted.
 

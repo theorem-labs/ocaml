@@ -174,7 +174,8 @@ Definition heap_field_target (hofs : ptrofs) (n_int : int) : ptrofs :=
 (* ================================================================== *)
 
 Theorem verify_SETFIELD_correct : forall n,
-    handler_correct_v1 (handle_SETFIELD n) f_instr_SETFIELD
+    handler_correct (handle_SETFIELD n) f_instr_SETFIELD
+      (fun _ => None)
       (fun e m s ard =>
          let cb := ar_code_base_block ard in
          let co := ar_code_base_ofs ard in
@@ -252,17 +253,6 @@ Theorem verify_SETFIELD_correct : forall n,
                   (forall b ofs k p,
                      Mem.valid_block m_sp b -> Mem.perm m_sp b ofs k p ->
                      Mem.perm m_cm b ofs k p)))))
-      (fun _ s => match s.(Machine.stack) with
-                  | newval :: _ =>
-                    match s.(Machine.accu) with
-                    | Val_ptr addr =>
-                      match heap_lookup s.(Machine.hp) addr with
-                      | Some (_, fields) => set_nth fields n newval = None
-                      | None => True
-                      end
-                    | _ => True
-                    end
-                  | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
 Admitted.

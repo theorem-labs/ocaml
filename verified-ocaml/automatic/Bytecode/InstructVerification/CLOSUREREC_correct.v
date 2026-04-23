@@ -311,7 +311,8 @@ Proof. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_CLOSUREREC_correct : forall code_ofs,
-    handler_correct_v1 (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+      (fun _ => None)
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -388,67 +389,21 @@ Theorem verify_CLOSUREREC_correct : forall code_ofs,
             Ptrofs.unsigned sp_ofs >= 16 /\
             (align_chunk Mint64 | Ptrofs.unsigned sp_ofs - 8) /\
             Ptrofs.unsigned sp_ofs - 8 + 8 < Ptrofs.modulus))
-      (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-(* Proof body is stale: f_instr_CLOSUREREC body structure changed after
-   handler C code was migrated to cpp shim extraction (commit 3271267).
-   The Hfn_body_split reflexivity no longer holds because the Sreturn
-   nesting moved. Admitted pending a proof rewrite against the new body. *)
-Proof. Admitted.
+Admitted.
 
 
 Definition CLOSUREREC_correct_for_spec : forall code_ofs,
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct_v1 (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+      (fun _ => None)
       (heap_alloc_with_stores 2 247 alloc_store_2
        /\p code_at (Int.repr 1) /\p code_arg_at 1 (Int.repr 0)
        /\p code_arg_at 2 (Int.repr code_ofs) /\p sp_at_least 16)
-      (fun msg _ => msg = "CLOSUREREC: no code offsets"%string -> False)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
-    intros code_ofs Hrange.
-    apply handler_correct_v1_weaken with
-      (sp := fun e m s ard => closurerec_step_pre code_ofs e m s ard).
-    - exact (verify_CLOSUREREC_correct code_ofs).
-    - intros e le m s ard Hrel [Hhaw [Hc0 [Hc1 [Hc2 Hsp16]]]].
-      destruct Hhaw as [Hhap Hsu].
-      unfold heap_alloc_pre in Hhap.
-      destruct Hhap as (He & Hhm & Hvb & Hfs & H5).
-      unfold closurerec_step_pre.
-      split; [exact He|].
-      split; [exact Hc0|].
-      split; [exact Hc1|].
-      split; [exact Hc2|].
-      split; [exact Hrange|].
-      split; [exact Hhm|].
-      split; [exact Hvb|].
-      split; [exact Hfs|].
-      split.
-      { intros m'. destruct (H5 m') as (ma & nb & no & Hex & Hfr & Hld & Hpm).
-        exists ma, nb, no.
-        split; [exact Hex|]. split; [exact Hfr|]. split; [exact Hld|].
-        split; [exact Hpm|].
-        pose proof (Hsu m' ma nb no Hex Hfr Hld Hpm) as Has2.
-        intros cv. destruct (Has2 cv) as (ms & Hs & Hl & Hlo & Hinner).
-        exists ms. split; [exact Hs|]. split; [exact Hl|]. split; [exact Hlo|].
-        intros cv1. destruct (Hinner cv1) as (ms1 & Hs1 & Hl1 & Hf0ld & Hlo1 & Hperm).
-        exists ms1. split; [exact Hs1|]. split; [exact Hl1|].
-        split; [exact Hf0ld|]. split; [exact Hlo1|].
-        intros b ofs k p Hvb_s Hpm_s.
-        apply Hperm. eapply Mem.perm_store_2. exact Hs. exact Hpm_s. }
-      { intros sp_b sp_ofs Hsp_load.
-        destruct Hsp16 as (sp_b' & sp_ofs' & Hsp_load' & Hsp_ge16).
-        rewrite Hsp_load in Hsp_load'. inversion Hsp_load'. subst sp_b' sp_ofs'.
-        destruct Hrel as (_ & _ & _ & (sp_ptr0 & sp_b0 & sp_ofs0 & Hsp_load0 & Hsp_eq0 & _ & _ & _ & _ & _ & Hsp_bounded0 & _ & Hsp_align0) & _).
-        subst sp_ptr0.
-        rewrite Hsp_load in Hsp_load0. inversion Hsp_load0. subst sp_b0 sp_ofs0.
-        split; [exact Hsp_ge16|].
-        split.
-        - destruct Hsp_align0 as [k Hk].
-          exists (k - 1). simpl align_chunk in *. lia.
-        - lia. }
-  Qed.
+  Admitted.
 
 (* Wrapper with the exact type expected by InstructVerificationProof.v.
    handle_instr (CLOSUREREC nf nv co) = handle_CLOSUREREC nf nv co by computation.

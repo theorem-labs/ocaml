@@ -1,6 +1,6 @@
 (* C_CALL_correct.v -- C_CALL handler correctness wrapper.
 
-   handle_C_CALL always returns CCall_request, so handler_correct_v1
+   handle_C_CALL always returns CCall_request, so handler_correct
    reduces to proving P_ccall_of (C_CALL nargs prim_idx), which is
    instr_wfb (C_CALL nargs prim_idx) = true /\ True — trivially true. *)
 

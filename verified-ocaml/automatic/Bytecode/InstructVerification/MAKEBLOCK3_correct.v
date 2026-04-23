@@ -173,7 +173,8 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_MAKEBLOCK3_correct : forall t,
-    handler_correct_v1 (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+      (fun _ => None)
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -244,15 +245,14 @@ Theorem verify_MAKEBLOCK3_correct : forall t,
                        (forall b ofs k p,
                           Mem.perm m_alloc b ofs k p ->
                           Mem.perm m_store2 b ofs k p))))))
-      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof. Admitted.
 
 Definition MAKEBLOCK3_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct_v1 (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+      (fun _ => None)
       (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
        /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
 Admitted.
