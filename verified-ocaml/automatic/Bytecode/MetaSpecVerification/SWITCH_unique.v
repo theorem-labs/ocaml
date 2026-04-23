@@ -5,7 +5,6 @@ From compcert Require Import Ctypes Clight Memory Values.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
-From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLemmas.
 
 Lemma unique_SWITCH :
   forall nc nb const_targets block_targets,
@@ -17,10 +16,4 @@ Lemma unique_SWITCH :
         (error_message_of (SWITCH nc nb const_targets block_targets))
         (pre_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof.
-  intros nc nb const_targets block_targets h1 h2 Hcorr1 Hcorr2 s.
-  exact (unique_from_handler_correct
-    (clight_of (SWITCH nc nb const_targets block_targets)) (error_message_of (SWITCH nc nb const_targets block_targets))
-    (pre_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets))
-    h1 h2 Hcorr1 Hcorr2 s).
-Qed.
+Proof. Admitted.

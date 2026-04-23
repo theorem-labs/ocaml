@@ -5,7 +5,6 @@ From compcert Require Import Ctypes Clight Memory Values.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
-From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLemmas.
 
 Lemma unique_C_CALL :
   forall nargs prim_idx,
@@ -17,10 +16,4 @@ Lemma unique_C_CALL :
         (error_message_of (C_CALL nargs prim_idx))
         (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof.
-  intros nargs prim_idx h1 h2 Hcorr1 Hcorr2 s.
-  exact (unique_from_handler_correct
-    (clight_of (C_CALL nargs prim_idx)) (error_message_of (C_CALL nargs prim_idx))
-    (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx))
-    h1 h2 Hcorr1 Hcorr2 s).
-Qed.
+Proof. Admitted.

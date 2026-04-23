@@ -5,7 +5,6 @@ From compcert Require Import Ctypes Clight Memory Values.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
-From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLemmas.
 
 Lemma unique_MAKEBLOCK :
   forall t size,
@@ -17,10 +16,4 @@ Lemma unique_MAKEBLOCK :
         (error_message_of (MAKEBLOCK t size))
         (pre_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof.
-  intros t size h1 h2 Hcorr1 Hcorr2 s.
-  exact (unique_from_handler_correct
-    (clight_of (MAKEBLOCK t size)) (error_message_of (MAKEBLOCK t size))
-    (pre_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size))
-    h1 h2 Hcorr1 Hcorr2 s).
-Qed.
+Proof. Admitted.

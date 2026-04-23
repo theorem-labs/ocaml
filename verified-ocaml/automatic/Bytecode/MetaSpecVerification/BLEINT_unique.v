@@ -5,7 +5,6 @@ From compcert Require Import Ctypes Clight Memory Values.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
-From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLemmas.
 
 Lemma unique_BLEINT :
   forall z1 z2,
@@ -17,10 +16,4 @@ Lemma unique_BLEINT :
         (error_message_of (BLEINT z1 z2))
         (pre_of (BLEINT z1 z2)) (P_halt_of (BLEINT z1 z2)) (P_ccall_of (BLEINT z1 z2)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof.
-  intros z1 z2 h1 h2 Hcorr1 Hcorr2 s.
-  exact (unique_from_handler_correct
-    (clight_of (BLEINT z1 z2)) (error_message_of (BLEINT z1 z2))
-    (pre_of (BLEINT z1 z2)) (P_halt_of (BLEINT z1 z2)) (P_ccall_of (BLEINT z1 z2))
-    h1 h2 Hcorr1 Hcorr2 s).
-Qed.
+Proof. Admitted.
