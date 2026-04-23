@@ -54,7 +54,7 @@ Proof. intros. reflexivity. Qed.
 (* Heap-store precondition for field 1: now uses generic setfield_heap_pre 1. *)
 
 Theorem verify_SETFIELD1_correct :
-    handler_correct (handle_SETFIELD 1) f_instr_SETFIELD1
+    handler_correct_v1 (handle_SETFIELD 1) f_instr_SETFIELD1
       (setfield_heap_pre 1)
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
@@ -70,7 +70,7 @@ Theorem verify_SETFIELD1_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_SETFIELD.
+  unfold handler_correct_v1, handle_SETFIELD.
 
   destruct (Machine.stack s) as [|newval rest] eqn:Hstk.
   { reflexivity. }

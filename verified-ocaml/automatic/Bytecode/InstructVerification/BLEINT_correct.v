@@ -251,7 +251,7 @@ Local Ltac read_pc_from_struct Hle co_is Hco Hpc_offset Hload :=
 
 Theorem verify_BLEINT_correct : forall n target,
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BLEINT n target) f_instr_BLEINT
+    handler_correct_v1 (handle_BLEINT n target) f_instr_BLEINT
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
          Int.min_signed <= n <= Int.max_signed /\
@@ -811,14 +811,14 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_BLEINT_handler_correct : forall n target,
+Theorem verify_BLEINT_handler_correct_v1 : forall n target,
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BLEINT n target) f_instr_BLEINT
+    handler_correct_v1 (handle_BLEINT n target) f_instr_BLEINT
       (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun msg s => msg = "BLEINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target Hn.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_BLEINT_correct n target Hn).
   - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
     exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
@@ -828,15 +828,15 @@ Qed.
 
    The handler checks instr_wfb (BLEINT z1 z2) = ((min_signed <=? z1) &&
    (z1 <=? max_signed))%Z.  When that guard is false the handler returns
-   Error "BLEINT: malformed operand", which matches P_error_of because
+   Error "BLEINT: malformed operand", which matches error_message_of because
    error_message_of checks the identical boolean.  When the guard is true
    we have the signed-range assumption needed by the inner proof.
 
    Non-integer accu error cases are fully proved via error_message_of. *)
 Theorem correct_BLEINT : forall z1 z2,
   handler_correct (handle_instr (Bytecode.AST.BLEINT z1 z2)) (clight_of (Bytecode.AST.BLEINT z1 z2))
-    (pre_of (Bytecode.AST.BLEINT z1 z2))
-    (P_error_of (Bytecode.AST.BLEINT z1 z2)) (P_halt_of (Bytecode.AST.BLEINT z1 z2)) (P_ccall_of (Bytecode.AST.BLEINT z1 z2)).
+    (error_message_of (Bytecode.AST.BLEINT z1 z2))
+    (pre_of (Bytecode.AST.BLEINT z1 z2)) (P_halt_of (Bytecode.AST.BLEINT z1 z2)) (P_ccall_of (Bytecode.AST.BLEINT z1 z2)).
 Proof.
 Admitted.
 

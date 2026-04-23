@@ -839,7 +839,7 @@ Proof. exact I. Qed.
 
 Theorem verify_MAKEBLOCK_correct : forall (t size : nat),
     (size >= 1)%nat ->
-    handler_correct (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
+    handler_correct_v1 (handle_MAKEBLOCK t size) f_instr_MAKEBLOCK
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -952,7 +952,7 @@ Import Bytecode.AST.
    by computation via Dispatch.
    clight_of (MAKEBLOCK t size) = f_instr_MAKEBLOCK by computation.
    pre_of (MAKEBLOCK t size) = makeblock_step_pre t size by computation.
-   P_error_of (MAKEBLOCK _ _) is vacuously False (error_message_of returns None).
+   error_message_of (MAKEBLOCK _ _) is vacuously False (error_message_of returns None).
    P_halt_of and P_ccall_of are False (not STOP/C_CALL).
    Since handle_MAKEBLOCK always returns Step, those predicates are never
    needed.  The Step case delegates to verify_MAKEBLOCK_correct, which
@@ -960,7 +960,7 @@ Import Bytecode.AST.
    (0 < Z.of_nat size <= Int.max_signed). *)
 Definition correct_MAKEBLOCK : forall t size,
     handler_correct (handle_instr (MAKEBLOCK t size)) (clight_of (MAKEBLOCK t size))
-      (pre_of (MAKEBLOCK t size))
-      (P_error_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)).
+      (error_message_of (MAKEBLOCK t size))
+      (pre_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)).
 Proof.
 Admitted.

@@ -97,13 +97,13 @@ Local Definition heap_field_loadable_2
 (* ================================================================== *)
 
 Theorem verify_GETFIELD2_with_pre :
-    handler_correct (handle_GETFIELD 2) f_instr_GETFIELD2
+    handler_correct_v1 (handle_GETFIELD 2) f_instr_GETFIELD2
       (heap_field_loadable 2)
       (fun _ s => field_or_heap s s.(Machine.accu) 2 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETFIELD.
+  unfold handler_correct_v1, handle_GETFIELD.
   destruct (field_or_heap s s.(Machine.accu) 2) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)

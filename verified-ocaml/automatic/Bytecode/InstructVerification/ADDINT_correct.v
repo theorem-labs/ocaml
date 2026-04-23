@@ -49,7 +49,7 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_ADDINT_compl_comp :
-    handler_correct handle_ADDINT f_instr_ADDINT
+    handler_correct_v1 handle_ADDINT f_instr_ADDINT
       (pre_and accu_is_long stack_head_is_long)
       (fun _ s => forall a b rest,
          s.(Machine.accu) = Val_int a ->
@@ -58,7 +58,7 @@ Theorem verify_ADDINT_compl_comp :
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_ADDINT.
+  unfold handler_correct_v1, handle_ADDINT.
 
   (* Case split on accu *)
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
@@ -435,7 +435,7 @@ Import Bytecode.AST.
 
 Theorem correct_ADDINT :
     handler_correct (handle_instr ADDINT) (clight_of ADDINT)
-      (pre_of ADDINT)
-      (P_error_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT).
+      (error_message_of ADDINT)
+      (pre_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT).
 Proof.
 Admitted.

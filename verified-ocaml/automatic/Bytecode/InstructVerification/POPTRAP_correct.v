@@ -172,7 +172,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_POPTRAP_correct :
-    handler_correct (handle_POPTRAP) f_instr_POPTRAP
+    handler_correct_v1 (handle_POPTRAP) f_instr_POPTRAP
       (fun _ m s ard =>
          (* Stack has at least 4 elements with trap link at position 1 *)
          exists v0 prev_tsp v2 v3 rest,
@@ -242,7 +242,7 @@ Qed.
    handle_POPTRAP_error_implies_error_message. *)
 Definition correct_POPTRAP :
     handler_correct (handle_instr POPTRAP) (clight_of POPTRAP)
-      (pre_of POPTRAP)
-      (P_error_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP).
+      (error_message_of POPTRAP)
+      (pre_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP).
 Proof.
 Admitted.

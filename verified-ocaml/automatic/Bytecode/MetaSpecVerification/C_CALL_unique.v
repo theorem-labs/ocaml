@@ -11,14 +11,16 @@ Lemma unique_C_CALL :
   forall nargs prim_idx,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (C_CALL nargs prim_idx))
-        (pre_of (C_CALL nargs prim_idx)) (P_error_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)) ->
+        (error_message_of (C_CALL nargs prim_idx))
+        (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)) ->
       handler_correct h2 (clight_of (C_CALL nargs prim_idx))
-        (pre_of (C_CALL nargs prim_idx)) (P_error_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)) ->
+        (error_message_of (C_CALL nargs prim_idx))
+        (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros nargs prim_idx h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (C_CALL nargs prim_idx)) (pre_of (C_CALL nargs prim_idx))
-    (P_error_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx))
+    (clight_of (C_CALL nargs prim_idx)) (error_message_of (C_CALL nargs prim_idx))
+    (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

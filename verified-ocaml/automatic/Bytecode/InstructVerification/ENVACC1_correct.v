@@ -91,13 +91,13 @@ Definition env_field_loadable_1
 (* ================================================================== *)
 
 Theorem verify_ENVACC1_with_pre :
-    handler_correct (handle_ENVACC 1) f_instr_ENVACC1
+    handler_correct_v1 (handle_ENVACC 1) f_instr_ENVACC1
       env_field_loadable_1
       (fun _ s => field_or_heap s s.(Machine.env) 1 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_ENVACC.
+  unfold handler_correct_v1, handle_ENVACC.
   destruct (field_or_heap s s.(Machine.env) 1) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)

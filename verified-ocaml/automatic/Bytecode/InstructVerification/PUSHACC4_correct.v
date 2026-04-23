@@ -36,7 +36,7 @@ Proof.
 Qed.
 
 Theorem verify_PUSHACC4_correct :
-    handler_correct (handle_PUSHACC 4) f_instr_PUSHACC4
+    handler_correct_v1 (handle_PUSHACC 4) f_instr_PUSHACC4
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -46,7 +46,7 @@ Theorem verify_PUSHACC4_correct :
       (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 4 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSHACC. simpl nth_error.
+  intros e le m s. unfold handler_correct_v1, handle_PUSHACC. simpl nth_error.
   (* The handler computes nth_error (accu :: stack) 4 = nth_error stack 3.
      We need stack to have >= 4 elements for Step. *)
   destruct (Machine.stack s) as [|v0 stk0] eqn:Hstk.

@@ -27,7 +27,7 @@
 
    NO AXIOMS.  All invariants that CONSTINT_correct.v took as axioms
    (code_block_ne_sptr, code_contains_n, tagged_int_eq) are turned
-   into preconditions via handler_correct. *)
+   into preconditions via handler_correct_v1. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -170,7 +170,7 @@ Qed.
    4. code_block_ne_sp: code block distinct from stack block *)
 #[warnings="-not-a-closed-proof"]
 Theorem verify_PUSHCONSTINT_correct : forall n,
-    handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
+    handler_correct_v1 (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
       (fun _ m s ard =>
          (* code block separate from struct block *)
          ar_code_base_block ard <> ar_sptr_block ard /\
@@ -198,7 +198,7 @@ Theorem verify_PUSHCONSTINT_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_PUSHCONSTINT. simpl.
+  unfold handler_correct_v1, handle_PUSHCONSTINT. simpl.
 
   intros ard Hpre Hextra_pre.
   destruct Hextra_pre as (Hcb_ne & Hcb_ne_sp & Hcode_load & Htagged_eq & Hsp_ge16).
@@ -721,7 +721,7 @@ Qed.
 
 Definition correct_PUSHCONSTINT : forall z,
     handler_correct (handle_instr (PUSHCONSTINT z)) (clight_of (PUSHCONSTINT z))
-      (pre_of (PUSHCONSTINT z))
-      (P_error_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)).
+      (error_message_of (PUSHCONSTINT z))
+      (pre_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)).
 Proof.
 Admitted.

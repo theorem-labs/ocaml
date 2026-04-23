@@ -22,7 +22,7 @@
           }
      3. return 0
 
-   In handler_correct, pc' = s.(pc), so:
+   In handler_correct_v1, pc' = s.(pc), so:
      - Taken:  post-state has pc = target
      - Not taken: post-state has pc = s.(pc) (unchanged from Rocq perspective)
 
@@ -83,7 +83,7 @@ Qed.
 (* ================================================================== *)
 
 (* code_block_ne_sptr and code_contains_branch_offset have been moved
-   into the precondition of handler_correct.  The caller must
+   into the precondition of handler_correct_v1.  The caller must
    supply these facts when instantiating the spec. *)
 
 (* ================================================================== *)
@@ -257,7 +257,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_BRANCHIFNOT_correct : forall target,
-    handler_correct (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
+    handler_correct_v1 (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
          (exists ofs_int,
@@ -1137,7 +1137,7 @@ Qed.
    predicates are in dead match branches and thus irrelevant. *)
 Definition correct_BRANCHIFNOT : forall z,
   handler_correct (handle_instr (BRANCHIFNOT z)) (clight_of (BRANCHIFNOT z))
-    (pre_of (BRANCHIFNOT z))
-    (P_error_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
+    (error_message_of (BRANCHIFNOT z))
+    (pre_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
 Proof.
 Admitted.

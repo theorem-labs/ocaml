@@ -51,7 +51,7 @@ Local Lemma offset_closure_0 : forall n,
 Proof. intros. rewrite Z.add_0_r. apply Nat2Z.id. Qed.
 
 Theorem verify_OFFSETCLOSURE0_compl_comp :
-    handler_correct (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
+    handler_correct_v1 (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
       (fun _ _ _ _ => True)
       (fun msg s => msg = "OFFSETCLOSURE: invalid env"%string /\
         match Machine.env s with Val_closure _ _ | Val_block _ _ => False | _ => True end)
@@ -59,7 +59,7 @@ Theorem verify_OFFSETCLOSURE0_compl_comp :
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_OFFSETCLOSURE.
+  unfold handler_correct_v1, handle_OFFSETCLOSURE.
 
   (* Case split on s.(env) *)
   destruct (Machine.env s) eqn:Henv_eq.

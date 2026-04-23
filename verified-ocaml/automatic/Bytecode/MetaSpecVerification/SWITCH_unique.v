@@ -11,14 +11,16 @@ Lemma unique_SWITCH :
   forall nc nb const_targets block_targets,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (SWITCH nc nb const_targets block_targets))
-        (pre_of (SWITCH nc nb const_targets block_targets)) (P_error_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets)) ->
+        (error_message_of (SWITCH nc nb const_targets block_targets))
+        (pre_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets)) ->
       handler_correct h2 (clight_of (SWITCH nc nb const_targets block_targets))
-        (pre_of (SWITCH nc nb const_targets block_targets)) (P_error_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets)) ->
+        (error_message_of (SWITCH nc nb const_targets block_targets))
+        (pre_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros nc nb const_targets block_targets h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (SWITCH nc nb const_targets block_targets)) (pre_of (SWITCH nc nb const_targets block_targets))
-    (P_error_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets))
+    (clight_of (SWITCH nc nb const_targets block_targets)) (error_message_of (SWITCH nc nb const_targets block_targets))
+    (pre_of (SWITCH nc nb const_targets block_targets)) (P_halt_of (SWITCH nc nb const_targets block_targets)) (P_ccall_of (SWITCH nc nb const_targets block_targets))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

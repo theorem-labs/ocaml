@@ -241,7 +241,7 @@ Local Ltac read_pc_from_struct Hle co_is Hco Hpc_offset Hload :=
 
 Theorem verify_BEQ_correct : forall n target,
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BEQ n target) f_instr_BEQ
+    handler_correct_v1 (handle_BEQ n target) f_instr_BEQ
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
          Int.min_signed <= n <= Int.max_signed /\
@@ -801,14 +801,14 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_BEQ_handler_correct : forall n target,
+Theorem verify_BEQ_handler_correct_v1 : forall n target,
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BEQ n target) f_instr_BEQ
+    handler_correct_v1 (handle_BEQ n target) f_instr_BEQ
       (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target Hn.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_BEQ_correct n target Hn).
   - intros e le m s ard _ [[[Hne Hca] Hbo] [Hai Hal]].
     exact (conj Hne (conj Hn (conj Hca (conj Hbo (conj Hai Hal))))).
@@ -817,15 +817,15 @@ Qed.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v.
    handle_instr (BEQ z1 z2) / clight_of (BEQ z1 z2) / pre_of (BEQ z1 z2)
    are convertible with handle_BEQ z1 z2 / f_instr_BEQ / the building-block
-   conjunction used by verify_BEQ_handler_correct.  P_error_of / P_halt_of /
+   conjunction used by verify_BEQ_handler_correct_v1.  error_message_of / P_halt_of /
    P_ccall_of are vacuously satisfied because handle_BEQ always returns Step.
    The Int.min_signed <= z1 <= Int.max_signed constraint needed by the inner
    proof is not derivable from pre_of and is admitted; it will be discharged
    once instr_wfb is threaded into the precondition. *)
 Definition correct_BEQ : forall z1 z2,
   handler_correct (handle_instr (Bytecode.AST.BEQ z1 z2)) (clight_of (Bytecode.AST.BEQ z1 z2))
-    (pre_of (Bytecode.AST.BEQ z1 z2))
-    (P_error_of (Bytecode.AST.BEQ z1 z2)) (P_halt_of (Bytecode.AST.BEQ z1 z2)) (P_ccall_of (Bytecode.AST.BEQ z1 z2)).
+    (error_message_of (Bytecode.AST.BEQ z1 z2))
+    (pre_of (Bytecode.AST.BEQ z1 z2)) (P_halt_of (Bytecode.AST.BEQ z1 z2)) (P_ccall_of (Bytecode.AST.BEQ z1 z2)).
 Proof.
 Admitted.
 

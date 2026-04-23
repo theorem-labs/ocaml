@@ -180,7 +180,7 @@ Definition setvectitem_pre
 (* ================================================================== *)
 
 Theorem verify_SETVECTITEM_correct :
-    handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
+    handler_correct_v1 handle_SETVECTITEM f_instr_SETVECTITEM
       (fun e m s ard => setvectitem_pre e m s ard)
       (fun _ s => match s.(Machine.stack) with
                   | Val_int idx :: newval :: _ =>
@@ -201,11 +201,11 @@ Admitted.
    handle_instr SETVECTITEM / clight_of SETVECTITEM / pre_of SETVECTITEM are
    convertible with handle_SETVECTITEM / f_instr_SETVECTITEM / setvectitem_pre.
    P_halt_of and P_ccall_of are vacuously satisfied (SETVECTITEM never halts
-   or issues a C call).  P_error_of requires a small computation bridge. *)
+   or issues a C call).  error_message_of requires a small computation bridge. *)
 Definition correct_SETVECTITEM :
     handler_correct (handle_instr Bytecode.AST.SETVECTITEM) (clight_of Bytecode.AST.SETVECTITEM)
-      (pre_of Bytecode.AST.SETVECTITEM)
-      (P_error_of Bytecode.AST.SETVECTITEM) (P_halt_of Bytecode.AST.SETVECTITEM) (P_ccall_of Bytecode.AST.SETVECTITEM).
+      (error_message_of Bytecode.AST.SETVECTITEM)
+      (pre_of Bytecode.AST.SETVECTITEM) (P_halt_of Bytecode.AST.SETVECTITEM) (P_ccall_of Bytecode.AST.SETVECTITEM).
 Proof.
 Admitted.
 

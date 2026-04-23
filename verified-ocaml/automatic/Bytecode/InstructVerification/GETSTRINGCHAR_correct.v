@@ -221,7 +221,7 @@ Definition getstringchar_heap_pre
 (* ================================================================== *)
 
 Theorem verify_GETSTRINGCHAR_correct :
-    handler_correct handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
+    handler_correct_v1 handle_GETSTRINGCHAR f_instr_GETSTRINGCHAR
       (fun _ m s ard =>
          getstringchar_heap_pre m s ard /\
          match s.(Machine.stack) with
@@ -247,7 +247,7 @@ Theorem verify_GETSTRINGCHAR_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETSTRINGCHAR.
+  unfold handler_correct_v1, handle_GETSTRINGCHAR.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [| v_hd stk_tl] eqn:Hstk.
@@ -660,7 +660,7 @@ Import Bytecode.AST.
 
 Definition correct_GETSTRINGCHAR :
     handler_correct (handle_instr GETSTRINGCHAR) (clight_of GETSTRINGCHAR)
-      (pre_of GETSTRINGCHAR)
-      (P_error_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR).
+      (error_message_of GETSTRINGCHAR)
+      (pre_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR).
 Proof.
 Admitted.

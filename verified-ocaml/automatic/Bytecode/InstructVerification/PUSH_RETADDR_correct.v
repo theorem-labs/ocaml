@@ -234,7 +234,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSH_RETADDR_correct : forall ret_addr,
-    handler_correct (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
+    handler_correct_v1 (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
       (push_retaddr_step_pre ret_addr)
       (fun _ _ => False)
       (fun _ => False)
@@ -242,7 +242,7 @@ Theorem verify_PUSH_RETADDR_correct : forall ret_addr,
 Proof.
   intro ret_addr.
   intros e le m s.
-  unfold handler_correct, handle_PUSH_RETADDR. simpl.
+  unfold handler_correct_v1, handle_PUSH_RETADDR. simpl.
   intros ard Hpre Hstep_pre.
 
   (* Extract abs_rel fields *)
@@ -977,7 +977,7 @@ Qed.
 Import Bytecode.AST.
 Definition correct_PUSH_RETADDR : forall z,
     handler_correct (handle_instr (PUSH_RETADDR z)) (clight_of (PUSH_RETADDR z))
-      (pre_of (PUSH_RETADDR z))
-      (P_error_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)).
+      (error_message_of (PUSH_RETADDR z))
+      (pre_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)).
 Proof.
 Admitted.

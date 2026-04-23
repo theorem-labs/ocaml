@@ -46,14 +46,14 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_CONST0_compl_comp :
-    handler_correct (handle_CONSTINT 0) f_instr_CONST0
+    handler_correct_v1 (handle_CONSTINT 0) f_instr_CONST0
       (fun _ _ _ _ => True)
       (fun _ _ => False)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_CONSTINT. simpl.
+  unfold handler_correct_v1, handle_CONSTINT. simpl.
 
   (* ================================================================ *)
   (* CONST0 always returns Step — no case split needed                 *)

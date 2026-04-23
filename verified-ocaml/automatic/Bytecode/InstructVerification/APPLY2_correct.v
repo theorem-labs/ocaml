@@ -317,7 +317,7 @@ Qed.
    are imported from HandlerLemmas. *)
 
 Theorem verify_APPLY2_correct :
-    handler_correct (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
+    handler_correct_v1 (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
       apply2_step_pre
       (fun msg s =>
          (msg = "APPLY2: accu is not a closure"%string /\
@@ -327,7 +327,7 @@ Theorem verify_APPLY2_correct :
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct. simpl.
+  unfold handler_correct_v1. simpl.
   unfold handle_APPLY2.
   destruct (Machine.stack s) as [|arg1 stk1] eqn:Hstk.
   { (* stack = [] -- Error "stack underflow" *)
@@ -1425,12 +1425,12 @@ Qed.
    handle_instr APPLY2 = handle_APPLY2 and clight_of APPLY2 = f_instr_APPLY2
    by computation.  pre_of APPLY2 = apply2_step_pre is convertible.
    Error cases are bridged by case-splitting on the handler result and
-   unfolding P_error_of / P_halt_of / P_ccall_of. *)
+   unfolding error_message_of / P_halt_of / P_ccall_of. *)
 Definition correct_APPLY2 :
     handler_correct (Dispatch.handle_instr Bytecode.AST.APPLY2)
       (clight_of Bytecode.AST.APPLY2)
-      (pre_of Bytecode.AST.APPLY2)
-      (P_error_of Bytecode.AST.APPLY2) (P_halt_of Bytecode.AST.APPLY2)
+      (error_message_of Bytecode.AST.APPLY2)
+      (pre_of Bytecode.AST.APPLY2) (P_halt_of Bytecode.AST.APPLY2)
       (P_ccall_of Bytecode.AST.APPLY2).
 Proof.
 Admitted.

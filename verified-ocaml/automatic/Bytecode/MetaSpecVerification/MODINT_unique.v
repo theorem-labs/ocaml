@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_MODINT :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of MODINT)
-        (pre_of MODINT) (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT) ->
+        (error_message_of MODINT)
+        (pre_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT) ->
       handler_correct h2 (clight_of MODINT)
-        (pre_of MODINT) (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT) ->
+        (error_message_of MODINT)
+        (pre_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of MODINT) (pre_of MODINT)
-    (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT)
+    (clight_of MODINT) (error_message_of MODINT)
+    (pre_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

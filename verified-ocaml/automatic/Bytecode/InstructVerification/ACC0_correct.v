@@ -53,14 +53,14 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_ACC0_compl_comp :
-    handler_correct (handle_ACC 0) f_instr_ACC0
+    handler_correct_v1 (handle_ACC 0) f_instr_ACC0
       (fun _ _ _ _ => True)
       (fun _ s => s.(Machine.stack) = nil)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_ACC. simpl nth_error.
+  unfold handler_correct_v1, handle_ACC. simpl nth_error.
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk.
 
   (* ================================================================ *)

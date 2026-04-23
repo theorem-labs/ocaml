@@ -45,7 +45,7 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_PUSHCONST0_correct :
-    handler_correct (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
+    handler_correct_v1 (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -56,7 +56,7 @@ Theorem verify_PUSHCONST0_correct :
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSHCONSTINT. simpl.
+  intros e le m s. unfold handler_correct_v1, handle_PUSHCONSTINT. simpl.
   intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.

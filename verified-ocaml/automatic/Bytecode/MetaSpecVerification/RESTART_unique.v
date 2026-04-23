@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_RESTART :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of RESTART)
-        (pre_of RESTART) (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART) ->
+        (error_message_of RESTART)
+        (pre_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART) ->
       handler_correct h2 (clight_of RESTART)
-        (pre_of RESTART) (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART) ->
+        (error_message_of RESTART)
+        (pre_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of RESTART) (pre_of RESTART)
-    (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART)
+    (clight_of RESTART) (error_message_of RESTART)
+    (pre_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

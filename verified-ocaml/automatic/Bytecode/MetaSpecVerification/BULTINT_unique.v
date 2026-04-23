@@ -11,14 +11,16 @@ Lemma unique_BULTINT :
   forall z1 z2,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (BULTINT z1 z2))
-        (pre_of (BULTINT z1 z2)) (P_error_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2)) ->
+        (error_message_of (BULTINT z1 z2))
+        (pre_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2)) ->
       handler_correct h2 (clight_of (BULTINT z1 z2))
-        (pre_of (BULTINT z1 z2)) (P_error_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2)) ->
+        (error_message_of (BULTINT z1 z2))
+        (pre_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros z1 z2 h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (BULTINT z1 z2)) (pre_of (BULTINT z1 z2))
-    (P_error_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2))
+    (clight_of (BULTINT z1 z2)) (error_message_of (BULTINT z1 z2))
+    (pre_of (BULTINT z1 z2)) (P_halt_of (BULTINT z1 z2)) (P_ccall_of (BULTINT z1 z2))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

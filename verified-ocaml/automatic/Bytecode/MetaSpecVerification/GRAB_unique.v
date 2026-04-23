@@ -11,14 +11,16 @@ Lemma unique_GRAB :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (GRAB n))
-        (pre_of (GRAB n)) (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)) ->
+        (error_message_of (GRAB n))
+        (pre_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)) ->
       handler_correct h2 (clight_of (GRAB n))
-        (pre_of (GRAB n)) (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)) ->
+        (error_message_of (GRAB n))
+        (pre_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros n h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (GRAB n)) (pre_of (GRAB n))
-    (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n))
+    (clight_of (GRAB n)) (error_message_of (GRAB n))
+    (pre_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

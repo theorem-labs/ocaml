@@ -190,7 +190,7 @@ Definition getmethod_heap_pre
 (* ================================================================== *)
 
 Theorem verify_GETMETHOD_correct :
-    handler_correct handle_GETMETHOD f_instr_GETMETHOD
+    handler_correct_v1 handle_GETMETHOD f_instr_GETMETHOD
       (fun _ m s ard =>
          getmethod_heap_pre m s ard /\
          match s.(Machine.accu) with
@@ -207,7 +207,7 @@ Theorem verify_GETMETHOD_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETMETHOD.
+  unfold handler_correct_v1, handle_GETMETHOD.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [| obj stk_tl] eqn:Hstk.
@@ -475,11 +475,11 @@ Qed.
    handle_instr GETMETHOD / clight_of GETMETHOD / pre_of GETMETHOD are
    convertible with handle_GETMETHOD / f_instr_GETMETHOD / getmethod_step_pre.
    P_halt_of and P_ccall_of are vacuously satisfied (GETMETHOD never halts or
-   issues a C call).  P_error_of requires bridging from the disjunction in the
+   issues a C call).  error_message_of requires bridging from the disjunction in the
    old proof to `error_message_of GETMETHOD s = Some msg`. *)
 Definition correct_GETMETHOD :
     handler_correct (handle_instr GETMETHOD) (clight_of GETMETHOD)
-      (pre_of GETMETHOD)
-      (P_error_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD).
+      (error_message_of GETMETHOD)
+      (pre_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD).
 Proof.
 Admitted.

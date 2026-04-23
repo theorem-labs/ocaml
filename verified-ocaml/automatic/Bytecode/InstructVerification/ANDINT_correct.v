@@ -43,7 +43,7 @@ Proof.
 Qed.
 
 Local Theorem verify_ANDINT_correct :
-    handler_correct handle_ANDINT f_instr_ANDINT
+    handler_correct_v1 handle_ANDINT f_instr_ANDINT
       (pre_and accu_is_long stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
@@ -51,7 +51,7 @@ Local Theorem verify_ANDINT_correct :
                   end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_ANDINT.
+  intros e le m s. unfold handler_correct_v1, handle_ANDINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
@@ -179,7 +179,7 @@ Import Bytecode.AST.
    expected by InstructVerificationFineGrainedSpec. *)
 Theorem correct_ANDINT :
     handler_correct (handle_instr ANDINT) (clight_of ANDINT)
-      (pre_of ANDINT)
-      (P_error_of ANDINT) (P_halt_of ANDINT) (P_ccall_of ANDINT).
+      (error_message_of ANDINT)
+      (pre_of ANDINT) (P_halt_of ANDINT) (P_ccall_of ANDINT).
 Proof.
 Admitted.

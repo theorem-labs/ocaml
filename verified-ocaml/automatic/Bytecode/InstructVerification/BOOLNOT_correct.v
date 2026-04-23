@@ -524,9 +524,9 @@ Proof.
        rewrite Haccu_eq in Hbool; discriminate.
 Qed.
 
-(* Wrapper: convert to handler_correct form for the Module Type. *)
-Theorem verify_BOOLNOT_handler_correct :
-    handler_correct handle_BOOLNOT f_instr_BOOLNOT
+(* Wrapper: convert to handler_correct_v1 form for the Module Type. *)
+Theorem verify_BOOLNOT_handler_correct_v1 :
+    handler_correct_v1 handle_BOOLNOT f_instr_BOOLNOT
       (pre_and accu_is_bool accu_is_long)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -543,8 +543,8 @@ Qed.
 (* Final wrapper with the exact type expected by InstructVerificationProof.v. *)
 Definition correct_BOOLNOT :
     handler_correct (handle_instr Bytecode.AST.BOOLNOT) (clight_of Bytecode.AST.BOOLNOT)
-      (pre_of Bytecode.AST.BOOLNOT)
-      (P_error_of Bytecode.AST.BOOLNOT) (P_halt_of Bytecode.AST.BOOLNOT) (P_ccall_of Bytecode.AST.BOOLNOT).
+      (error_message_of Bytecode.AST.BOOLNOT)
+      (pre_of Bytecode.AST.BOOLNOT) (P_halt_of Bytecode.AST.BOOLNOT) (P_ccall_of Bytecode.AST.BOOLNOT).
 Proof.
 Admitted.
 

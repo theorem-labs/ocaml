@@ -68,13 +68,13 @@ Definition env_field_loadable_2
         val_repr hm cb co v cv.
 
 Theorem verify_ENVACC2_with_pre :
-    handler_correct (handle_ENVACC 2) f_instr_ENVACC2
+    handler_correct_v1 (handle_ENVACC 2) f_instr_ENVACC2
       env_field_loadable_2
       (fun _ s => field_or_heap s s.(Machine.env) 2 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_ENVACC.
+  unfold handler_correct_v1, handle_ENVACC.
   destruct (field_or_heap s s.(Machine.env) 2) as [v|] eqn:Hfoh.
 
   2: { reflexivity. }
@@ -228,15 +228,15 @@ Proof.
   }
 Qed.
 
-(* Wrapper bridging the inner proof to uniform P_error_of / P_halt_of / P_ccall_of.
+(* Wrapper bridging the inner proof to uniform error_message_of / P_halt_of / P_ccall_of.
    instr_wfb (ENVACC 2) is trivially true (2 < Int.half_modulus), so we just
    unfold handle_ENVACC, let the wfb guard compute away, case-split on
    field_or_heap, and delegate Step to the inner proof / close Error via
-   P_error_of matching error_message_of. *)
+   error_message_of. *)
 Definition correct_ENVACC2 :
     handler_correct (handle_ENVACC 2) f_instr_ENVACC2
+      (error_message_of (Bytecode.AST.ENVACC 2))
       env_field_loadable_2
-      (P_error_of (Bytecode.AST.ENVACC 2))
       (P_halt_of (Bytecode.AST.ENVACC 2))
       (P_ccall_of (Bytecode.AST.ENVACC 2)).
 Proof.

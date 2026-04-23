@@ -29,7 +29,7 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_PUSH_correct :
-    handler_correct handle_PUSH f_instr_PUSH
+    handler_correct_v1 handle_PUSH f_instr_PUSH
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -41,7 +41,7 @@ Theorem verify_PUSH_correct :
       (fun _ _ _ => False).
 
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSH. intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
+  intros e le m s. unfold handler_correct_v1, handle_PUSH. intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.
   set (hm := ar_heap_map ard) in *.
@@ -324,8 +324,8 @@ Qed.
    P_error/P_halt/P_ccall predicates are dead code in the match. *)
 Definition correct_PUSH :
   handler_correct (Dispatch.handle_instr PUSH) (clight_of PUSH)
-    (pre_of PUSH)
-    (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
+    (error_message_of PUSH)
+    (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
 Proof.
 Admitted.
 

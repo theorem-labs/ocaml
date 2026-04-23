@@ -97,13 +97,13 @@ Local Definition heap_field_loadable_3
 (* ================================================================== *)
 
 Theorem verify_GETFIELD3_with_pre :
-    handler_correct (handle_GETFIELD 3) f_instr_GETFIELD3
+    handler_correct_v1 (handle_GETFIELD 3) f_instr_GETFIELD3
       (heap_field_loadable 3)
       (fun _ s => field_or_heap s s.(Machine.accu) 3 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETFIELD.
+  unfold handler_correct_v1, handle_GETFIELD.
   destruct (field_or_heap s s.(Machine.accu) 3) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)

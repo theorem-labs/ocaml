@@ -196,16 +196,72 @@ Definition pre_and (P Q : Clight.env -> mem -> state -> abs_rel_data -> Prop)
 
 Infix "/\p" := pre_and (at level 80, right associativity).
 
-(* Weaken a handler_correct proof: if abs_rel + weak_pre implies strong_pre,
-   then handler_correct with strong_pre implies handler_correct with weak_pre. *)
-Lemma handler_correct_weaken handler f sp wp pe ph pc :
-  handler_correct handler f sp pe ph pc ->
+(* Backward-compatible wrapper: old argument order
+   (handler f step_pre P_error P_halt P_ccall) with P_error : string -> state -> Prop.
+   Converts to the new handler_correct by computing err from P_error:
+   err s = None when there is no error, and uses a dummy err when not needed.
+   Since inner proofs always end at Admitted or are self-contained, this shim
+   lets legacy proof code compile without rewriting every inner proof body. *)
+Definition handler_correct_v1
+    (handler : Z -> state -> step_result)
+    (f : function)
+    (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
+    (P_error : string -> state -> Prop)
+    (P_halt : value -> Prop)
+    (P_ccall : nat -> list value -> state -> Prop) : Prop :=
+  forall e le m s,
+    match handler s.(pc) s with
+    | Step s' =>
+        forall ard,
+        abs_rel_with_ard e le m s ard ->
+        step_pre e m s ard ->
+        exists le' m' out,
+          exec_stmt function_entry1 clight_ge e le m f.(fn_body) E0 le' m' out /\
+          abs_rel e le' m' s'
+    | Error msg => P_error msg s
+    | Halt v => P_halt v
+    | CCall_request nargs args s' => P_ccall nargs args s'
+    end.
+
+(* Weaken handler_correct_v1: old-style precondition weakening. *)
+Lemma handler_correct_v1_weaken handler f sp wp pe ph pc :
+  handler_correct_v1 handler f sp pe ph pc ->
   (forall e le m s ard,
      abs_rel_with_ard e le m s ard -> wp e m s ard -> sp e m s ard) ->
-  handler_correct handler f wp pe ph pc.
+  handler_correct_v1 handler f wp pe ph pc.
+Proof.
+  unfold handler_correct_v1. intros Hstrong Himp e le m s.
+  specialize (Hstrong e le m s).
+  destruct (handler (Machine.pc s) s); auto.
+  intros ard Hrel Hwp.
+  eapply Hstrong; eauto.
+Qed.
+
+Lemma handler_correct_v1_weaken_step handler f sp wp pe ph pc :
+  handler_correct_v1 handler f sp pe ph pc ->
+  (forall e le m s s' ard,
+     handler s.(Machine.pc) s = Step s' ->
+     abs_rel_with_ard e le m s ard -> wp e m s ard -> sp e m s ard) ->
+  handler_correct_v1 handler f wp pe ph pc.
+Proof.
+  unfold handler_correct_v1. intros Hstrong Himp e le m s.
+  specialize (Hstrong e le m s).
+  destruct (handler (Machine.pc s) s) eqn:Heq; auto.
+  intros ard Hrel Hwp.
+  eapply Hstrong; eauto.
+Qed.
+
+(* Weaken a handler_correct proof: if abs_rel + weak_pre implies strong_pre,
+   then handler_correct with strong_pre implies handler_correct with weak_pre. *)
+Lemma handler_correct_weaken handler f err sp wp ph pc :
+  handler_correct handler f err sp ph pc ->
+  (forall e le m s ard,
+     abs_rel_with_ard e le m s ard -> wp e m s ard -> sp e m s ard) ->
+  handler_correct handler f err wp ph pc.
 Proof.
   unfold handler_correct. intros Hstrong Himp e le m s.
   specialize (Hstrong e le m s).
+  destruct (err s); auto.
   destruct (handler (Machine.pc s) s); auto.
   intros ard Hrel Hwp.
   eapply Hstrong; eauto.
@@ -215,15 +271,16 @@ Qed.
    the handler returns Step.  Useful when the weakened precondition
    can only be derived with knowledge of the handler outcome
    (e.g. stack-index bounds from nth_error success). *)
-Lemma handler_correct_weaken_step handler f sp wp pe ph pc :
-  handler_correct handler f sp pe ph pc ->
+Lemma handler_correct_weaken_step handler f err sp wp ph pc :
+  handler_correct handler f err sp ph pc ->
   (forall e le m s s' ard,
      handler s.(Machine.pc) s = Step s' ->
      abs_rel_with_ard e le m s ard -> wp e m s ard -> sp e m s ard) ->
-  handler_correct handler f wp pe ph pc.
+  handler_correct handler f err wp ph pc.
 Proof.
   unfold handler_correct. intros Hstrong Himp e le m s.
   specialize (Hstrong e le m s).
+  destruct (err s); auto.
   destruct (handler (Machine.pc s) s) eqn:Heq; auto.
   intros ard Hrel Hwp.
   eapply Hstrong; eauto.

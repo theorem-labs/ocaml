@@ -173,7 +173,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_MAKEBLOCK3_correct : forall t,
-    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+    handler_correct_v1 (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -249,7 +249,7 @@ Theorem verify_MAKEBLOCK3_correct : forall t,
 Proof. Admitted.
 
 Definition MAKEBLOCK3_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
+    handler_correct_v1 (handle_MAKEBLOCK3 t) f_instr_MAKEBLOCK3
       (heap_alloc_with_stores 3 (Z.of_nat t) alloc_store_3
        /\p code_at (Int.repr (Z.of_nat t)))
       (fun _ s => match s.(Machine.stack) with _ :: _ :: _ => False | _ => True end)
@@ -259,7 +259,7 @@ Admitted.
 
 
 (* Canonical wrapper: bridge from the per-instruction spec
-   (handle_instr (MAKEBLOCK3 n), clight_of, pre_of, P_error_of,
+   (handle_instr (MAKEBLOCK3 n), clight_of, pre_of, error_message_of,
    P_halt_of, P_ccall_of) to the existing proof.
 
    Admitted because the underlying verify_MAKEBLOCK3_correct proof
@@ -268,6 +268,6 @@ Admitted.
    range guard that the C handler requires. *)
 Definition correct_MAKEBLOCK3 : forall n,
     handler_correct (handle_instr (Bytecode.AST.MAKEBLOCK3 n)) (clight_of (Bytecode.AST.MAKEBLOCK3 n))
-      (pre_of (Bytecode.AST.MAKEBLOCK3 n))
-      (P_error_of (Bytecode.AST.MAKEBLOCK3 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK3 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK3 n)).
+      (error_message_of (Bytecode.AST.MAKEBLOCK3 n))
+      (pre_of (Bytecode.AST.MAKEBLOCK3 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK3 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK3 n)).
 Proof. Admitted.

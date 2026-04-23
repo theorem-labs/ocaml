@@ -259,7 +259,7 @@ Local Ltac prove_field_survives_left Hstore Hload :=
 (* ================================================================== *)
 
 (* Custom statement because handle_SWITCH doesn't take pc' and
-   does not fit handler_correct's (Z -> state -> step_result) shape.
+   does not fit handler_correct_v1's (Z -> state -> step_result) shape.
    We prove the Val_int case directly. The block/pointer cases are
    excluded by precondition. *)
 
@@ -326,11 +326,11 @@ Proof. Admitted.
      fun pc' s => handle_SWITCH n1 n2 l1 l2 s  (Dispatch.v, pc' ignored).
    clight_of (SWITCH n1 n2 l1 l2) = f_instr_SWITCH by computation.
    pre_of (SWITCH n1 n2 l1 l2) = switch_step_pre n1 n2 l1 l2 by computation.
-   P_error_of bridges via error_message_of; P_halt_of and P_ccall_of
+   error_message_of bridges via error_message_of; P_halt_of and P_ccall_of
    are vacuously False for SWITCH. *)
 Definition correct_SWITCH : forall n1 n2 l1 l2,
   handler_correct (handle_instr (Bytecode.AST.SWITCH n1 n2 l1 l2)) (clight_of (Bytecode.AST.SWITCH n1 n2 l1 l2))
-    (pre_of (Bytecode.AST.SWITCH n1 n2 l1 l2))
-    (P_error_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_halt_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_ccall_of (Bytecode.AST.SWITCH n1 n2 l1 l2)).
+    (error_message_of (Bytecode.AST.SWITCH n1 n2 l1 l2))
+    (pre_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_halt_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_ccall_of (Bytecode.AST.SWITCH n1 n2 l1 l2)).
 Proof. Admitted.
 

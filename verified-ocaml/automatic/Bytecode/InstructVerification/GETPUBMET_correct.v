@@ -610,7 +610,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_GETPUBMET_correct : forall tag,
-    handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
+    handler_correct_v1 (handle_GETPUBMET tag) f_instr_GETPUBMET
       (getpubmet_pre tag)
       (fun msg _ => msg = "GETPUBMET: no class table"%string \/
         msg = "GETPUBMET: method not found"%string)
@@ -622,15 +622,15 @@ Admitted.
    handle_instr (GETPUBMET z) / clight_of (GETPUBMET z) / pre_of (GETPUBMET z)
    are convertible with handle_GETPUBMET z / f_instr_GETPUBMET / getpubmet_pre z.
    P_halt_of and P_ccall_of are vacuously satisfied (GETPUBMET never halts or
-   issues a C call).  P_error_of requires bridging from the disjunction in
+   issues a C call).  error_message_of requires bridging from the disjunction in
    verify_GETPUBMET_correct to `error_message_of (GETPUBMET z) s = Some msg`. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Definition correct_GETPUBMET : forall z,
     handler_correct (handle_instr (GETPUBMET z)) (clight_of (GETPUBMET z))
-      (pre_of (GETPUBMET z))
-      (P_error_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
+      (error_message_of (GETPUBMET z))
+      (pre_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
 Proof.
 Admitted.
 

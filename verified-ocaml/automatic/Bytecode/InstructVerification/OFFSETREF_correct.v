@@ -260,7 +260,7 @@ Definition offsetref_heap_pre
 (* ================================================================== *)
 
 Theorem verify_OFFSETREF_correct : forall n,
-    handler_correct (handle_OFFSETREF n) f_instr_OFFSETREF
+    handler_correct_v1 (handle_OFFSETREF n) f_instr_OFFSETREF
       (fun _ => offsetref_heap_pre n)
       (fun _ s => match s.(Machine.accu) with
                   | Val_ptr addr =>
@@ -274,7 +274,7 @@ Theorem verify_OFFSETREF_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_OFFSETREF.
+  unfold handler_correct_v1, handle_OFFSETREF.
 
   (* Case split on accu *)
   destruct (Machine.accu s) as [z | t flds | addr | a1 a2] eqn:Haccu_eq;
@@ -694,7 +694,7 @@ Import Bytecode.AST.
 
 Definition correct_OFFSETREF : forall z,
   handler_correct (handle_instr (OFFSETREF z)) (clight_of (OFFSETREF z))
-    (pre_of (OFFSETREF z))
-    (P_error_of (OFFSETREF z)) (P_halt_of (OFFSETREF z)) (P_ccall_of (OFFSETREF z)).
+    (error_message_of (OFFSETREF z))
+    (pre_of (OFFSETREF z)) (P_halt_of (OFFSETREF z)) (P_ccall_of (OFFSETREF z)).
 Proof.
 Admitted.

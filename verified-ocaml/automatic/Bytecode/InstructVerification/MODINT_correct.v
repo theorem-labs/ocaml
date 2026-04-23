@@ -9,7 +9,7 @@
    Rocq handler: handle_MODINT pops stack, computes Z.rem, with
    division-by-zero check.
 
-   Uses handler_correct to exclude the b=0 (do_raise) case.
+   Uses handler_correct_v1 to exclude the b=0 (do_raise) case.
    The do_raise path involves complex trap frame manipulation that
    we sidestep with a nonzero-divisor precondition. *)
 
@@ -307,7 +307,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_MODINT_correct :
-    handler_correct handle_MODINT f_instr_MODINT
+    handler_correct_v1 handle_MODINT f_instr_MODINT
       (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
@@ -728,8 +728,8 @@ Proof.
 Qed.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_MODINT_handler_correct :
-    handler_correct handle_MODINT f_instr_MODINT
+Theorem verify_MODINT_handler_correct_v1 :
+    handler_correct_v1 handle_MODINT f_instr_MODINT
       divmod_safe
       (fun _ s =>
          match s.(Machine.accu), s.(Machine.stack) with
@@ -739,7 +739,7 @@ Theorem verify_MODINT_handler_correct :
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
@@ -765,7 +765,7 @@ Import Bytecode.AST.
 
 Theorem correct_MODINT :
     handler_correct (handle_instr MODINT) (clight_of MODINT)
-      (pre_of MODINT)
-      (P_error_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT).
+      (error_message_of MODINT)
+      (pre_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT).
 Proof.
 Admitted.

@@ -19,12 +19,12 @@ Local Ltac eval_cbn :=
         ptrofs_of_int field_offset PTree.get PTree.set].
 
 Theorem verify_ACC1 :
-    handler_correct (handle_ACC 1) f_instr_ACC1
+    handler_correct_v1 (handle_ACC 1) f_instr_ACC1
       (fun _ _ _ _ => True)
       (fun _ s => nth_error s.(Machine.stack) 1 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_ACC. simpl nth_error.
+  intros e le m s. unfold handler_correct_v1, handle_ACC. simpl nth_error.
   destruct (Machine.stack s) as [|v0 stk0] eqn:Hstk.
   { reflexivity. }
   destruct stk0 as [|v1 rest].

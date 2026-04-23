@@ -103,11 +103,11 @@ Definition neq_int_range_pre (m : mem) (s : state) (ard : abs_rel_data) : Prop :
   end.
 
 Theorem verify_NEQ_correct :
-    handler_correct handle_NEQ f_instr_NEQ
+    handler_correct_v1 handle_NEQ f_instr_NEQ
       (fun _ => neq_int_range_pre)
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   intros e le m s. unfold handle_NEQ.
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try reflexivity.
   (* Non-empty stack: handle_NEQ returns Step for all accu/v_hd combos. *)
@@ -257,12 +257,12 @@ Proof.
 Qed.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_NEQ_handler_correct :
-    handler_correct handle_NEQ f_instr_NEQ
+Theorem verify_NEQ_handler_correct_v1 :
+    handler_correct_v1 handle_NEQ f_instr_NEQ
       int_op_safe
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ => neq_int_range_pre).
   - exact verify_NEQ_correct.
   - intros e le m s ard _ Hios.
@@ -275,7 +275,7 @@ Qed.
 Local Notation NEQ := Bytecode.AST.NEQ.
 Theorem correct_NEQ :
     handler_correct (handle_instr NEQ) (clight_of NEQ)
-      (pre_of NEQ)
-      (P_error_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ).
+      (error_message_of NEQ)
+      (pre_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ).
 Proof.
 Admitted.

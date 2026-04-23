@@ -53,7 +53,7 @@ Proof.
 Qed.
 
 Theorem verify_XORINT_correct :
-    handler_correct handle_XORINT f_instr_XORINT
+    handler_correct_v1 handle_XORINT f_instr_XORINT
       (pre_and accu_is_long stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
@@ -61,7 +61,7 @@ Theorem verify_XORINT_correct :
                   end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_XORINT.
+  intros e le m s. unfold handler_correct_v1, handle_XORINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
@@ -187,8 +187,8 @@ Qed.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_XORINT :
   handler_correct (handle_instr Bytecode.AST.XORINT) (clight_of Bytecode.AST.XORINT)
-    (pre_of Bytecode.AST.XORINT)
-    (P_error_of Bytecode.AST.XORINT) (P_halt_of Bytecode.AST.XORINT) (P_ccall_of Bytecode.AST.XORINT).
+    (error_message_of Bytecode.AST.XORINT)
+    (pre_of Bytecode.AST.XORINT) (P_halt_of Bytecode.AST.XORINT) (P_ccall_of Bytecode.AST.XORINT).
 Proof.
 Admitted.
 

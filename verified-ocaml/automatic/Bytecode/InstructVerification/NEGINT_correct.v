@@ -156,14 +156,14 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_NEGINT_compl_comp :
-    handler_correct handle_NEGINT f_instr_NEGINT
+    handler_correct_v1 handle_NEGINT f_instr_NEGINT
       accu_is_long
       (fun _ s => forall n, s.(Machine.accu) <> Val_int n)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_NEGINT.
+  unfold handler_correct_v1, handle_NEGINT.
 
   (* Case split on accu *)
   destruct (Machine.accu s) as [n | | | ] eqn:Haccu_eq;
@@ -413,10 +413,10 @@ Qed.
    handle_instr NEGINT / clight_of NEGINT / pre_of NEGINT are convertible
    with handle_NEGINT / f_instr_NEGINT / accu_is_long.
    P_halt_of and P_ccall_of are vacuously satisfied (NEGINT never halts or
-   issues a C call).  P_error_of requires a small computation bridge. *)
+   issues a C call).  error_message_of requires a small computation bridge. *)
 Definition correct_NEGINT :
     handler_correct (handle_instr NEGINT) (clight_of NEGINT)
-      (pre_of NEGINT)
-      (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT).
+      (error_message_of NEGINT)
+      (pre_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT).
 Proof.
 Admitted.

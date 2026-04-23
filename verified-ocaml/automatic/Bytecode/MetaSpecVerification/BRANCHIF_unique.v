@@ -11,14 +11,16 @@ Lemma unique_BRANCHIF :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (BRANCHIF z))
-        (pre_of (BRANCHIF z)) (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)) ->
+        (error_message_of (BRANCHIF z))
+        (pre_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)) ->
       handler_correct h2 (clight_of (BRANCHIF z))
-        (pre_of (BRANCHIF z)) (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)) ->
+        (error_message_of (BRANCHIF z))
+        (pre_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros z h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (BRANCHIF z)) (pre_of (BRANCHIF z))
-    (P_error_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z))
+    (clight_of (BRANCHIF z)) (error_message_of (BRANCHIF z))
+    (pre_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

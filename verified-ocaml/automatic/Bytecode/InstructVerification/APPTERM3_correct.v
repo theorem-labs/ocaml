@@ -332,7 +332,7 @@ Qed.
    are imported from HandlerLemmas. *)
 
 Theorem verify_APPTERM3_correct : forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
+    handler_correct_v1 (fun _ s => handle_APPTERM3 slotsize s) f_instr_APPTERM3
       (fun _ m s ard =>
          (* The code buffer contains Int.repr slotsize at the current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -373,7 +373,7 @@ Theorem verify_APPTERM3_correct : forall slotsize,
 Proof.
   intro slotsize.
   intros e le m s.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   simpl.
   unfold handle_APPTERM3.
 
@@ -1333,7 +1333,7 @@ Import Bytecode.AST.
 
 Theorem correct_APPTERM3 : forall n,
     handler_correct (handle_instr (APPTERM3 n)) (clight_of (APPTERM3 n))
-      (pre_of (APPTERM3 n))
-      (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)).
+      (error_message_of (APPTERM3 n))
+      (pre_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)).
 Proof.
 Admitted.

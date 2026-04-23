@@ -26,7 +26,7 @@
    env field access pattern, generalized over n.
 
    NO AXIOMS.  All structural/range constraints are preconditions
-   via handler_correct. *)
+   via handler_correct_v1. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -175,7 +175,7 @@ Qed.
 
 Theorem verify_ENVACC_correct : forall n,
     Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ENVACC n) f_instr_ENVACC
+    handler_correct_v1 (handle_ENVACC n) f_instr_ENVACC
       (fun e m s ard =>
          (* The code buffer contains Int.repr (Z.of_nat n) at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -189,7 +189,7 @@ Theorem verify_ENVACC_correct : forall n,
 Proof.
   intros n Hn_range.
   intros e le m s.
-  unfold handler_correct, handle_ENVACC.
+  unfold handler_correct_v1, handle_ENVACC.
   (* Resolve the well-formedness guard using the range hypothesis *)
   replace (Z.of_nat n <? Int.half_modulus)%Z with true
     by (symmetry; apply Z.ltb_lt; lia).
@@ -534,13 +534,13 @@ Proof.
 Qed.
 
 Definition ENVACC_correct_for_spec : forall n, Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ENVACC n) f_instr_ENVACC
+    handler_correct_v1 (handle_ENVACC n) f_instr_ENVACC
       (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
       (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
     intros n Hrange.
-    eapply handler_correct_weaken.
+    eapply handler_correct_v1_weaken.
     - exact (verify_ENVACC_correct n Hrange).
     - intros e le m s ard _ [Hcode Henv]. exact (conj Hcode Henv).
   Qed.
@@ -550,11 +550,11 @@ Definition ENVACC_correct_for_spec : forall n, Z.of_nat n < Int.half_modulus ->
    convertible with handle_ENVACC n / f_instr_ENVACC /
    (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n).
    P_halt_of and P_ccall_of are vacuously satisfied (ENVACC never halts or
-   issues a C call).  P_error_of is tautological on the Error branch. *)
+   issues a C call).  error_message_of is tautological on the Error branch. *)
 Theorem correct_ENVACC : forall n,
     handler_correct (handle_instr (Bytecode.AST.ENVACC n)) (clight_of (Bytecode.AST.ENVACC n))
-      (pre_of (Bytecode.AST.ENVACC n))
-      (P_error_of (Bytecode.AST.ENVACC n)) (P_halt_of (Bytecode.AST.ENVACC n)) (P_ccall_of (Bytecode.AST.ENVACC n)).
+      (error_message_of (Bytecode.AST.ENVACC n))
+      (pre_of (Bytecode.AST.ENVACC n)) (P_halt_of (Bytecode.AST.ENVACC n)) (P_ccall_of (Bytecode.AST.ENVACC n)).
 Proof.
 Admitted.
 

@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_ULTINT :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of ULTINT)
-        (pre_of ULTINT) (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT) ->
+        (error_message_of ULTINT)
+        (pre_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT) ->
       handler_correct h2 (clight_of ULTINT)
-        (pre_of ULTINT) (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT) ->
+        (error_message_of ULTINT)
+        (pre_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of ULTINT) (pre_of ULTINT)
-    (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT)
+    (clight_of ULTINT) (error_message_of ULTINT)
+    (pre_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

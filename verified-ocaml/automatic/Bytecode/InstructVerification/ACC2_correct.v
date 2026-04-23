@@ -51,12 +51,12 @@ Proof.
 Qed.
 
 Theorem verify_ACC2 :
-    handler_correct (handle_ACC 2) f_instr_ACC2
+    handler_correct_v1 (handle_ACC 2) f_instr_ACC2
       (fun _ _ _ _ => True)
       (fun _ s => nth_error s.(Machine.stack) 2 = None) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_ACC. simpl nth_error.
+  unfold handler_correct_v1, handle_ACC. simpl nth_error.
 
   (* Destruct stack to depth 3 *)
   destruct (Machine.stack s) as [|v0 stk0] eqn:Hstk.

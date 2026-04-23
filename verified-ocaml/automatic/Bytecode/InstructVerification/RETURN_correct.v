@@ -305,7 +305,7 @@ Qed.
 
 #[warnings="-not-a-closed-proof"]
 Theorem verify_RETURN_correct : forall stacksize,
-    handler_correct (fun _ => handle_RETURN stacksize) f_instr_RETURN
+    handler_correct_v1 (fun _ => handle_RETURN stacksize) f_instr_RETURN
       (fun _ m s ard =>
          (* Common preamble: code buffer has stacksize at current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -1820,7 +1820,7 @@ Qed.
 
 Definition correct_RETURN : forall n,
   handler_correct (handle_instr (RETURN n)) (clight_of (RETURN n))
-    (pre_of (RETURN n))
-    (P_error_of (RETURN n)) (P_halt_of (RETURN n)) (P_ccall_of (RETURN n)).
+    (error_message_of (RETURN n))
+    (pre_of (RETURN n)) (P_halt_of (RETURN n)) (P_ccall_of (RETURN n)).
 Proof.
 Admitted.

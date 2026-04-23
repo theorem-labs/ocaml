@@ -473,7 +473,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_GETDYNMET_correct :
-    handler_correct handle_GETDYNMET f_instr_GETDYNMET
+    handler_correct_v1 handle_GETDYNMET f_instr_GETDYNMET
       getdynmet_pre
       (fun msg _ => msg = "GETDYNMET: stack underflow"%string \/
         msg = "GETDYNMET: no class table"%string \/
@@ -481,7 +481,7 @@ Theorem verify_GETDYNMET_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETDYNMET.
+  unfold handler_correct_v1, handle_GETDYNMET.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [| obj stk_tl] eqn:Hstk.
@@ -1017,14 +1017,14 @@ Qed.
 (* Wrapper with uniform type for InstructVerificationProof.v           *)
 (*                                                                      *)
 (* Bridges verify_GETDYNMET_correct (string-disjunction errors,        *)
-(* custom precondition) to the uniform P_error_of / pre_of interface.  *)
+(* custom precondition) to the uniform error_message_of / pre_of interface.  *)
 (* ================================================================== *)
 
 Import Bytecode.AST.
 
 Definition correct_GETDYNMET :
     handler_correct (handle_instr GETDYNMET) (clight_of GETDYNMET)
-      (pre_of GETDYNMET)
-      (P_error_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET).
+      (error_message_of GETDYNMET)
+      (pre_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET).
 Proof.
 Admitted.

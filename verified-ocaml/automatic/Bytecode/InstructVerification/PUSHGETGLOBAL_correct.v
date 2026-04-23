@@ -274,7 +274,7 @@ Qed.
 
 Theorem verify_PUSHGETGLOBAL_correct : forall n,
     0 <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
+    handler_correct_v1 (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
       (fun _ m s ard =>
          (* code memory at pc contains n *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -864,15 +864,15 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_PUSHGETGLOBAL_handler_correct : forall n,
+Theorem verify_PUSHGETGLOBAL_handler_correct_v1 : forall n,
     0 <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
+    handler_correct_v1 (handle_PUSHGETGLOBAL n) f_instr_PUSHGETGLOBAL
       (pre_and (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n)) (sp_at_least 16))
       (fun _ s => nth_error s.(Machine.global) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n Hn.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_PUSHGETGLOBAL_correct n Hn).
   - intros e le m s ard _ [[Hca Hgs] Hsp].
     split. { exact Hca. }
@@ -887,13 +887,13 @@ Qed.
    are convertible with handle_PUSHGETGLOBAL n / f_instr_PUSHGETGLOBAL /
    ((code_at ... /\p global_offset_safe n) /\p sp_at_least 16).
    P_halt_of and P_ccall_of are vacuously satisfied (PUSHGETGLOBAL never halts or
-   issues a C call).  P_error_of requires nth_error global n = None. *)
+   issues a C call).  error_message_of requires nth_error global n = None. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Theorem correct_PUSHGETGLOBAL : forall n,
     handler_correct (handle_instr (PUSHGETGLOBAL n)) (clight_of (PUSHGETGLOBAL n))
-      (pre_of (PUSHGETGLOBAL n))
-      (P_error_of (PUSHGETGLOBAL n)) (P_halt_of (PUSHGETGLOBAL n)) (P_ccall_of (PUSHGETGLOBAL n)).
+      (error_message_of (PUSHGETGLOBAL n))
+      (pre_of (PUSHGETGLOBAL n)) (P_halt_of (PUSHGETGLOBAL n)) (P_ccall_of (PUSHGETGLOBAL n)).
 Proof.
 Admitted.

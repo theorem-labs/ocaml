@@ -11,14 +11,16 @@ Lemma unique_OFFSETINT :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (OFFSETINT z))
-        (pre_of (OFFSETINT z)) (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)) ->
+        (error_message_of (OFFSETINT z))
+        (pre_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)) ->
       handler_correct h2 (clight_of (OFFSETINT z))
-        (pre_of (OFFSETINT z)) (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)) ->
+        (error_message_of (OFFSETINT z))
+        (pre_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros z h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (OFFSETINT z)) (pre_of (OFFSETINT z))
-    (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z))
+    (clight_of (OFFSETINT z)) (error_message_of (OFFSETINT z))
+    (pre_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

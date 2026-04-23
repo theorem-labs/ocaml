@@ -11,14 +11,16 @@ Lemma unique_MAKEBLOCK :
   forall t size,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (MAKEBLOCK t size))
-        (pre_of (MAKEBLOCK t size)) (P_error_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)) ->
+        (error_message_of (MAKEBLOCK t size))
+        (pre_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)) ->
       handler_correct h2 (clight_of (MAKEBLOCK t size))
-        (pre_of (MAKEBLOCK t size)) (P_error_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)) ->
+        (error_message_of (MAKEBLOCK t size))
+        (pre_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros t size h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (MAKEBLOCK t size)) (pre_of (MAKEBLOCK t size))
-    (P_error_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size))
+    (clight_of (MAKEBLOCK t size)) (error_message_of (MAKEBLOCK t size))
+    (pre_of (MAKEBLOCK t size)) (P_halt_of (MAKEBLOCK t size)) (P_ccall_of (MAKEBLOCK t size))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

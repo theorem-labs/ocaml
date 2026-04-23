@@ -68,13 +68,13 @@ Definition env_field_loadable_3
         val_repr hm cb co v cv.
 
 Theorem verify_ENVACC3_with_pre :
-    handler_correct (handle_ENVACC 3) f_instr_ENVACC3
+    handler_correct_v1 (handle_ENVACC 3) f_instr_ENVACC3
       env_field_loadable_3
       (fun _ s => field_or_heap s s.(Machine.env) 3 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_ENVACC.
+  unfold handler_correct_v1, handle_ENVACC.
   destruct (field_or_heap s s.(Machine.env) 3) as [v|] eqn:Hfoh.
 
   2: { reflexivity. }

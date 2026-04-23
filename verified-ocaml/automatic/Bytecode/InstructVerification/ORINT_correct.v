@@ -43,7 +43,7 @@ Proof.
 Qed.
 
 Theorem verify_ORINT_correct :
-    handler_correct handle_ORINT f_instr_ORINT
+    handler_correct_v1 handle_ORINT f_instr_ORINT
       (pre_and accu_is_long stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
@@ -51,7 +51,7 @@ Theorem verify_ORINT_correct :
                   end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_ORINT.
+  intros e le m s. unfold handler_correct_v1, handle_ORINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
@@ -176,7 +176,7 @@ Qed.
 (* Wrapper with the exact type expected by InstructVerificationProof.v *)
 Theorem correct_ORINT :
     handler_correct (handle_instr ORINT) (clight_of ORINT)
-      (pre_of ORINT)
-      (P_error_of ORINT) (P_halt_of ORINT) (P_ccall_of ORINT).
+      (error_message_of ORINT)
+      (pre_of ORINT) (P_halt_of ORINT) (P_ccall_of ORINT).
 Proof.
 Admitted.

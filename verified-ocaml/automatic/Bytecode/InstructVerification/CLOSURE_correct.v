@@ -293,7 +293,7 @@ Proof. reflexivity. Qed.
 
 Theorem verify_CLOSURE_correct : forall code_ofs,
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
+    handler_correct_v1 (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -760,7 +760,7 @@ Qed.
 Theorem verify_CLOSURE_general_correct : forall nvars code_ofs,
     (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+    handler_correct_v1 (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
       (closure_general_step_pre nvars code_ofs)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -770,7 +770,7 @@ Proof.
   (* ============================================================== *)
   (* Case nvars = 0: delegate to verify_CLOSURE_correct              *)
   (* ============================================================== *)
-  { apply (handler_correct_weaken _ _ _ _ _ _ _
+  { apply (handler_correct_v1_weaken _ _ _ _ _ _ _
        (verify_CLOSURE_correct code_ofs Hcode_ofs_range)).
     intros e le m s ard Hpre Hstep_pre.
     unfold closure_general_step_pre in Hstep_pre.
@@ -798,7 +798,7 @@ Proof. Admitted.
 Definition CLOSURE_correct_for_spec : forall nvars code_ofs,
     (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
+    handler_correct_v1 (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
       (closure_general_step_pre nvars code_ofs)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
   Proof.
@@ -814,13 +814,13 @@ Definition CLOSURE_correct_for_spec : forall nvars code_ofs,
    pre_of (CLOSURE nvars code_ofs) = closure_general_step_pre nvars code_ofs.
    handle_CLOSURE now has a boolean range guard; when the guard is true, the
    handler returns Step and we delegate to CLOSURE_correct_for_spec; when false,
-   it returns Error and we prove P_error_of by reflexivity. *)
+   it returns Error and we prove error_message_of by reflexivity. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Definition correct_CLOSURE : forall nvars code_ofs,
   handler_correct (handle_instr (CLOSURE nvars code_ofs)) (clight_of (CLOSURE nvars code_ofs))
-    (pre_of (CLOSURE nvars code_ofs))
-    (P_error_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs)).
+    (error_message_of (CLOSURE nvars code_ofs))
+    (pre_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs)).
 Proof.
 Admitted.

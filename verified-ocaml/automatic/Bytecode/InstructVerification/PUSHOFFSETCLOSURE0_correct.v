@@ -62,7 +62,7 @@ Local Lemma offset_closure_0 : forall n,
 Proof. intros. rewrite Z.add_0_r. apply Nat2Z.id. Qed.
 
 Theorem verify_PUSHOFFSETCLOSURE0_correct :
-    handler_correct (handle_PUSHOFFSETCLOSURE 0) f_instr_PUSHOFFSETCLOSURE0
+    handler_correct_v1 (handle_PUSHOFFSETCLOSURE 0) f_instr_PUSHOFFSETCLOSURE0
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -75,7 +75,7 @@ Theorem verify_PUSHOFFSETCLOSURE0_correct :
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_PUSHOFFSETCLOSURE.
+  unfold handler_correct_v1, handle_PUSHOFFSETCLOSURE.
 
   (* Case split on s.(env) *)
   destruct (Machine.env s) eqn:Henv_eq.

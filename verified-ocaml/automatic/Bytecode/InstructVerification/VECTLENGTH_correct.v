@@ -276,14 +276,14 @@ Definition vectlength_pre
 (* ================================================================== *)
 
 Theorem verify_VECTLENGTH_correct :
-    handler_correct handle_VECTLENGTH f_instr_VECTLENGTH
+    handler_correct_v1 handle_VECTLENGTH f_instr_VECTLENGTH
       (fun _ => vectlength_pre)
       (fun _ s => size_or_heap s s.(Machine.accu) = None)
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_VECTLENGTH.
+  unfold handler_correct_v1, handle_VECTLENGTH.
 
   (* Case split on accu -- constructor order: Val_int, Val_block, Val_ptr, Val_closure *)
   destruct (Machine.accu s) as [z | tag0 fields0 | addr | addr0 ofs0] eqn:Haccu_eq.
@@ -636,10 +636,10 @@ Qed.
    handle_instr VECTLENGTH / clight_of VECTLENGTH / pre_of VECTLENGTH are
    convertible with handle_VECTLENGTH / f_instr_VECTLENGTH / (fun _ => vectlength_pre).
    P_halt_of and P_ccall_of are vacuously satisfied (VECTLENGTH never halts
-   or issues a C call).  P_error_of requires a small computation bridge. *)
+   or issues a C call).  error_message_of requires a small computation bridge. *)
 Definition correct_VECTLENGTH :
     handler_correct (handle_instr Bytecode.AST.VECTLENGTH) (clight_of Bytecode.AST.VECTLENGTH)
-      (pre_of Bytecode.AST.VECTLENGTH)
-      (P_error_of Bytecode.AST.VECTLENGTH) (P_halt_of Bytecode.AST.VECTLENGTH) (P_ccall_of Bytecode.AST.VECTLENGTH).
+      (error_message_of Bytecode.AST.VECTLENGTH)
+      (pre_of Bytecode.AST.VECTLENGTH) (P_halt_of Bytecode.AST.VECTLENGTH) (P_ccall_of Bytecode.AST.VECTLENGTH).
 Proof.
 Admitted.

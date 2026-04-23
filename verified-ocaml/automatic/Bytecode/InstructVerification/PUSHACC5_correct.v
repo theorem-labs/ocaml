@@ -33,7 +33,7 @@ Proof. intros. unfold sem_binary_operation, sem_add.
   unfold sem_add_ptr_int. reflexivity. Qed.
 
 Theorem verify_PUSHACC5_correct :
-    handler_correct (handle_PUSHACC 5) f_instr_PUSHACC5
+    handler_correct_v1 (handle_PUSHACC 5) f_instr_PUSHACC5
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -43,7 +43,7 @@ Theorem verify_PUSHACC5_correct :
       (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 5 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSHACC. simpl nth_error.
+  intros e le m s. unfold handler_correct_v1, handle_PUSHACC. simpl nth_error.
   (* Need 5 elements in original stack for Step. *)
   destruct (Machine.stack s) as [|v0 stk0] eqn:Hstk.
   { reflexivity. }

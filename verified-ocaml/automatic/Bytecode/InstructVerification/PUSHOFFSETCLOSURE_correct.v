@@ -156,7 +156,7 @@ Qed.
 
 #[warnings="-not-a-closed-proof"]
 Theorem verify_PUSHOFFSETCLOSURE_correct : forall ofs,
-    handler_correct (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
+    handler_correct_v1 (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -202,7 +202,7 @@ Theorem verify_PUSHOFFSETCLOSURE_correct : forall ofs,
 Proof.
   intro ofs.
   intros e le m s.
-  unfold handler_correct, handle_PUSHOFFSETCLOSURE.
+  unfold handler_correct_v1, handle_PUSHOFFSETCLOSURE.
 
   (* Case split on s.(env) *)
   destruct (Machine.env s) eqn:Henv_eq.
@@ -1151,13 +1151,13 @@ Qed.
    handle_PUSHOFFSETCLOSURE z / f_instr_PUSHOFFSETCLOSURE /
    pushoffsetclosure_step_pre z.
    P_halt_of and P_ccall_of are vacuously satisfied (PUSHOFFSETCLOSURE
-   never halts or issues a C call).  P_error_of requires a small
+   never halts or issues a C call).  error_message_of requires a small
    computation bridge. *)
 (* ================================================================== *)
 
 Definition correct_PUSHOFFSETCLOSURE : forall z,
     handler_correct (handle_instr (PUSHOFFSETCLOSURE z)) (clight_of (PUSHOFFSETCLOSURE z))
-      (pre_of (PUSHOFFSETCLOSURE z))
-      (P_error_of (PUSHOFFSETCLOSURE z)) (P_halt_of (PUSHOFFSETCLOSURE z)) (P_ccall_of (PUSHOFFSETCLOSURE z)).
+      (error_message_of (PUSHOFFSETCLOSURE z))
+      (pre_of (PUSHOFFSETCLOSURE z)) (P_halt_of (PUSHOFFSETCLOSURE z)) (P_ccall_of (PUSHOFFSETCLOSURE z)).
 Proof.
 Admitted.

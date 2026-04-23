@@ -250,7 +250,7 @@ Definition float_field_loadable_sep (n : nat)
 (* ================================================================== *)
 
 Theorem verify_GETFLOATFIELD_correct : forall n,
-    handler_correct (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
+    handler_correct_v1 (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -307,7 +307,7 @@ Theorem verify_GETFLOATFIELD_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_GETFLOATFIELD.
+  unfold handler_correct_v1, handle_GETFLOATFIELD.
   destruct (field_or_heap s s.(Machine.accu) n) as [v|] eqn:Hfoh.
 
   2: { reflexivity. }
@@ -1151,13 +1151,13 @@ Qed.
    definitionally equal, so the bridge is trivial. *)
 Definition GETFLOATFIELD_correct_for_spec : forall n,
     Int.min_signed <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
+    handler_correct_v1 (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
       (getfloatfield_step_pre n)
       (fun _ s => field_or_heap s s.(Machine.accu) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n Hrange.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_GETFLOATFIELD_correct n).
   - intros e le m s ard _ Hpre. exact Hpre.
 Qed.
@@ -1169,14 +1169,14 @@ Import Bytecode.AST.
    handle_instr (GETFLOATFIELD n) = handle_GETFLOATFIELD n by computation.
    clight_of (GETFLOATFIELD n) = f_instr_GETFLOATFIELD by computation.
    pre_of (GETFLOATFIELD n) = getfloatfield_step_pre n by computation.
-   P_error_of (GETFLOATFIELD n) = error_message_of (GETFLOATFIELD n) s = Some msg.
+   error_message_of (GETFLOATFIELD n) = error_message_of (GETFLOATFIELD n) s = Some msg.
    P_halt_of (GETFLOATFIELD n) and P_ccall_of (GETFLOATFIELD n) are vacuously False.
    The Step case extracts the range bound from the precondition and
    delegates to GETFLOATFIELD_correct_for_spec.
    The Error case follows from error_message_of computation. *)
 Definition correct_GETFLOATFIELD : forall n,
   handler_correct (handle_instr (GETFLOATFIELD n)) (clight_of (GETFLOATFIELD n))
-    (pre_of (GETFLOATFIELD n))
-    (P_error_of (GETFLOATFIELD n)) (P_halt_of (GETFLOATFIELD n)) (P_ccall_of (GETFLOATFIELD n)).
+    (error_message_of (GETFLOATFIELD n))
+    (pre_of (GETFLOATFIELD n)) (P_halt_of (GETFLOATFIELD n)) (P_ccall_of (GETFLOATFIELD n)).
 Proof.
 Admitted.

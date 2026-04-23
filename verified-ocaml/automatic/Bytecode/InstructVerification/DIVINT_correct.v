@@ -16,7 +16,7 @@
            else Step (s<|pc:=pc'|><|accu:=Val_int(Z.quot a b)|><|stack:=rest|>)
        | _, _ => Error ...
 
-   Precondition (handler_correct):
+   Precondition (handler_correct_v1):
      b <> 0 -- the stack top is nonzero
      Tagged values are in Int64 signed range (true for OCaml 63-bit ints)
 
@@ -225,7 +225,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_DIVINT_correct :
-    handler_correct handle_DIVINT f_instr_DIVINT
+    handler_correct_v1 handle_DIVINT f_instr_DIVINT
       (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
@@ -715,8 +715,8 @@ Proof.
 Qed.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_DIVINT_handler_correct :
-    handler_correct handle_DIVINT f_instr_DIVINT
+Theorem verify_DIVINT_handler_correct_v1 :
+    handler_correct_v1 handle_DIVINT f_instr_DIVINT
       divmod_safe
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int b :: _ => Z.eqb b 0 = true
@@ -724,7 +724,7 @@ Theorem verify_DIVINT_handler_correct :
                   end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
@@ -765,7 +765,7 @@ Qed.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_DIVINT :
   handler_correct (handle_instr Bytecode.AST.DIVINT) (clight_of Bytecode.AST.DIVINT)
-    (pre_of Bytecode.AST.DIVINT)
-    (P_error_of Bytecode.AST.DIVINT) (P_halt_of Bytecode.AST.DIVINT) (P_ccall_of Bytecode.AST.DIVINT).
+    (error_message_of Bytecode.AST.DIVINT)
+    (pre_of Bytecode.AST.DIVINT) (P_halt_of Bytecode.AST.DIVINT) (P_ccall_of Bytecode.AST.DIVINT).
 Proof.
 Admitted.

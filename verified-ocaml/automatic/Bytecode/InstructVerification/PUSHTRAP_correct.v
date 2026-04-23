@@ -225,7 +225,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSHTRAP_correct : forall handler_pc,
-    handler_correct (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
+    handler_correct_v1 (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
       (pushtrap_step_pre handler_pc)
       (fun _ _ => False)
       (fun _ => False)
@@ -233,7 +233,7 @@ Theorem verify_PUSHTRAP_correct : forall handler_pc,
 Proof.
   intro handler_pc.
   intros e le m s.
-  unfold handler_correct, handle_PUSHTRAP. simpl.
+  unfold handler_correct_v1, handle_PUSHTRAP. simpl.
   intros ard Hpre Hstep_pre.
 
   (* Extract abs_rel fields *)
@@ -1099,11 +1099,11 @@ Qed.
    handle_instr (PUSHTRAP z) / clight_of (PUSHTRAP z) / pre_of (PUSHTRAP z)
    are convertible with handle_PUSHTRAP z / f_instr_PUSHTRAP / pushtrap_step_pre z.
    P_halt_of and P_ccall_of are vacuously satisfied (PUSHTRAP never halts or
-   issues a C call).  P_error_of is vacuous too (PUSHTRAP never errors). *)
+   issues a C call).  error_message_of is vacuous too (PUSHTRAP never errors). *)
 Definition correct_PUSHTRAP : forall z,
     handler_correct (handle_instr (Bytecode.AST.PUSHTRAP z)) (clight_of (Bytecode.AST.PUSHTRAP z))
-      (pre_of (Bytecode.AST.PUSHTRAP z))
-      (P_error_of (Bytecode.AST.PUSHTRAP z)) (P_halt_of (Bytecode.AST.PUSHTRAP z)) (P_ccall_of (Bytecode.AST.PUSHTRAP z)).
+      (error_message_of (Bytecode.AST.PUSHTRAP z))
+      (pre_of (Bytecode.AST.PUSHTRAP z)) (P_halt_of (Bytecode.AST.PUSHTRAP z)) (P_ccall_of (Bytecode.AST.PUSHTRAP z)).
 Proof.
 Admitted.
 

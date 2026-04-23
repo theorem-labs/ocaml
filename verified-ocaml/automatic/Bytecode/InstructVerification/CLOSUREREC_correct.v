@@ -311,7 +311,7 @@ Proof. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_CLOSUREREC_correct : forall code_ofs,
-    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+    handler_correct_v1 (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -400,7 +400,7 @@ Proof. Admitted.
 
 Definition CLOSUREREC_correct_for_spec : forall code_ofs,
     Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
+    handler_correct_v1 (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
       (heap_alloc_with_stores 2 247 alloc_store_2
        /\p code_at (Int.repr 1) /\p code_arg_at 1 (Int.repr 0)
        /\p code_arg_at 2 (Int.repr code_ofs) /\p sp_at_least 16)
@@ -408,7 +408,7 @@ Definition CLOSUREREC_correct_for_spec : forall code_ofs,
       (fun _ => False) (fun _ _ _ => False).
   Proof.
     intros code_ofs Hrange.
-    apply handler_correct_weaken with
+    apply handler_correct_v1_weaken with
       (sp := fun e m s ard => closurerec_step_pre code_ofs e m s ard).
     - exact (verify_CLOSUREREC_correct code_ofs).
     - intros e le m s ard Hrel [Hhaw [Hc0 [Hc1 [Hc2 Hsp16]]]].
@@ -454,17 +454,17 @@ Definition CLOSUREREC_correct_for_spec : forall code_ofs,
    handle_instr (CLOSUREREC nf nv co) = handle_CLOSUREREC nf nv co by computation.
    clight_of (CLOSUREREC nf nv co) = f_instr_CLOSUREREC by computation.
    pre_of (CLOSUREREC 1 0 [code_ofs]) = heap_alloc_with_stores ... by computation.
-   P_error_of (CLOSUREREC nf nv co) is error_message_of applied.
+   error_message_of (CLOSUREREC nf nv co) is error_message_of applied.
    P_halt_of and P_ccall_of are vacuously False (not STOP/C_CALL).
-   For the malformed-operand cases (instr_wfb = false), P_error_of holds
+   For the malformed-operand cases (instr_wfb = false), error_message_of holds
    because both the handler and error_message_of return the same error.
    For the Step case (nfuncs=1, nvars=0, code_offsets=[code_ofs] in range),
    delegates to CLOSUREREC_correct_for_spec. *)
 Definition correct_CLOSUREREC : forall nfuncs nvars code_offsets,
   handler_correct (handle_instr (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
     (clight_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
+    (error_message_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
     (pre_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
-    (P_error_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
     (P_halt_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
     (P_ccall_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets)).
 Proof.

@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_LSRINT :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of LSRINT)
-        (pre_of LSRINT) (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT) ->
+        (error_message_of LSRINT)
+        (pre_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT) ->
       handler_correct h2 (clight_of LSRINT)
-        (pre_of LSRINT) (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT) ->
+        (error_message_of LSRINT)
+        (pre_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of LSRINT) (pre_of LSRINT)
-    (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT)
+    (clight_of LSRINT) (error_message_of LSRINT)
+    (pre_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

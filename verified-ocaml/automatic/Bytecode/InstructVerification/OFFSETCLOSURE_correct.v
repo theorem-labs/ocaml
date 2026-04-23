@@ -25,7 +25,7 @@
    OFFSETCLOSURE2's env offset arithmetic, generalized over n.
 
    NO AXIOMS.  All structural/range constraints are preconditions
-   via handler_correct. *)
+   via handler_correct_v1. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -192,7 +192,7 @@ Definition offsetclosure_pre (n : Z)
 (* ================================================================== *)
 
 Theorem verify_OFFSETCLOSURE_correct : forall n,
-    handler_correct (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
+    handler_correct_v1 (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
       (fun e m s ard => offsetclosure_pre n e m s ard)
       (fun msg s =>
         (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -204,7 +204,7 @@ Theorem verify_OFFSETCLOSURE_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_OFFSETCLOSURE.
+  unfold handler_correct_v1, handle_OFFSETCLOSURE.
 
   (* Case split on s.(env) *)
   destruct (Machine.env s) eqn:Henv_eq.
@@ -765,12 +765,12 @@ Qed.
    handle_instr (OFFSETCLOSURE z) / clight_of (OFFSETCLOSURE z) / pre_of (OFFSETCLOSURE z)
    are convertible with handle_OFFSETCLOSURE z / f_instr_OFFSETCLOSURE / offsetclosure_pre z.
    P_halt_of and P_ccall_of are vacuously satisfied (OFFSETCLOSURE never halts or
-   issues a C call).  P_error_of requires a small computation bridge via
+   issues a C call).  error_message_of requires a small computation bridge via
    error_message_of. *)
 Definition correct_OFFSETCLOSURE : forall z,
     handler_correct (handle_instr (Bytecode.AST.OFFSETCLOSURE z)) (clight_of (Bytecode.AST.OFFSETCLOSURE z))
-      (pre_of (Bytecode.AST.OFFSETCLOSURE z))
-      (P_error_of (Bytecode.AST.OFFSETCLOSURE z)) (P_halt_of (Bytecode.AST.OFFSETCLOSURE z)) (P_ccall_of (Bytecode.AST.OFFSETCLOSURE z)).
+      (error_message_of (Bytecode.AST.OFFSETCLOSURE z))
+      (pre_of (Bytecode.AST.OFFSETCLOSURE z)) (P_halt_of (Bytecode.AST.OFFSETCLOSURE z)) (P_ccall_of (Bytecode.AST.OFFSETCLOSURE z)).
 Proof.
 Admitted.
 

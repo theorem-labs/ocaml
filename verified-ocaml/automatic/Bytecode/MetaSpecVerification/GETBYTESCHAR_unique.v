@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_GETBYTESCHAR :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of GETBYTESCHAR)
-        (pre_of GETBYTESCHAR) (P_error_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR) ->
+        (error_message_of GETBYTESCHAR)
+        (pre_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR) ->
       handler_correct h2 (clight_of GETBYTESCHAR)
-        (pre_of GETBYTESCHAR) (P_error_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR) ->
+        (error_message_of GETBYTESCHAR)
+        (pre_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of GETBYTESCHAR) (pre_of GETBYTESCHAR)
-    (P_error_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR)
+    (clight_of GETBYTESCHAR) (error_message_of GETBYTESCHAR)
+    (pre_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

@@ -158,13 +158,13 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_RAISE_NOTRACE_correct :
-    handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
+    handler_correct_v1 (fun _pc s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
       raise_step_pre
       (fun msg _ => msg = "unhandled exception"%string \/
                     msg = "RAISE: malformed trap frame"%string)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct. simpl. unfold do_raise.
+  intros e le m s. unfold handler_correct_v1. simpl. unfold do_raise.
   destruct (Nat.eqb (trap_sp s) 0) eqn:Htsp_eq.
   - left. reflexivity.
   - set (k := Nat.sub (length (Machine.stack s)) (trap_sp s)).
@@ -681,7 +681,7 @@ Import Bytecode.AST.
    Error cases are bridged via do_raise_error_implies_error_message. *)
 Definition correct_RAISE_NOTRACE :
     handler_correct (handle_instr RAISE_NOTRACE) (clight_of RAISE_NOTRACE)
-      (pre_of RAISE_NOTRACE)
-      (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE).
+      (error_message_of RAISE_NOTRACE)
+      (pre_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE).
 Proof.
 Admitted.

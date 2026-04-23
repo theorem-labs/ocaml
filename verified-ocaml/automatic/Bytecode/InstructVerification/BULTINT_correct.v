@@ -280,7 +280,7 @@ Local Ltac read_pc_from_struct Hle co_is Hco Hpc_offset Hload :=
 Theorem verify_BULTINT_correct : forall n target,
     0 <= n ->
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BULTINT n target) f_instr_BULTINT
+    handler_correct_v1 (handle_BULTINT n target) f_instr_BULTINT
       (fun _ m s ard =>
          ar_code_base_block ard <> ar_sptr_block ard /\
          0 <= n /\
@@ -833,14 +833,14 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_BULTINT_handler_correct : forall n target,
+Theorem verify_BULTINT_handler_correct_v1 : forall n target,
     0 <= n -> Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BULTINT n target) f_instr_BULTINT
+    handler_correct_v1 (handle_BULTINT n target) f_instr_BULTINT
       (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
       (fun msg s => msg = "BULTINT: not an integer"%string /\ match Machine.accu s with Val_int _ => False | _ => True end) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n target Hn0 Hn.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_BULTINT_correct n target Hn0 Hn).
   - intros e le m s ard _ [[[[Hne Hca] Hbo] Hai] Hal].
     exact (conj Hne (conj Hn0 (conj Hn (conj Hca (conj Hbo (conj Hai Hal)))))).
@@ -853,7 +853,7 @@ Qed.
 
    The handler checks instr_wfb (BULTINT n _) = ((0 <=? n) && (min_signed <=? n)
    && (n <=? max_signed))%Z.  When that guard is false the handler returns
-   Error "BULTINT: malformed operand", which matches P_error_of because
+   Error "BULTINT: malformed operand", which matches error_message_of because
    error_message_of checks the identical boolean.  When the guard is true
    we have the range assumptions needed by the inner proof.
 
@@ -861,8 +861,8 @@ Qed.
    includes accu_unsigned_int which is False for non-integer accu. *)
 Theorem correct_BULTINT : forall n target,
     handler_correct (handle_instr (Bytecode.AST.BULTINT n target)) (clight_of (Bytecode.AST.BULTINT n target))
-      (pre_of (Bytecode.AST.BULTINT n target))
-      (P_error_of (Bytecode.AST.BULTINT n target)) (P_halt_of (Bytecode.AST.BULTINT n target)) (P_ccall_of (Bytecode.AST.BULTINT n target)).
+      (error_message_of (Bytecode.AST.BULTINT n target))
+      (pre_of (Bytecode.AST.BULTINT n target)) (P_halt_of (Bytecode.AST.BULTINT n target)) (P_ccall_of (Bytecode.AST.BULTINT n target)).
 Proof.
 Admitted.
 

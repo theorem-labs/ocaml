@@ -22,7 +22,7 @@
 
    Two stores: accu field at offset +8, pc field at offset +0.
 
-   Preconditions (via handler_correct):
+   Preconditions (via handler_correct_v1):
    - Code buffer contains Int.repr (Z.of_nat n) at the current PC position
    - Z.of_nat n fits in int32 signed range
    - Global offset arithmetic stays in ptrofs range
@@ -276,7 +276,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_GETGLOBAL_correct : forall n,
-    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
+    handler_correct_v1 (handle_GETGLOBAL n) f_instr_GETGLOBAL
       (fun _ m s ard =>
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -590,15 +590,15 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_GETGLOBAL_handler_correct : forall n,
+Theorem verify_GETGLOBAL_handler_correct_v1 : forall n,
     0 <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
+    handler_correct_v1 (handle_GETGLOBAL n) f_instr_GETGLOBAL
       (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n))
       (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n Hn.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_GETGLOBAL_correct n).
   - intros e le m s ard _ [Hca Hgs].
     exact (conj Hca (conj Hn Hgs)).
@@ -608,15 +608,15 @@ Qed.
    handle_instr (GETGLOBAL n) reduces to handle_GETGLOBAL n by computation.
    clight_of (GETGLOBAL n) = f_instr_GETGLOBAL,
    pre_of (GETGLOBAL n) = code_at ... /\p global_offset_safe n.
-   Error cases (index out of bounds, malformed operand) match P_error_of via
-   error_message_of.  Step case delegates to verify_GETGLOBAL_handler_correct
+   Error cases (index out of bounds, malformed operand) match error_message_of via
+   error_message_of.  Step case delegates to verify_GETGLOBAL_handler_correct_v1
    (requires Z.of_nat n <= Int.max_signed). *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Theorem correct_GETGLOBAL : forall n,
     handler_correct (handle_instr (GETGLOBAL n)) (clight_of (GETGLOBAL n))
-      (pre_of (GETGLOBAL n))
-      (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)).
+      (error_message_of (GETGLOBAL n))
+      (pre_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)).
 Proof.
 Admitted.

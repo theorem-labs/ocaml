@@ -23,7 +23,7 @@
    - n fits in the int32 signed range
 
    NO AXIOMS.  All structural/range constraints are preconditions
-   via handler_correct, following the pattern of POP_correct.v. *)
+   via handler_correct_v1, following the pattern of POP_correct.v. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -189,7 +189,7 @@ Qed.
 
 Theorem verify_CONSTINT_correct : forall n,
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
+    handler_correct_v1 (handle_CONSTINT n) f_instr_CONSTINT
       (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -202,7 +202,7 @@ Theorem verify_CONSTINT_correct : forall n,
 Proof.
   intro n. intro Hn_range_hyp.
   intros e le m s.
-  unfold handler_correct, handle_CONSTINT.
+  unfold handler_correct_v1, handle_CONSTINT.
   replace ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z with true.
   2: { symmetry. apply Bool.andb_true_iff. split;
        apply Z.leb_le; lia. }
@@ -525,14 +525,14 @@ Proof.
 Qed.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_CONSTINT_handler_correct : forall n,
+Theorem verify_CONSTINT_handler_correct_v1 : forall n,
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
+    handler_correct_v1 (handle_CONSTINT n) f_instr_CONSTINT
       (code_at (Int.repr n))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n Hn.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ m s ard =>
        Mem.load Mint32 m (ar_code_base_block ard)
          (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -552,14 +552,14 @@ Import Bytecode.AST.
    handle_instr (CONSTINT n) = handle_CONSTINT n by computation.
    clight_of (CONSTINT n) = f_instr_CONSTINT by computation.
    pre_of (CONSTINT n) = code_at (Int.repr n) by computation.
-   P_error_of (CONSTINT n) is vacuously False (error_message_of returns None).
+   error_message_of (CONSTINT n) is vacuously False (error_message_of returns None).
    P_halt_of (CONSTINT n) and P_ccall_of (CONSTINT n) are False (not STOP/C_CALL).
    Since handle_CONSTINT always returns Step, those predicates are never needed.
-   The Step case delegates to verify_CONSTINT_handler_correct, which requires
+   The Step case delegates to verify_CONSTINT_handler_correct_v1, which requires
    n in Int.min_signed..Int.max_signed — the same guard enforced by instr_wfb. *)
 Definition correct_CONSTINT : forall n,
   handler_correct (handle_instr (CONSTINT n)) (clight_of (CONSTINT n))
-    (pre_of (CONSTINT n))
-    (P_error_of (CONSTINT n)) (P_halt_of (CONSTINT n)) (P_ccall_of (CONSTINT n)).
+    (error_message_of (CONSTINT n))
+    (pre_of (CONSTINT n)) (P_halt_of (CONSTINT n)) (P_ccall_of (CONSTINT n)).
 Proof.
 Admitted.

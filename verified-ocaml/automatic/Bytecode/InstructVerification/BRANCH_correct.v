@@ -103,7 +103,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_BRANCH_correct : forall target,
-    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+    handler_correct_v1 (fun _ s => handle_BRANCH target s) f_instr_BRANCH
       (fun _ m s ard =>
          exists v, Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -113,7 +113,7 @@ Theorem verify_BRANCH_correct : forall target,
 Proof.
   intro target.
   intros e le m s.
-  unfold handler_correct, handle_BRANCH. simpl.
+  unfold handler_correct_v1, handle_BRANCH. simpl.
   intros ard Hpre Hstep_pre.
   unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
@@ -311,13 +311,13 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_BRANCH_handler_correct : forall target,
-    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
+Theorem verify_BRANCH_handler_correct_v1 : forall target,
+    handler_correct_v1 (fun _ s => handle_BRANCH target s) f_instr_BRANCH
       code_loadable
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros target.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_BRANCH_correct target).
   - intros e le m s ard _ Hcl. exact Hcl.
 Qed.
@@ -330,8 +330,8 @@ Qed.
    predicates are in dead match branches and thus irrelevant. *)
 Definition correct_BRANCH : forall z,
   handler_correct (handle_instr (Bytecode.AST.BRANCH z)) (clight_of (Bytecode.AST.BRANCH z))
-    (pre_of (Bytecode.AST.BRANCH z))
-    (P_error_of (Bytecode.AST.BRANCH z)) (P_halt_of (Bytecode.AST.BRANCH z)) (P_ccall_of (Bytecode.AST.BRANCH z)).
+    (error_message_of (Bytecode.AST.BRANCH z))
+    (pre_of (Bytecode.AST.BRANCH z)) (P_halt_of (Bytecode.AST.BRANCH z)) (P_ccall_of (Bytecode.AST.BRANCH z)).
 Proof.
 Admitted.
 

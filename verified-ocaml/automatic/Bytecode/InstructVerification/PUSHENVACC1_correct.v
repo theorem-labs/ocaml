@@ -63,13 +63,13 @@ Qed.
 (* Step precondition for PUSHENVACC1: now uses generic pushenvacc_step_pre 1. *)
 
 Theorem verify_PUSHENVACC1_correct :
-    handler_correct (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
+    handler_correct_v1 (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
       (pushenvacc_step_pre 1)
       (fun _ s => field_or_heap s s.(Machine.env) 1 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_PUSHENVACC.
+  unfold handler_correct_v1, handle_PUSHENVACC.
 
   destruct (field_or_heap s s.(Machine.env) 1) as [v|] eqn:Hfoh.
 
@@ -434,16 +434,16 @@ Proof.
   }
 Qed.
 
-(* Wrapper bridging the raw proof to P_error_of / P_halt_of / P_ccall_of.
+(* Wrapper bridging the raw proof to error_message_of / P_halt_of / P_ccall_of.
    The inner proof uses a direct error predicate; this wrapper shows
-   P_error_of (PUSHENVACC 1) holds in the error branch and delegates
+   error_message_of (PUSHENVACC 1) holds in the error branch and delegates
    the step branch to verify_PUSHENVACC1_correct.
    P_halt_of and P_ccall_of are vacuously False (PUSHENVACC never halts
    or issues a C call). *)
 Definition correct_PUSHENVACC1 :
     handler_correct (handle_PUSHENVACC 1) f_instr_PUSHENVACC1
+      (error_message_of (Bytecode.AST.PUSHENVACC 1))
       (pushenvacc_step_pre 1)
-      (P_error_of (Bytecode.AST.PUSHENVACC 1))
       (P_halt_of (Bytecode.AST.PUSHENVACC 1))
       (P_ccall_of (Bytecode.AST.PUSHENVACC 1)).
 Proof.

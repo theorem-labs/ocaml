@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_NEGINT :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of NEGINT)
-        (pre_of NEGINT) (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT) ->
+        (error_message_of NEGINT)
+        (pre_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT) ->
       handler_correct h2 (clight_of NEGINT)
-        (pre_of NEGINT) (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT) ->
+        (error_message_of NEGINT)
+        (pre_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of NEGINT) (pre_of NEGINT)
-    (P_error_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT)
+    (clight_of NEGINT) (error_message_of NEGINT)
+    (pre_of NEGINT) (P_halt_of NEGINT) (P_ccall_of NEGINT)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

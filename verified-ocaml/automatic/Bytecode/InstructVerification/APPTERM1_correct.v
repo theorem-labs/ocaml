@@ -251,7 +251,7 @@ Qed.
    are imported from HandlerLemmas. *)
 
 Theorem verify_APPTERM1_correct : forall slotsize,
-    handler_correct (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
+    handler_correct_v1 (fun _ s => handle_APPTERM1 slotsize s) f_instr_APPTERM1
       (fun _ m s ard =>
          (* The code buffer contains Int.repr slotsize at the current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -286,7 +286,7 @@ Theorem verify_APPTERM1_correct : forall slotsize,
 Proof.
   intro slotsize.
   intros e le m s.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   simpl.
   unfold handle_APPTERM1.
 
@@ -899,7 +899,7 @@ Qed.
 (*   handle_instr (APPTERM1 n) reduces to handle_APPTERM1 n by        *)
 (*   computation.  clight_of (APPTERM1 n) = f_instr_APPTERM1,         *)
 (*   pre_of (APPTERM1 n) = appterm1_step_pre n (from InstructSpec).   *)
-(*   Error case matches P_error_of exactly.                            *)
+(*   Error case matches error_message_of exactly.                            *)
 (*   Step case delegates to verify_APPTERM1_correct.                   *)
 (* ================================================================== *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
@@ -907,7 +907,7 @@ Import Bytecode.AST.
 
 Theorem correct_APPTERM1 : forall n,
     handler_correct (handle_instr (APPTERM1 n)) (clight_of (APPTERM1 n))
-      (pre_of (APPTERM1 n))
-      (P_error_of (APPTERM1 n)) (P_halt_of (APPTERM1 n)) (P_ccall_of (APPTERM1 n)).
+      (error_message_of (APPTERM1 n))
+      (pre_of (APPTERM1 n)) (P_halt_of (APPTERM1 n)) (P_ccall_of (APPTERM1 n)).
 Proof.
 Admitted.

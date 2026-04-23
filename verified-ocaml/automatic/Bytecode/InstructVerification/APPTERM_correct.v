@@ -13,7 +13,7 @@
    exec_stmt judgment) and that the resulting memory satisfies abs_rel.
 
    This decomposes APPTERM correctness into:
-   1. (This file) handler_correct holds given the exec and abs_rel assumptions.
+   1. (This file) handler_correct_v1 holds given the exec and abs_rel assumptions.
    2. (Separately provable) The C body's exec_stmt and abs_rel post-conditions
       follow from the operational semantics and the loop invariant.
 
@@ -43,11 +43,11 @@ Local Notation ge := clight_ge.
 (* ================================================================== *)
 
 (* The step_pre must work with any le satisfying abs_rel_with_ard,
-   because handler_correct universally quantifies over le but does
+   because handler_correct_v1 universally quantifies over le but does
    not pass it to step_pre.  We parameterize accordingly. *)
 
 Theorem verify_APPTERM_correct : forall nargs slotsize,
-    handler_correct (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
+    handler_correct_v1 (fun _ s => handle_APPTERM nargs slotsize s) f_instr_APPTERM
       (fun e0 m s ard =>
          get_code_ptr_s s s.(Machine.accu) <> None /\
          let s' := match get_code_ptr_s s s.(Machine.accu) with
@@ -70,7 +70,7 @@ Theorem verify_APPTERM_correct : forall nargs slotsize,
 Proof.
   intros nargs slotsize.
   intros e le m s.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   simpl.
   unfold handle_APPTERM.
 
@@ -89,12 +89,12 @@ Qed.
    handle_instr (APPTERM nargs slotsize) = handle_APPTERM nargs slotsize
    and clight_of (APPTERM nargs slotsize) = f_instr_APPTERM by computation.
    pre_of (APPTERM nargs slotsize) is convertible with the precondition
-   above.  P_error_of bridges via error_message_of; P_halt_of / P_ccall_of
+   above.  error_message_of bridges via error_message_of; P_halt_of / P_ccall_of
    are vacuously False since APPTERM is neither STOP nor C_CALL. *)
 Definition correct_APPTERM : forall nargs slotsize,
   handler_correct (Dispatch.handle_instr (Bytecode.AST.APPTERM nargs slotsize)) (clight_of (Bytecode.AST.APPTERM nargs slotsize))
-    (pre_of (Bytecode.AST.APPTERM nargs slotsize))
-    (P_error_of (Bytecode.AST.APPTERM nargs slotsize)) (P_halt_of (Bytecode.AST.APPTERM nargs slotsize)) (P_ccall_of (Bytecode.AST.APPTERM nargs slotsize)).
+    (error_message_of (Bytecode.AST.APPTERM nargs slotsize))
+    (pre_of (Bytecode.AST.APPTERM nargs slotsize)) (P_halt_of (Bytecode.AST.APPTERM nargs slotsize)) (P_ccall_of (Bytecode.AST.APPTERM nargs slotsize)).
 Proof.
 Admitted.
 

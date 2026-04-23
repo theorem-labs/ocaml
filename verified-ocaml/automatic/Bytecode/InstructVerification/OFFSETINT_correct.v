@@ -25,7 +25,7 @@
    - Post-state uses shifted code_base_ofs to account for pc advancement
    - Code buffer invariants expressed as preconditions (not axioms)
 
-   Uses handler_correct for code buffer preconditions.
+   Uses handler_correct_v1 for code buffer preconditions.
    NO AXIOMS. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
@@ -228,7 +228,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* ================================================================== *)
 (* Main theorem                                                        *)
 (*                                                                      *)
-(* Preconditions (from handler_correct):                      *)
+(* Preconditions (from handler_correct_v1):                      *)
 (* 1. Code buffer contains the operand at current PC                   *)
 (* 2. The 32-bit left shift by 1 does not overflow                    *)
 (*                                                                      *)
@@ -238,7 +238,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 
 Theorem verify_OFFSETINT_correct : forall ofs,
     Int.min_signed <= ofs * 2 <= Int.max_signed ->
-    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
+    handler_correct_v1 (handle_OFFSETINT ofs) f_instr_OFFSETINT
       (fun e m s ard =>
          (exists (i : int),
            Mem.load Mint32 m (ar_code_base_block ard)
@@ -253,7 +253,7 @@ Theorem verify_OFFSETINT_correct : forall ofs,
 Proof.
   intro ofs. intro Hrange_ofs.
   intros e le m s.
-  unfold handler_correct, handle_OFFSETINT.
+  unfold handler_correct_v1, handle_OFFSETINT.
 
   (* The wfb guard is true by Hrange_ofs *)
   assert (Hwf : ((Int.min_signed <=? ofs * 2) && (ofs * 2 <=? Int.max_signed))%Z = true).
@@ -584,15 +584,15 @@ Proof.
 Qed.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_OFFSETINT_handler_correct : forall ofs,
+Theorem verify_OFFSETINT_handler_correct_v1 : forall ofs,
     Int.min_signed <= ofs * 2 <= Int.max_signed ->
-    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
+    handler_correct_v1 (handle_OFFSETINT ofs) f_instr_OFFSETINT
       (pre_and (code_at (Int.repr ofs)) accu_is_long)
       (fun _ s => match s.(Machine.accu) with Val_int _ => False | _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros ofs Hrange.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun e m s ard =>
        (exists (i : int),
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -628,8 +628,8 @@ Qed.
 
    The proof destructs the instr_wfb boolean guard first:
    - When z * 2 is in range: the Step case (accu = Val_int) delegates to
-     verify_OFFSETINT_handler_correct. Error cases (non-integer accu) are
-     proved via P_error_of / error_message_of reflexivity.
+     verify_OFFSETINT_handler_correct_v1. Error cases (non-integer accu) are
+     proved via error_message_of / error_message_of reflexivity.
    - When z * 2 is out of range: the handler returns Error "OFFSETINT:
      malformed operand", matching error_message_of exactly. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
@@ -637,7 +637,7 @@ Import Bytecode.AST.
 
 Definition correct_OFFSETINT : forall z,
   handler_correct (handle_instr (OFFSETINT z)) (clight_of (OFFSETINT z))
-    (pre_of (OFFSETINT z))
-    (P_error_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)).
+    (error_message_of (OFFSETINT z))
+    (pre_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)).
 Proof.
 Admitted.

@@ -11,14 +11,16 @@ Lemma unique_CLOSUREREC :
   forall nfuncs nvars code_offsets,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (CLOSUREREC nfuncs nvars code_offsets))
-        (pre_of (CLOSUREREC nfuncs nvars code_offsets)) (P_error_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets)) ->
+        (error_message_of (CLOSUREREC nfuncs nvars code_offsets))
+        (pre_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets)) ->
       handler_correct h2 (clight_of (CLOSUREREC nfuncs nvars code_offsets))
-        (pre_of (CLOSUREREC nfuncs nvars code_offsets)) (P_error_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets)) ->
+        (error_message_of (CLOSUREREC nfuncs nvars code_offsets))
+        (pre_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros nfuncs nvars code_offsets h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (CLOSUREREC nfuncs nvars code_offsets)) (pre_of (CLOSUREREC nfuncs nvars code_offsets))
-    (P_error_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets))
+    (clight_of (CLOSUREREC nfuncs nvars code_offsets)) (error_message_of (CLOSUREREC nfuncs nvars code_offsets))
+    (pre_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

@@ -68,13 +68,13 @@ Definition env_field_loadable_4
         val_repr hm cb co v cv.
 
 Theorem verify_ENVACC4_with_pre :
-    handler_correct (handle_ENVACC 4) f_instr_ENVACC4
+    handler_correct_v1 (handle_ENVACC 4) f_instr_ENVACC4
       env_field_loadable_4
       (fun _ s => field_or_heap s s.(Machine.env) 4 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_ENVACC.
+  unfold handler_correct_v1, handle_ENVACC.
   destruct (field_or_heap s s.(Machine.env) 4) as [v|] eqn:Hfoh.
 
   2: { reflexivity. }

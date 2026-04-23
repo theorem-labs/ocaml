@@ -318,7 +318,7 @@ Definition apply3_step_pre
    are imported from HandlerLemmas. *)
 
 Theorem verify_APPLY3_correct :
-    handler_correct (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
+    handler_correct_v1 (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
       apply3_step_pre
       (fun msg s =>
         match s.(Machine.stack) with
@@ -329,7 +329,7 @@ Theorem verify_APPLY3_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   simpl.
   unfold handle_APPLY3.
 
@@ -1786,7 +1786,7 @@ Import Bytecode.AST.
 
 Definition correct_APPLY3 :
   handler_correct (handle_instr APPLY3) (clight_of APPLY3)
-    (pre_of APPLY3)
-    (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3).
+    (error_message_of APPLY3)
+    (pre_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3).
 Proof.
 Admitted.

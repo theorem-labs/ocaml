@@ -60,13 +60,13 @@ Qed.
 (* Step precondition for PUSHENVACC4: now uses generic pushenvacc_step_pre 4. *)
 
 Theorem verify_PUSHENVACC4_correct :
-    handler_correct (handle_PUSHENVACC 4) f_instr_PUSHENVACC4
+    handler_correct_v1 (handle_PUSHENVACC 4) f_instr_PUSHENVACC4
       (pushenvacc_step_pre 4)
       (fun _ s => field_or_heap s s.(Machine.env) 4 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_PUSHENVACC.
+  unfold handler_correct_v1, handle_PUSHENVACC.
 
   destruct (field_or_heap s s.(Machine.env) 4) as [v|] eqn:Hfoh.
 
@@ -399,8 +399,8 @@ From OCamlInterp.Automatic.Bytecode.InstructVerification
 
 Definition correct_PUSHENVACC4 :
     handler_correct (handle_instr (Bytecode.AST.PUSHENVACC 4)) (clight_of (Bytecode.AST.PUSHENVACC 4))
-      (pre_of (Bytecode.AST.PUSHENVACC 4))
-      (P_error_of (Bytecode.AST.PUSHENVACC 4)) (P_halt_of (Bytecode.AST.PUSHENVACC 4)) (P_ccall_of (Bytecode.AST.PUSHENVACC 4)).
+      (error_message_of (Bytecode.AST.PUSHENVACC 4))
+      (pre_of (Bytecode.AST.PUSHENVACC 4)) (P_halt_of (Bytecode.AST.PUSHENVACC 4)) (P_ccall_of (Bytecode.AST.PUSHENVACC 4)).
 Proof.
 Admitted.
 

@@ -11,14 +11,16 @@ Lemma unique_CLOSURE :
   forall nvars code_ofs,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (CLOSURE nvars code_ofs))
-        (pre_of (CLOSURE nvars code_ofs)) (P_error_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs)) ->
+        (error_message_of (CLOSURE nvars code_ofs))
+        (pre_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs)) ->
       handler_correct h2 (clight_of (CLOSURE nvars code_ofs))
-        (pre_of (CLOSURE nvars code_ofs)) (P_error_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs)) ->
+        (error_message_of (CLOSURE nvars code_ofs))
+        (pre_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros nvars code_ofs h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (CLOSURE nvars code_ofs)) (pre_of (CLOSURE nvars code_ofs))
-    (P_error_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs))
+    (clight_of (CLOSURE nvars code_ofs)) (error_message_of (CLOSURE nvars code_ofs))
+    (pre_of (CLOSURE nvars code_ofs)) (P_halt_of (CLOSURE nvars code_ofs)) (P_ccall_of (CLOSURE nvars code_ofs))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

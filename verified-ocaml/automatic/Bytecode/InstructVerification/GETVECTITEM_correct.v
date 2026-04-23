@@ -188,7 +188,7 @@ Definition getvectitem_heap_pre
 
 #[warnings="-not-a-closed-proof"]
 Theorem verify_GETVECTITEM_correct :
-    handler_correct handle_GETVECTITEM f_instr_GETVECTITEM
+    handler_correct_v1 handle_GETVECTITEM f_instr_GETVECTITEM
       (fun _ m s ard =>
          getvectitem_heap_pre m s ard /\
          (* idx is non-negative, tagged value fits in signed int64,
@@ -209,7 +209,7 @@ Theorem verify_GETVECTITEM_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETVECTITEM.
+  unfold handler_correct_v1, handle_GETVECTITEM.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [| v_hd stk_tl] eqn:Hstk.
@@ -588,11 +588,11 @@ Qed.
    handle_instr GETVECTITEM / clight_of GETVECTITEM / pre_of GETVECTITEM are
    convertible with handle_GETVECTITEM / f_instr_GETVECTITEM / getvectitem_step_pre.
    P_halt_of and P_ccall_of are vacuously satisfied (GETVECTITEM never halts
-   or issues a C call).  P_error_of requires a small computation bridge. *)
+   or issues a C call).  error_message_of requires a small computation bridge. *)
 Definition correct_GETVECTITEM :
     handler_correct (handle_instr Bytecode.AST.GETVECTITEM) (clight_of Bytecode.AST.GETVECTITEM)
-      (pre_of Bytecode.AST.GETVECTITEM)
-      (P_error_of Bytecode.AST.GETVECTITEM) (P_halt_of Bytecode.AST.GETVECTITEM) (P_ccall_of Bytecode.AST.GETVECTITEM).
+      (error_message_of Bytecode.AST.GETVECTITEM)
+      (pre_of Bytecode.AST.GETVECTITEM) (P_halt_of Bytecode.AST.GETVECTITEM) (P_ccall_of Bytecode.AST.GETVECTITEM).
 Proof.
 Admitted.
 
