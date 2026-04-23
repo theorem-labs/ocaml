@@ -11,7 +11,6 @@ manual/Bytecode/Interpret/InstructSpec.v
 manual/Bytecode/Interpret/MetaSpec.v
 manual/Bytecode/Interpret/Run.v
 manual/Bytecode/Machine.v
-manual/Bytecode/SatisfiabilityCheck.v
 manual/Compile/CompileSpec.v
 manual/ExtractSetup.v
 manual/LexParse/LexParseSpec.v

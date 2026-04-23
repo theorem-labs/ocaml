@@ -19,6 +19,7 @@ From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 
 Theorem verify_STOP_correct :
   handler_correct (fun _ => handle_STOP) f_instr_STOP

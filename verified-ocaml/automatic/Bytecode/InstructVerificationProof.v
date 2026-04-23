@@ -13,6 +13,7 @@ From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import ASSIGN_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LSLINT_correct.
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import LSRINT_correct.

@@ -36,6 +36,7 @@ From compcert Require Import Ctypes Clight ClightBigstep Memory.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
+From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 
 (* ================================================================== *)
 (* Fine-grained Axiom (A): abs_rel is injective / functional           *)

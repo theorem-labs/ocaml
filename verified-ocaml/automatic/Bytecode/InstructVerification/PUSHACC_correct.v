@@ -21,6 +21,7 @@ From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Handlers Dispatch.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 
 (* Individual handler proofs *)
 From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import

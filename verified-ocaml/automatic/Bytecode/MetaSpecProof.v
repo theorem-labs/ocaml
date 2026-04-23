@@ -8,6 +8,7 @@
 
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
+From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require
   ACC_unique
   PUSH_unique

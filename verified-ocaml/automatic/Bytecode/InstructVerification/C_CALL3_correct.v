@@ -17,6 +17,7 @@ From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 
 Theorem verify_C_CALL3_correct : forall prim_idx,
   handler_correct (handle_C_CALL 3 prim_idx) f_instr_C_CALL3

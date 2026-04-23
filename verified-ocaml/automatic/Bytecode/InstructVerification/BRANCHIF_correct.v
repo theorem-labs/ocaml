@@ -46,6 +46,7 @@ From OCamlInterp.Manual Require Bytecode.AST.
 Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
 
 Local Notation ge := clight_ge.
