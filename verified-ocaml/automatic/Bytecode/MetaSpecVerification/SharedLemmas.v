@@ -4,16 +4,17 @@
    The generic uniqueness proof is parameterised over an abstract state S,
    a witness type W, an abstraction relation R : Clight.env -> temp_env ->
    mem -> S -> W -> Prop, and pc extraction pc_of : S -> Z.  The Section
-   hypotheses R_total and R_functional replace the old abs_rel_functional /
-   abs_rel_inhabitable axioms.
+   hypotheses R_total and R_functional supply the totality and functionality
+   properties that were previously the abs_rel_functional / abs_rel_inhabitable
+   axioms (now removed).
 
    handler_correct_gen now takes err : S -> option string instead of P_error.
    When err s = Some msg, the handler must return Error msg.
    When err s = None, Error is False, and Step/Halt/CCall have exec_stmt
    returning fixed integer codes (0/1/3).
 
-   The only remaining axiom is exec_stmt_deterministic (Clight bigstep
-   determinism), which is out of scope for this project. *)
+   The only axiom is exec_stmt_deterministic (Clight bigstep determinism),
+   which is out of scope for this project. *)
 
 From Stdlib Require Import ZArith List Strings.String.
 From compcert Require Import Integers Ctypes Clight ClightBigstep Memory.
@@ -110,24 +111,14 @@ Module SharedLemmasMetaSpecGen <: MetaSpecGen.
 End SharedLemmasMetaSpecGen.
 
 (* ================================================================== *)
-(* Concrete instantiation (backward compat)                            *)
+(* Concrete instantiation                                              *)
 (*                                                                      *)
 (* These reproduce the old lemmas with the concrete abs_rel types.     *)
+(* The R_total and R_functional properties are now passed as           *)
+(* hypotheses instead of being axioms.                                 *)
 (* ================================================================== *)
 
-Axiom abs_rel_functional :
-  forall (e : Clight.env) (le : temp_env) (m : mem) (s1 s2 : state),
-    abs_rel e le m s1 -> abs_rel e le m s2 -> s1 = s2.
-
-Axiom abs_rel_inhabitable :
-  forall (f : function)
-         (err : state -> option string)
-         (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
-         (s : state),
-    exists (e : Clight.env) (le : temp_env) (m : mem) (ard : abs_rel_data),
-      abs_rel_with_ard e le m s ard /\ step_pre e m s ard.
-
-(* Main concrete theorem *)
+(* Main concrete theorem -- takes totality and functionality as hypotheses *)
 Lemma handler_correct_determines_em_eq :
   forall (f : function)
          (err : state -> option string)
@@ -135,29 +126,20 @@ Lemma handler_correct_determines_em_eq :
          (P_halt : value -> Prop)
          (P_ccall : nat -> list value -> state -> Prop)
          (h1 h2 : Z -> state -> step_result) (s : state),
+    (forall s0, exists e le m w, abs_rel_with_ard e le m s0 w) ->
+    (forall e le m s1 s2 w1 w2,
+       abs_rel_with_ard e le m s1 w1 -> abs_rel_with_ard e le m s2 w2 -> s1 = s2) ->
     (forall s e le m w, abs_rel_with_ard e le m s w -> step_pre e m s w) ->
     handler_correct h1 f err step_pre P_halt P_ccall ->
     handler_correct h2 f err step_pre P_halt P_ccall ->
     em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
-  intros f err step_pre P_halt P_ccall h1 h2 s Hpre_holds Hc1 Hc2.
+  intros f err step_pre P_halt P_ccall h1 h2 s Htotal Hfunc Hpre_holds Hc1 Hc2.
   (* handler_correct unfolds to handler_correct_gen state abs_rel_data Machine.pc abs_rel_with_ard *)
   (* Use the generic theorem *)
   pose proof (handler_correct_gen_determines_em_eq
-    state abs_rel_data Machine.pc abs_rel_with_ard) as Hgen.
-  (* We need R_total and R_functional for the concrete R *)
-  assert (Htotal : forall s0, exists e le m w, abs_rel_with_ard e le m s0 w).
-  { intro s0.
-    destruct (abs_rel_inhabitable f err step_pre s0)
-      as [e [le [m [ard [Habs _]]]]].
-    exists e, le, m, ard. exact Habs. }
-  assert (Hfunc : forall e le m s1 s2 w1 w2,
-    abs_rel_with_ard e le m s1 w1 -> abs_rel_with_ard e le m s2 w2 -> s1 = s2).
-  { intros e le m s1 s2 w1 w2 H1 H2.
-    apply abs_rel_functional with (e := e) (le := le) (m := m).
-    - exists w1. exact H1.
-    - exists w2. exact H2. }
-  specialize (Hgen Htotal Hfunc f h1 h2 err step_pre P_halt P_ccall Hpre_holds Hc1 Hc2 s).
+    state abs_rel_data Machine.pc abs_rel_with_ard Htotal Hfunc
+    f h1 h2 err step_pre P_halt P_ccall Hpre_holds Hc1 Hc2 s) as Hgen.
   (* em_eq_gen on step_result (= step_result_gen state) implies em_eq *)
   remember (h1 s.(pc) s) as r1.
   remember (h2 s.(pc) s) as r2.
@@ -176,6 +158,13 @@ Variables (f : function)
           (P_halt_pred : value -> Prop)
           (P_ccall_pred : nat -> list value -> state -> Prop).
 
+Hypothesis abs_rel_total :
+  forall s, exists e le m w, abs_rel_with_ard e le m s w.
+
+Hypothesis abs_rel_func :
+  forall e le m s1 s2 w1 w2,
+    abs_rel_with_ard e le m s1 w1 -> abs_rel_with_ard e le m s2 w2 -> s1 = s2.
+
 Variable step_pre_holds :
   forall s e le m w, abs_rel_with_ard e le m s w -> step_pre e m s w.
 
@@ -186,7 +175,7 @@ Lemma generic_step_step_eq :
     h1 s.(pc) s = Step s1 -> h2 s.(pc) s = Step s2 -> s1 = s2.
 Proof.
   intros h1 h2 s s1 s2 Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem. reflexivity.
 Qed.
 
@@ -197,7 +186,7 @@ Lemma generic_step_error_excl :
     h1 s.(pc) s = Step s' -> h2 s.(pc) s = Error msg -> False.
 Proof.
   intros h1 h2 s s' msg Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem.
 Qed.
 
@@ -208,7 +197,7 @@ Lemma generic_halt_halt_eq :
     h1 s.(pc) s = Halt v1 -> h2 s.(pc) s = Halt v2 -> v1 = v2.
 Proof.
   intros h1 h2 s v1 v2 Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem. reflexivity.
 Qed.
 
@@ -219,7 +208,7 @@ Lemma generic_step_halt_excl :
     h1 s.(pc) s = Step s' -> h2 s.(pc) s = Halt v -> False.
 Proof.
   intros h1 h2 s s' v Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem.
 Qed.
 
@@ -230,7 +219,7 @@ Lemma generic_halt_error_excl :
     h1 s.(pc) s = Halt v -> h2 s.(pc) s = Error msg -> False.
 Proof.
   intros h1 h2 s v msg Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem.
 Qed.
 
@@ -243,7 +232,7 @@ Lemma generic_ccall_ccall_eq :
     n1 = n2 /\ args1 = args2 /\ s1 = s2.
 Proof.
   intros h1 h2 s n1 args1 s1 n2 args2 s2 Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem. auto.
 Qed.
 
@@ -254,7 +243,7 @@ Lemma generic_step_ccall_excl :
     h1 s.(pc) s = Step s' -> h2 s.(pc) s = CCall_request n0 args0 s'' -> False.
 Proof.
   intros h1 h2 s s' n0 args0 s'' Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem.
 Qed.
 
@@ -265,7 +254,7 @@ Lemma generic_error_ccall_excl :
     h1 s.(pc) s = Error msg -> h2 s.(pc) s = CCall_request n0 args0 s' -> False.
 Proof.
   intros h1 h2 s msg n0 args0 s' Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem.
 Qed.
 
@@ -276,7 +265,7 @@ Lemma generic_halt_ccall_excl :
     h1 s.(pc) s = Halt v -> h2 s.(pc) s = CCall_request n0 args0 s' -> False.
 Proof.
   intros h1 h2 s v n0 args0 s' Hc1 Hc2 E1 E2.
-  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s step_pre_holds Hc1 Hc2) as Hem.
+  pose proof (handler_correct_determines_em_eq f err step_pre P_halt_pred P_ccall_pred h1 h2 s abs_rel_total abs_rel_func step_pre_holds Hc1 Hc2) as Hem.
   rewrite E1, E2 in Hem. inversion Hem.
 Qed.
 
@@ -290,6 +279,9 @@ Lemma unique_from_handler_correct :
          (P_halt_p : value -> Prop)
          (P_ccall_p : nat -> list value -> state -> Prop)
          (h1 h2 : Z -> state -> step_result),
+    (forall s0, exists e le m w, abs_rel_with_ard e le m s0 w) ->
+    (forall e le m s1 s2 w1 w2,
+       abs_rel_with_ard e le m s1 w1 -> abs_rel_with_ard e le m s2 w2 -> s1 = s2) ->
     (forall s e le m w, abs_rel_with_ard e le m s w -> step_pre e m s w) ->
     handler_correct h1 f err step_pre P_halt_p P_ccall_p ->
     handler_correct h2 f err step_pre P_halt_p P_ccall_p ->
