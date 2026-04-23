@@ -247,12 +247,14 @@ Section Generic.
               P_halt v /\
               (forall w,
                R e le m s w ->
+               step_pre e m s w ->
                exists le' m',
                  clight_returns f 1 e le m le' m')
           | CCall_request n args s' =>
               P_ccall n args s' /\
               (forall w,
                R e le m s w ->
+               step_pre e m s w ->
                exists le' m',
                  clight_returns f 3 e le m le' m')
           end
