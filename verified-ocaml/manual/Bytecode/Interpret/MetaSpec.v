@@ -15,17 +15,66 @@ From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec.
 
-(* Error-message equivalence on step_result.
+(* ================================================================== *)
+(* Generic error-message equivalence on step_result_gen                *)
+(* ================================================================== *)
 
-   Two outcomes are [em_eq] iff they agree on the non-error projections
-   (Step post-state, Halt value, CCall_request triple) or both are Error
-   with arbitrary messages. *)
+Inductive em_eq_gen {S : Type} : step_result_gen S -> step_result_gen S -> Prop :=
+  | em_Step_gen  : forall s, em_eq_gen (Step_gen s) (Step_gen s)
+  | em_Halt_gen  : forall v, em_eq_gen (Halt_gen v) (Halt_gen v)
+  | em_CCall_gen : forall n args s',
+      em_eq_gen (CCall_gen n args s') (CCall_gen n args s')
+  | em_Error_gen : forall msg msg', em_eq_gen (Error_gen msg) (Error_gen msg').
+
+(* Concrete error-message equivalence on step_result (backward compat). *)
+
 Inductive em_eq : step_result -> step_result -> Prop :=
   | em_Step  : forall s, em_eq (Step s) (Step s)
   | em_Halt  : forall v, em_eq (Halt v) (Halt v)
   | em_CCall : forall n args s',
       em_eq (CCall_request n args s') (CCall_request n args s')
   | em_Error : forall msg msg', em_eq (Error msg) (Error msg').
+
+(* ================================================================== *)
+(* Generic MetaSpec                                                    *)
+(*                                                                      *)
+(* Quantified over abstract state S, witness W, abstraction relation R  *)
+(* with three hypotheses:                                               *)
+(*   R_total      : forall s, exists w, R w s                          *)
+(*   R_functional : forall w s1 s2, R w s1 -> R w s2 -> s1 = s2       *)
+(*   step_pre_sat : forall s, step_pre satisfiable                     *)
+(* These appear ONLY in the MetaSpec module type, not in the Generic    *)
+(* section of InstructSpec.v.                                           *)
+(* ================================================================== *)
+
+Module Type MetaSpecGen.
+
+  (* Abstract state, witness, pc extraction, and relation *)
+  Parameter S : Type.
+  Parameter W : Type.
+  Parameter pc_of : S -> Z.
+  Parameter R : W -> S -> Prop.
+
+  (* Constraint hypotheses *)
+  Parameter R_total : forall s, exists w, R w s.
+  Parameter R_functional : forall w s1 s2, R w s1 -> R w s2 -> s1 = s2.
+
+  (* Uniqueness mod error-message strings (generic). *)
+  Parameter handler_unique_mod_errors_gen :
+    forall (step_pre : W -> S -> Prop)
+           (P_error : string -> S -> Prop)
+           (P_halt : value -> Prop)
+           (P_ccall : nat -> list value -> S -> Prop)
+           (h1 h2 : Z -> S -> step_result_gen S),
+      handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
+      handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
+      forall s, em_eq_gen (h1 (pc_of s) s) (h2 (pc_of s) s).
+
+End MetaSpecGen.
+
+(* ================================================================== *)
+(* Concrete MetaSpec (backward compat)                                 *)
+(* ================================================================== *)
 
 Module Type MetaSpec.
 

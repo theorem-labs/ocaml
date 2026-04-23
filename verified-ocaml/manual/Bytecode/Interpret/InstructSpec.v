@@ -385,8 +385,96 @@ Definition abs_rel_pre (e : Clight.env) (le : temp_env) (m : mem)
     Cur Writable.
 
 (* ================================================================== *)
+(* Generic handler correctness                                         *)
+(*                                                                      *)
+(* Parameterised over an abstract state type S, a "witness" type W      *)
+(* bundling the concrete Clight state, a pc-extraction function, and    *)
+(* an abstraction relation R : W -> S -> Prop.                          *)
+(*                                                                      *)
+(* NO constraint hypotheses (totality, functionality of R) appear here; *)
+(* those belong in MetaSpec where the uniqueness theorem lives.         *)
+(* ================================================================== *)
+
+Section Generic.
+
+Variables (S : Type) (W : Type).
+Variable (pc_of_S : S -> Z).
+
+(* Generic step result parameterised by state type. *)
+Inductive step_result_gen : Type :=
+  | Step_gen      : S -> step_result_gen
+  | Halt_gen      : value -> step_result_gen
+  | Error_gen     : string -> step_result_gen
+  | CCall_gen     : nat -> list value -> S -> step_result_gen.
+
+(* Abstraction relation: W (concrete witness) relates to S (abstract state). *)
+Variable (R : W -> S -> Prop).
+
+(* Existential wrapper hiding the witness. *)
+Definition R_ex (s : S) : Prop := exists w, R w s.
+
+(* Generic handler correctness.
+   - handler : Z -> S -> step_result_gen
+   - step_pre : W -> S -> Prop     (precondition on concrete witness + abstract state)
+   - P_error, P_halt, P_ccall : predicates on non-Step outcomes *)
+Definition handler_correct_gen
+    (handler : Z -> S -> step_result_gen)
+    (step_pre : W -> S -> Prop)
+    (P_error : string -> S -> Prop)
+    (P_halt : value -> Prop)
+    (P_ccall : nat -> list value -> S -> Prop) : Prop :=
+  forall w s,
+    match handler (pc_of_S s) s with
+    | Step_gen s' =>
+        R w s ->
+        step_pre w s ->
+        exists w', R w' s'
+    | Error_gen msg => P_error msg s
+    | Halt_gen v => P_halt v
+    | CCall_gen nargs args s' => P_ccall nargs args s'
+    end.
+
+(* Generic weakest-precondition:
+   "there exists a post-witness related to some post-state". *)
+Definition pre_of_gen
+    (body : W -> W -> Prop) : W -> S -> Prop :=
+  fun w s =>
+    exists w' s'', body w w' /\ R w' s''.
+
+End Generic.
+
+Arguments step_result_gen : clear implicits.
+Arguments Step_gen {S}.
+Arguments Halt_gen {S}.
+Arguments Error_gen {S}.
+Arguments CCall_gen {S}.
+Arguments handler_correct_gen : clear implicits.
+Arguments R_ex : clear implicits.
+Arguments pre_of_gen : clear implicits.
+
+(* ================================================================== *)
 (* Uniform completeness statement                                      *)
 (* ================================================================== *)
+
+(* Concrete instantiation types.
+   W = (env * temp_env * mem)  -- the Clight "witness"
+   S = state                   -- the abstract ZINC machine state
+   R = abs_rel (projected from the triple) *)
+
+(* Project the Clight triple into abs_rel *)
+Definition clight_R (elm : Clight.env * temp_env * mem) (s : state) : Prop :=
+  let '(e, le, m) := elm in abs_rel e le m s.
+
+(* Concrete step_result is step_result_gen instantiated at state. *)
+(* We keep Machine.step_result for backward compat in Interpret/Run etc.
+   and provide injections here. *)
+Definition to_gen (r : step_result) : step_result_gen state :=
+  match r with
+  | Step s => Step_gen s
+  | Halt v => Halt_gen v
+  | Error msg => Error_gen msg
+  | CCall_request n args s => CCall_gen n args s
+  end.
 
 (* handler_correct: unified correctness statement for instruction handlers.
    Takes a handler function, a Clight function, and a step precondition.
