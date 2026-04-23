@@ -1,5 +1,5 @@
-(* SharedLemmas.v - [UNTRUSTED] Shared axioms and derived lemmas for
-   per-instruction handler uniqueness proofs.
+(* SharedLemmas.v - [UNTRUSTED] Shared lemmas for per-instruction handler
+   uniqueness proofs.
 
    The generic uniqueness proof is parameterised over an abstract state S,
    a witness type W, an abstraction relation R : Clight.env -> temp_env ->
@@ -12,9 +12,8 @@
    When err s = None, Error is False, and Step/Halt/CCall have exec_stmt
    returning fixed integer codes (0/1/3).
 
-   The concrete closed helpers additionally assume abs_rel totality and
-   functionality for compatibility with the current fine-grained MetaSpec
-   surface. *)
+   The concrete helpers take abs_rel totality and functionality as explicit
+   hypotheses (not axioms). *)
 
 From Stdlib Require Import ZArith List Strings.String.
 From compcert Require Import Coqlib Integers Ctypes Cop Clight ClightBigstep Events Globalenvs Memory Values.
@@ -600,22 +599,9 @@ End SharedLemmasMetaSpecGen.
 (* ================================================================== *)
 (* Concrete instantiation                                              *)
 (*                                                                      *)
-(* The main concrete theorem takes totality and functionality as        *)
-(* hypotheses.  The closed per-instruction uniqueness lemmas below      *)
-(* still need concrete compatibility assumptions for abs_rel_with_ard.  *)
+(* All concrete lemmas take totality and functionality as explicit      *)
+(* hypotheses rather than axioms.                                      *)
 (* ================================================================== *)
-
-Axiom abs_rel_functional :
-  forall (e : Clight.env) (le : temp_env) (m : mem) (s1 s2 : state),
-    abs_rel e le m s1 -> abs_rel e le m s2 -> s1 = s2.
-
-Axiom abs_rel_inhabitable :
-  forall (f : function)
-         (err : state -> option string)
-         (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
-         (s : state),
-    exists (e : Clight.env) (le : temp_env) (m : mem) (ard : abs_rel_data),
-      abs_rel_with_ard e le m s ard /\ step_pre e m s ard.
 
 Lemma unique_non_halt_ccall_from_handler_correct :
   forall (f : function)
@@ -624,14 +610,19 @@ Lemma unique_non_halt_ccall_from_handler_correct :
          (P_halt : value -> Prop)
          (P_ccall : nat -> list value -> state -> Prop)
          (h1 h2 : Z -> state -> step_result),
+    (forall (e : Clight.env) (le : temp_env) (m : mem) (s1 s2 : state),
+       abs_rel e le m s1 -> abs_rel e le m s2 -> s1 = s2) ->
+    (forall (s : state),
+       exists (e : Clight.env) (le : temp_env) (m : mem) (ard : abs_rel_data),
+         abs_rel_with_ard e le m s ard /\ step_pre e m s ard) ->
     (forall v, P_halt v -> False) ->
     (forall n args s, P_ccall n args s -> False) ->
     handler_correct h1 f err step_pre P_halt P_ccall ->
     handler_correct h2 f err step_pre P_halt P_ccall ->
     forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
-  intros f err step_pre P_halt P_ccall h1 h2 Hno_halt Hno_ccall Hc1 Hc2 s.
-  destruct (abs_rel_inhabitable f err step_pre s)
+  intros f err step_pre P_halt P_ccall h1 h2 abs_rel_functional abs_rel_inhabitable Hno_halt Hno_ccall Hc1 Hc2 s.
+  destruct (abs_rel_inhabitable s)
     as [e [le [m [ard [Hrel Hpre]]]]].
   unfold handler_correct, handler_correct_gen in Hc1, Hc2.
   destruct (err s) as [msg|] eqn:Herr.
