@@ -20,11 +20,11 @@ From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec.
 (* ================================================================== *)
 
 Inductive em_eq_gen {S : Type} : step_result_gen S -> step_result_gen S -> Prop :=
-  | em_Step_gen  : forall s, em_eq_gen (Step_gen s) (Step_gen s)
-  | em_Halt_gen  : forall v, em_eq_gen (Halt_gen v) (Halt_gen v)
+  | em_Step_gen  : forall s, em_eq_gen (Step s) (Step s)
+  | em_Halt_gen  : forall v, em_eq_gen (Halt v) (Halt v)
   | em_CCall_gen : forall n args s',
-      em_eq_gen (CCall_gen n args s') (CCall_gen n args s')
-  | em_Error_gen : forall msg msg', em_eq_gen (Error_gen msg) (Error_gen msg').
+      em_eq_gen (CCall_request n args s') (CCall_request n args s')
+  | em_Error_gen : forall msg msg', em_eq_gen (Error msg) (Error msg').
 
 (* Concrete error-message equivalence on step_result (backward compat). *)
 

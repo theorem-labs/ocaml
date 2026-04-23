@@ -34,11 +34,19 @@ Record state : Type := mk_state {
 #[export] Instance eta_state : Settable state :=
   settable! mk_state <pc; accu; stack; env; extra_args; global; trap_sp; hp; next_addr>.
 
-Inductive step_result : Type :=
-  | Step      : state -> step_result
-  | Halt      : value -> step_result
-  | Error     : string -> step_result
-  | CCall_request : nat -> list value -> state -> step_result.
+Inductive step_result_gen (S : Type) : Type :=
+  | Step      : S -> step_result_gen S
+  | Halt      : value -> step_result_gen S
+  | Error     : string -> step_result_gen S
+  | CCall_request : nat -> list value -> S -> step_result_gen S.
+
+Arguments step_result_gen : clear implicits.
+Arguments Step {S}.
+Arguments Halt {S}.
+Arguments Error {S}.
+Arguments CCall_request {S}.
+
+Definition step_result := step_result_gen state.
 
 Inductive run_result : Type :=
   | Finished    : value -> run_result

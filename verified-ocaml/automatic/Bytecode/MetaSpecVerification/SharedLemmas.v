@@ -58,16 +58,16 @@ Lemma gen_step_step_eq :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) s1 s2,
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Step_gen s1 ->
-    h2 (pc_of s) s = Step_gen s2 ->
+    h1 (pc_of s) s = Step s1 ->
+    h2 (pc_of s) s = Step s2 ->
     s1 = s2.
 Proof. Admitted.
 
 (* -- Error / Error ---------------------------------------------------- *)
 Lemma gen_error_error_eq :
   forall (h1 h2 : Z -> S -> step_result_gen S) (s : S) msg1 msg2,
-    h1 (pc_of s) s = Error_gen msg1 ->
-    h2 (pc_of s) s = Error_gen msg2 ->
+    h1 (pc_of s) s = Error msg1 ->
+    h2 (pc_of s) s = Error msg2 ->
     em_eq_gen (h1 (pc_of s) s) (h2 (pc_of s) s).
 Proof.
   intros h1 h2 s msg1 msg2 E1 E2.
@@ -84,7 +84,7 @@ Lemma gen_step_error_excl :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) s' msg,
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Step_gen s' -> h2 (pc_of s) s = Error_gen msg -> False.
+    h1 (pc_of s) s = Step s' -> h2 (pc_of s) s = Error msg -> False.
 Proof. Admitted.
 
 Lemma gen_step_halt_excl :
@@ -95,7 +95,7 @@ Lemma gen_step_halt_excl :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) s' v,
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Step_gen s' -> h2 (pc_of s) s = Halt_gen v -> False.
+    h1 (pc_of s) s = Step s' -> h2 (pc_of s) s = Halt v -> False.
 Proof. Admitted.
 
 Lemma gen_step_ccall_excl :
@@ -106,7 +106,7 @@ Lemma gen_step_ccall_excl :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) s' n args s'',
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Step_gen s' -> h2 (pc_of s) s = CCall_gen n args s'' -> False.
+    h1 (pc_of s) s = Step s' -> h2 (pc_of s) s = CCall_request n args s'' -> False.
 Proof. Admitted.
 
 Lemma gen_halt_error_excl :
@@ -117,7 +117,7 @@ Lemma gen_halt_error_excl :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) v msg,
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Halt_gen v -> h2 (pc_of s) s = Error_gen msg -> False.
+    h1 (pc_of s) s = Halt v -> h2 (pc_of s) s = Error msg -> False.
 Proof. Admitted.
 
 Lemma gen_halt_ccall_excl :
@@ -128,7 +128,7 @@ Lemma gen_halt_ccall_excl :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) v n args s',
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Halt_gen v -> h2 (pc_of s) s = CCall_gen n args s' -> False.
+    h1 (pc_of s) s = Halt v -> h2 (pc_of s) s = CCall_request n args s' -> False.
 Proof. Admitted.
 
 Lemma gen_error_ccall_excl :
@@ -139,7 +139,7 @@ Lemma gen_error_ccall_excl :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) msg n args s',
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Error_gen msg -> h2 (pc_of s) s = CCall_gen n args s' -> False.
+    h1 (pc_of s) s = Error msg -> h2 (pc_of s) s = CCall_request n args s' -> False.
 Proof. Admitted.
 
 Lemma gen_halt_halt_eq :
@@ -150,7 +150,7 @@ Lemma gen_halt_halt_eq :
          (h1 h2 : Z -> S -> step_result_gen S) (s : S) v1 v2,
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = Halt_gen v1 -> h2 (pc_of s) s = Halt_gen v2 -> v1 = v2.
+    h1 (pc_of s) s = Halt v1 -> h2 (pc_of s) s = Halt v2 -> v1 = v2.
 Proof. Admitted.
 
 Lemma gen_ccall_ccall_eq :
@@ -162,8 +162,8 @@ Lemma gen_ccall_ccall_eq :
          n1 args1 s1 n2 args2 s2,
     handler_correct_gen S W pc_of R h1 step_pre P_error P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 step_pre P_error P_halt P_ccall ->
-    h1 (pc_of s) s = CCall_gen n1 args1 s1 ->
-    h2 (pc_of s) s = CCall_gen n2 args2 s2 ->
+    h1 (pc_of s) s = CCall_request n1 args1 s1 ->
+    h2 (pc_of s) s = CCall_request n2 args2 s2 ->
     n1 = n2 /\ args1 = args2 /\ s1 = s2.
 Proof. Admitted.
 
