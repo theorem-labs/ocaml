@@ -10,6 +10,9 @@ From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import HandleInstrSpec.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import STOP_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import CHECK_SIGNALS_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import C_CALL_correct.
 
 Module DispatchHI <: HandleInstrSpec.
   Definition handle_instr := Dispatch.handle_instr.
@@ -348,14 +351,14 @@ Proof. Admitted.
 Definition correct_CHECK_SIGNALS :
   handler_correct (handle_instr CHECK_SIGNALS) (clight_of CHECK_SIGNALS)
     (error_message_of CHECK_SIGNALS)
-    (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS).
-Proof. Admitted.
+    (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS)
+  := CHECK_SIGNALS_correct.correct_CHECK_SIGNALS.
 
 Definition correct_C_CALL : forall nargs prim_idx,
   handler_correct (handle_instr (C_CALL nargs prim_idx)) (clight_of (C_CALL nargs prim_idx))
     (error_message_of (C_CALL nargs prim_idx))
-    (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)).
-Proof. Admitted.
+    (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx))
+  := C_CALL_correct.correct_C_CALL.
 
 Definition correct_CONSTINT : forall z,
   handler_correct (handle_instr (CONSTINT z)) (clight_of (CONSTINT z))
@@ -576,5 +579,5 @@ Proof. Admitted.
 Definition correct_STOP :
   handler_correct (handle_instr STOP) (clight_of STOP)
     (error_message_of STOP)
-    (pre_of STOP) (P_halt_of STOP) (P_ccall_of STOP).
-Proof. Admitted.
+    (pre_of STOP) (P_halt_of STOP) (P_ccall_of STOP)
+  := STOP_correct.correct_STOP.
