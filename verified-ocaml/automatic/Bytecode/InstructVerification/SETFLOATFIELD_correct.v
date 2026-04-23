@@ -285,7 +285,7 @@ Definition setfloatfield_code_pre (n : nat)
 (* ================================================================== *)
 
 Theorem verify_SETFLOATFIELD_correct : forall n,
-    handler_correct (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
+    handler_correct_v1 (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
       (setfloatfield_step_pre n)
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
@@ -303,7 +303,7 @@ Theorem verify_SETFLOATFIELD_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_SETFLOATFIELD.
+  unfold handler_correct_v1, handle_SETFLOATFIELD.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [|newval rest] eqn:Hstk.
@@ -1302,8 +1302,8 @@ Qed.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Definition correct_SETFLOATFIELD : forall n,
     handler_correct (handle_instr (Bytecode.AST.SETFLOATFIELD n)) (clight_of (Bytecode.AST.SETFLOATFIELD n))
-      (pre_of (Bytecode.AST.SETFLOATFIELD n))
-      (P_error_of (Bytecode.AST.SETFLOATFIELD n)) (P_halt_of (Bytecode.AST.SETFLOATFIELD n)) (P_ccall_of (Bytecode.AST.SETFLOATFIELD n)).
+      (error_message_of (Bytecode.AST.SETFLOATFIELD n))
+      (pre_of (Bytecode.AST.SETFLOATFIELD n)) (P_halt_of (Bytecode.AST.SETFLOATFIELD n)) (P_ccall_of (Bytecode.AST.SETFLOATFIELD n)).
 Proof.
 Admitted.
 

@@ -142,7 +142,7 @@ Proof.
 Qed.
 
 Theorem verify_MULINT_correct :
-    handler_correct handle_MULINT f_instr_MULINT
+    handler_correct_v1 handle_MULINT f_instr_MULINT
       (pre_and accu_is_long stack_head_is_long)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
@@ -150,7 +150,7 @@ Theorem verify_MULINT_correct :
                   end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_MULINT.
+  intros e le m s. unfold handler_correct_v1, handle_MULINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
@@ -295,8 +295,8 @@ Qed.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_MULINT :
   handler_correct (handle_instr Bytecode.AST.MULINT) (clight_of Bytecode.AST.MULINT)
-    (pre_of Bytecode.AST.MULINT)
-    (P_error_of Bytecode.AST.MULINT) (P_halt_of Bytecode.AST.MULINT) (P_ccall_of Bytecode.AST.MULINT).
+    (error_message_of Bytecode.AST.MULINT)
+    (pre_of Bytecode.AST.MULINT) (P_halt_of Bytecode.AST.MULINT) (P_ccall_of Bytecode.AST.MULINT).
 Proof.
 Admitted.
 

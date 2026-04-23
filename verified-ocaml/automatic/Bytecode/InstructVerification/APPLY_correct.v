@@ -188,7 +188,7 @@ Proof.
 Qed.
 
 Theorem verify_APPLY_correct : forall n,
-    handler_correct (fun _ s => handle_APPLY n s) f_instr_APPLY
+    handler_correct_v1 (fun _ s => handle_APPLY n s) f_instr_APPLY
       (fun _ m s ard =>
          (* The code buffer contains Int.repr (Z.of_nat n) at the current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -206,7 +206,7 @@ Theorem verify_APPLY_correct : forall n,
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   simpl.
   unfold handle_APPLY.
 
@@ -622,13 +622,13 @@ Qed.
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr (APPLY n) reduces to handle_APPLY n by computation.
    clight_of (APPLY n) = f_instr_APPLY and pre_of (APPLY n) = apply_n_step_pre n
-   are convertible.  Error case is bridged by unfolding P_error_of and
+   are convertible.  Error case is bridged by unfolding error_message_of and
    case-splitting on get_code_ptr_s. *)
 Definition correct_APPLY : forall n,
     handler_correct (Dispatch.handle_instr (Bytecode.AST.APPLY n))
       (clight_of (Bytecode.AST.APPLY n))
-      (pre_of (Bytecode.AST.APPLY n))
-      (P_error_of (Bytecode.AST.APPLY n)) (P_halt_of (Bytecode.AST.APPLY n))
+      (error_message_of (Bytecode.AST.APPLY n))
+      (pre_of (Bytecode.AST.APPLY n)) (P_halt_of (Bytecode.AST.APPLY n))
       (P_ccall_of (Bytecode.AST.APPLY n)).
 Proof.
 Admitted.

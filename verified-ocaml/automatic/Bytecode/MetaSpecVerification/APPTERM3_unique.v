@@ -11,14 +11,16 @@ Lemma unique_APPTERM3 :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (APPTERM3 n))
-        (pre_of (APPTERM3 n)) (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)) ->
+        (error_message_of (APPTERM3 n))
+        (pre_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)) ->
       handler_correct h2 (clight_of (APPTERM3 n))
-        (pre_of (APPTERM3 n)) (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)) ->
+        (error_message_of (APPTERM3 n))
+        (pre_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros n h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (APPTERM3 n)) (pre_of (APPTERM3 n))
-    (P_error_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n))
+    (clight_of (APPTERM3 n)) (error_message_of (APPTERM3 n))
+    (pre_of (APPTERM3 n)) (P_halt_of (APPTERM3 n)) (P_ccall_of (APPTERM3 n))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

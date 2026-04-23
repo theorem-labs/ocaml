@@ -174,14 +174,14 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSHENVACC_correct : forall n,
-    handler_correct (handle_PUSHENVACC n) f_instr_PUSHENVACC
+    handler_correct_v1 (handle_PUSHENVACC n) f_instr_PUSHENVACC
       (pushenvacc_generic_step_pre n)
       (fun _ s => field_or_heap s s.(Machine.env) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intro n.
   intros e le m s.
-  unfold handler_correct, handle_PUSHENVACC.
+  unfold handler_correct_v1, handle_PUSHENVACC.
 
   destruct (field_or_heap s s.(Machine.env) n) as [v|] eqn:Hfoh.
 
@@ -653,11 +653,11 @@ Qed.
    are convertible with handle_PUSHENVACC n / f_instr_PUSHENVACC /
    pushenvacc_generic_step_pre n.
    P_halt_of and P_ccall_of are vacuously satisfied (PUSHENVACC never halts or
-   issues a C call).  P_error_of requires a small computation bridge. *)
+   issues a C call).  error_message_of requires a small computation bridge. *)
 Definition correct_PUSHENVACC : forall n,
     handler_correct (handle_instr (Bytecode.AST.PUSHENVACC n)) (clight_of (Bytecode.AST.PUSHENVACC n))
-      (pre_of (Bytecode.AST.PUSHENVACC n))
-      (P_error_of (Bytecode.AST.PUSHENVACC n)) (P_halt_of (Bytecode.AST.PUSHENVACC n)) (P_ccall_of (Bytecode.AST.PUSHENVACC n)).
+      (error_message_of (Bytecode.AST.PUSHENVACC n))
+      (pre_of (Bytecode.AST.PUSHENVACC n)) (P_halt_of (Bytecode.AST.PUSHENVACC n)) (P_ccall_of (Bytecode.AST.PUSHENVACC n)).
 Proof.
 Admitted.
 

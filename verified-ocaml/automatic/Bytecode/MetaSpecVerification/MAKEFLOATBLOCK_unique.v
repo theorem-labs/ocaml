@@ -11,14 +11,16 @@ Lemma unique_MAKEFLOATBLOCK :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (MAKEFLOATBLOCK n))
-        (pre_of (MAKEFLOATBLOCK n)) (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)) ->
+        (error_message_of (MAKEFLOATBLOCK n))
+        (pre_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)) ->
       handler_correct h2 (clight_of (MAKEFLOATBLOCK n))
-        (pre_of (MAKEFLOATBLOCK n)) (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)) ->
+        (error_message_of (MAKEFLOATBLOCK n))
+        (pre_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros n h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (MAKEFLOATBLOCK n)) (pre_of (MAKEFLOATBLOCK n))
-    (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n))
+    (clight_of (MAKEFLOATBLOCK n)) (error_message_of (MAKEFLOATBLOCK n))
+    (pre_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

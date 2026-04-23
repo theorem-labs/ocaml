@@ -162,7 +162,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_MAKEBLOCK2_correct : forall t,
-    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
+    handler_correct_v1 (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -1472,13 +1472,13 @@ Proof.
 Qed.
 
 Definition MAKEBLOCK2_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
+    handler_correct_v1 (handle_MAKEBLOCK2 t) f_instr_MAKEBLOCK2
       (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
        /\p code_at (Int.repr (Z.of_nat t)))
       (fun _ _ => True)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
-    intros t Hrange. eapply handler_correct_weaken.
+    intros t Hrange. eapply handler_correct_v1_weaken.
     - exact (verify_MAKEBLOCK2_correct t).
     - intros e le m s ard _ [[Hhap Hsu] Hcode].
       unfold heap_alloc_pre in Hhap.
@@ -1507,15 +1507,15 @@ Definition MAKEBLOCK2_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
 (*                                                                      *)
 (* The range guard (0 <= Z.of_nat n <= 255) is obtained by              *)
 (* case-splitting on the boolean guard in handle_MAKEBLOCK2.  When the  *)
-(* guard is false the handler returns Error which matches P_error_of    *)
+(* guard is false the handler returns Error which matches error_message_of    *)
 (* via error_message_of.  When true, the range assumption feeds         *)
 (* MAKEBLOCK2_correct_for_spec; the stack-empty Error is likewise       *)
 (* discharged via error_message_of.                                     *)
 (* ================================================================== *)
 Definition correct_MAKEBLOCK2 : forall n,
     handler_correct (handle_instr (Bytecode.AST.MAKEBLOCK2 n)) (clight_of (Bytecode.AST.MAKEBLOCK2 n))
-      (pre_of (Bytecode.AST.MAKEBLOCK2 n))
-      (P_error_of (Bytecode.AST.MAKEBLOCK2 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK2 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK2 n)).
+      (error_message_of (Bytecode.AST.MAKEBLOCK2 n))
+      (pre_of (Bytecode.AST.MAKEBLOCK2 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK2 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK2 n)).
 Proof.
 Admitted.
 

@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_PUSH :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of PUSH)
-        (pre_of PUSH) (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH) ->
+        (error_message_of PUSH)
+        (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH) ->
       handler_correct h2 (clight_of PUSH)
-        (pre_of PUSH) (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH) ->
+        (error_message_of PUSH)
+        (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of PUSH) (pre_of PUSH)
-    (P_error_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH)
+    (clight_of PUSH) (error_message_of PUSH)
+    (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

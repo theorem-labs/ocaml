@@ -25,7 +25,7 @@
    stack access pattern, generalized over n.
 
    NO AXIOMS.  All structural/range constraints are preconditions
-   via handler_correct. *)
+   via handler_correct_v1. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -222,7 +222,7 @@ Qed.
 
 Theorem verify_ACC_correct : forall n,
     Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ACC n) f_instr_ACC
+    handler_correct_v1 (handle_ACC n) f_instr_ACC
       (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -241,7 +241,7 @@ Theorem verify_ACC_correct : forall n,
 Proof.
   intro n. intro Hn_range_hyp.
   intros e le m s.
-  unfold handler_correct, handle_ACC.
+  unfold handler_correct_v1, handle_ACC.
   replace (Z.of_nat n <? Int.half_modulus)%Z with true.
   2: { symmetry. apply Z.ltb_lt. exact Hn_range_hyp. }
 
@@ -580,15 +580,15 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_ACC_handler_correct : forall n,
+Theorem verify_ACC_handler_correct_v1 : forall n,
     Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ACC n) f_instr_ACC
+    handler_correct_v1 (handle_ACC n) f_instr_ACC
       (code_at (Int.repr (Z.of_nat n)))
       (fun _ s => nth_error s.(Machine.stack) n = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n Hn.
-  eapply handler_correct_weaken_step.
+  eapply handler_correct_v1_weaken_step.
   - exact (verify_ACC_correct n Hn).
   - intros e le m s s' ard Hstep Hrel Hca.
     split. { exact Hca. }
@@ -612,14 +612,14 @@ Qed.
 (* Wrapper matching InstructVerificationFineGrainedSpec signature.
    handle_instr (ACC n) reduces to handle_ACC n by computation.
    clight_of (ACC n) = f_instr_ACC, pre_of (ACC n) = code_at (Int.repr (Z.of_nat n)).
-   Error case (stack underflow) matches P_error_of exactly.
-   Step case delegates to verify_ACC_handler_correct (requires Z.of_nat n < Int.half_modulus). *)
+   Error case (stack underflow) matches error_message_of exactly.
+   Step case delegates to verify_ACC_handler_correct_v1 (requires Z.of_nat n < Int.half_modulus). *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Theorem correct_ACC : forall n,
     handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
-      (pre_of (ACC n))
-      (P_error_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
+      (error_message_of (ACC n))
+      (pre_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
 Proof.
 Admitted.

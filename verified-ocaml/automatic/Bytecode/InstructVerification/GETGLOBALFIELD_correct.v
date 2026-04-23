@@ -318,7 +318,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_GETGLOBALFIELD_correct : forall n p,
-    handler_correct (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
+    handler_correct_v1 (handle_GETGLOBALFIELD n p) f_instr_GETGLOBALFIELD
       (fun _ m s ard =>
          (* Code buffer contains Int.repr (Z.of_nat n) at current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -890,15 +890,15 @@ Import Bytecode.AST.
 (* handle_instr (GETGLOBALFIELD n p) computes to handle_GETGLOBALFIELD n p.
    clight_of (GETGLOBALFIELD n p) computes to f_instr_GETGLOBALFIELD.
    pre_of (GETGLOBALFIELD n p) computes to getglobalfield_step_pre n p.
-   P_error_of (GETGLOBALFIELD n p) requires bridging: the old proof uses an
-   explicit disjunction while P_error_of uses error_message_of.
+   error_message_of (GETGLOBALFIELD n p) requires bridging: the old proof uses an
+   explicit disjunction while error_message_of uses error_message_of.
    P_halt_of / P_ccall_of are vacuously False (not STOP / not C_CALL).
    We case-split on nth_error and field_or_heap:
      - Step case: delegate to verify_GETGLOBALFIELD_correct.
-     - Error cases: prove P_error_of by unfolding error_message_of. *)
+     - Error cases: prove error_message_of by unfolding error_message_of. *)
 Definition correct_GETGLOBALFIELD : forall n p,
     handler_correct (handle_instr (GETGLOBALFIELD n p)) (clight_of (GETGLOBALFIELD n p))
-      (pre_of (GETGLOBALFIELD n p))
-      (P_error_of (GETGLOBALFIELD n p)) (P_halt_of (GETGLOBALFIELD n p)) (P_ccall_of (GETGLOBALFIELD n p)).
+      (error_message_of (GETGLOBALFIELD n p))
+      (pre_of (GETGLOBALFIELD n p)) (P_halt_of (GETGLOBALFIELD n p)) (P_ccall_of (GETGLOBALFIELD n p)).
 Proof.
 Admitted.

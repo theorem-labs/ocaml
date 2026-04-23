@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_ISINT :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of ISINT)
-        (pre_of ISINT) (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT) ->
+        (error_message_of ISINT)
+        (pre_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT) ->
       handler_correct h2 (clight_of ISINT)
-        (pre_of ISINT) (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT) ->
+        (error_message_of ISINT)
+        (pre_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of ISINT) (pre_of ISINT)
-    (P_error_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT)
+    (clight_of ISINT) (error_message_of ISINT)
+    (pre_of ISINT) (P_halt_of ISINT) (P_ccall_of ISINT)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

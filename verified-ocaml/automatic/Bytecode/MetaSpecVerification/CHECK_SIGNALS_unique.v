@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_CHECK_SIGNALS :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of CHECK_SIGNALS)
-        (pre_of CHECK_SIGNALS) (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS) ->
+        (error_message_of CHECK_SIGNALS)
+        (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS) ->
       handler_correct h2 (clight_of CHECK_SIGNALS)
-        (pre_of CHECK_SIGNALS) (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS) ->
+        (error_message_of CHECK_SIGNALS)
+        (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of CHECK_SIGNALS) (pre_of CHECK_SIGNALS)
-    (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS)
+    (clight_of CHECK_SIGNALS) (error_message_of CHECK_SIGNALS)
+    (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

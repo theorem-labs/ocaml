@@ -93,14 +93,14 @@ Definition geint_range_pre (m : mem) (s : state) (ard : abs_rel_data) : Prop :=
   end.
 
 Theorem verify_GEINT_correct :
-    handler_correct handle_GEINT f_instr_GEINT
+    handler_correct_v1 handle_GEINT f_instr_GEINT
       (fun _ => geint_range_pre)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   intros e le m s. unfold handle_GEINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
@@ -235,15 +235,15 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
 
-Theorem verify_GEINT_handler_correct :
-    handler_correct handle_GEINT f_instr_GEINT
+Theorem verify_GEINT_handler_correct_v1 :
+    handler_correct_v1 handle_GEINT f_instr_GEINT
       signed_int_op_safe
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with (sp := fun _ => geint_range_pre).
+  apply handler_correct_v1_weaken with (sp := fun _ => geint_range_pre).
   - exact verify_GEINT_correct.
   - intros e le m s ard _ Hsio.
     unfold signed_int_op_safe in Hsio.
@@ -259,7 +259,7 @@ Import Bytecode.AST.
 
 Theorem correct_GEINT :
     handler_correct (handle_instr GEINT) (clight_of GEINT)
-      (pre_of GEINT)
-      (P_error_of GEINT) (P_halt_of GEINT) (P_ccall_of GEINT).
+      (error_message_of GEINT)
+      (pre_of GEINT) (P_halt_of GEINT) (P_ccall_of GEINT).
 Proof.
 Admitted.

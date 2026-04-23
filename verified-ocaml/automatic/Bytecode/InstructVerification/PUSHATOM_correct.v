@@ -179,7 +179,7 @@ Qed.
 
 Theorem verify_PUSHATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
+    handler_correct_v1 (handle_PUSHATOM t) f_instr_PUSHATOM
       (fun _ m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -195,7 +195,7 @@ Theorem verify_PUSHATOM_correct : forall t,
       (fun _ _ _ => False).
 Proof.
   intros t Ht_range.
-  intros e le m s. unfold handler_correct, handle_PUSHATOM.
+  intros e le m s. unfold handler_correct_v1, handle_PUSHATOM.
   replace (Z.of_nat t <=? 2097151)%Z with true.
   2: { symmetry. apply Z.leb_le. exact Ht_range. }
   simpl.
@@ -647,14 +647,14 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_PUSHATOM_handler_correct : forall t,
+Theorem verify_PUSHATOM_handler_correct_v1 : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
+    handler_correct_v1 (handle_PUSHATOM t) f_instr_PUSHATOM
       (pre_and (sp_at_least 16) (code_at (Int.repr (Z.of_nat t))))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros t Ht.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_PUSHATOM_correct t Ht).
   - intros e le m s ard _ [Hsp Hca]. exact (conj Hsp Hca).
 Qed.
@@ -663,17 +663,17 @@ Qed.
    handle_instr (PUSHATOM t) = handle_PUSHATOM t by computation via Dispatch.
    clight_of (PUSHATOM t) = f_instr_PUSHATOM by computation.
    pre_of (PUSHATOM t) = sp_at_least 16 /\p code_at (Int.repr (Z.of_nat t)).
-   P_error_of (PUSHATOM _) is vacuously False (error_message_of returns None).
+   error_message_of (PUSHATOM _) is vacuously False (error_message_of returns None).
    P_halt_of (PUSHATOM _) and P_ccall_of (PUSHATOM _) are False (not STOP/C_CALL).
    Since handle_PUSHATOM always returns Step, those predicates are never needed.
-   The Step case delegates to verify_PUSHATOM_handler_correct, which requires
+   The Step case delegates to verify_PUSHATOM_handler_correct_v1, which requires
    Z.of_nat t <= 2097151 — the same guard enforced by instr_wfb. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Definition correct_PUSHATOM : forall t,
   handler_correct (handle_instr (PUSHATOM t)) (clight_of (PUSHATOM t))
-    (pre_of (PUSHATOM t))
-    (P_error_of (PUSHATOM t)) (P_halt_of (PUSHATOM t)) (P_ccall_of (PUSHATOM t)).
+    (error_message_of (PUSHATOM t))
+    (pre_of (PUSHATOM t)) (P_halt_of (PUSHATOM t)) (P_ccall_of (PUSHATOM t)).
 Proof.
 Admitted.

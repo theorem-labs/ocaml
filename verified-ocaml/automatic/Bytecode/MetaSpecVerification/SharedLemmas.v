@@ -40,6 +40,11 @@ Axiom exec_stmt_deterministic :
 (*                                                                      *)
 (* Parameterised over S, W, R, pc_of with R_total and R_functional     *)
 (* as Section hypotheses (not axioms).                                 *)
+(*                                                                      *)
+(* Uses the new handler_correct_gen with err : S -> option string.     *)
+(* The err case split makes cross-constructor exclusion provable:      *)
+(*   Some msg => both handlers return Error msg (trivial)              *)
+(*   None     => Error is excluded (False in handler_correct_gen)       *)
 (* ================================================================== *)
 
 Section GenericUniqueness.

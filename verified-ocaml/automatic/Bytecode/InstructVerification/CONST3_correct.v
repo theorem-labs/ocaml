@@ -22,9 +22,9 @@ Local Lemma sem_shl_long_3_1 : forall m, sem_binary_operation (genv_cenv clight_
 Local Lemma sem_add_long_int_6_1 : forall m, sem_binary_operation (genv_cenv clight_ge) Oadd (Vlong (Int64.repr 6)) tlong (Vint (Int.repr 1)) tint m = Some (Vlong (Int64.repr 7)). Proof. intros. reflexivity. Qed.
 Local Lemma val_int_3_load_result : Val.load_result Mint64 (Vlong (Int64.repr 7)) = Vlong (Int64.repr 7). Proof. reflexivity. Qed.
 Theorem verify_CONST3_correct :
-    handler_correct (handle_CONSTINT 3) f_instr_CONST3 (fun _ _ _ _ => True) (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+    handler_correct_v1 (handle_CONSTINT 3) f_instr_CONST3 (fun _ _ _ _ => True) (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_CONSTINT. simpl. intros ard Hpre _. unfold abs_rel_with_ard in Hpre. set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
+  intros e le m s. unfold handler_correct_v1, handle_CONSTINT. simpl. intros ard Hpre _. unfold abs_rel_with_ard in Hpre. set (sb := ar_sptr_block ard) in *. set (so := ar_sptr_ofs ard) in *. set (hm := ar_heap_map ard) in *.
   set (cb := ar_code_base_block ard) in *.
   set (co := ar_code_base_ofs ard) in *.
   destruct Hpre as (Hle_s & [pc_ptr [Hpc_load Hpc_rel]] & [accu_v [Haccu_load Haccu_repr]] & [sp_ptr [sp_b [sp_ofs [Hsp_load [Hsp_eq [Hstack_repr [Hsp_ne_sb [Hsp_ne_gb [Hcb_ne_sp [Hsp_ge8 [Hsp_rep [Hsp_writable Hsp_align]]]]]]]]]]]] & [env_v [Henv_load Henv_repr]] & Hextra_load & [gd_ptr [Hgd_load [Hgd_eq [Hglobal_repr Hgb_ne_sb]]]] & [ts_ptr [Hts_load Htrap_rel]] & Hsb_writable). subst sp_ptr.

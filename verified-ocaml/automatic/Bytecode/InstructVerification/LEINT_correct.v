@@ -85,14 +85,14 @@ Definition le_int_range_pre (m : mem) (s : state) (ard : abs_rel_data) : Prop :=
   end.
 
 Theorem verify_LEINT_correct :
-    handler_correct handle_LEINT f_instr_LEINT
+    handler_correct_v1 handle_LEINT f_instr_LEINT
       (fun _ => le_int_range_pre)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   intros e le m s. unfold handle_LEINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
     try (destruct (Machine.stack s); exact I);
@@ -218,15 +218,15 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
 
-Theorem verify_LEINT_handler_correct :
-    handler_correct handle_LEINT f_instr_LEINT
+Theorem verify_LEINT_handler_correct_v1 :
+    handler_correct_v1 handle_LEINT f_instr_LEINT
       signed_int_op_safe
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with (sp := fun _ => le_int_range_pre).
+  apply handler_correct_v1_weaken with (sp := fun _ => le_int_range_pre).
   - exact verify_LEINT_correct.
   - intros e le m s ard _ Hsio.
     unfold signed_int_op_safe in Hsio.
@@ -242,7 +242,7 @@ Import Bytecode.AST.
 
 Theorem correct_LEINT :
     handler_correct (handle_instr LEINT) (clight_of LEINT)
-      (pre_of LEINT)
-      (P_error_of LEINT) (P_halt_of LEINT) (P_ccall_of LEINT).
+      (error_message_of LEINT)
+      (pre_of LEINT) (P_halt_of LEINT) (P_ccall_of LEINT).
 Proof.
 Admitted.

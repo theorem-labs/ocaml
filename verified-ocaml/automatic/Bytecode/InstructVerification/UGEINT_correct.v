@@ -207,7 +207,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_UGEINT_correct :
-    handler_correct handle_UGEINT f_instr_UGEINT
+    handler_correct_v1 handle_UGEINT f_instr_UGEINT
       (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
@@ -222,7 +222,7 @@ Theorem verify_UGEINT_correct :
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_UGEINT.
+  intros e le m s. unfold handler_correct_v1, handle_UGEINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq; try (exact I).
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try (exact I).
   destruct v_hd as [b| | |] eqn:Hvhd; try (exact I).
@@ -404,15 +404,15 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
 
-Theorem verify_UGEINT_handler_correct :
-    handler_correct handle_UGEINT f_instr_UGEINT
+Theorem verify_UGEINT_handler_correct_v1 :
+    handler_correct_v1 handle_UGEINT f_instr_UGEINT
       unsigned_ints_safe
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
@@ -437,7 +437,7 @@ Local Notation UGEINT := Bytecode.AST.UGEINT.
 
 Theorem correct_UGEINT :
     handler_correct (handle_instr UGEINT) (clight_of UGEINT)
-      (pre_of UGEINT)
-      (P_error_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT).
+      (error_message_of UGEINT)
+      (pre_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT).
 Proof.
 Admitted.

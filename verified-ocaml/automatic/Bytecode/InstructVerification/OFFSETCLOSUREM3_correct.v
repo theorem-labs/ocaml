@@ -87,7 +87,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_OFFSETCLOSUREM3_compl_comp :
-    handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM3
+    handler_correct_v1 (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM3
       (closure_offset_pre (-2) (-24))
       (fun msg s =>
         (msg = "OFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -98,7 +98,7 @@ Theorem verify_OFFSETCLOSUREM3_compl_comp :
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_OFFSETCLOSURE.
+  unfold handler_correct_v1, handle_OFFSETCLOSURE.
 
   (* Case split on s.(env) — value has 4 constructors *)
   destruct (Machine.env s) eqn:Henv_eq.

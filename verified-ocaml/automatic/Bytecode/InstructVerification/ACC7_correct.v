@@ -27,12 +27,12 @@ Proof. intros. unfold sem_binary_operation, sem_add.
   unfold sem_add_ptr_int. reflexivity. Qed.
 
 Theorem verify_ACC7 :
-    handler_correct (handle_ACC 7) f_instr_ACC7
+    handler_correct_v1 (handle_ACC 7) f_instr_ACC7
       (fun _ _ _ _ => True)
       (fun _ s => nth_error s.(Machine.stack) 7 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_ACC. simpl nth_error.
+  intros e le m s. unfold handler_correct_v1, handle_ACC. simpl nth_error.
   destruct (Machine.stack s) as [|v0 stk0] eqn:Hstk.
   { reflexivity. }
   destruct stk0 as [|v1 stk1].

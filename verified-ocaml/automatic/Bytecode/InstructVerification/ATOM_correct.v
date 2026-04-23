@@ -17,7 +17,7 @@
    matching vr_block_atom in val_repr.
 
    Two stores: pc field at offset +0, accu field at offset +8.
-   Reads tag operand from code block (precondition via handler_correct).
+   Reads tag operand from code block (precondition via handler_correct_v1).
 
    NO AXIOMS.  NO ADMITTED. *)
 
@@ -196,7 +196,7 @@ Qed.
 
 Theorem verify_ATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_ATOM t) f_instr_ATOM
+    handler_correct_v1 (handle_ATOM t) f_instr_ATOM
       (fun _ m s ard =>
          Mem.load Mint32 m (ar_code_base_block ard)
            (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
@@ -490,7 +490,7 @@ Import Bytecode.AST.
    Z.of_nat t <= 2097151 — the guard enforced by instr_wfb. *)
 Definition correct_ATOM : forall t,
   handler_correct (handle_instr (ATOM t)) (clight_of (ATOM t))
-    (pre_of (ATOM t))
-    (P_error_of (ATOM t)) (P_halt_of (ATOM t)) (P_ccall_of (ATOM t)).
+    (error_message_of (ATOM t))
+    (pre_of (ATOM t)) (P_halt_of (ATOM t)) (P_ccall_of (ATOM t)).
 Proof.
 Admitted.

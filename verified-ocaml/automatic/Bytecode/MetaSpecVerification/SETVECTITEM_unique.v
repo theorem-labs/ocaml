@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_SETVECTITEM :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of SETVECTITEM)
-        (pre_of SETVECTITEM) (P_error_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM) ->
+        (error_message_of SETVECTITEM)
+        (pre_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM) ->
       handler_correct h2 (clight_of SETVECTITEM)
-        (pre_of SETVECTITEM) (P_error_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM) ->
+        (error_message_of SETVECTITEM)
+        (pre_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of SETVECTITEM) (pre_of SETVECTITEM)
-    (P_error_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM)
+    (clight_of SETVECTITEM) (error_message_of SETVECTITEM)
+    (pre_of SETVECTITEM) (P_halt_of SETVECTITEM) (P_ccall_of SETVECTITEM)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

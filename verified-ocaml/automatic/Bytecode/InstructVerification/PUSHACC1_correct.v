@@ -25,7 +25,7 @@ Local Ltac eval_cbn :=
         ptrofs_of_int field_offset PTree.get PTree.set].
 
 Theorem verify_PUSHACC1_correct :
-    handler_correct (handle_PUSHACC 1) f_instr_PUSHACC1
+    handler_correct_v1 (handle_PUSHACC 1) f_instr_PUSHACC1
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -35,7 +35,7 @@ Theorem verify_PUSHACC1_correct :
       (fun _ s => nth_error (s.(Machine.accu) :: s.(Machine.stack)) 1 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSHACC. simpl nth_error.
+  intros e le m s. unfold handler_correct_v1, handle_PUSHACC. simpl nth_error.
   (* The handler computes nth_error (accu :: stack) 1 = nth_error stack 0.
      We need stack to be non-empty for Step. *)
   destruct (Machine.stack s) as [|v0 rest] eqn:Hstk.

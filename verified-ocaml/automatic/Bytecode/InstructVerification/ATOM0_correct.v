@@ -94,7 +94,7 @@ Proof. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_ATOM0_correct :
-    handler_correct handle_ATOM0 f_instr_ATOM0
+    handler_correct_v1 handle_ATOM0 f_instr_ATOM0
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.

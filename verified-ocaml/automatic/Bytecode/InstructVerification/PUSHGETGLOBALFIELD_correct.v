@@ -341,7 +341,7 @@ Definition heap_field_loadable_pushgetglobalfield
 
 #[warnings="-not-a-closed-proof"]
 Theorem verify_PUSHGETGLOBALFIELD_correct : forall n p,
-    handler_correct (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
+    handler_correct_v1 (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
       (fun _ m s ard =>
          (* Code memory at pc contains n (first operand) *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -1194,15 +1194,15 @@ Import Bytecode.AST.
 (* handle_instr (PUSHGETGLOBALFIELD n p) computes to handle_PUSHGETGLOBALFIELD n p.
    clight_of (PUSHGETGLOBALFIELD n p) computes to f_instr_PUSHGETGLOBALFIELD.
    pre_of (PUSHGETGLOBALFIELD n p) computes to pushgetglobalfield_step_pre n p.
-   P_error_of (PUSHGETGLOBALFIELD n p) requires bridging: the old proof uses an
-   explicit disjunction while P_error_of uses error_message_of.
+   error_message_of (PUSHGETGLOBALFIELD n p) requires bridging: the old proof uses an
+   explicit disjunction while error_message_of uses error_message_of.
    P_halt_of / P_ccall_of are vacuously False (not STOP / not C_CALL).
    We case-split on nth_error and field_or_heap:
      - Step case: delegate to verify_PUSHGETGLOBALFIELD_correct.
-     - Error cases: prove P_error_of by unfolding error_message_of. *)
+     - Error cases: prove error_message_of by unfolding error_message_of. *)
 Definition correct_PUSHGETGLOBALFIELD : forall n p,
     handler_correct (handle_instr (PUSHGETGLOBALFIELD n p)) (clight_of (PUSHGETGLOBALFIELD n p))
-      (pre_of (PUSHGETGLOBALFIELD n p))
-      (P_error_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p)).
+      (error_message_of (PUSHGETGLOBALFIELD n p))
+      (pre_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p)).
 Proof.
 Admitted.

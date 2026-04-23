@@ -93,7 +93,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSHOFFSETCLOSUREM3_correct :
-    handler_correct (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM3
+    handler_correct_v1 (handle_PUSHOFFSETCLOSURE (-2)) f_instr_PUSHOFFSETCLOSUREM3
       (sp_at_least 16 /\p closure_offset_pre (-2) (-24))
       (fun msg s =>
         (msg = "PUSHOFFSETCLOSURE: non-zero offset on non-closure env"%string /\
@@ -104,7 +104,7 @@ Theorem verify_PUSHOFFSETCLOSUREM3_correct :
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_PUSHOFFSETCLOSURE.
+  unfold handler_correct_v1, handle_PUSHOFFSETCLOSURE.
 
   (* Case split on s.(env) *)
   destruct (Machine.env s) eqn:Henv_eq.

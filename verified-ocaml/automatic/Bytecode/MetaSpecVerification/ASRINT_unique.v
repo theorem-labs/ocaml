@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_ASRINT :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of ASRINT)
-        (pre_of ASRINT) (P_error_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT) ->
+        (error_message_of ASRINT)
+        (pre_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT) ->
       handler_correct h2 (clight_of ASRINT)
-        (pre_of ASRINT) (P_error_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT) ->
+        (error_message_of ASRINT)
+        (pre_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of ASRINT) (pre_of ASRINT)
-    (P_error_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT)
+    (clight_of ASRINT) (error_message_of ASRINT)
+    (pre_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

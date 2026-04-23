@@ -30,7 +30,7 @@
    - heap_alloc_extends_heap_map: After allocation, the heap map can be
      extended to map the new address to the returned block.
 
-   PRECONDITIONS (via handler_correct):
+   PRECONDITIONS (via handler_correct_v1):
    - The code buffer contains Int.repr (Z.of_nat t) at the current PC.
    - t fits in unsigned char range (0 <= Z.of_nat t <= 255). *)
 
@@ -175,7 +175,7 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_MAKEBLOCK1_correct : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
+    handler_correct_v1 (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -1141,12 +1141,12 @@ Proof.
 Qed.
 
 Definition MAKEBLOCK1_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
-    handler_correct (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
+    handler_correct_v1 (handle_MAKEBLOCK1 t) f_instr_MAKEBLOCK1
       (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1
        /\p code_at (Int.repr (Z.of_nat t)))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
   Proof.
-    intros t Hrange. eapply handler_correct_weaken.
+    intros t Hrange. eapply handler_correct_v1_weaken.
     - exact (verify_MAKEBLOCK1_correct t Hrange).
     - intros e le m s ard _ [[Hhap Hsu] Hcode].
       unfold heap_alloc_pre in Hhap.
@@ -1165,11 +1165,11 @@ Definition MAKEBLOCK1_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
    handle_instr (MAKEBLOCK1 n) computes to handle_MAKEBLOCK1 n.
    The handler checks instr_wfb (tag in 0..255):
    - true  -> returns Step; delegate to MAKEBLOCK1_correct_for_spec
-   - false -> returns Error; P_error_of is satisfied by error_message_of *)
+   - false -> returns Error; error_message_of is satisfied by error_message_of *)
 Definition correct_MAKEBLOCK1 : forall n,
     handler_correct (handle_instr (Bytecode.AST.MAKEBLOCK1 n)) (clight_of (Bytecode.AST.MAKEBLOCK1 n))
-      (pre_of (Bytecode.AST.MAKEBLOCK1 n))
-      (P_error_of (Bytecode.AST.MAKEBLOCK1 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK1 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK1 n)).
+      (error_message_of (Bytecode.AST.MAKEBLOCK1 n))
+      (pre_of (Bytecode.AST.MAKEBLOCK1 n)) (P_halt_of (Bytecode.AST.MAKEBLOCK1 n)) (P_ccall_of (Bytecode.AST.MAKEBLOCK1 n)).
 Proof.
 Admitted.
 

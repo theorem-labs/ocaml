@@ -225,7 +225,7 @@ Qed.
 
 #[warnings="-not-a-closed-proof"]
 Theorem verify_GRAB_correct : forall required,
-    handler_correct (handle_GRAB required) f_instr_GRAB
+    handler_correct_v1 (handle_GRAB required) f_instr_GRAB
       (fun _ m s ard =>
          (* The code buffer contains Int.repr required at the current PC *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -250,7 +250,7 @@ Theorem verify_GRAB_correct : forall required,
 Proof.
   intro required.
   intros e le m s.
-  unfold handler_correct, handle_GRAB.
+  unfold handler_correct_v1, handle_GRAB.
 
   (* Simplify Nat.leb in the match *)
   destruct (Nat.leb required (extra_args s)) eqn:Hleb.
@@ -786,7 +786,7 @@ Local Notation GRAB := Bytecode.AST.GRAB.
 
 Definition correct_GRAB : forall n,
   handler_correct (handle_instr (GRAB n)) (clight_of (GRAB n))
-    (pre_of (GRAB n))
-    (P_error_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)).
+    (error_message_of (GRAB n))
+    (pre_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)).
 Proof.
 Admitted.

@@ -11,14 +11,16 @@ Lemma unique_ATOM :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (ATOM n))
-        (pre_of (ATOM n)) (P_error_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)) ->
+        (error_message_of (ATOM n))
+        (pre_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)) ->
       handler_correct h2 (clight_of (ATOM n))
-        (pre_of (ATOM n)) (P_error_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)) ->
+        (error_message_of (ATOM n))
+        (pre_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros n h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (ATOM n)) (pre_of (ATOM n))
-    (P_error_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n))
+    (clight_of (ATOM n)) (error_message_of (ATOM n))
+    (pre_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

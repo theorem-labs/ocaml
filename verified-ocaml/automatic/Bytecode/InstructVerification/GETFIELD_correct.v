@@ -183,7 +183,7 @@ Qed.
 
 Theorem verify_GETFIELD_correct : forall n,
     Int.min_signed <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
+    handler_correct_v1 (handle_GETFIELD n) f_instr_GETFIELD
       (fun e m s ard =>
          heap_field_loadable n e m s ard /\
          (* The code buffer contains Int.repr n at the current PC position *)
@@ -198,7 +198,7 @@ Theorem verify_GETFIELD_correct : forall n,
 Proof.
   intro n. intro Hn_range_top.
   intros e le m s.
-  unfold handler_correct, handle_GETFIELD.
+  unfold handler_correct_v1, handle_GETFIELD.
   (* Discharge the range guard using the top-level hypothesis *)
   assert (Hwfb : ((Int.min_signed <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z = true).
   { apply andb_true_intro. split; apply Z.leb_le; lia. }
@@ -547,13 +547,13 @@ Proof.
 Qed.
 
 Definition GETFIELD_correct_for_spec : forall n, Int.min_signed <= Z.of_nat n <= Int.max_signed ->
-    handler_correct (handle_GETFIELD n) f_instr_GETFIELD
+    handler_correct_v1 (handle_GETFIELD n) f_instr_GETFIELD
       (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
       (fun _ s => field_or_heap s s.(Machine.accu) n = None)
       (fun _ => False) (fun _ _ _ => False).
   Proof.
     intros n Hrange.
-    eapply handler_correct_weaken.
+    eapply handler_correct_v1_weaken.
     - exact (verify_GETFIELD_correct n Hrange).
     - intros e le m s ard _ [Hhfl Hcode]. exact (conj Hhfl (conj Hcode Hrange)).
   Qed.
@@ -565,7 +565,7 @@ Import Bytecode.AST.
    handle_instr (GETFIELD n) = handle_GETFIELD n by computation.
    clight_of (GETFIELD n) = f_instr_GETFIELD by computation.
    pre_of (GETFIELD n) = heap_field_loadable n /\p code_at ... by computation.
-   P_error_of (GETFIELD n) = error_message_of (GETFIELD n) s = Some msg.
+   error_message_of (GETFIELD n) = error_message_of (GETFIELD n) s = Some msg.
    P_halt_of (GETFIELD n) and P_ccall_of (GETFIELD n) are vacuously False
    (GETFIELD is neither STOP nor C_CALL).
    The Step case delegates to GETFIELD_correct_for_spec, which requires
@@ -573,7 +573,7 @@ Import Bytecode.AST.
    The Error case follows from error_message_of computation. *)
 Definition correct_GETFIELD : forall n,
   handler_correct (handle_instr (GETFIELD n)) (clight_of (GETFIELD n))
-    (pre_of (GETFIELD n))
-    (P_error_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)).
+    (error_message_of (GETFIELD n))
+    (pre_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)).
 Proof.
 Admitted.

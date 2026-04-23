@@ -84,13 +84,13 @@ Local Definition heap_field_loadable_1
 (* ================================================================== *)
 
 Theorem verify_GETFIELD1_with_pre :
-    handler_correct (handle_GETFIELD 1) f_instr_GETFIELD1
+    handler_correct_v1 (handle_GETFIELD 1) f_instr_GETFIELD1
       (heap_field_loadable 1)
       (fun _ s => field_or_heap s s.(Machine.accu) 1 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETFIELD.
+  unfold handler_correct_v1, handle_GETFIELD.
   destruct (field_or_heap s s.(Machine.accu) 1) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)

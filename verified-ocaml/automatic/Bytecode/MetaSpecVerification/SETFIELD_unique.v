@@ -11,14 +11,16 @@ Lemma unique_SETFIELD :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (SETFIELD n))
-        (pre_of (SETFIELD n)) (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)) ->
+        (error_message_of (SETFIELD n))
+        (pre_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)) ->
       handler_correct h2 (clight_of (SETFIELD n))
-        (pre_of (SETFIELD n)) (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)) ->
+        (error_message_of (SETFIELD n))
+        (pre_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros n h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (SETFIELD n)) (pre_of (SETFIELD n))
-    (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n))
+    (clight_of (SETFIELD n)) (error_message_of (SETFIELD n))
+    (pre_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

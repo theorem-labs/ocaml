@@ -15,7 +15,7 @@
 
    Two stores: pc field at offset +0, sp field at offset +16.
 
-   Uses handler_correct because the C code reads n from the
+   Uses handler_correct_v1 because the C code reads n from the
    code buffer and because the code block must be separate from the
    struct block (for store separation).  NO AXIOMS -- everything is
    either proved or expressed as a precondition. *)
@@ -219,7 +219,7 @@ Qed.
 
 Theorem verify_POP_correct : forall n,
     Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_POP n) f_instr_POP
+    handler_correct_v1 (handle_POP n) f_instr_POP
       (fun _ m s ard =>
          (* The code buffer contains Int.repr n at the current PC position *)
          Mem.load Mint32 m (ar_code_base_block ard)
@@ -241,7 +241,7 @@ Theorem verify_POP_correct : forall n,
 Proof.
   intro n. intro Hn_range_hyp.
   intros e le m s.
-  unfold handler_correct, handle_POP.
+  unfold handler_correct_v1, handle_POP.
   replace (Z.of_nat n <? Int.half_modulus)%Z with true.
   2: { symmetry. apply Z.ltb_lt. exact Hn_range_hyp. }
   simpl.
@@ -578,14 +578,14 @@ Proof.
 Qed.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_POP_handler_correct : forall n,
+Theorem verify_POP_handler_correct_v1 : forall n,
     Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_POP n) f_instr_POP
+    handler_correct_v1 (handle_POP n) f_instr_POP
       (pre_and (pre_and (code_at (Int.repr (Z.of_nat n))) code_ne_struct) (stack_length_ge n))
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros n Hn.
-  eapply handler_correct_weaken.
+  eapply handler_correct_v1_weaken.
   - exact (verify_POP_correct n Hn).
   - intros e le m s ard Hrel [[Hca Hne] Hslg].
     unfold stack_length_ge in Hslg.
@@ -605,18 +605,18 @@ Qed.
 (* Wrapper with the exact type expected by InstructVerificationProof.v.
    handle_instr (POP n) = handle_POP n and clight_of (POP n) = f_instr_POP
    by computation.  pre_of (POP n) = (code_at ... /\p code_ne_struct) /\p
-   stack_length_ge n, matching verify_POP_handler_correct's precondition.
+   stack_length_ge n, matching verify_POP_handler_correct_v1's precondition.
 
-   The Step case delegates to verify_POP_handler_correct after showing
+   The Step case delegates to verify_POP_handler_correct_v1 after showing
    Z.of_nat n < Int.half_modulus via Z.ltb_spec.  The Error case
    (n >= half_modulus) is discharged by reflexivity since handle_POP
-   returns Error and P_error_of is trivially satisfied. *)
+   returns Error and error_message_of is trivially satisfied. *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Definition correct_POP : forall n,
   handler_correct (handle_instr (POP n)) (clight_of (POP n))
-    (pre_of (POP n))
-    (P_error_of (POP n)) (P_halt_of (POP n)) (P_ccall_of (POP n)).
+    (error_message_of (POP n))
+    (pre_of (POP n)) (P_halt_of (POP n)) (P_ccall_of (POP n)).
 Proof.
 Admitted.

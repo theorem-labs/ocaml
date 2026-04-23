@@ -22,7 +22,7 @@
 
    Three stores: pc field at offset +0, stack at sp[n], accu field at offset +8.
 
-   Uses handler_correct with preconditions for:
+   Uses handler_correct_v1 with preconditions for:
    - Code buffer contains n at current PC
    - Code block is separate from struct block
    - Stack store at sp[n] succeeds in m1 (after pc store)
@@ -275,7 +275,7 @@ Qed.
 
 Theorem correct_ASSIGN : forall n,
     handler_correct (handle_instr (ASSIGN n)) (clight_of (ASSIGN n))
-      (pre_of (ASSIGN n))
-      (P_error_of (ASSIGN n)) (P_halt_of (ASSIGN n)) (P_ccall_of (ASSIGN n)).
+      (error_message_of (ASSIGN n))
+      (pre_of (ASSIGN n)) (P_halt_of (ASSIGN n)) (P_ccall_of (ASSIGN n)).
 Proof.
 Admitted.

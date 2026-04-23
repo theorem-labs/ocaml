@@ -30,12 +30,12 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_CHECK_SIGNALS_correct :
-    handler_correct handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
+    handler_correct_v1 handle_CHECK_SIGNALS f_instr_CHECK_SIGNALS
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_CHECK_SIGNALS.
+  unfold handler_correct_v1, handle_CHECK_SIGNALS.
   intros ard Hpre _.
   exists le. exists m.
   exists (Out_return (Some (Vint (Int.repr 0), tint))).
@@ -51,7 +51,7 @@ Qed.
    pre_of CHECK_SIGNALS = no_pre = fun _ _ _ _ => True. *)
 Definition correct_CHECK_SIGNALS :
   handler_correct (handle_instr CHECK_SIGNALS) (clight_of CHECK_SIGNALS)
-    (pre_of CHECK_SIGNALS)
-    (P_error_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS).
+    (error_message_of CHECK_SIGNALS)
+    (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS).
 Proof.
 Admitted.

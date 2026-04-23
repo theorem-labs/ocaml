@@ -11,14 +11,16 @@ Lemma unique_APPTERM :
   forall nargs slotsize,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (APPTERM nargs slotsize))
-        (pre_of (APPTERM nargs slotsize)) (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)) ->
+        (error_message_of (APPTERM nargs slotsize))
+        (pre_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)) ->
       handler_correct h2 (clight_of (APPTERM nargs slotsize))
-        (pre_of (APPTERM nargs slotsize)) (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)) ->
+        (error_message_of (APPTERM nargs slotsize))
+        (pre_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros nargs slotsize h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (APPTERM nargs slotsize)) (pre_of (APPTERM nargs slotsize))
-    (P_error_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize))
+    (clight_of (APPTERM nargs slotsize)) (error_message_of (APPTERM nargs slotsize))
+    (pre_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

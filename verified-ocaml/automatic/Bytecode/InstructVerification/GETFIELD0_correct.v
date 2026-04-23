@@ -31,7 +31,7 @@
    APPROACH:
    - Error case: fully proved (trivial — handler returns Error iff
      field_or_heap returns None, which is exactly the error predicate).
-   - Step case: proved using handler_correct with a heap
+   - Step case: proved using handler_correct_v1 with a heap
      precondition (heap_field_loadable) that asserts:
        When field_or_heap s (accu s) 0 = Some v, there exists a C value
        cv such that:
@@ -40,7 +40,7 @@
        (c) val_repr hm cb co v cv
      This is exactly the missing link between field_or_heap and Mem.load.
 
-   TO UPGRADE to plain handler_correct (no precondition), add to abs_rel:
+   TO UPGRADE to plain handler_correct_v1 (no precondition), add to abs_rel:
      forall addr b ofs tag fields,
        hm addr = Some (b, ofs) ->
        heap_lookup (hp s) addr = Some (tag, fields) ->
@@ -50,7 +50,7 @@
    plus the constraint that val_repr values that are Vptr always have
    their first argument derivable from hm.  With this invariant in
    abs_rel, the heap_field_loadable precondition would be derivable
-   and handler_correct would imply handler_correct.
+   and handler_correct_v1 would imply handler_correct_v1.
 
    No Axioms, no Admitted, no vm_compute on Ptrofs. *)
 
@@ -124,13 +124,13 @@ Local Definition heap_field_loadable_0
 (* ================================================================== *)
 
 Theorem verify_GETFIELD0_with_pre :
-    handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
+    handler_correct_v1 (handle_GETFIELD 0) f_instr_GETFIELD0
       (heap_field_loadable 0)
       (fun _ s => field_or_heap s s.(Machine.accu) 0 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_GETFIELD.
+  unfold handler_correct_v1, handle_GETFIELD.
   destruct (field_or_heap s s.(Machine.accu) 0) as [v|] eqn:Hfoh.
 
   (* ================================================================ *)

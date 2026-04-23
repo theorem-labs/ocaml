@@ -51,7 +51,7 @@ Local Notation ge := clight_ge.
 (* ================================================================== *)
 
 Theorem verify_SETGLOBAL_correct : forall n,
-    handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
+    handler_correct_v1 (handle_SETGLOBAL n) f_instr_SETGLOBAL
       (setglobal_step_pre n)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
@@ -67,14 +67,14 @@ Import Bytecode.AST.
 (* handle_instr (SETGLOBAL n) computes to handle_SETGLOBAL n.
    clight_of (SETGLOBAL n) computes to f_instr_SETGLOBAL.
    pre_of (SETGLOBAL n) computes to setglobal_step_pre n.
-   P_error_of (SETGLOBAL n) is vacuously False (error_message_of returns None).
+   error_message_of (SETGLOBAL n) is vacuously False (error_message_of returns None).
    P_halt_of (SETGLOBAL n) is False (not STOP).
    P_ccall_of (SETGLOBAL n) is False (not C_CALL).
    handle_SETGLOBAL always returns Step, so we delegate directly to
    verify_SETGLOBAL_correct. *)
 Definition correct_SETGLOBAL : forall n,
   handler_correct (handle_instr (SETGLOBAL n)) (clight_of (SETGLOBAL n))
-    (pre_of (SETGLOBAL n))
-    (P_error_of (SETGLOBAL n)) (P_halt_of (SETGLOBAL n)) (P_ccall_of (SETGLOBAL n)).
+    (error_message_of (SETGLOBAL n))
+    (pre_of (SETGLOBAL n)) (P_halt_of (SETGLOBAL n)) (P_ccall_of (SETGLOBAL n)).
 Proof.
 Admitted.

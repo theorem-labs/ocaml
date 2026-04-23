@@ -11,14 +11,16 @@ Lemma unique_ENVACC :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (ENVACC n))
-        (pre_of (ENVACC n)) (P_error_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)) ->
+        (error_message_of (ENVACC n))
+        (pre_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)) ->
       handler_correct h2 (clight_of (ENVACC n))
-        (pre_of (ENVACC n)) (P_error_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)) ->
+        (error_message_of (ENVACC n))
+        (pre_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros n h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (ENVACC n)) (pre_of (ENVACC n))
-    (P_error_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n))
+    (clight_of (ENVACC n)) (error_message_of (ENVACC n))
+    (pre_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

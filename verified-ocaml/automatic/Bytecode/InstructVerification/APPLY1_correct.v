@@ -246,7 +246,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_APPLY1_correct :
-    handler_correct (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
+    handler_correct_v1 (fun pc' s => handle_APPLY1 pc' s) f_instr_APPLY1
       apply1_step_pre
       (fun msg s =>
          (msg = "APPLY1: accu is not a closure"%string /\
@@ -256,7 +256,7 @@ Theorem verify_APPLY1_correct :
       (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct. simpl.
+  unfold handler_correct_v1. simpl.
   unfold handle_APPLY1.
   destruct (Machine.stack s) as [|arg1 rest] eqn:Hstk.
   { (* stack = [] -- Error "stack underflow" *)
@@ -1225,12 +1225,12 @@ Qed.
    handle_instr APPLY1 = handle_APPLY1 and clight_of APPLY1 = f_instr_APPLY1
    by computation.  pre_of APPLY1 = apply1_step_pre is convertible.
    Error cases are bridged by case-splitting on the handler result and
-   unfolding P_error_of / P_halt_of / P_ccall_of. *)
+   unfolding error_message_of / P_halt_of / P_ccall_of. *)
 Definition correct_APPLY1 :
     handler_correct (Dispatch.handle_instr Bytecode.AST.APPLY1)
       (clight_of Bytecode.AST.APPLY1)
-      (pre_of Bytecode.AST.APPLY1)
-      (P_error_of Bytecode.AST.APPLY1) (P_halt_of Bytecode.AST.APPLY1)
+      (error_message_of Bytecode.AST.APPLY1)
+      (pre_of Bytecode.AST.APPLY1) (P_halt_of Bytecode.AST.APPLY1)
       (P_ccall_of Bytecode.AST.APPLY1).
 Proof.
 Admitted.

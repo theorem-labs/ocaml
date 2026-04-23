@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_RAISE_NOTRACE :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of RAISE_NOTRACE)
-        (pre_of RAISE_NOTRACE) (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE) ->
+        (error_message_of RAISE_NOTRACE)
+        (pre_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE) ->
       handler_correct h2 (clight_of RAISE_NOTRACE)
-        (pre_of RAISE_NOTRACE) (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE) ->
+        (error_message_of RAISE_NOTRACE)
+        (pre_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of RAISE_NOTRACE) (pre_of RAISE_NOTRACE)
-    (P_error_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE)
+    (clight_of RAISE_NOTRACE) (error_message_of RAISE_NOTRACE)
+    (pre_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

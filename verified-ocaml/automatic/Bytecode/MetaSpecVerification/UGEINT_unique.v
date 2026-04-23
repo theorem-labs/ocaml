@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_UGEINT :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of UGEINT)
-        (pre_of UGEINT) (P_error_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT) ->
+        (error_message_of UGEINT)
+        (pre_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT) ->
       handler_correct h2 (clight_of UGEINT)
-        (pre_of UGEINT) (P_error_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT) ->
+        (error_message_of UGEINT)
+        (pre_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of UGEINT) (pre_of UGEINT)
-    (P_error_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT)
+    (clight_of UGEINT) (error_message_of UGEINT)
+    (pre_of UGEINT) (P_halt_of UGEINT) (P_ccall_of UGEINT)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

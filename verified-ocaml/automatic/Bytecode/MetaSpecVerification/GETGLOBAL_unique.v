@@ -11,14 +11,16 @@ Lemma unique_GETGLOBAL :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of (GETGLOBAL n))
-        (pre_of (GETGLOBAL n)) (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)) ->
+        (error_message_of (GETGLOBAL n))
+        (pre_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)) ->
       handler_correct h2 (clight_of (GETGLOBAL n))
-        (pre_of (GETGLOBAL n)) (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)) ->
+        (error_message_of (GETGLOBAL n))
+        (pre_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros n h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of (GETGLOBAL n)) (pre_of (GETGLOBAL n))
-    (P_error_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n))
+    (clight_of (GETGLOBAL n)) (error_message_of (GETGLOBAL n))
+    (pre_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n))
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

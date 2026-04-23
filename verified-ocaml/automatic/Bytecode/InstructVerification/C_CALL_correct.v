@@ -1,6 +1,6 @@
 (* C_CALL_correct.v -- C_CALL handler correctness wrapper.
 
-   handle_C_CALL always returns CCall_request, so handler_correct
+   handle_C_CALL always returns CCall_request, so handler_correct_v1
    reduces to proving P_ccall_of (C_CALL nargs prim_idx), which is
    instr_wfb (C_CALL nargs prim_idx) = true /\ True — trivially true. *)
 
@@ -15,7 +15,7 @@ From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers
 
 Theorem correct_C_CALL : forall nargs prim_idx,
   handler_correct (handle_instr (C_CALL nargs prim_idx)) (clight_of (C_CALL nargs prim_idx))
-    (pre_of (C_CALL nargs prim_idx))
-    (P_error_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)).
+    (error_message_of (C_CALL nargs prim_idx))
+    (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)).
 Proof.
 Admitted.

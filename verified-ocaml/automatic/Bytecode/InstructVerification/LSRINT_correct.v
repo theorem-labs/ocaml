@@ -229,7 +229,7 @@ Qed.
 
 #[warnings="-not-a-closed-proof"]
 Theorem verify_LSRINT_correct :
-    handler_correct handle_LSRINT f_instr_LSRINT
+    handler_correct_v1 handle_LSRINT f_instr_LSRINT
       (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ => 0 <= b < 64 /\ int_vlong ard a /\ int_vlong ard b
@@ -399,15 +399,15 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
 
-Theorem verify_LSRINT_handler_correct :
-    handler_correct handle_LSRINT f_instr_LSRINT
+Theorem verify_LSRINT_handler_correct_v1 :
+    handler_correct_v1 handle_LSRINT f_instr_LSRINT
       shift_in_range
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ => 0 <= b < 64 /\ int_vlong ard a /\ int_vlong ard b
@@ -427,7 +427,7 @@ Import Bytecode.AST.
 
 Theorem correct_LSRINT :
     handler_correct (handle_instr LSRINT) (clight_of LSRINT)
-      (pre_of LSRINT)
-      (P_error_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT).
+      (error_message_of LSRINT)
+      (pre_of LSRINT) (P_halt_of LSRINT) (P_ccall_of LSRINT).
 Proof.
 Admitted.

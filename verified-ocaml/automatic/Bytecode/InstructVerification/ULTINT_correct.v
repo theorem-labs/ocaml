@@ -12,7 +12,7 @@
    Int64.ltu for non-negative operands (0 <= a, 0 <= b < 2^62).
    For negative operands, Z.lxor on infinite-precision Z does not
    model the 63-bit OCaml lxor correctly, causing disagreement.
-   We add this as a step_pre via handler_correct. *)
+   We add this as a step_pre via handler_correct_v1. *)
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
 From compcert Require Import Coqlib Integers Floats Ctypes Cop
@@ -142,7 +142,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_ULTINT_correct :
-    handler_correct handle_ULTINT f_instr_ULTINT
+    handler_correct_v1 handle_ULTINT f_instr_ULTINT
       (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
@@ -295,15 +295,15 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
 
-Theorem verify_ULTINT_handler_correct :
-    handler_correct handle_ULTINT f_instr_ULTINT
+Theorem verify_ULTINT_handler_correct_v1 :
+    handler_correct_v1 handle_ULTINT f_instr_ULTINT
       unsigned_ints_safe
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
@@ -326,10 +326,10 @@ Local Abbreviation ULTINT := Bytecode.AST.ULTINT.
    handle_instr ULTINT / clight_of ULTINT / pre_of ULTINT are convertible
    with handle_ULTINT / f_instr_ULTINT / unsigned_ints_safe.
    P_halt_of and P_ccall_of are vacuously satisfied (ULTINT never halts or
-   issues a C call).  P_error_of requires matching error_message_of. *)
+   issues a C call).  error_message_of requires matching error_message_of. *)
 Definition correct_ULTINT :
     handler_correct (handle_instr ULTINT) (clight_of ULTINT)
-      (pre_of ULTINT)
-      (P_error_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT).
+      (error_message_of ULTINT)
+      (pre_of ULTINT) (P_halt_of ULTINT) (P_ccall_of ULTINT).
 Proof.
 Admitted.

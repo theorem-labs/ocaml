@@ -264,7 +264,7 @@ Definition setbyteschar_heap_pre
 
 #[warnings="-not-a-closed-proof"]
 Theorem verify_SETBYTESCHAR_correct :
-    handler_correct handle_SETBYTESCHAR f_instr_SETBYTESCHAR
+    handler_correct_v1 handle_SETBYTESCHAR f_instr_SETBYTESCHAR
       (fun _ m s ard =>
          setbyteschar_heap_pre m s ard /\
          match s.(Machine.stack) with
@@ -292,7 +292,7 @@ Theorem verify_SETBYTESCHAR_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_SETBYTESCHAR.
+  unfold handler_correct_v1, handle_SETBYTESCHAR.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [| v_hd stk1] eqn:Hstk.
@@ -779,7 +779,7 @@ Import Bytecode.AST.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Definition correct_SETBYTESCHAR :
     handler_correct (handle_instr SETBYTESCHAR) (clight_of SETBYTESCHAR)
-      (pre_of SETBYTESCHAR)
-      (P_error_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR).
+      (error_message_of SETBYTESCHAR)
+      (pre_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR).
 Proof.
 Admitted.

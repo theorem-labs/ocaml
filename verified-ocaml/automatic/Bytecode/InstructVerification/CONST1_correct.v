@@ -49,12 +49,12 @@ Local Lemma val_int_1_load_result :
 Proof. reflexivity. Qed.
 
 Theorem verify_CONST1_correct :
-    handler_correct (handle_CONSTINT 1) f_instr_CONST1
+    handler_correct_v1 (handle_CONSTINT 1) f_instr_CONST1
       (fun _ _ _ _ => True)
       (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_CONSTINT. simpl.
+  unfold handler_correct_v1, handle_CONSTINT. simpl.
   intros ard Hpre _. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.

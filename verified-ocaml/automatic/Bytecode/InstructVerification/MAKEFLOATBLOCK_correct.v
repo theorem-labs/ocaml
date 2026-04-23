@@ -202,7 +202,7 @@ Qed.
 (*
 Theorem verify_MAKEFLOATBLOCK_correct_v1 : forall (n : nat),
     (n >= 1)%nat ->
-    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+    handler_correct_v1 (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -892,7 +892,7 @@ Abort.
 
 Theorem verify_MAKEFLOATBLOCK_correct : forall (n : nat),
     (n >= 1)%nat ->
-    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
+    handler_correct_v1 (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
       (fun e m s ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -1000,14 +1000,14 @@ Proof. Admitted.
    handle_instr (MAKEFLOATBLOCK n) / clight_of (MAKEFLOATBLOCK n) /
    pre_of (MAKEFLOATBLOCK n) are convertible with handle_MAKEFLOATBLOCK n /
    f_instr_MAKEFLOATBLOCK / makefloatblock_step_pre n.
-   P_error_of, P_halt_of, and P_ccall_of are vacuously satisfied
+   error_message_of, P_halt_of, and P_ccall_of are vacuously satisfied
    (MAKEFLOATBLOCK never errors, halts, or issues a C call). *)
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 Import Bytecode.AST.
 
 Definition correct_MAKEFLOATBLOCK : forall n,
     handler_correct (handle_instr (MAKEFLOATBLOCK n)) (clight_of (MAKEFLOATBLOCK n))
-      (pre_of (MAKEFLOATBLOCK n))
-      (P_error_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)).
+      (error_message_of (MAKEFLOATBLOCK n))
+      (pre_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)).
 Proof.
 Admitted.

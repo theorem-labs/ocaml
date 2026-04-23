@@ -66,7 +66,7 @@ Local Lemma val_int_3_load_result :
 Proof. reflexivity. Qed.
 
 Theorem verify_PUSHCONST3_correct :
-    handler_correct (handle_PUSHCONSTINT 3) f_instr_PUSHCONST3
+    handler_correct_v1 (handle_PUSHCONSTINT 3) f_instr_PUSHCONST3
       (fun _ m _ ard =>
          let sb := ar_sptr_block ard in
          let so := ar_sptr_ofs ard in
@@ -77,7 +77,7 @@ Theorem verify_PUSHCONST3_correct :
       (fun _ => False)
       (fun _ _ _ => False).
 Proof.
-  intros e le m s. unfold handler_correct, handle_PUSHCONSTINT. simpl.
+  intros e le m s. unfold handler_correct_v1, handle_PUSHCONSTINT. simpl.
   intros ard Hpre Hstep_pre. unfold abs_rel_with_ard in Hpre.
   set (sb := ar_sptr_block ard) in *.
   set (so := ar_sptr_ofs ard) in *.

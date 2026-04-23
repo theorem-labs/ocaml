@@ -24,7 +24,7 @@
    for the result to agree with Z.shiftr on unbounded integers.
    This holds for OCaml's 63-bit integers (a in [-2^62, 2^62-1]).
    Both constraints are encoded as preconditions via
-   handler_correct. *)
+   handler_correct_v1. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -222,7 +222,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_ASRINT_correct :
-    handler_correct handle_ASRINT f_instr_ASRINT
+    handler_correct_v1 handle_ASRINT f_instr_ASRINT
       (fun _ _ s ard =>
          match s.(Machine.accu), s.(Machine.stack) with
          | Val_int a, Val_int b :: _ =>
@@ -481,15 +481,15 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
 
-Theorem verify_ASRINT_handler_correct :
-    handler_correct handle_ASRINT f_instr_ASRINT
+Theorem verify_ASRINT_handler_correct_v1 :
+    handler_correct_v1 handle_ASRINT f_instr_ASRINT
       shift_in_range
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True end)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ _ s ard =>
        match s.(Machine.accu), s.(Machine.stack) with
        | Val_int a, Val_int b :: _ =>
@@ -509,8 +509,8 @@ Qed.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_ASRINT :
   handler_correct (handle_instr Bytecode.AST.ASRINT) (clight_of Bytecode.AST.ASRINT)
-    (pre_of Bytecode.AST.ASRINT)
-    (P_error_of Bytecode.AST.ASRINT) (P_halt_of Bytecode.AST.ASRINT) (P_ccall_of Bytecode.AST.ASRINT).
+    (error_message_of Bytecode.AST.ASRINT)
+    (pre_of Bytecode.AST.ASRINT) (P_halt_of Bytecode.AST.ASRINT) (P_ccall_of Bytecode.AST.ASRINT).
 Proof.
 Admitted.
 

@@ -60,13 +60,13 @@ Qed.
 (* Step precondition for PUSHENVACC3: now uses generic pushenvacc_step_pre 3. *)
 
 Theorem verify_PUSHENVACC3_correct :
-    handler_correct (handle_PUSHENVACC 3) f_instr_PUSHENVACC3
+    handler_correct_v1 (handle_PUSHENVACC 3) f_instr_PUSHENVACC3
       (pushenvacc_step_pre 3)
       (fun _ s => field_or_heap s s.(Machine.env) 3 = None)
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_PUSHENVACC.
+  unfold handler_correct_v1, handle_PUSHENVACC.
 
   destruct (field_or_heap s s.(Machine.env) 3) as [v|] eqn:Hfoh.
 

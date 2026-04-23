@@ -707,7 +707,7 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_RESTART_correct :
-    handler_correct handle_RESTART f_instr_RESTART
+    handler_correct_v1 handle_RESTART f_instr_RESTART
       restart_step_pre
       (fun msg s =>
          (msg = "RESTART: env is not a block"%string /\
@@ -1515,7 +1515,7 @@ Local Lemma handle_RESTART_error_implies_error_message : forall pc' s msg,
 Proof.
   intros pc' s msg H.
   unfold handle_RESTART in H.
-  unfold P_error_of, error_message_of.
+  unfold error_message_of.
   destruct (Machine.env s) as [z | t fields_v | addr | addr ofs].
   - (* Val_int *) inversion H. reflexivity.
   - (* Val_block *)
@@ -1544,7 +1544,7 @@ Qed.
    Halt and CCall are impossible since handle_RESTART never produces them. *)
 Definition correct_RESTART :
     handler_correct (handle_instr RESTART) (clight_of RESTART)
-      (pre_of RESTART)
-      (P_error_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART).
+      (error_message_of RESTART)
+      (pre_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART).
 Proof.
 Admitted.

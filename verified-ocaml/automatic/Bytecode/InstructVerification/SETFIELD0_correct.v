@@ -100,7 +100,7 @@ Proof. intros. reflexivity. Qed.
 (* ================================================================== *)
 
 Theorem verify_SETFIELD0_correct :
-    handler_correct (handle_SETFIELD 0) f_instr_SETFIELD0
+    handler_correct_v1 (handle_SETFIELD 0) f_instr_SETFIELD0
       (setfield_heap_pre 0)
       (fun _ s => match s.(Machine.stack) with
                   | _ :: _ =>
@@ -116,7 +116,7 @@ Theorem verify_SETFIELD0_correct :
       (fun _ => False) (fun _ _ _ => False).
 Proof.
   intros e le m s.
-  unfold handler_correct, handle_SETFIELD.
+  unfold handler_correct_v1, handle_SETFIELD.
 
   (* Case split on stack *)
   destruct (Machine.stack s) as [|newval rest] eqn:Hstk.

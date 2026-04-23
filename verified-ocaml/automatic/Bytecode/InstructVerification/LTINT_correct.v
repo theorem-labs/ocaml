@@ -88,14 +88,14 @@ Definition lt_int_range_pre (m : mem) (s : state) (ard : abs_rel_data) : Prop :=
   end.
 
 Theorem verify_LTINT_correct :
-    handler_correct handle_LTINT f_instr_LTINT
+    handler_correct_v1 handle_LTINT f_instr_LTINT
       (fun _ => lt_int_range_pre)
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   intros e le m s. unfold handle_LTINT.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
     destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk;
@@ -233,15 +233,15 @@ Proof.
     { intros ofs' Hofs'. eapply Mem.perm_store_1. exact Hstore2. eapply Mem.perm_store_1. exact Hstore1. apply Hsb_writable. exact Hofs'. } }
 Qed.
 
-Theorem verify_LTINT_handler_correct :
-    handler_correct handle_LTINT f_instr_LTINT
+Theorem verify_LTINT_handler_correct_v1 :
+    handler_correct_v1 handle_LTINT f_instr_LTINT
       signed_int_op_safe
       (fun _ s => match s.(Machine.accu), s.(Machine.stack) with
                   | Val_int _, Val_int _ :: _ => False
                   | _, _ => True
                   end) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with (sp := fun _ => lt_int_range_pre).
+  apply handler_correct_v1_weaken with (sp := fun _ => lt_int_range_pre).
   - exact verify_LTINT_correct.
   - intros e le m s ard _ Hsio.
     unfold signed_int_op_safe in Hsio.
@@ -257,7 +257,7 @@ Import Bytecode.AST.
 
 Theorem correct_LTINT :
     handler_correct (handle_instr LTINT) (clight_of LTINT)
-      (pre_of LTINT)
-      (P_error_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT).
+      (error_message_of LTINT)
+      (pre_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT).
 Proof.
 Admitted.

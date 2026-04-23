@@ -10,14 +10,16 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_APPLY3 :
   forall (h1 h2 : Z -> state -> step_result),
       handler_correct h1 (clight_of APPLY3)
-        (pre_of APPLY3) (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3) ->
+        (error_message_of APPLY3)
+        (pre_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3) ->
       handler_correct h2 (clight_of APPLY3)
-        (pre_of APPLY3) (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3) ->
+        (error_message_of APPLY3)
+        (pre_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
 Proof.
   intros h1 h2 Hcorr1 Hcorr2 s.
   exact (unique_from_handler_correct
-    (clight_of APPLY3) (pre_of APPLY3)
-    (P_error_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3)
+    (clight_of APPLY3) (error_message_of APPLY3)
+    (pre_of APPLY3) (P_halt_of APPLY3) (P_ccall_of APPLY3)
     h1 h2 Hcorr1 Hcorr2 s).
 Qed.

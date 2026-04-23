@@ -174,7 +174,7 @@ Definition heap_field_target (hofs : ptrofs) (n_int : int) : ptrofs :=
 (* ================================================================== *)
 
 Theorem verify_SETFIELD_correct : forall n,
-    handler_correct (handle_SETFIELD n) f_instr_SETFIELD
+    handler_correct_v1 (handle_SETFIELD n) f_instr_SETFIELD
       (fun e m s ard =>
          let cb := ar_code_base_block ard in
          let co := ar_code_base_ofs ard in
@@ -273,7 +273,7 @@ Import Bytecode.AST.
 
 Definition correct_SETFIELD : forall n,
     handler_correct (handle_instr (SETFIELD n)) (clight_of (SETFIELD n))
-      (pre_of (SETFIELD n))
-      (P_error_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)).
+      (error_message_of (SETFIELD n))
+      (pre_of (SETFIELD n)) (P_halt_of (SETFIELD n)) (P_ccall_of (SETFIELD n)).
 Proof.
 Admitted.

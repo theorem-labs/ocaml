@@ -85,11 +85,11 @@ Definition eq_int_range_pre (m : mem) (s : state) (ard : abs_rel_data) : Prop :=
   end.
 
 Theorem verify_EQ_correct :
-    handler_correct handle_EQ f_instr_EQ
+    handler_correct_v1 handle_EQ f_instr_EQ
       (fun _ => eq_int_range_pre)
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  unfold handler_correct.
+  unfold handler_correct_v1.
   intros e le m s. unfold handle_EQ.
   destruct (Machine.stack s) as [|v_hd v_tl] eqn:Hstk; try reflexivity.
   destruct (Machine.accu s) as [a| | |] eqn:Haccu_eq;
@@ -252,12 +252,12 @@ Proof.
 Qed.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_EQ_handler_correct :
-    handler_correct handle_EQ f_instr_EQ
+Theorem verify_EQ_handler_correct_v1 :
+    handler_correct_v1 handle_EQ f_instr_EQ
       int_op_safe
       (fun _ s => s.(Machine.stack) = nil) (fun _ => False) (fun _ _ _ => False).
 Proof.
-  apply handler_correct_weaken with
+  apply handler_correct_v1_weaken with
     (sp := fun _ => eq_int_range_pre).
   - exact verify_EQ_correct.
   - intros e le m s ard _ Hios.
@@ -269,8 +269,8 @@ Qed.
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_EQ :
   handler_correct (handle_instr Bytecode.AST.EQ) (clight_of Bytecode.AST.EQ)
-    (pre_of Bytecode.AST.EQ)
-    (P_error_of Bytecode.AST.EQ) (P_halt_of Bytecode.AST.EQ) (P_ccall_of Bytecode.AST.EQ).
+    (error_message_of Bytecode.AST.EQ)
+    (pre_of Bytecode.AST.EQ) (P_halt_of Bytecode.AST.EQ) (P_ccall_of Bytecode.AST.EQ).
 Proof.
 Admitted.
 
