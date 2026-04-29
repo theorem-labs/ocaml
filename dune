@@ -16,6 +16,8 @@
  (dev     (flags (:standard -w +a-4-9-40-41-42-44-45-48-66-67-70)))
  (release (flags (:standard -w +a-4-9-40-41-42-44-45-48-66-67-70))))
 
+(ignored_subdirs (manual))
+
 ;; Too annoying to get to work. Use (copy_files# ...) instead
 ; (include_subdirs unqualified)
 ; (ignored_subdirs (lex yacc testsuite ocamldoc ocamltest toplevel otherlibs))
@@ -35,9 +37,9 @@
 
 (library
  (name ocamlcommon)
+ (public_name ocaml-variants.ocamlcommon)
  (wrapped false)
- (flags (:standard -principal -nostdlib \ -short-paths))
- (libraries stdlib)
+ (flags (:standard -principal -short-paths))
  (modules_without_implementation
    annot asttypes cmo_format outcometree parsetree)
  (modules
@@ -84,9 +86,10 @@
 
 (library
  (name ocamlbytecomp)
+ (public_name ocaml-variants.ocamlbytecomp)
  (wrapped false)
- (flags (:standard -principal -nostdlib))
- (libraries stdlib ocamlcommon)
+ (flags (:standard -principal))
+ (libraries ocamlcommon)
  (modules
     ;; bytecomp/
     bytegen bytelibrarian bytelink bytepackager emitcode printinstr
