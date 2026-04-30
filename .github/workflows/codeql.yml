@@ -1,0 +1,106 @@
+name: CodeQL
+
+on:
+  push:
+    branches:
+      - '4.**'
+      - '5.**'
+      - 'trunk'
+  pull_request:
+  schedule:
+    - cron: '27 3 * * 1'
+
+permissions:
+  actions: read
+  contents: read
+  security-events: write
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name == 'pull_request' || github.sha }}
+  cancel-in-progress: true
+
+jobs:
+  detect:
+    name: Detect languages
+    runs-on: ubuntu-latest
+    outputs:
+      has_languages: ${{ steps.languages.outputs.has_languages }}
+      matrix: ${{ steps.languages.outputs.matrix }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Detect CodeQL languages in this branch
+        id: languages
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          files="$(git ls-files)"
+          include=()
+
+          has_file() {
+            grep -Eq "$1" <<< "$files"
+          }
+
+          add_language() {
+            include+=("{\"language\":\"$1\",\"build-mode\":\"$2\"}")
+          }
+
+          if has_file '(^|/).*[.](c|cc|cpp|cxx|c\+\+|h|hh|hpp|hxx|h\+\+)$'; then
+            add_language c-cpp none
+          fi
+
+          if has_file '(^|/).*[.](js|jsx|mjs|cjs|ts|tsx)$|(^|/)package(-lock)?[.]json$'; then
+            add_language javascript-typescript none
+          fi
+
+          if has_file '^\.github/workflows/.*[.]ya?ml$|(^|/)action[.]ya?ml$'; then
+            add_language actions none
+          fi
+
+          if has_file '(^|/).*[.](cs|csproj|sln)$'; then
+            add_language csharp none
+          fi
+
+          if has_file '(^|/).*[.]pyi?$|(^|/)(pyproject[.]toml|setup[.]py|requirements.*[.]txt)$'; then
+            add_language python none
+          fi
+
+          if ((${#include[@]})); then
+            matrix="{\"include\":[$(IFS=,; echo "${include[*]}")]}"
+            echo "has_languages=true" >> "$GITHUB_OUTPUT"
+          else
+            matrix='{"include":[]}'
+            echo "has_languages=false" >> "$GITHUB_OUTPUT"
+          fi
+
+          echo "matrix=$matrix" >> "$GITHUB_OUTPUT"
+          echo "$matrix"
+
+  analyze:
+    name: Analyze (${{ matrix.language }})
+    needs: detect
+    if: needs.detect.outputs.has_languages == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.detect.outputs.matrix) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v4
+        with:
+          languages: ${{ matrix.language }}
+          build-mode: ${{ matrix.build-mode }}
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v4
+        with:
+          category: "/language:${{ matrix.language }}"
