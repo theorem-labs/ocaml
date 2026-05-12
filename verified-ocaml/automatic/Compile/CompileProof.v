@@ -649,13 +649,23 @@ Proof.
 Qed.
 
 Lemma step_getfield : forall code s n v,
+  Int.min_signed <= Z.of_nat n <= Int.max_signed ->
   nth_error code (Z.to_nat (pc s)) = Some (GETFIELD n) ->
   field_or_heap s (accu s) n = Some v ->
   step_list code s = Step (st s (pc s + 1) v (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
-(* False without GETFIELD operand bounds: handler rejects n > Int.max_signed
-   even when field lookup succeeds. *)
-Admitted.
+Proof.
+  intros code s n v Hbounds Hnth Hfield.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  unfold handle_GETFIELD.
+  replace (andb (Int.min_signed <=? Z.of_nat n)%Z
+                (Z.of_nat n <=? Int.max_signed)%Z) with true.
+  - rewrite Hfield. unfold st.
+    destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl.
+    reflexivity.
+  - symmetry. apply andb_true_intro. split; apply Z.leb_le; lia.
+Qed.
 
 (* APPLY1 step lemma *)
 Lemma step_apply1 : forall code s arg rest target_pc,
