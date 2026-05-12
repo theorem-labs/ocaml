@@ -25,7 +25,7 @@ Reach full formal verification of the OCaml compiler in two stages:
 
 | Component | File | Admitted | Qed | Blocker |
 |-----------|------|----------|-----|---------|
-| Compiler correctness | `automatic/Compile/CompileProof.v` | 18 | 126 | Closures, heap allocation, function application, remaining active step lemmas needing stronger preconditions; bounded CONSTINT/POP/GETFIELD helpers and an unused ENVACC duplicate are proved |
+| Compiler correctness | `automatic/Compile/CompileProof.v` | 16 | 128 | Closures, heap allocation, function application, remaining active step lemmas needing stronger preconditions; bounded CONSTINT/POP/GETFIELD/CLOSURE/CLOSUREREC helpers and an unused ENVACC duplicate are proved |
 | Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
 
 ### Known Gaps in Trusted Code
@@ -234,7 +234,7 @@ Additional simplification principle: **pulling in existing source code is free c
 
 ### 2.1 Complete CompileProof.v
 
-**Current state**: 18 Admitted, 126 Qed. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_not_bool`, plus bounded CONSTINT, POP, and GETFIELD helper lemmas. An unused duplicate ENVACC helper is also bounded/proved; the active ENVACC variable case still needs an index-bound invariant. Core blockers are extending `val_corresponds` for closures and strengthening the remaining single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
+**Current state**: 16 Admitted, 128 Qed. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_not_bool`, plus bounded CONSTINT, POP, GETFIELD, CLOSURE, and CLOSUREREC helper lemmas. An unused duplicate ENVACC helper is also bounded/proved; the active ENVACC variable case still needs an index-bound invariant. Core blockers are extending `val_corresponds` for closures and strengthening the remaining single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
 
 **Work needed**:
 - Extend `val_corresponds` with a closure clause relating `SVal_closure param body senv` to `Val_closure addr ofs` (heap-allocated)

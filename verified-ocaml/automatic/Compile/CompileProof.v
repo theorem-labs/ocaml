@@ -701,19 +701,41 @@ Qed.
 
 (* CLOSURE step lemma — uses heap allocation. *)
 Lemma step_closure : forall code s nvars code_ofs,
+  Z.of_nat (2 + nvars) <= Int.max_signed ->
+  Int.min_signed <= code_ofs <= Int.max_signed ->
   nth_error code (Z.to_nat (pc s)) = Some (CLOSURE nvars code_ofs) ->
   exists s', step_list code s = Step s' /\ pc s' = pc s + 1.
-(* False without CLOSURE operand bounds on closure size and code offset. *)
-Admitted.
+Proof.
+  intros code s nvars code_ofs Hsize Hbounds Hnth.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  unfold handle_CLOSURE.
+  replace (andb (andb (andb (0 <=? Z.of_nat (2 + nvars))%Z
+                            (Z.of_nat (2 + nvars) <=? Int.max_signed)%Z)
+                      (Int.min_signed <=? code_ofs)%Z)
+                (code_ofs <=? Int.max_signed)%Z) with true.
+  - eexists. split; reflexivity.
+  - symmetry. repeat (apply andb_true_intro; split); apply Z.leb_le; lia.
+Qed.
 
 (* CLOSUREREC step lemma — uses heap allocation. *)
-Lemma step_closurerec : forall code s nfuncs nvars offsets,
+Lemma step_closurerec : forall code s nfuncs nvars offsets code_ofs,
+  nfuncs = 1%nat ->
+  offsets = [code_ofs] ->
+  Int.min_signed <= code_ofs <= Int.max_signed ->
   nth_error code (Z.to_nat (pc s)) = Some (CLOSUREREC nfuncs nvars offsets) ->
-  offsets <> [] ->
   exists s', step_list code s = Step s' /\ pc s' = pc s + 1.
-(* False without CLOSUREREC well-formedness: current handler only accepts
-   one function with one signed code offset. *)
-Admitted.
+Proof.
+  intros code s nfuncs nvars offsets code_ofs Hnfuncs Hoffsets Hbounds Hnth.
+  subst nfuncs offsets.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  unfold handle_CLOSUREREC.
+  replace (andb (Int.min_signed <=? code_ofs)%Z
+                (code_ofs <=? Int.max_signed)%Z) with true.
+  - eexists. split; reflexivity.
+  - symmetry. apply andb_true_intro. split; apply Z.leb_le; lia.
+Qed.
 
 (* --- Helper: rev (rev l ++ []) = l --- *)
 Lemma rev_rev_app_nil : forall {A : Type} (l : list A),
