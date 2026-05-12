@@ -239,6 +239,7 @@ Additional simplification principle: **pulling in existing source code is free c
 **Work needed**:
 - Extend `val_corresponds` with a closure clause relating `SVal_closure param body senv` to `Val_closure addr ofs` (heap-allocated)
 - Prove `expr_correct_gen` for `Exp_fun`, `Exp_app`, `Exp_letrec`, `Exp_match`, `Exp_constr`, `Exp_tuple`
+- Decide/enforce integer literal representability: source `Exp_int n` accepts arbitrary `Z`, while bytecode `CONSTINT n` rejects values outside the signed-int range, so the remaining integer-heavy `compiler_correct_*` lemmas are false as stated
 - Fix compiler: constructor tags must distinguish variants (requires new `constr_env` data structure), nullary constructors with tag > 0 need `ATOM tag`
 - Fix string compilation (currently `CONSTINT 0` — this is a large feature, not a simple fix)
 - The 12 remaining per-program `compiler_correct_*` Admitted are redundant once the main theorem is proved; empty programs, type declarations, unit expressions, bool expressions, and boolean `not` are now proved directly
