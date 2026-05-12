@@ -24,15 +24,15 @@ Reach full formal verification of the OCaml compiler in two stages:
 
 | Component | File | Admitted | Qed | Blocker |
 |-----------|------|----------|-----|---------|
-| Compiler correctness | `automatic/Compile/CompileProof.v` | 18 | 95 | Closures, heap allocation, function application |
+| Compiler correctness | `automatic/Compile/CompileProof.v` | 27 | 115 | Closures, heap allocation, function application, false step lemmas needing stronger preconditions |
 | Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
-| Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 99 | 0 | Hinges on 1 key generic lemma |
+| Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 99 | 0 | Generic lemma is unprovable as stated without halt/ccall payload uniqueness or weaker equivalence |
 
 ### Known Gaps in Trusted Code
 
 1. **`behavior_equiv` doesn't compare return values** (`manual/Compile/CompileSpec.v:67-79`). When both sides terminate normally, it checks trace length equality but not `Term_normal v1 = Term_normal v2`. This means two programs producing the same output but different return values are considered equivalent.
 
-2. **`ccall_to_events` only handles 2 of ~25 C-calls** (`CompileSpec.v:30-35`). Only `print_int` (idx=0) and `print_newline` (idx=1) produce events. `print_string` (idx=2) and all other C-calls are silently dropped. Compare `checker/Bytecode/Main.v` which handles ~25 C-calls at the pipeline level.
+2. **`ccall_to_events` only handles output C-calls for the current source subset** (`CompileSpec.v:34-40`). `print_int` (idx=0), `print_newline` (idx=1), and `print_char` (idx=3) produce events. `print_string` (idx=2) remains a no-op while strings are stubbed end-to-end. Compare `checker/Bytecode/Main.v` which handles ~25 C-calls at the pipeline level.
 
 3. **`Observable.v` has no input events**. Only `Out_char` exists. Programs reading stdin, files, or environment variables cannot be distinguished by their behavior.
 
@@ -56,7 +56,7 @@ Reach full formal verification of the OCaml compiler in two stages:
 
 ### PBT Coverage
 
-~5,215 QCheck tests + 35 deterministic tests across 11 files. Strong coverage for the features that exist, but coverage is limited to the subset of OCaml modeled by `Syntax.v`.
+5,200 QCheck tests + 41 deterministic tests across 11 files. Strong coverage for the features that exist, but coverage is limited to the subset of OCaml modeled by `Syntax.v`.
 
 ---
 
@@ -82,13 +82,13 @@ Axiom compiler_correctness :
 **Concrete trusted definitions used**: `behavior_equiv`, `bytecode_behavior`, `run_collecting`, `ccall_to_events`, `step_list_of`.
 
 **Stage 1 work needed**:
-- Fix `behavior_equiv` to compare return values when both sides terminate normally
-- Decide whether `ccall_to_events` needs to handle more C-calls (currently only print_int and print_newline produce observable events — this is arguably correct if those are the only side-effecting operations)
+- Keep `behavior_equiv` trace-based for the current OS-observable behavior model
+- Decide whether `ccall_to_events` needs to handle more C-calls (`print_char` now produces events; `print_string` remains intentionally stubbed until strings are de-stubbed)
 - Verify that the `step_fn` derived from `HandleInstrSpec` matches the bytecode semantics
 
 ### Theorem 2: PBT Connection (our compiler vs ocamlc)
 
-**Stated** in `manual/Compile/PBTSpec.v`:
+**Stated** in `manual/Compile/PBTSpec.v` and exposed through `checker/Compile/PBTChecker.v`:
 
 ```coq
 Axiom compile_models_ocamlc_ok :
@@ -126,7 +126,7 @@ Axiom compile_models_ocamlc_ok :
 
 ### Theorem 3: Extraction Validation
 
-**Stated** in `manual/Compile/ExtractionSpec.v`:
+**Stated** in `manual/Compile/ExtractionSpec.v` and exposed through `checker/Compile/ExtractionChecker.v`:
 
 ```coq
 Axiom extraction_validates :
@@ -180,24 +180,24 @@ Error message matching (`msg1 = msg2` for `Term_error`) is also impractical — 
 
 **File**: `manual/Compile/CompileSpec.v`
 
-Currently handles: `print_int` (idx=0), `print_newline` (idx=1). Review found:
-- `print_char` is handled by the source interpreter but NOT mapped to a C-call index by the compiler — more pressing than `print_string`
+Currently handles: `print_int` (idx=0), `print_newline` (idx=1), `print_char` (idx=3). Review found:
+- `print_char` is handled by the source interpreter and now mapped as an observable C-call
 - `print_string` (idx=2) is mapped by the compiler but is a stub in both the source interpreter and `ccall_to_events`
 - Only output-producing C-calls need event handling; pure C-calls (comparison, etc.) correctly produce no events
 
-**Fix**: Add `print_char` as a C-call primitive (idx=3 in compiler, new case in `ccall_to_events`). Add `print_string` (idx=2) handling when strings are de-stubbed.
+**Remaining fix**: Add `print_string` (idx=2) handling when strings are de-stubbed.
 
 ### 1.3 Theorem 2 (PBT Connection) — DONE
 
 **File**: `manual/Compile/PBTSpec.v` (already written)
 
-Universally quantified over a `pbt_seed` type. External tools (`ocamlc_compile`, `ocamlc_decode`) are Parameters filled by the auto side with embedded results from running ocamlc. Anti-vacuity via `golden_seed`/`golden_compiles_and_decodes`. Follows the Go verified compiler's `compile_models_go_pbt_ok` pattern.
+Universally quantified over a `pbt_seed` type. External tools (`ocamlc_compile`, `ocamlc_decode`) are Parameters filled by the auto side with embedded results from running ocamlc. Anti-vacuity via `golden_seed`/`golden_compiles_and_decodes`. Checker exposure exists in `checker/Compile/PBTChecker.v`. Follows the Go verified compiler's `compile_models_go_pbt_ok` pattern.
 
 ### 1.4 Theorem 3 (Extraction Validation) — DONE
 
 **File**: `manual/Compile/ExtractionSpec.v` (already written)
 
-Universally quantified over all programs. Extraction pipeline (`extract_to_ocaml`, `ocaml_build`, `extracted_run`) decomposed as Parameters. Uses instruction-list equality (not behavioral equivalence). `ocaml_build` failure is `False` (extraction must compile). Anti-vacuity via `golden_program`/`golden_extraction_succeeds`. Follows the Go verified compiler's `extract_on_compile_ok` pattern.
+Universally quantified over all programs. Extraction pipeline (`extract_to_ocaml`, `ocaml_build`, `extracted_run`) decomposed as Parameters. Uses instruction-list equality (not behavioral equivalence). `ocaml_build` failure is `False` (extraction must compile). Anti-vacuity via `golden_program`/`golden_extraction_succeeds`. Checker exposure exists in `checker/Compile/ExtractionChecker.v`. Follows the Go verified compiler's `extract_on_compile_ok` pattern.
 
 ### 1.5 Simplification Pass
 
@@ -234,7 +234,7 @@ Additional simplification principle: **pulling in existing source code is free c
 
 ### 2.1 Complete CompileProof.v
 
-**Current state**: 18 Admitted, 95 Qed. Core blocker is extending `val_corresponds` for closures — a design problem requiring heap reasoning that the current proof infrastructure lacks.
+**Current state**: 27 Admitted, 115 Qed. Core blockers are extending `val_corresponds` for closures and strengthening false single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
 
 **Work needed**:
 - Extend `val_corresponds` with a closure clause relating `SVal_closure param body senv` to `Val_closure addr ofs` (heap-allocated)
@@ -249,13 +249,13 @@ Additional simplification principle: **pulling in existing source code is free c
 
 **Work needed**: Prove each handler correct against the Clight AST. Largely mechanical — follows established pattern (construct exec_stmt derivation, prove abs_rel preservation). Complexity varies: STOP is 51 lines, CLOSUREREC is 427 lines.
 
-**Also needed**: Relax CLOSUREREC restriction in `manual/Bytecode/Interpret/InstructSpec.v` from `nf=1, nv=0` to `nf=1, any nv`. The current restriction rejects the compiler's own output when closures capture free variables.
+**Resolved**: The CLOSUREREC restriction in `manual/Bytecode/Interpret/InstructSpec.v` now permits `nf=1, any nv`, so closures capturing free variables are not rejected solely because `nv > 0`.
 
 ### 2.3 Complete MetaSpecVerification
 
 **Current state**: 99 Admitted across 95 files. All 94 handler uniqueness lemmas Admitted.
 
-**Work needed**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). It hinges on 1 key generic lemma (`handler_correct_gen_determines_em_eq` in `SharedLemmas.v`) — a Clight E0-determinism result. Once proved, the 94 per-instruction uniqueness proofs follow by simple instantiation.
+**Work needed**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). The generic lemma (`handler_correct_gen_determines_em_eq` in `SharedLemmas.v`) is unprovable as stated: `handler_correct_gen` does not uniquely pin down halt/ccall payloads. Fix by adding payload uniqueness to the spec, or weaken the target equivalence so payload equality is not required.
 
 ### 2.4 Fix Source Interpreter
 
@@ -314,7 +314,7 @@ This is why `Syntax.v` is in `manual/` — it's the single source of truth for w
 
 3. **`ocamlc` axiomatization**: External tools (ocamlc, extraction, decoder) are modeled as **Parameters** in Module Types, following the Go verified compiler's pattern. The auto side fills these Parameters with concrete implementations that embed results from actually running the tools. The build system runs ocamlc externally; the Rocq spec references it only abstractly through Parameters. Theorems are universally quantified (over seed type for PBT, over all programs for extraction).
 
-4. **CLOSUREREC restriction**: `nf=1` is sufficient (only single recursion in `Syntax.v`), but `nv=0` is too restrictive — the compiler emits `CLOSUREREC 1 nvars [ofs]` with `nvars > 0` for closures capturing free variables. Fix: relax `InstructSpec.v` precondition to `nf=1, any nv`.
+4. **CLOSUREREC restriction**: `nf=1` is sufficient (only single recursion in `Syntax.v`), and the former `nv=0` restriction was too restrictive because the compiler emits `CLOSUREREC 1 nvars [ofs]` with `nvars > 0` for closures capturing free variables. `InstructSpec.v` now accepts `nf=1, any nv`.
 
 ## Remaining Concerns
 

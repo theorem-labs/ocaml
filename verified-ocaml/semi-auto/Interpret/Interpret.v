@@ -8,7 +8,7 @@
 
 From Stdlib Require Import ZArith Bool PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
-From Stdlib Require Import Strings.String.
+From Stdlib Require Import Strings.String Strings.Ascii.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
@@ -97,7 +97,6 @@ Fixpoint match_pattern (p : pattern) (v : svalue) : option env :=
         end) ps vs
     else None
   | Pat_nil, SVal_constr "[]" None => Some Env_nil
-  | Pat_nil, SVal_int 0 => Some Env_nil
   | Pat_cons ph pt, SVal_constr "::" (Some (SVal_tuple [h; t])) =>
     match match_pattern ph h, match_pattern pt t with
     | Some e1, Some e2 => Some (env_append e1 e2)
@@ -155,8 +154,6 @@ Definition eval_binop (op : binop) (v1 v2 : svalue) : option svalue :=
     if Z.eqb b 0 then None else Some (SVal_int (Z.quot a b))
   | Op_mod, SVal_int a, SVal_int b =>
     if Z.eqb b 0 then None else Some (SVal_int (Z.rem a b))
-  | Op_eq, SVal_int a, SVal_int b => Some (SVal_bool (Z.eqb a b))
-  | Op_neq, SVal_int a, SVal_int b => Some (SVal_bool (negb (Z.eqb a b)))
   | Op_lt, SVal_int a, SVal_int b => Some (SVal_bool (a <? b))
   | Op_le, SVal_int a, SVal_int b => Some (SVal_bool (a <=? b))
   | Op_gt, SVal_int a, SVal_int b => Some (SVal_bool (a >? b))
@@ -164,6 +161,42 @@ Definition eval_binop (op : binop) (v1 v2 : svalue) : option svalue :=
   | Op_and, SVal_bool a, SVal_bool b => Some (SVal_bool (a && b))
   | Op_or, SVal_bool a, SVal_bool b => Some (SVal_bool (a || b))
   | _, _, _ => None
+  end.
+
+Fixpoint svalue_eqb (v1 v2 : svalue) : bool :=
+  match v1, v2 with
+  | SVal_int a, SVal_int b => Z.eqb a b
+  | SVal_bool a, SVal_bool b => Bool.eqb a b
+  | SVal_unit, SVal_unit => true
+  | SVal_tuple xs, SVal_tuple ys =>
+    (fix list_eqb (xs ys : list svalue) : bool :=
+      match xs, ys with
+      | [], [] => true
+      | x :: xs', y :: ys' => svalue_eqb x y && list_eqb xs' ys'
+      | _, _ => false
+      end) xs ys
+  | SVal_constr c1 None, SVal_constr c2 None => String.eqb c1 c2
+  | SVal_constr c1 (Some x), SVal_constr c2 (Some y) =>
+    String.eqb c1 c2 && svalue_eqb x y
+  | SVal_record xs, SVal_record ys =>
+    (fix fields_eqb (xs ys : list (ident * svalue)) : bool :=
+      match xs, ys with
+      | [], [] => true
+      | (x, vx) :: xs', (y, vy) :: ys' =>
+        String.eqb x y && svalue_eqb vx vy && fields_eqb xs' ys'
+      | _, _ => false
+      end) xs ys
+  | SVal_string s1, SVal_string s2 => String.eqb s1 s2
+  | _, _ => false
+  end.
+
+Definition eval_structural_binop (op : binop) (v1 v2 : svalue) : option svalue :=
+  match op, v1, v2 with
+  (* TODO: widen equality once the compiler emits structural equality instead
+     of bytecode EQ/NEQ, whose current proof only matches integer equality. *)
+  | Op_eq, SVal_int a, SVal_int b => Some (SVal_bool (Z.eqb a b))
+  | Op_neq, SVal_int a, SVal_int b => Some (SVal_bool (negb (Z.eqb a b)))
+  | _, _, _ => eval_binop op v1 v2
   end.
 
 Definition eval_unop (op : unop) (v : svalue) : option svalue :=
@@ -175,6 +208,12 @@ Definition eval_unop (op : unop) (v : svalue) : option svalue :=
 
 (* z_to_events and nat_to_events_aux are now defined in Observable.v *)
 
+Fixpoint string_to_events (s : string) : list event :=
+  match s with
+  | EmptyString => []
+  | String c rest => Out_char (Z.of_nat (nat_of_ascii c)) :: string_to_events rest
+  end.
+
 (* Apply a builtin function, returning result value and new output *)
 Definition apply_builtin (b : builtin) (arg : svalue) (out : list event) :
     option (svalue * list event) :=
@@ -185,9 +224,8 @@ Definition apply_builtin (b : builtin) (arg : svalue) (out : list event) :
     Some (SVal_unit, Out_char 10 :: out)
   | Bi_print_char, SVal_int c =>
     Some (SVal_unit, Out_char c :: out)
-  | Bi_print_string, SVal_tuple [] =>
-    (* print_string is a stub: strings are not yet first-class values *)
-    Some (SVal_unit, out)
+  | Bi_print_string, SVal_string s =>
+    Some (SVal_unit, rev (string_to_events s) ++ out)
   | Bi_compare, SVal_int a =>
     (* compare is a stub: returns 0 (equal) for any single argument.
        Full implementation requires currying support. *)
@@ -213,6 +251,14 @@ Definition max_closure : svalue :=
 (* Qualified name helper *)
 Definition qualify_name (prefix : ident) (name : ident) : ident :=
   String.append prefix (String.append "." name).
+
+Fixpoint strip_prefix (prefix name : string) : option string :=
+  match prefix, name with
+  | EmptyString, _ => Some name
+  | String pc prest, String nc nrest =>
+    if Ascii.eqb pc nc then strip_prefix prest nrest else None
+  | _, _ => None
+  end.
 
 (* Standard library environment *)
 Definition stdlib_env : env :=
@@ -250,10 +296,32 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
 
   | Exp_binop op e1 e2 =>
     match eval fuel' e1 env0 out with
+    | Eval_ok (SVal_bool false) out1 =>
+      (* TODO: restore short-circuiting once the compiler emits branch code for
+         Op_and/Op_or instead of strict ANDINT/ORINT evaluation. *)
+      match eval fuel' e2 env0 out1 with
+      | Eval_ok v2 out2 =>
+        match eval_structural_binop op (SVal_bool false) v2 with
+        | Some v => Eval_ok v out2
+        | None => Eval_err "binop type error" out2
+        end
+      | other => other
+      end
+    | Eval_ok (SVal_bool true) out1 =>
+      (* TODO: restore short-circuiting once the compiler emits branch code for
+         Op_and/Op_or instead of strict ANDINT/ORINT evaluation. *)
+      match eval fuel' e2 env0 out1 with
+      | Eval_ok v2 out2 =>
+        match eval_structural_binop op (SVal_bool true) v2 with
+        | Some v => Eval_ok v out2
+        | None => Eval_err "binop type error" out2
+        end
+      | other => other
+      end
     | Eval_ok v1 out1 =>
       match eval fuel' e2 env0 out1 with
       | Eval_ok v2 out2 =>
-        match eval_binop op v1 v2 with
+        match eval_structural_binop op v1 v2 with
         | Some v => Eval_ok v out2
         | None => Eval_err "binop type error" out2
         end
@@ -431,6 +499,19 @@ Fixpoint add_qualified_bindings (prefix : ident) (names : list ident) (inner_env
     add_qualified_bindings prefix rest inner_env env_acc'
   end.
 
+Fixpoint open_module_bindings (mod_name : ident) (source env_acc : env) : env :=
+  let prefix := String.append mod_name "." in
+  match source with
+  | Env_nil => env_acc
+  | Env_cons x v rest =>
+    let env_acc' :=
+      match strip_prefix prefix x with
+      | Some short => env_extend env_acc short v
+      | None => env_acc
+      end in
+    open_module_bindings mod_name rest env_acc'
+  end.
+
 (* eval_program returns (env * eval_result): the accumulated environment
    alongside the evaluation result. This allows Decl_module to extract
    the env produced by inner declarations and add qualified-name aliases. *)
@@ -469,25 +550,74 @@ Fixpoint eval_program (fuel : nat) (prog : program) (env0 : env) (out : list eve
     | Decl_module mod_name inner_decls =>
       match eval_program fuel' inner_decls env0 out with
       | (inner_env, Eval_ok _ out') =>
-        (* Add unqualified bindings (already in inner_env) and
-           qualified aliases (mod_name.x for each x bound by inner_decls) *)
+        (* Add only qualified aliases (mod_name.x) to avoid leaking module internals. *)
         let names := decl_bound_names inner_decls in
-        let env_with_qual := add_qualified_bindings mod_name names inner_env inner_env in
+        let env_with_qual := add_qualified_bindings mod_name names inner_env env0 in
         eval_program fuel' rest env_with_qual out'
       | (_, other) => (env0, other)
       end
-    | Decl_open _ =>
-      eval_program fuel' rest env0 out
+    | Decl_open mod_name =>
+      eval_program fuel' rest (open_module_bindings mod_name env0 env0) out
     | Decl_exception _ _ =>
       eval_program fuel' rest env0 out
     end
   end
   end.
 
+Fixpoint svalue_to_value (fuel : nat) (v : svalue) : option value :=
+  match fuel with
+  | O => None
+  | S fuel' =>
+    match v with
+    | SVal_int n => Some (Val_int n)
+    | SVal_bool b => Some (val_bool b)
+    | SVal_unit => Some val_unit
+    | SVal_tuple vs =>
+      match (fix list_to_values (vs : list svalue) : option (list value) :=
+        match vs with
+        | [] => Some []
+        | v :: rest =>
+          match svalue_to_value fuel' v, list_to_values rest with
+          | Some v', Some rest' => Some (v' :: rest')
+          | _, _ => None
+          end
+        end) vs with
+      | Some vals => Some (Val_block 0 vals)
+      | None => None
+      end
+    | SVal_constr "[]" None => Some (Val_int 0)
+    | SVal_constr "::" (Some (SVal_tuple [h; t])) =>
+      match svalue_to_value fuel' h, svalue_to_value fuel' t with
+      | Some hv, Some tv => Some (Val_block 0 [hv; tv])
+      | _, _ => None
+      end
+    | SVal_record fields =>
+      match (fix fields_to_values (fields : list (ident * svalue)) : option (list value) :=
+        match fields with
+        | [] => Some []
+        | (_, v) :: rest =>
+          match svalue_to_value fuel' v, fields_to_values rest with
+          | Some v', Some rest' => Some (v' :: rest')
+          | _, _ => None
+          end
+        end) fields with
+      | Some vals => Some (Val_block 0 vals)
+      | None => None
+      end
+    | SVal_string s =>
+      Some (Val_block String_tag (List.map (fun ev => match ev with Out_char c => Val_int c end) (string_to_events s)))
+    | _ => None
+    end
+  end.
+
 (* Entry point *)
 Definition interpret (fuel : nat) (prog : program) : behavior :=
   match eval_program fuel prog stdlib_env [] with
-  | (_, Eval_ok _ out) => mk_behavior (rev out) (Term_normal (Val_int 0))
+  | (_, Eval_ok v out) =>
+    mk_behavior (rev out) (Term_normal (match svalue_to_value fuel v with
+                                        | Some rv => rv
+                                        | None => Val_int 0
+                                        end))
   | (_, Eval_err msg out) => mk_behavior (rev out) (Term_error msg)
   | (_, Eval_timeout out) => mk_behavior (rev out) Term_timeout
   end.

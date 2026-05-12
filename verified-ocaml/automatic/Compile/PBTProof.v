@@ -18,10 +18,21 @@ Module Make (Import HI : HandleInstrSpec) <: PBTSpec HI.
 
   Definition compile_program := Compile.compile_program.
 
-  Parameter pbt_seed : Type.
-  Parameter pbt_program : pbt_seed -> program.
+  Inductive pbt_seed_t : Type :=
+    | Seed_int_zero.
+
+  Definition pbt_seed : Type := pbt_seed_t.
+
+  Definition pbt_program (seed : pbt_seed) : program :=
+    match seed with
+    | Seed_int_zero => [Decl_expr (Exp_int 0)]
+    end.
+
   Parameter ocamlc_compile : program -> option (list Z).
   Parameter ocamlc_decode : list Z -> option (list instruction).
+
+  (* External results stay abstract until a checked-in generation pipeline records
+     actual ocamlc bytes and their decoded instruction stream for this seed. *)
 
   Axiom compile_models_ocamlc_ok :
     forall (seed : pbt_seed),
@@ -39,7 +50,7 @@ Module Make (Import HI : HandleInstrSpec) <: PBTSpec HI.
       | None => True
       end.
 
-  Parameter golden_seed : pbt_seed.
+  Definition golden_seed : pbt_seed := Seed_int_zero.
   Axiom golden_compiles_and_decodes :
     match ocamlc_compile (pbt_program golden_seed) with
     | Some bytes =>

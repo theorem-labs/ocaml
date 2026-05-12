@@ -85,6 +85,7 @@ Definition is_builtin (x : ident) : option nat :=
   if String.eqb x "print_int" then Some 0%nat
   else if String.eqb x "print_newline" then Some 1%nat
   else if String.eqb x "print_string" then Some 2%nat
+  else if String.eqb x "print_char" then Some 3%nat
   else None.
 
 Definition is_inline_builtin (x : ident) : option (list instruction) :=

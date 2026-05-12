@@ -18,6 +18,9 @@ Module ExtractionValidation <: ExtractionSpec.
   Parameter ocaml_build : string -> option (list Z).
   Parameter extracted_run : list Z -> program -> option (list instruction).
 
+  (* External build/run results stay abstract until a checked-in generation
+     pipeline records the extracted source, built artifact identity, and run table. *)
+
   Axiom extraction_validates :
     forall (prog : program),
       let extracted_source := extract_to_ocaml compile_program in
@@ -31,7 +34,7 @@ Module ExtractionValidation <: ExtractionSpec.
       | None => False
       end.
 
-  Parameter golden_program : program.
+  Definition golden_program : program := [Decl_expr (Exp_int 0)].
   Axiom golden_extraction_succeeds :
     let extracted_source := extract_to_ocaml compile_program in
     match ocaml_build extracted_source with

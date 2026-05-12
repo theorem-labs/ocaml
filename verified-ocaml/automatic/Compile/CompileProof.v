@@ -1195,9 +1195,13 @@ Proof.
       * (* Exp_binop *)
         destruct (eval fuel e1 senv out) eqn:He1; try discriminate.
         rewrite (IHfuel fuel'' e1 senv out s l He1 Hle').
-        destruct (eval fuel e2 senv l) eqn:He2; try discriminate.
-        rewrite (IHfuel fuel'' e2 senv l s0 l0 He2 Hle').
-        exact Heval.
+        destruct s; simpl in Heval |- *;
+          try (destruct (eval fuel e2 senv l) eqn:He2; try discriminate;
+               erewrite IHfuel; eauto; exact Heval).
+        destruct b0; destruct b; simpl in Heval |- *;
+          try (destruct (eval fuel e2 senv l) eqn:He2; try discriminate;
+               erewrite IHfuel; eauto; exact Heval);
+          exact Heval.
       * (* Exp_unop *)
         destruct (eval fuel e senv out) eqn:He; try discriminate.
         rewrite (IHfuel fuel'' e senv out s l He Hle').
@@ -1330,28 +1334,50 @@ Lemma apply_builtin_extends_output : forall b arg out rv out',
 Proof.
   intros b arg out rv out' H.
   destruct b; destruct arg; simpl in H; try discriminate;
-    (* Handle cases where output is unchanged (injection succeeds directly) *)
-    try (injection H; intros; subst; exists []; reflexivity).
-  - (* Bi_print_int / SVal_int: output changes *)
-    injection H; intros; subst. exists (rev (z_to_events z)). reflexivity.
-  - (* Bi_print_string / SVal_tuple: need to destruct list *)
-    destruct l; [| discriminate].
-    injection H; intros; subst. exists []. reflexivity.
-  - (* Bi_print_newline / SVal_unit: output changes *)
-    injection H; intros; subst. exists [Out_char 10]. reflexivity.
-  - (* Bi_print_char / SVal_int: output changes *)
-    injection H; intros; subst. exists [Out_char z]. reflexivity.
-  - (* Bi_fst / SVal_tuple: need to destruct list *)
-    destruct l as [| a rest]; [discriminate |].
-    injection H; intros; subst. exists []. reflexivity.
-  - (* Bi_snd / SVal_tuple: need to destruct list *)
-    destruct l as [| a [| b0 rest]]; try discriminate.
-    injection H; intros; subst. exists []. reflexivity.
+    try solve
+      [ inversion H; subst; exists []; reflexivity
+      | inversion H; subst; exists [Out_char 10]; reflexivity
+      | inversion H; subst; match goal with
+                            | n : Z |- _ => exists [Out_char n]
+                            end; reflexivity
+      | inversion H; subst; match goal with
+                            | n : Z |- _ => exists (rev (z_to_events n))
+                            end; reflexivity
+      | inversion H; subst; match goal with
+                            | s : string |- _ => exists (rev (string_to_events s))
+                            end; reflexivity ].
+  - match goal with
+    | xs : list svalue |- _ => destruct xs as [| a rest]; [discriminate |]
+    end;
+    inversion H; subst; exists []; reflexivity.
+  - match goal with
+    | xs : list svalue |- _ => destruct xs as [| a [| b0 rest]]; try discriminate
+    end;
+    inversion H; subst; exists []; reflexivity.
 Qed.
 
 (* eval only extends output: if eval returns Eval_ok, the output
    list is a suffix-extension of the input. More precisely, there
    exists a list of new events such that out' = new_events ++ out. *)
+
+Ltac solve_eval_extends_eager_binop IHfuel Heval He1 :=
+  let He2 := fresh "He2" in
+  match type of Heval with
+  | context[eval ?fuel0 ?rhs ?senv0 ?mid] =>
+      destruct (eval fuel0 rhs senv0 mid) eqn:He2; try discriminate
+  end;
+  simpl in Heval;
+  try match type of He2 with
+  | eval _ _ _ _ = Eval_ok ?v2 _ => destruct v2; simpl in Heval; try discriminate
+  end;
+  repeat match type of Heval with
+  | context[eval_structural_binop ?op ?v1 ?v2] =>
+      destruct (eval_structural_binop op v1 v2) eqn:?; try discriminate
+  end;
+  inversion Heval; subst;
+  destruct (IHfuel _ _ _ _ _ He1) as [ne1 Hl];
+  destruct (IHfuel _ _ _ _ _ He2) as [ne2 Hout'];
+  subst; exists (ne2 ++ ne1); rewrite app_assoc; reflexivity.
 
 Lemma eval_extends_output : forall fuel e senv out sv out',
   eval fuel e senv out = Eval_ok sv out' ->
@@ -1369,12 +1395,17 @@ Proof.
       injection Heval; intros; subst. exists []. reflexivity.
     + (* Exp_binop *)
       destruct (eval fuel e1 senv out) eqn:He1; try discriminate.
-      destruct (eval fuel e2 senv l) eqn:He2; try discriminate.
-      destruct (eval_binop b s s0) eqn:?; try discriminate.
-      injection Heval; intros; subst.
-      destruct (IHfuel _ _ _ _ _ He1) as [ne1 Hl].
-      destruct (IHfuel _ _ _ _ _ He2) as [ne2 Hout'].
-      subst. exists (ne2 ++ ne1). rewrite app_assoc. reflexivity.
+      destruct s; simpl in Heval;
+        try solve_eval_extends_eager_binop IHfuel Heval He1.
+      destruct b0.
+      { destruct b; simpl in Heval;
+          try solve_eval_extends_eager_binop IHfuel Heval He1.
+        all: inversion Heval; subst; try exact (IHfuel _ _ _ _ _ He1);
+          match goal with |- ?G => fail 0 G end. }
+      { destruct b; simpl in Heval;
+          try solve_eval_extends_eager_binop IHfuel Heval He1.
+        all: inversion Heval; subst; try exact (IHfuel _ _ _ _ _ He1);
+          match goal with |- ?G => fail 0 G end. }
     + (* Exp_unop *)
       destruct (eval fuel e senv out) eqn:He; try discriminate.
       destruct (eval_unop u s) eqn:?; try discriminate.
@@ -2050,11 +2081,15 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -2243,11 +2278,15 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -2416,10 +2455,13 @@ Proof.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -2588,10 +2630,13 @@ Proof.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   destruct (Z.eqb z0 0) eqn:Hz0; [discriminate |].
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
@@ -2764,10 +2809,13 @@ Proof.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   destruct (Z.eqb z0 0) eqn:Hz0; [discriminate |].
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
@@ -2946,10 +2994,13 @@ Proof.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -3118,10 +3169,13 @@ Proof.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -3290,10 +3344,13 @@ Proof.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -3462,10 +3519,13 @@ Proof.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
+  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct v1; simpl in Heval;
+    try (destruct v2; simpl in Heval; try destruct b0; discriminate).
+  destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -3637,11 +3697,29 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | msg1 l1 | ] eqn:He1;
+    try discriminate.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | msg2 l2 | ] eqn:He2;
+    try solve [destruct v1; simpl in Heval;
+      repeat match goal with
+      | b' : bool |- _ => destruct b'
+      | o : option _ |- _ => destruct o
+      end; discriminate].
+  destruct v1;
+    try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
+      simpl in Heval;
+      repeat match goal with
+      | b' : bool |- _ => destruct b'
+      | o : option _ |- _ => destruct o
+      end; discriminate].
+  destruct v2;
+    try solve [unfold eval_structural_binop, eval_binop in Heval;
+      simpl in Heval;
+      repeat match goal with
+      | b' : bool |- _ => destruct b'
+      | o : option _ |- _ => destruct o
+      end; discriminate].
+  unfold eval_structural_binop, eval_binop in Heval; simpl in Heval.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -3815,11 +3893,29 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | msg1 l1 | ] eqn:He1;
+    try discriminate.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | msg2 l2 | ] eqn:He2;
+    try solve [destruct v1; simpl in Heval;
+      repeat match goal with
+      | b' : bool |- _ => destruct b'
+      | o : option _ |- _ => destruct o
+      end; discriminate].
+  destruct v1;
+    try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
+      simpl in Heval;
+      repeat match goal with
+      | b' : bool |- _ => destruct b'
+      | o : option _ |- _ => destruct o
+      end; discriminate].
+  destruct v2;
+    try solve [unfold eval_structural_binop, eval_binop in Heval;
+      simpl in Heval;
+      repeat match goal with
+      | b' : bool |- _ => destruct b'
+      | o : option _ |- _ => destruct o
+      end; discriminate].
+  unfold eval_structural_binop, eval_binop in Heval; simpl in Heval.
   injection Heval; intros Hout_eq Hval_eq.
   subst out2.
   assert (He1_pure : out1 = out).
@@ -3997,12 +4093,27 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
-  injection Heval; intros Hout_eq Hval_eq.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+    simpl in Heval; try discriminate.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2;
+    simpl in Heval;
+    [ | destruct v1; simpl in Heval;
+          repeat match goal with | b' : bool |- _ => destruct b' end;
+          discriminate
+      | destruct v1; simpl in Heval;
+          repeat match goal with | b' : bool |- _ => destruct b' end;
+          discriminate ].
+  destruct v1 as [z_left|b0| |tuple_left|constr_left arg_left|fname_left body_left env_left|rf_left rx_left rbody_left renv_left|builtin_left|record_left|string_left];
+    try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
+      cbn in Heval; discriminate].
+  destruct v2 as [z_right|b1| |tuple_right|constr_right arg_right|fname_right body_right env_right|rf_right rx_right rbody_right renv_right|builtin_right|record_right|string_right];
+    try solve [unfold eval_structural_binop, eval_binop in Heval;
+      cbn in Heval; destruct b0; discriminate].
+  unfold eval_structural_binop, eval_binop in Heval; cbn in Heval.
+  assert (Hval_eq : (b0 && b1)%bool = (a && b)%bool).
+  { destruct b0; simpl in Heval |- *; inversion Heval; reflexivity. }
+  assert (Hout_eq : out2 = out).
+  { destruct b0; simpl in Heval; inversion Heval; reflexivity. }
   subst out2.
   assert (He1_pure : out1 = out).
   { symmetry. eapply eval_pure_intermediate; eauto. }
@@ -4409,12 +4520,27 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2; try discriminate.
-  destruct v1; try discriminate.
-  destruct v2; try discriminate.
-  simpl in Heval.
-  injection Heval; intros Hout_eq Hval_eq.
+  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+    simpl in Heval; try discriminate.
+  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2;
+    simpl in Heval;
+    [ | destruct v1; simpl in Heval;
+          repeat match goal with | b' : bool |- _ => destruct b' end;
+          discriminate
+      | destruct v1; simpl in Heval;
+          repeat match goal with | b' : bool |- _ => destruct b' end;
+          discriminate ].
+  destruct v1 as [z_left|b0| |tuple_left|constr_left arg_left|fname_left body_left env_left|rf_left rx_left rbody_left renv_left|builtin_left|record_left|string_left];
+    try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
+      cbn in Heval; discriminate].
+  destruct v2 as [z_right|b1| |tuple_right|constr_right arg_right|fname_right body_right env_right|rf_right rx_right rbody_right renv_right|builtin_right|record_right|string_right];
+    try solve [unfold eval_structural_binop, eval_binop in Heval;
+      cbn in Heval; destruct b0; discriminate].
+  unfold eval_structural_binop, eval_binop in Heval; cbn in Heval.
+  assert (Hval_eq : (b0 || b1)%bool = (a || b)%bool).
+  { destruct b0; simpl in Heval |- *; inversion Heval; reflexivity. }
+  assert (Hout_eq : out2 = out).
+  { destruct b0; simpl in Heval; inversion Heval; reflexivity. }
   subst out2.
   assert (He1_pure : out1 = out).
   { symmetry. eapply eval_pure_intermediate; eauto. }
@@ -5361,6 +5487,7 @@ Qed.
    - print_int  -> C_CALL 1 0  (prim_idx = 0)
    - print_newline -> C_CALL 1 1  (prim_idx = 1)
    - print_string -> C_CALL 1 2  (prim_idx = 2)
+   - print_char -> C_CALL 1 3  (prim_idx = 3)
 
    The trusted observable mapping also reserves/requires prim_idx = 3 for
    print_char. print_string remains a no-op because strings are still stubbed
