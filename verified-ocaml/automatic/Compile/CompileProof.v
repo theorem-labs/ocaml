@@ -2182,13 +2182,22 @@ Proof.
 Qed.
 
 Lemma step_envacc : forall code s n v,
+  (Z.of_nat n < Int.half_modulus)%Z ->
   nth_error code (Z.to_nat (pc s)) = Some (ENVACC n) ->
   field_or_heap s (Machine.env s) n = Some v ->
   step_list code s = Step (st s (pc s + 1) v (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
-(* False without ENVACC operand bounds: handler rejects n >= Int.half_modulus
-   even when env lookup succeeds. *)
-Admitted.
+Proof.
+  intros code s n v Hbound Hnth Hfield.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  unfold handle_ENVACC.
+  replace (Z.of_nat n <? Int.half_modulus)%Z with true.
+  - rewrite Hfield. unfold st.
+    destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl.
+    reflexivity.
+  - symmetry. apply Z.ltb_lt. exact Hbound.
+Qed.
 
 (* --- Additional arithmetic step lemmas --- *)
 
