@@ -26,25 +26,23 @@ Reach full formal verification of the OCaml compiler in two stages:
 |-----------|------|----------|-----|---------|
 | Compiler correctness | `automatic/Compile/CompileProof.v` | 27 | 115 | Closures, heap allocation, function application, false step lemmas needing stronger preconditions |
 | Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
-| Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 99 | 0 | Generic lemma is unprovable as stated without halt/ccall payload uniqueness or weaker equivalence |
+| Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 94 | 31 | Per-instruction uniqueness lemmas still admitted; generic halt/ccall payload issue resolved |
 
 ### Known Gaps in Trusted Code
 
 1. **`behavior_equiv` doesn't compare return values** (`manual/Compile/CompileSpec.v:67-79`). When both sides terminate normally, it checks trace length equality but not `Term_normal v1 = Term_normal v2`. This means two programs producing the same output but different return values are considered equivalent.
 
-2. **`ccall_to_events` only handles output C-calls for the current source subset** (`CompileSpec.v:34-40`). `print_int` (idx=0), `print_newline` (idx=1), and `print_char` (idx=3) produce events. `print_string` (idx=2) remains a no-op while strings are stubbed end-to-end. Compare `checker/Bytecode/Main.v` which handles ~25 C-calls at the pipeline level.
+2. **`ccall_to_events` only handles output C-calls for the current compiled subset** (`CompileSpec.v:34-40`). `print_int` (idx=0), `print_newline` (idx=1), and `print_char` (idx=3) produce events. `print_string` (idx=2) remains a no-op until string compilation/bytecode string representation is implemented. Compare `checker/Bytecode/Main.v` which handles ~25 C-calls at the pipeline level.
 
 3. **`Observable.v` has no input events**. Only `Out_char` exists. Programs reading stdin, files, or environment variables cannot be distinguished by their behavior.
 
 4. **`Syntax.v` missing constructs**: No `raise`/`try`, `while`/`for`, `ref`/mutable, multi-arg `let rec`, floats, `;;` (double semicolons), character literals, nested modules with signatures.
 
-5. **Source interpreter stubs** (`semi-auto/Interpret/Interpret.v`):
+5. **Source interpreter remaining caveats** (`semi-auto/Interpret/Interpret.v`):
    - `compare` returns `Val_int 0` always
-   - `print_string` is a no-op
-   - `Decl_open` is a no-op
-   - `interpret` always returns `Val_int 0` regardless of actual result
-   - `Pat_nil` incorrectly matches `SVal_int 0`
-   - `Decl_module` leaks inner bindings into outer scope
+   - `Op_and`/`Op_or` are strict to match current compiler `ANDINT`/`ORINT`
+   - `Op_eq`/`Op_neq` remain int-only to match current bytecode physical equality proof
+   - `Decl_open` supports qualified aliases only
 
 6. **Compiler gaps** (`automatic/Compile/Compile.v`):
    - All constructors share tag 0 (can't distinguish variants)
@@ -253,21 +251,18 @@ Additional simplification principle: **pulling in existing source code is free c
 
 ### 2.3 Complete MetaSpecVerification
 
-**Current state**: 99 Admitted across 95 files. All 94 handler uniqueness lemmas Admitted.
+**Current state**: 94 Admitted and 31 Qed across 95 files. All 94 per-handler uniqueness lemmas remain Admitted; the shared generic uniqueness lemma is now proved.
 
-**Work needed**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). The generic lemma (`handler_correct_gen_determines_em_eq` in `SharedLemmas.v`) is unprovable as stated: `handler_correct_gen` does not uniquely pin down halt/ccall payloads. Fix by adding payload uniqueness to the spec, or weaken the target equivalence so payload equality is not required.
+**Work needed**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). `handler_correct_gen` now uses state-indexed option payload specs for halt/ccall, so `handler_correct_gen_determines_em_eq` can prove exact payload equality. Remaining work is to replace the 94 per-instruction uniqueness admits with instantiations of the generic lemma.
 
 ### 2.4 Fix Source Interpreter
 
 **File**: `semi-auto/Interpret/Interpret.v`
 
-**Fixes needed**:
+**Remaining fixes needed**:
 - `compare` must implement real structural comparison
-- `print_string` must produce `Out_char` events
-- `interpret` must return the actual computed value, not `Val_int 0`
-- `Pat_nil` must not match `SVal_int 0`
-- `Decl_module` must not leak inner bindings
-- `Decl_open` needs real semantics or must be documented as out-of-scope
+- Restore short-circuit `Op_and`/`Op_or` once the compiler emits branch code instead of strict `ANDINT`/`ORINT`
+- Widen structural equality once the compiler emits structural equality instead of bytecode `EQ`/`NEQ`
 
 ### 2.5 Fix Compiler
 

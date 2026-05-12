@@ -15,7 +15,7 @@
    The concrete helpers take abs_rel totality and functionality as explicit
    hypotheses (not axioms). *)
 
-From Stdlib Require Import ZArith List Strings.String.
+From Stdlib Require Import ZArith List Strings.String Lia.
 From compcert Require Import Coqlib Integers Ctypes Cop Clight ClightBigstep Events Globalenvs Memory Values.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
@@ -522,6 +522,23 @@ Proof.
   auto.
 Qed.
 
+Lemma clight_returns_retcode_injective :
+  forall f ret1 ret2 e le m le1 m1 le2 m2,
+    0 <= ret1 <= Int.max_unsigned ->
+    0 <= ret2 <= Int.max_unsigned ->
+    clight_returns f ret1 e le m le1 m1 ->
+    clight_returns f ret2 e le m le2 m2 ->
+    ret1 = ret2.
+Proof.
+  unfold clight_returns. intros f ret1 ret2 e le m le1 m1 le2 m2 Hret1 Hret2 H1 H2.
+  destruct (proj1 (exec_stmt_eval_funcall_E0_deterministic clight_ge)
+    _ _ _ _ _ _ _ _ H1 eq_refl _ _ _ H2) as (_ & _ & Hout).
+  injection Hout as Hint.
+  change (Int.unsigned (Int.repr ret1) = Int.unsigned (Int.repr ret2)) in Hint.
+  rewrite !Int.unsigned_repr in Hint by lia.
+  lia.
+Qed.
+
 (* ================================================================== *)
 (* Generic uniqueness proof                                            *)
 (*                                                                      *)
@@ -556,13 +573,115 @@ Lemma handler_correct_gen_determines_em_eq :
          (h1 h2 : Z -> S -> step_result_gen S)
          (err : S -> option string)
          (step_pre : Clight.env -> mem -> S -> W -> Prop)
-         (P_halt : value -> Prop)
-         (P_ccall : nat -> list value -> S -> Prop),
+         (P_halt : S -> option value)
+         (P_ccall : S -> option (nat * list value * S)),
     (forall s e le m w, R e le m s w -> step_pre e m s w) ->
     handler_correct_gen S W pc_of R h1 f err step_pre P_halt P_ccall ->
     handler_correct_gen S W pc_of R h2 f err step_pre P_halt P_ccall ->
     forall s, em_eq_gen (h1 (pc_of s) s) (h2 (pc_of s) s).
-Proof. Admitted.
+Proof.
+  intros f h1 h2 err step_pre P_halt P_ccall Hpre_holds Hc1 Hc2 s.
+  destruct (R_total s) as [e [le [m [w Hrel]]]].
+  pose proof (Hpre_holds s e le m w Hrel) as Hpre.
+  unfold handler_correct_gen in Hc1, Hc2.
+  specialize (Hc1 e le m s).
+  specialize (Hc2 e le m s).
+  destruct (err s) as [msg|] eqn:Herr.
+  - rewrite Hc1, Hc2. constructor.
+  - destruct (h1 (pc_of s) s) as [s1|v1|msg1|n1 args1 s1] eqn:E1;
+      destruct (h2 (pc_of s) s) as [s2|v2|msg2|n2 args2 s2] eqn:E2.
+    + specialize (Hc1 w Hrel Hpre).
+      specialize (Hc2 w Hrel Hpre).
+      destruct Hc1 as [le1 [m1 [Hexec1 [w1 Hrel1]]]].
+      destruct Hc2 as [le2 [m2 [Hexec2 [w2 Hrel2]]]].
+      destruct (clight_returns_deterministic
+        _ _ _ _ _ _ _ _ _ Hexec1 Hexec2) as [Hle Hm].
+      subst le2 m2.
+      assert (s1 = s2).
+      { eapply R_functional with (e := e) (le := le1) (m := m1); eauto. }
+      subst s2. constructor.
+    + destruct Hc2 as [_ Hc2].
+      specialize (Hc1 w Hrel Hpre).
+      specialize (Hc2 w Hrel Hpre).
+      destruct Hc1 as [le1 [m1 [Hexec1 _]]].
+      destruct Hc2 as [le2 [m2 Hexec2]].
+      assert (0 = 1)%Z as Hret by
+        (eapply (clight_returns_retcode_injective f 0 1 e le m le1 m1 le2 m2);
+         [change Int.max_unsigned with 4294967295%Z; lia
+         | change Int.max_unsigned with 4294967295%Z; lia
+         | exact Hexec1 | exact Hexec2]).
+      lia.
+    + contradiction.
+    + destruct Hc2 as [_ Hc2].
+      specialize (Hc1 w Hrel Hpre).
+      specialize (Hc2 w Hrel Hpre).
+      destruct Hc1 as [le1 [m1 [Hexec1 _]]].
+      destruct Hc2 as [le2 [m2 Hexec2]].
+      assert (0 = 3)%Z as Hret by
+        (eapply (clight_returns_retcode_injective f 0 3 e le m le1 m1 le2 m2);
+         [change Int.max_unsigned with 4294967295%Z; lia
+         | change Int.max_unsigned with 4294967295%Z; lia
+         | exact Hexec1 | exact Hexec2]).
+      lia.
+    + destruct Hc1 as [_ Hc1].
+      specialize (Hc1 w Hrel Hpre).
+      specialize (Hc2 w Hrel Hpre).
+      destruct Hc1 as [le1 [m1 Hexec1]].
+      destruct Hc2 as [le2 [m2 [Hexec2 _]]].
+      assert (1 = 0)%Z as Hret by
+        (eapply (clight_returns_retcode_injective f 1 0 e le m le1 m1 le2 m2);
+         [change Int.max_unsigned with 4294967295%Z; lia
+         | change Int.max_unsigned with 4294967295%Z; lia
+         | exact Hexec1 | exact Hexec2]).
+      lia.
+    + destruct Hc1 as [HP1 _].
+      destruct Hc2 as [HP2 _].
+      rewrite HP1 in HP2. inversion HP2. subst. constructor.
+    + contradiction.
+    + destruct Hc1 as [_ Hc1].
+      destruct Hc2 as [_ Hc2].
+      specialize (Hc1 w Hrel Hpre).
+      specialize (Hc2 w Hrel Hpre).
+      destruct Hc1 as [le1 [m1 Hexec1]].
+      destruct Hc2 as [le2 [m2 Hexec2]].
+      assert (1 = 3)%Z as Hret by
+        (eapply (clight_returns_retcode_injective f 1 3 e le m le1 m1 le2 m2);
+         [change Int.max_unsigned with 4294967295%Z; lia
+         | change Int.max_unsigned with 4294967295%Z; lia
+         | exact Hexec1 | exact Hexec2]).
+      lia.
+    + contradiction.
+    + contradiction.
+    + constructor.
+    + contradiction.
+    + destruct Hc1 as [_ Hc1].
+      specialize (Hc1 w Hrel Hpre).
+      specialize (Hc2 w Hrel Hpre).
+      destruct Hc1 as [le1 [m1 Hexec1]].
+      destruct Hc2 as [le2 [m2 [Hexec2 _]]].
+      assert (3 = 0)%Z as Hret by
+        (eapply (clight_returns_retcode_injective f 3 0 e le m le1 m1 le2 m2);
+         [change Int.max_unsigned with 4294967295%Z; lia
+         | change Int.max_unsigned with 4294967295%Z; lia
+         | exact Hexec1 | exact Hexec2]).
+      lia.
+    + destruct Hc1 as [_ Hc1].
+      destruct Hc2 as [_ Hc2].
+      specialize (Hc1 w Hrel Hpre).
+      specialize (Hc2 w Hrel Hpre).
+      destruct Hc1 as [le1 [m1 Hexec1]].
+      destruct Hc2 as [le2 [m2 Hexec2]].
+      assert (3 = 1)%Z as Hret by
+        (eapply (clight_returns_retcode_injective f 3 1 e le m le1 m1 le2 m2);
+         [change Int.max_unsigned with 4294967295%Z; lia
+         | change Int.max_unsigned with 4294967295%Z; lia
+         | exact Hexec1 | exact Hexec2]).
+      lia.
+    + contradiction.
+    + destruct Hc1 as [HP1 _].
+      destruct Hc2 as [HP2 _].
+      rewrite HP1 in HP2. inversion HP2. subst. constructor.
+Qed.
 
 End GenericUniqueness.
 
@@ -581,8 +700,8 @@ Module SharedLemmasMetaSpecGen <: MetaSpecGen.
              (h1 h2 : Z -> S -> step_result_gen S)
              (err : S -> option string)
              (step_pre : Clight.env -> mem -> S -> W -> Prop)
-             (P_halt : value -> Prop)
-             (P_ccall : nat -> list value -> S -> Prop),
+              (P_halt : S -> option value)
+              (P_ccall : S -> option (nat * list value * S)),
         (forall s e le m w, R e le m s w -> step_pre e m s w) ->
         handler_correct_gen S W pc_of_S R h1 f err step_pre P_halt P_ccall ->
         handler_correct_gen S W pc_of_S R h2 f err step_pre P_halt P_ccall ->
@@ -607,16 +726,16 @@ Lemma unique_non_halt_ccall_from_handler_correct :
   forall (f : function)
          (err : state -> option string)
          (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
-         (P_halt : value -> Prop)
-         (P_ccall : nat -> list value -> state -> Prop)
+          (P_halt : state -> option value)
+          (P_ccall : state -> option (nat * list value * state))
          (h1 h2 : Z -> state -> step_result),
     (forall (e : Clight.env) (le : temp_env) (m : mem) (s1 s2 : state),
        abs_rel e le m s1 -> abs_rel e le m s2 -> s1 = s2) ->
     (forall (s : state),
        exists (e : Clight.env) (le : temp_env) (m : mem) (ard : abs_rel_data),
          abs_rel_with_ard e le m s ard /\ step_pre e m s ard) ->
-    (forall v, P_halt v -> False) ->
-    (forall n args s, P_ccall n args s -> False) ->
+    (forall s v, P_halt s = Some v -> False) ->
+    (forall s n args s', P_ccall s = Some (n, args, s') -> False) ->
     handler_correct h1 f err step_pre P_halt P_ccall ->
     handler_correct h2 f err step_pre P_halt P_ccall ->
     forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
@@ -657,8 +776,8 @@ Lemma handler_correct_determines_em_eq :
   forall (f : function)
          (err : state -> option string)
          (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
-         (P_halt : value -> Prop)
-         (P_ccall : nat -> list value -> state -> Prop)
+          (P_halt : state -> option value)
+          (P_ccall : state -> option (nat * list value * state))
          (h1 h2 : Z -> state -> step_result) (s : state),
     (forall s0, exists e le m w, abs_rel_with_ard e le m s0 w) ->
     (forall e le m s1 s2 w1 w2,
@@ -689,8 +808,8 @@ Section GenericHelpers.
 Variables (f : function)
           (err : state -> option string)
           (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
-          (P_halt_pred : value -> Prop)
-          (P_ccall_pred : nat -> list value -> state -> Prop).
+          (P_halt_pred : state -> option value)
+          (P_ccall_pred : state -> option (nat * list value * state)).
 
 Hypothesis abs_rel_total :
   forall s, exists e le m w, abs_rel_with_ard e le m s w.
@@ -810,8 +929,8 @@ Lemma unique_from_handler_correct :
   forall (f : function)
          (err : state -> option string)
          (step_pre : Clight.env -> mem -> state -> abs_rel_data -> Prop)
-         (P_halt_p : value -> Prop)
-         (P_ccall_p : nat -> list value -> state -> Prop)
+         (P_halt_p : state -> option value)
+         (P_ccall_p : state -> option (nat * list value * state))
          (h1 h2 : Z -> state -> step_result),
     (forall s0, exists e le m w, abs_rel_with_ard e le m s0 w) ->
     (forall e le m s1 s2 w1 w2,

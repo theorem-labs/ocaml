@@ -238,7 +238,7 @@ Proof.
   simpl handle_instr.
   unfold Handlers.handle_C_CALL.
   split.
-  - simpl. split; [reflexivity | exact I].
+  - reflexivity.
   - intros w Hrel Hpre.
     eapply C_CALLN_clight_returns; [exact Hrel |].
     (* step_pre = pre_of (C_CALL nargs prim_idx) provides code memory

@@ -4,7 +4,7 @@
    The Rocq handler is: handle_STOP s = Halt s.(accu).
 
    Since handler_correct matches on the step_result and the Halt case
-   requires P_halt_of STOP v = (instr_wfb STOP = true /\ True), the
+   requires P_halt_of STOP s = Some s.(accu), the
    proof reduces to showing that the Clight body `return 1` executes
    to Out_return (Some (Vint (Int.repr 1), tint)). *)
 
@@ -32,10 +32,10 @@ Proof.
   (* error_message_of STOP s = None, handle_instr STOP _ s = Halt s.(accu) *)
   simpl error_message_of.
   simpl handle_instr.
-  (* Now in the Halt branch: need P_halt_of STOP (accu s) /\ forall w, ... *)
+  (* Now in the Halt branch: need P_halt_of STOP s = Some s.(accu) /\ forall w, ... *)
   split.
-  - (* P_halt_of STOP (accu s) = instr_wfb STOP = true /\ True *)
-    simpl. split; [reflexivity | exact I].
+  - (* P_halt_of STOP s = Some s.(accu) *)
+    reflexivity.
   - (* forall w, abs_rel_with_ard e le m s w ->
        step_pre e m s w ->
        exists le' m', clight_returns f_instr_STOP 1 e le m le' m' *)

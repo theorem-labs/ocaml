@@ -227,8 +227,8 @@ Section Generic.
       (f : function)
       (err : S -> option string)
       (step_pre : Clight.env -> mem -> S -> W -> Prop)
-      (P_halt : value -> Prop)
-      (P_ccall : nat -> list value -> S -> Prop) : Prop :=
+      (P_halt : S -> option value)
+      (P_ccall : S -> option (nat * list value * S)) : Prop :=
     forall e le m s,
       match err s with
       | Some msg =>
@@ -244,14 +244,14 @@ Section Generic.
                 R_ex e le' m' s'
           | Error _ => False
           | Halt v =>
-              P_halt v /\
+              P_halt s = Some v /\
               (forall w,
                R e le m s w ->
                step_pre e m s w ->
                exists le' m',
                  clight_returns f 1 e le m le' m')
           | CCall_request n args s' =>
-              P_ccall n args s' /\
+              P_ccall s = Some (n, args, s') /\
               (forall w,
                R e le m s w ->
                step_pre e m s w ->
@@ -295,8 +295,8 @@ Definition handler_correct :=
 (*   clight_of        — Clight function                                 *)
 (*   error_message_of — None when well-formed, Some msg when error      *)
 (*   pre_of           — step precondition (weakest-precondition)        *)
-(*   P_halt_of        — wfb /\ (STOP -> True | _ -> False)              *)
-(*   P_ccall_of       — wfb /\ (C_CALL -> True | _ -> False)            *)
+(*   P_halt_of        — exact halt payload for STOP                      *)
+(*   P_ccall_of       — exact C-call payload for C_CALL                  *)
 (* ================================================================== *)
 
 (* handler_correct_absorb_wfb removed — no longer needed after uniformizing
@@ -1211,11 +1211,21 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
 Definition pre_of (i : instruction) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=
   pre_of_gen state abs_rel_data abs_rel_with_ard (fn_body (clight_of i)).
 
-Definition P_halt_of (i : instruction) (v : value) : Prop :=
-  instr_wfb i = true /\ match i with STOP => True | _ => False end.
+Definition P_halt_of (i : instruction) (s : state) : option value :=
+  match instr_wfb i, i with
+  | true, STOP => Some s.(accu)
+  | _, _ => None
+  end.
 
-Definition P_ccall_of (i : instruction) (n : nat) (args : list value) (s : state) : Prop :=
-  instr_wfb i = true /\ match i with C_CALL _ _ => True | _ => False end.
+Definition P_ccall_of (i : instruction) (s : state) : option (nat * list value * state) :=
+  match instr_wfb i, i with
+  | true, C_CALL nargs prim_idx =>
+      let args := s.(accu) :: firstn (Nat.sub nargs 1) s.(stack) in
+      let new_stack := skipn (Nat.sub nargs 1) s.(stack) in
+      let cont := s <|pc := s.(pc)|> <|accu := val_unit|> <|stack := new_stack|> in
+      Some (prim_idx, args, cont)
+  | _, _ => None
+  end.
 
 (* ================================================================== *)
 (* Module Type                                                         *)

@@ -59,8 +59,8 @@ Module Type MetaSpecGen.
              (h1 h2 : Z -> S -> step_result_gen S)
              (err : S -> option string)
              (step_pre : Clight.env -> mem -> S -> W -> Prop)
-             (P_halt : value -> Prop)
-             (P_ccall : nat -> list value -> S -> Prop),
+              (P_halt : S -> option value)
+              (P_ccall : S -> option (nat * list value * S)),
         (forall s e le m w, R e le m s w -> step_pre e m s w) ->
         handler_correct_gen S W pc_of_S R h1 f err step_pre P_halt P_ccall ->
         handler_correct_gen S W pc_of_S R h2 f err step_pre P_halt P_ccall ->
