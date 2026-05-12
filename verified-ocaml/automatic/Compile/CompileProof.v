@@ -12,6 +12,7 @@ From Stdlib Require Import ZArith Strings.String PeanoNat Lia.
 From Stdlib.Array Require Import PrimArray ArrayAxioms.
 From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
 From Stdlib Require Import List. Import ListNotations.
+From compcert Require Import Integers.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
@@ -368,6 +369,21 @@ Lemma step_constint : forall code s n,
 (* False without CONSTINT operand bounds: handler rejects ints outside
    [Int.min_signed, Int.max_signed]. *)
 Admitted.
+
+Lemma step_constint_bounded : forall code s n,
+  Int.min_signed <= n <= Int.max_signed ->
+  nth_error code (Z.to_nat (pc s)) = Some (CONSTINT n) ->
+  step_list code s = Step (st s (pc s + 1) (Val_int n) (Machine.stack s) (Machine.env s)
+                        (extra_args s) (Machine.global s) (trap_sp s)).
+Proof.
+  intros code s n Hbounds Hnth.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  unfold handle_CONSTINT.
+  replace (andb (Int.min_signed <=? n)%Z (n <=? Int.max_signed)%Z) with true.
+  - unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
+  - symmetry. apply andb_true_intro. split; apply Z.leb_le; lia.
+Qed.
 
 Lemma step_stop : forall code s,
   nth_error code (Z.to_nat (pc s)) = Some STOP ->
@@ -966,7 +982,13 @@ Lemma interpret_stable_empty : forall f,
 Proof. intros. unfold interpret. reflexivity. Qed.
 
 Lemma compiler_correct_empty : compiler_correct [].
-Admitted.
+Proof.
+  intros src_fuel bc_fuel.
+  unfold compiler_correct, behavior_equiv, CompileSpec.bytecode_behavior,
+    CompileSpec.run_collecting, compile_program, compile_decls,
+    Interpret.interpret, eval_program.
+  destruct src_fuel as [|sf]; destruct bc_fuel as [|bf]; simpl; split; auto.
+Qed.
 
 (* --- Type declaration: threshold = 0 --- *)
 
@@ -976,7 +998,73 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_type_decl : forall name params td,
   compiler_correct [Decl_type name params td].
-Admitted.
+Proof.
+  intros name params td src_fuel bc_fuel.
+  unfold compiler_correct, behavior_equiv, CompileSpec.bytecode_behavior,
+    CompileSpec.run_collecting, compile_program, compile_decls,
+    Interpret.interpret, eval_program.
+  destruct src_fuel as [|[|sf]]; destruct bc_fuel as [|bf];
+    simpl; split; auto.
+Qed.
+
+Lemma constint_stop_behavior_equiv : forall src_result bc_fuel n,
+  Int.min_signed <= n <= Int.max_signed ->
+  ((exists v, src_result = Term_normal v) \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT n; STOP] []).
+Proof.
+  intros src_result bc_fuel n Hbounds Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int n) [] val_unit 0 [] 0).
+  assert (Hconst : step_list [CONSTINT n; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity]. }
+  assert (Hhalt : step_list [CONSTINT n; STOP] s1 = Halt (Val_int n)).
+  { subst s1 s0. apply step_stop. reflexivity. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|fuel]].
+  - destruct Hsrc as [[v ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT n; STOP] s0 s1 [] Hconst).
+    destruct Hsrc as [[v ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step (S fuel) [CONSTINT n; STOP] s0 s1 [] Hconst).
+    rewrite (rc_halt fuel [CONSTINT n; STOP] s1 (Val_int n) [] Hhalt).
+    destruct Hsrc as [[v ->] | ->]; simpl; split; auto.
+Qed.
+
+Lemma constint_boolnot_stop_behavior_equiv : forall src_result bc_fuel n v,
+  Int.min_signed <= n <= Int.max_signed ->
+  ((n = 0 /\ v = val_true) \/ (n <> 0 /\ v = val_false)) ->
+  ((exists vsrc, src_result = Term_normal vsrc) \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT n; BOOLNOT; STOP] []).
+Proof.
+  intros src_result bc_fuel n v Hbounds Hnot Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int n) [] val_unit 0 [] 0).
+  set (s2 := st s1 2 v [] val_unit 0 [] 0).
+  assert (Hconst : step_list [CONSTINT n; BOOLNOT; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity]. }
+  assert (Hboolnot : step_list [CONSTINT n; BOOLNOT; STOP] s1 = Step s2).
+  { destruct Hnot as [[-> ->] | [Hnz ->]].
+    - subst s2 s1 s0. apply step_boolnot_zero; reflexivity.
+    - subst s2 s1 s0. apply step_boolnot_nonzero with (n := n);
+        [reflexivity | reflexivity | exact Hnz]. }
+  assert (Hhalt : step_list [CONSTINT n; BOOLNOT; STOP] s2 = Halt v).
+  { subst s2. apply step_stop. reflexivity. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|fuel]]].
+  - destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT n; BOOLNOT; STOP] s0 s1 [] Hconst).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 1 [CONSTINT n; BOOLNOT; STOP] s0 s1 [] Hconst).
+    rewrite (rc_step 0 [CONSTINT n; BOOLNOT; STOP] s1 s2 [] Hboolnot).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S fuel)) [CONSTINT n; BOOLNOT; STOP] s0 s1 [] Hconst).
+    rewrite (rc_step (S fuel) [CONSTINT n; BOOLNOT; STOP] s1 s2 [] Hboolnot).
+    rewrite (rc_halt fuel [CONSTINT n; BOOLNOT; STOP] s2 v [] Hhalt).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+Qed.
 
 (* --- Decl_expr (Exp_int n): threshold = 1 --- *)
 
@@ -998,7 +1086,47 @@ Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
 
 Lemma compiler_correct_expr_bool : forall b,
   compiler_correct [Decl_expr (Exp_bool b)].
-Admitted.
+Proof.
+  intros b src_fuel bc_fuel.
+  unfold compiler_correct.
+  destruct b.
+  - change (compile_program [Decl_expr (Exp_bool true)]) with [CONSTINT 1; STOP].
+    destruct src_fuel as [|[|sf]].
+    + change (interpret 0 [Decl_expr (Exp_bool true)]) with (mk_behavior [] Term_timeout).
+      apply constint_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. reflexivity.
+    + change (interpret 1 [Decl_expr (Exp_bool true)]) with (mk_behavior [] Term_timeout).
+      apply constint_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. reflexivity.
+    + replace (S (S sf)) with (2 + sf)%nat by lia.
+      rewrite interpret_stable_expr_bool.
+      apply constint_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * left. exists (Val_int 0). reflexivity.
+  - change (compile_program [Decl_expr (Exp_bool false)]) with [CONSTINT 0; STOP].
+    destruct src_fuel as [|[|sf]].
+    + change (interpret 0 [Decl_expr (Exp_bool false)]) with (mk_behavior [] Term_timeout).
+      apply constint_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. reflexivity.
+    + change (interpret 1 [Decl_expr (Exp_bool false)]) with (mk_behavior [] Term_timeout).
+      apply constint_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. reflexivity.
+    + replace (S (S sf)) with (2 + sf)%nat by lia.
+      rewrite interpret_stable_expr_bool.
+      apply constint_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * left. exists (Val_int 0). reflexivity.
+Qed.
 
 (* --- Decl_expr Exp_unit: threshold = 2 --- *)
 
@@ -1009,7 +1137,28 @@ Proof. intros. unfold interpret; simpl; reflexivity. Qed.
 
 Lemma compiler_correct_expr_unit :
   compiler_correct [Decl_expr Exp_unit].
-Admitted.
+Proof.
+  intros src_fuel bc_fuel.
+  unfold compiler_correct.
+  change (compile_program [Decl_expr Exp_unit]) with [CONSTINT 0; STOP].
+  destruct src_fuel as [|[|sf]].
+  - change (interpret 0 [Decl_expr Exp_unit]) with (mk_behavior [] Term_timeout).
+    apply constint_stop_behavior_equiv.
+    + change Int.min_signed with (-2147483648)%Z.
+      change Int.max_signed with 2147483647%Z. lia.
+    + right. reflexivity.
+  - change (interpret 1 [Decl_expr Exp_unit]) with (mk_behavior [] Term_timeout).
+    apply constint_stop_behavior_equiv.
+    + change Int.min_signed with (-2147483648)%Z.
+      change Int.max_signed with 2147483647%Z. lia.
+    + right. reflexivity.
+  - replace (S (S sf)) with (2 + sf)%nat by lia.
+    rewrite interpret_stable_expr_unit.
+    apply constint_stop_behavior_equiv.
+    + change Int.min_signed with (-2147483648)%Z.
+      change Int.max_signed with 2147483647%Z. lia.
+    + left. exists (Val_int 0). reflexivity.
+Qed.
 
 (* --- Decl_expr (Exp_seq (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
@@ -1042,7 +1191,73 @@ Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
 
 Lemma compiler_correct_not_bool : forall b,
   compiler_correct [Decl_expr (Exp_unop Op_not (Exp_bool b))].
-Admitted.
+Proof.
+  intros b src_fuel bc_fuel.
+  unfold compiler_correct.
+  destruct b.
+  - change (compile_program [Decl_expr (Exp_unop Op_not (Exp_bool true))])
+      with [CONSTINT 1; BOOLNOT; STOP].
+    destruct src_fuel as [|[|[|sf]]].
+    + change (interpret 0 [Decl_expr (Exp_unop Op_not (Exp_bool true))])
+        with (mk_behavior [] Term_timeout).
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. split; [lia | reflexivity].
+      * right. reflexivity.
+    + change (interpret 1 [Decl_expr (Exp_unop Op_not (Exp_bool true))])
+        with (mk_behavior [] Term_timeout).
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. split; [lia | reflexivity].
+      * right. reflexivity.
+    + change (interpret 2 [Decl_expr (Exp_unop Op_not (Exp_bool true))])
+        with (mk_behavior [] Term_timeout).
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. split; [lia | reflexivity].
+      * right. reflexivity.
+    + replace (S (S (S sf))) with (3 + sf)%nat by lia.
+      rewrite interpret_stable_not_bool.
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * right. split; [lia | reflexivity].
+      * left. exists (Val_int 0). reflexivity.
+  - change (compile_program [Decl_expr (Exp_unop Op_not (Exp_bool false))])
+      with [CONSTINT 0; BOOLNOT; STOP].
+    destruct src_fuel as [|[|[|sf]]].
+    + change (interpret 0 [Decl_expr (Exp_unop Op_not (Exp_bool false))])
+        with (mk_behavior [] Term_timeout).
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * left. split; [reflexivity | reflexivity].
+      * right. reflexivity.
+    + change (interpret 1 [Decl_expr (Exp_unop Op_not (Exp_bool false))])
+        with (mk_behavior [] Term_timeout).
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * left. split; [reflexivity | reflexivity].
+      * right. reflexivity.
+    + change (interpret 2 [Decl_expr (Exp_unop Op_not (Exp_bool false))])
+        with (mk_behavior [] Term_timeout).
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * left. split; [reflexivity | reflexivity].
+      * right. reflexivity.
+    + replace (S (S (S sf))) with (3 + sf)%nat by lia.
+      rewrite interpret_stable_not_bool.
+      eapply constint_boolnot_stop_behavior_equiv.
+      * change Int.min_signed with (-2147483648)%Z.
+        change Int.max_signed with 2147483647%Z. lia.
+      * left. split; [reflexivity | reflexivity].
+      * left. exists (Val_int 0). reflexivity.
+Qed.
 
 (* --- Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
