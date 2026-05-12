@@ -450,11 +450,19 @@ Proof.
 Qed.
 
 Lemma step_pop : forall code s n,
+  (Z.of_nat n < Int.half_modulus)%Z ->
   nth_error code (Z.to_nat (pc s)) = Some (POP n) ->
   step_list code s = Step (st s (pc s + 1) (accu s) (skipn n (Machine.stack s)) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
-(* False without POP operand bounds: handler rejects n >= Int.half_modulus. *)
-Admitted.
+Proof.
+  intros code s n Hbound Hnth.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  unfold handle_POP.
+  replace (Z.of_nat n <? Int.half_modulus)%Z with true.
+  - unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
+  - symmetry. apply Z.ltb_lt. exact Hbound.
+Qed.
 
 Lemma step_branch : forall code s target,
   nth_error code (Z.to_nat (pc s)) = Some (BRANCH target) ->
@@ -5983,7 +5991,9 @@ Proof.
       (skipn 1 (Machine.stack s_after_c2))
       (Machine.env s_after_c2) (extra_args s_after_c2)
       (Machine.global s_after_c2) (trap_sp s_after_c2))).
-  { apply step_pop. rewrite Hpc_c2. exact Hpop_fetch. }
+  { apply step_pop.
+    - change Int.half_modulus with 2147483648%Z. lia.
+    - rewrite Hpc_c2. exact Hpop_fetch. }
   set (s_after_pop := st s
     (Z.of_nat (base + c1_len + 1 + c2_len + 1))
     v2 (Machine.stack s) (Machine.env s)

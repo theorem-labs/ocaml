@@ -25,7 +25,7 @@ Reach full formal verification of the OCaml compiler in two stages:
 
 | Component | File | Admitted | Qed | Blocker |
 |-----------|------|----------|-----|---------|
-| Compiler correctness | `automatic/Compile/CompileProof.v` | 21 | 123 | Closures, heap allocation, function application, remaining step lemmas needing stronger preconditions; bounded CONSTINT helpers are proved |
+| Compiler correctness | `automatic/Compile/CompileProof.v` | 20 | 124 | Closures, heap allocation, function application, remaining step lemmas needing stronger preconditions; bounded CONSTINT/POP helpers are proved |
 | Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
 
 ### Known Gaps in Trusted Code
@@ -234,7 +234,7 @@ Additional simplification principle: **pulling in existing source code is free c
 
 ### 2.1 Complete CompileProof.v
 
-**Current state**: 21 Admitted, 123 Qed. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_not_bool`, plus bounded CONSTINT helper lemmas. Core blockers are extending `val_corresponds` for closures and strengthening the remaining single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
+**Current state**: 20 Admitted, 124 Qed. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_not_bool`, plus bounded CONSTINT and POP helper lemmas. Core blockers are extending `val_corresponds` for closures and strengthening the remaining single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
 
 **Work needed**:
 - Extend `val_corresponds` with a closure clause relating `SVal_closure param body senv` to `Val_closure addr ofs` (heap-allocated)
