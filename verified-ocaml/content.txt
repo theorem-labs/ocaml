@@ -10,18 +10,23 @@
 1. [Manual] `interpret-bytecode` Write an AST + pretty-printer + interpreter for OCaml bytecode; ~150 instructions, ~1500 LoC
     1. [Auto] PBT harness to verify that `ocamlrun` and `interpret-bytecode` do the same thing
 2. [Auto] `lex-parse` Process OCaml source into AST + [Semi-auto] `pretty-printer` reverse direction
-3. [Auto] `compile` (using `lex-parse) and [Auto] `interpret`
-4. [Manual] Define the compiler correctness theorem (`forall source, interpret(source) = (interpret-bytecode∘compile)(source)`)
-    1. [Auto] Continue to prove theorem as `compile` / `interpret` evolve
-    2. [Semi-auto] Impose a penalty for `interpret` length. Penalty is amplified if LLM cannot find a program (+ inputs to the program?) where the previous `interpret` and `ocamlrun∘ocamlc` disagree on behavior
-5. [Auto] PBT that `ocamlc` and `compile` produce identical/equivalent(?) bytecode on a series of [Manual] infinite families of syntax trees
+3. [Auto] `compile` (using `lex-parse`) and [Auto] `interpret`
+4. [Manual]/[Checker] Three top-level theorem statements (proofs in [Auto]):
+    1. Theorem (compiler correctness): `forall source fuel1 fuel2, behavior_equiv (interpret fuel1 source) (bytecode_behavior step_fn fuel2 (compile source) [])`
+        - [Auto] Continue to prove theorem as `compile` / `interpret` evolve
+        - [Semi-auto] Impose a penalty for `interpret` length. Penalty is amplified if LLM cannot find a program where the previous `interpret` and `ocamlrun∘ocamlc` disagree on behavior
+    2. Theorem (PBT oracle agreement): `forall prog, In prog test_programs -> forall fuel, behavior_equiv (bytecode_behavior step_fn fuel (compile prog) []) (bytecode_behavior step_fn fuel (oracle_bytecode prog) [])`
+        - oracle_bytecode filled with concrete bytecode from ocamlc at proof time
+        - Proved by native_compute on concrete test data
+        - [Checker] PBT that tests `compile` against `ocamlc`
+            - test_programs: generate relevant OCaml program syntax; select programs from corpus
+    3. Theorem (extraction validation): `forall prog, In prog validation_programs -> extracted_bytecode prog = compile prog`
+        - extracted_bytecode filled with output of extracted OCaml compiler binary
+        - Proved by native_compute: both sides reduce to concrete instruction lists
+        - [Checker] Extraction of `compile`, run on validation suite
+5. [Auto] PBT that `ocamlc` and `compile` produce identical/equivalent bytecode on a series of [Manual] infinite families of syntax trees
 6. [Auto] To contribute to formal verification of Rocq: as each source file of Rocq comes into scope, [Manual] we add Rocq source to the PBT on `ocaml` and `compile`
-7. [Auto] To formally verify an OCaml compiler in OCaml: as the OCaml extraction comes into scope, [Manual] require a proof that:
-    1. `compile` and `process∘interpret∘extract(compile src)` behave the same
-    2. Also `interpret-bytecode` and `process∘interpret∘extract(interpret-bytecode src)`
-    3. Also `interpret` and `process∘interpret∘extract(interpret src)`
-8. [Auto] To formally verify `ocamlc`: as `ocamlc` comes into scope, [Manual] require a proof that `compile` and `process∘interpret(ocamlc src)` behave the same
-9. [Manual] Set up a Dockerfile and graders for all of these tasks, harden against exploits that involve modifying the testing infra
+7. [Manual] Set up a Dockerfile and graders for all of these tasks, harden against exploits that involve modifying the testing infra
 
 
 Section 0:

@@ -1,0 +1,302 @@
+# Verified OCaml Compiler Roadmap
+
+## Goal
+
+Reach full formal verification of the OCaml compiler in two stages:
+
+1. **Stage 1 (Manual + Checker)**: State the three top-level theorems correctly. Only edit `manual/` and `checker/`. Stubs in `automatic/`/`semi-auto/` are permissible only as type-level placeholders. Complete when all three theorem statements are provable given only `automatic/`/`semi-auto/` changes. End with a simplification pass on `manual/`.
+
+2. **Stage 2 (Automatic + Semi-auto)**: Fill in proofs and implementations. No changes to `manual/` or `checker/`. `Print Assumptions` shows no `Admitted`. All real behavior modeled, error messages pinned, PBT seeds covering all possible programs.
+
+---
+
+## Current State
+
+### Fully Proved (0 Admitted)
+
+| Component | File | Lines | Lemmas |
+|-----------|------|-------|--------|
+| Decode roundtrip | `automatic/Bytecode/DecodeProof.v` | 2,683 | 102 Qed |
+| LexParse roundtrip | `automatic/LexParse/LexParseProof.v` | 4,351 | ~130 Qed |
+| All checker modules | `checker/*.v` (8 files) | 2,334 | 0 Admitted |
+
+### Partially Proved
+
+| Component | File | Admitted | Qed | Blocker |
+|-----------|------|----------|-----|---------|
+| Compiler correctness | `automatic/Compile/CompileProof.v` | 18 | 95 | Closures, heap allocation, function application |
+| Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
+| Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 99 | 0 | Hinges on 1 key generic lemma |
+
+### Known Gaps in Trusted Code
+
+1. **`behavior_equiv` doesn't compare return values** (`manual/Compile/CompileSpec.v:67-79`). When both sides terminate normally, it checks trace length equality but not `Term_normal v1 = Term_normal v2`. This means two programs producing the same output but different return values are considered equivalent.
+
+2. **`ccall_to_events` only handles 2 of ~25 C-calls** (`CompileSpec.v:30-35`). Only `print_int` (idx=0) and `print_newline` (idx=1) produce events. `print_string` (idx=2) and all other C-calls are silently dropped. Compare `checker/Bytecode/Main.v` which handles ~25 C-calls at the pipeline level.
+
+3. **`Observable.v` has no input events**. Only `Out_char` exists. Programs reading stdin, files, or environment variables cannot be distinguished by their behavior.
+
+4. **`Syntax.v` missing constructs**: No `raise`/`try`, `while`/`for`, `ref`/mutable, multi-arg `let rec`, floats, `;;` (double semicolons), character literals, nested modules with signatures.
+
+5. **Source interpreter stubs** (`semi-auto/Interpret/Interpret.v`):
+   - `compare` returns `Val_int 0` always
+   - `print_string` is a no-op
+   - `Decl_open` is a no-op
+   - `interpret` always returns `Val_int 0` regardless of actual result
+   - `Pat_nil` incorrectly matches `SVal_int 0`
+   - `Decl_module` leaks inner bindings into outer scope
+
+6. **Compiler gaps** (`automatic/Compile/Compile.v`):
+   - All constructors share tag 0 (can't distinguish variants)
+   - Strings compile to `CONSTINT 0` (placeholder)
+   - No tail-call optimization (always `APPLY1`, never `APPTERM`)
+   - Hardcoded fuel 1000
+
+7. **IO.v axioms are output-only**: No stdin, stderr, file writing, networking, environment variables.
+
+### PBT Coverage
+
+~5,215 QCheck tests + 35 deterministic tests across 11 files. Strong coverage for the features that exist, but coverage is limited to the subset of OCaml modeled by `Syntax.v`.
+
+---
+
+## The Three Theorems
+
+### Theorem 1: Compiler Correctness
+
+**Already stated** in `manual/Compile/CompileSpec.v:108-111`:
+
+```coq
+Axiom compiler_correctness :
+  forall (prog : program) (src_fuel bc_fuel : nat),
+    behavior_equiv (interpret src_fuel prog)
+                   (bytecode_behavior step_fn bc_fuel (compile_program prog) []).
+```
+
+**What it says**: For every program `prog`, the source interpreter and the bytecode interpreter (running the compiled output) produce equivalent observable behavior, regardless of fuel amounts.
+
+**Parameters** (filled by untrusted code):
+- `compile_program : program -> list instruction`
+- `interpret : nat -> program -> behavior`
+
+**Concrete trusted definitions used**: `behavior_equiv`, `bytecode_behavior`, `run_collecting`, `ccall_to_events`, `step_list_of`.
+
+**Stage 1 work needed**:
+- Fix `behavior_equiv` to compare return values when both sides terminate normally
+- Decide whether `ccall_to_events` needs to handle more C-calls (currently only print_int and print_newline produce observable events — this is arguably correct if those are the only side-effecting operations)
+- Verify that the `step_fn` derived from `HandleInstrSpec` matches the bytecode semantics
+
+### Theorem 2: PBT Oracle Agreement
+
+**Stated** in `manual/Compile/PBTSpec.v`:
+
+```coq
+Axiom pbt_agreement :
+  forall (prog : program),
+    In prog test_programs ->
+    forall (fuel : nat),
+      behavior_equiv
+        (bytecode_behavior step_fn fuel (compile_program prog) [])
+        (bytecode_behavior step_fn fuel (oracle_bytecode prog) []).
+```
+
+**What it says**: For every program in a concrete finite test suite, running our compiler's bytecode and reference bytecode (from ocamlc) through the same interpreter produces equivalent behaviors at every fuel level.
+
+**Parameters** (filled by untrusted code):
+- `compile_program : program -> list instruction`
+- `test_programs : list program` (concrete list, >= 1 entry)
+- `oracle_bytecode : program -> list instruction` (reference bytecodes from ocamlc)
+
+**How it's proved**: Both `bytecode_behavior` calls reduce to concrete `behavior` values via `native_compute` when all arguments are concrete. The checker embeds test programs and oracle bytecodes as Rocq literals, obtained by running ocamlc at proof-generation time.
+
+**Trust model**: Human auditing of the checker code verifies that `oracle_bytecode` actually came from ocamlc (not from copying `compile_program`'s output). The Rocq kernel verifies behavioral equivalence.
+
+### Theorem 3: Extraction Validation
+
+**Stated** in `manual/Compile/ExtractionSpec.v`:
+
+```coq
+Axiom extraction_faithful :
+  forall (prog : program),
+    In prog validation_programs ->
+    extracted_bytecode prog = compile_program prog.
+```
+
+**What it says**: For every program in a concrete finite validation suite, the bytecodes produced by the extracted OCaml compiler binary are identical to those produced by evaluating the Rocq definition directly.
+
+**Parameters** (filled by untrusted code):
+- `compile_program : program -> list instruction`
+- `validation_programs : list program` (concrete list, >= 1 entry)
+- `extracted_bytecode : program -> list instruction` (from running the extracted binary)
+
+**How it's proved**: `compile_program prog` reduces by `native_compute` to a concrete `list instruction`. `extracted_bytecode prog` is also concrete (obtained by running the extracted binary at proof-generation time). If extraction is faithful, `reflexivity` closes the goal.
+
+**Why instruction-list equality** (not behavioral equivalence): Theorem 3 checks that the *same* compiler produces *identical* bytecodes before and after extraction. This is the correct (and stronger) notion for extraction faithfulness. Theorem 2 uses `behavior_equiv` because it compares two *different* compilers (ours vs ocamlc) that produce different bytecodes.
+
+**Trust model**: Human auditing verifies that `extracted_bytecode` came from the actual extracted binary (not from copying `compile_program`). The Rocq kernel verifies bytecode identity. This provides strong evidence of extraction correctness without requiring verified extraction (an unsolved research problem).
+
+---
+
+## Stage 1 Plan: Manual + Checker
+
+**Goal**: State all three theorems correctly. Only edit `manual/` and `checker/`. When complete, the theorems are provable with only `automatic/`/`semi-auto/` changes.
+
+### 1.1 Audit `behavior_equiv` (resolved: keep as-is)
+
+**File**: `manual/Compile/CompileSpec.v`
+
+Review found that `behavior_equiv` does not compare return values (`Term_normal v1` vs `Term_normal v2`). However, adding `v1 = v2` would make the spec **unprovable** because the source interpreter always returns `Val_int 0` regardless of the actual result. Return values are also unobservable at the OS boundary. **Resolution**: Keep `behavior_equiv` as-is. The trace-based comparison is the correct notion.
+
+Error message matching (`msg1 = msg2` for `Term_error`) is also impractical — the source interpreter and bytecode interpreter produce different error strings for the same semantic error. **Resolution**: Keep current behavior (same termination kind, not same message).
+
+**Remaining concern**: `behavior_equiv` permits trivial satisfaction — an `interpret` that always returns `Term_timeout` with empty trace satisfies `compiler_correctness`. The length penalty on `interpret` (semi-auto constraint) is the mitigation, but it is external to the formal spec.
+
+### 1.2 Audit `ccall_to_events`
+
+**File**: `manual/Compile/CompileSpec.v`
+
+Currently handles: `print_int` (idx=0), `print_newline` (idx=1). Review found:
+- `print_char` is handled by the source interpreter but NOT mapped to a C-call index by the compiler — more pressing than `print_string`
+- `print_string` (idx=2) is mapped by the compiler but is a stub in both the source interpreter and `ccall_to_events`
+- Only output-producing C-calls need event handling; pure C-calls (comparison, etc.) correctly produce no events
+
+**Fix**: Add `print_char` as a C-call primitive (idx=3 in compiler, new case in `ccall_to_events`). Add `print_string` (idx=2) handling when strings are de-stubbed.
+
+### 1.3 Theorem 2 (PBT Oracle Agreement) — DONE
+
+**File**: `manual/Compile/PBTSpec.v` (already written)
+
+Uses the finite-test-suite approach: for each program in a concrete list, our compiler's bytecode and oracle bytecode (from ocamlc) produce behaviorally equivalent results. Proved by `native_compute` on concrete data. No need to axiomatize `ocamlc` or define `process`.
+
+### 1.4 Theorem 3 (Extraction Validation) — DONE
+
+**File**: `manual/Compile/ExtractionSpec.v` (already written)
+
+Uses instruction-list equality on a finite validation suite. The extracted compiler binary must produce identical bytecodes to the Rocq definition. Proved by `native_compute`. No need for verified extraction.
+
+### 1.5 Simplification Pass
+
+Before declaring Stage 1 complete, review every file in `manual/` against four criteria:
+
+1. **Fully describes real behavior**: Every definition models the actual OCaml semantics it claims to model. No stubs, no placeholders, no "returns 0 for everything."
+2. **Provable**: The stated theorems can be proved by providing appropriate `automatic/`/`semi-auto/` implementations. No theorem is stated in a way that makes it impossible to prove.
+3. **Uniquely pins down behavior**: The specs don't allow trivially satisfying implementations (e.g., a compiler that always outputs `STOP`, or an interpreter that always returns `Val_int 0`).
+4. **No cheating**: No axioms that smuggle in unverified assumptions. No specs that are trivially true.
+
+Additional simplification principle: **pulling in existing source code is free complexity**. If a definition in `manual/` can be simplified by referencing real OCaml/Rocq definitions (like the actual opcode table, the actual instruction set), that's preferred over hand-maintaining a parallel definition.
+
+**Files to audit in the simplification pass**:
+- `Observable.v` — Is `Out_char` the only needed event type? (Probably yes for current scope)
+- `Value.v` — Is this complete for current Syntax.v? (Missing: floats, but Syntax.v has no floats either)
+- `Syntax.v` — Is this the right subset? (Matches current scope; progressive expansion adds more)
+- `WellFormed.v` — Are the 20 keywords correct? Are the predicates complete?
+- `CompileSpec.v` — After behavior_equiv fix, is this the simplest correct statement?
+- `DecodeSpec.v` — Already clean. `well_formed` predicate is the right approach.
+- `LexParseSpec.v` — Already minimal (5 lines of content). Good.
+- `Machine.v` — Is `state` complete for current instruction set?
+- `Encode.v` — Is the encoder complete and correct?
+- `IO.v` — Are all 8 axioms needed? Are any missing?
+- `HandleInstrSpec.v` — Is the single-function interface right?
+- `Run.v` — Is the double-fuel model the simplest correct approach?
+- `InstructSpec.v` — Is the Clight-level spec the right abstraction?
+- `MetaSpec.v` — Is the uniqueness meta-theorem correctly formulated?
+
+---
+
+## Stage 2 Plan: Automatic + Semi-auto
+
+**Goal**: Fill in all proofs and implementations. No changes to `manual/` or `checker/`. `Print Assumptions` shows no `Admitted`.
+
+### 2.1 Complete CompileProof.v
+
+**Current state**: 18 Admitted, 95 Qed. Core blocker is extending `val_corresponds` for closures — a design problem requiring heap reasoning that the current proof infrastructure lacks.
+
+**Work needed**:
+- Extend `val_corresponds` with a closure clause relating `SVal_closure param body senv` to `Val_closure addr ofs` (heap-allocated)
+- Prove `expr_correct_gen` for `Exp_fun`, `Exp_app`, `Exp_letrec`, `Exp_match`, `Exp_constr`, `Exp_tuple`
+- Fix compiler: constructor tags must distinguish variants (requires new `constr_env` data structure), nullary constructors with tag > 0 need `ATOM tag`
+- Fix string compilation (currently `CONSTINT 0` — this is a large feature, not a simple fix)
+- The 17 per-program `compiler_correct_*` Admitted are redundant once the main theorem is proved
+
+### 2.2 Complete InstructVerification
+
+**Current state**: 315 Admitted (per-handler) + 92 Admitted (assembly), 1214 Qed across 147 files. Only STOP and CHECK_SIGNALS fully proved.
+
+**Work needed**: Prove each handler correct against the Clight AST. Largely mechanical — follows established pattern (construct exec_stmt derivation, prove abs_rel preservation). Complexity varies: STOP is 51 lines, CLOSUREREC is 427 lines.
+
+**Also needed**: Relax CLOSUREREC restriction in `manual/Bytecode/Interpret/InstructSpec.v` from `nf=1, nv=0` to `nf=1, any nv`. The current restriction rejects the compiler's own output when closures capture free variables.
+
+### 2.3 Complete MetaSpecVerification
+
+**Current state**: 99 Admitted across 95 files. All 94 handler uniqueness lemmas Admitted.
+
+**Work needed**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). It hinges on 1 key generic lemma (`handler_correct_gen_determines_em_eq` in `SharedLemmas.v`) — a Clight E0-determinism result. Once proved, the 94 per-instruction uniqueness proofs follow by simple instantiation.
+
+### 2.4 Fix Source Interpreter
+
+**File**: `semi-auto/Interpret/Interpret.v`
+
+**Fixes needed**:
+- `compare` must implement real structural comparison
+- `print_string` must produce `Out_char` events
+- `interpret` must return the actual computed value, not `Val_int 0`
+- `Pat_nil` must not match `SVal_int 0`
+- `Decl_module` must not leak inner bindings
+- `Decl_open` needs real semantics or must be documented as out-of-scope
+
+### 2.5 Fix Compiler
+
+**File**: `automatic/Compile/Compile.v`
+
+**Fixes needed**:
+- Constructor tags must distinguish different variants (not all tag 0)
+- String compilation must produce real string values
+- Consider adding tail-call optimization (APPTERM)
+- Fuel should not be hardcoded
+
+### 2.6 PBT Expansion
+
+Expand PBT to cover all possible programs:
+- Seeds must enumerate all strings in roughly lexicographic order
+- Generators must produce relevant OCaml program syntax
+- Programs selected from corpus (OCaml test suite, Rocq source)
+- Error messages pinned and matching exactly
+
+---
+
+## Progressive Expansion
+
+The three theorem statements are designed to be **stable under feature expansion**. When a new OCaml feature is added to `Syntax.v`:
+
+1. The `program` type grows (new constructors in `expr`, `pattern`, `decl`)
+2. `compile_program` must handle the new constructors (change in `automatic/`)
+3. `interpret` must handle the new constructors (change in `semi-auto/`)
+4. The theorem statements in `manual/` **do not change** — they quantify over all `program` values, which automatically includes the new constructors
+5. The proofs in `automatic/` must be extended to cover the new cases
+6. PBT generators must be extended to produce the new syntax
+
+This is why `Syntax.v` is in `manual/` — it's the single source of truth for what "a program" means, and all theorem statements are parametric over it.
+
+**Exception**: Adding new *observable* behavior (e.g., input events, file I/O) would require changes to `Observable.v` and potentially to `behavior_equiv`. This is a Stage 1 concern — the observable behavior model must be complete enough for the target scope before Stage 1 is declared complete.
+
+---
+
+## Resolved Questions
+
+1. **`behavior_equiv` return values**: Keep as-is (no return value comparison). Adding `v1 = v2` would break provability because the source interpreter always returns `Val_int 0`. Return values are unobservable at the OS boundary.
+
+2. **Error message matching**: Keep as-is (same termination kind, not same message). Source and bytecode interpreters produce different error strings for the same semantic error.
+
+3. **`ocamlc` axiomatization**: Not needed. Theorems 2 and 3 use the finite-test-suite approach — oracle/extracted bytecodes are embedded as concrete Rocq literals at proof-generation time. The build system runs `ocamlc` externally; the Rocq spec never references it.
+
+4. **CLOSUREREC restriction**: `nf=1` is sufficient (only single recursion in `Syntax.v`), but `nv=0` is too restrictive — the compiler emits `CLOSUREREC 1 nvars [ofs]` with `nvars > 0` for closures capturing free variables. Fix: relax `InstructSpec.v` precondition to `nf=1, any nv`.
+
+## Remaining Concerns
+
+1. **`behavior_equiv` trivial satisfaction**: An `interpret` always returning `Term_timeout` with empty trace vacuously satisfies `compiler_correctness`. The length penalty on `interpret` is the mitigation but is external to the formal spec.
+
+2. **PBT generator coverage**: Current generators only produce integer-arithmetic programs. `compare`, `print_string`, string literals, `Pat_nil`, `Decl_module`, non-integer equality, constructors with multiple tags — none are tested.
+
+3. **Progressive expansion requires controlled `manual/` changes**: Every new syntax constructor requires updating `Syntax.v` and `WellFormed.v` in `manual/`. Theorem statements stay stable, but these type-level changes are unavoidable.
+
+4. **Source interpreter additional bugs found**: `Op_eq`/`Op_neq` only work on integers (structural equality missing). `Op_and`/`Op_or` evaluate eagerly instead of short-circuiting.
