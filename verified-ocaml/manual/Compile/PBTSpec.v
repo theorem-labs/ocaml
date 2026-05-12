@@ -1,14 +1,22 @@
-(* PBTSpec.v - [TRUSTED] Module Type specifying that the compiler
-   agrees with a reference oracle on a finite test suite.
+(* PBTSpec.v - [TRUSTED] Module Type for the PBT connection between
+   our compiler and ocamlc.
 
-   The oracle bytecode is abstract; the checker fills it with concrete
-   bytecode obtained by running ocamlc and decoding its output.
-   Agreement is checked by computation inside Rocq.
+   Following the pattern from the Go verified compiler: external tools
+   (ocamlc, decoder) are Parameters that the untrusted side fills with
+   concrete implementations embedding actual test results. The theorem
+   is universally quantified over a seed type.
 
-   Trust model: this file defines the CONCRETE correctness statement using
-   only trusted components (bytecode_behavior, behavior_equiv, step_list_of
-   from CompileSpec.v). The untrusted code must provide compile_program,
-   test_programs, oracle_bytecode, and a proof of agreement.
+   The seed type is abstract here; the auto side defines it as a finite
+   inductive type whose constructors correspond to concrete test cases.
+   For each seed, pbt_program maps it deterministically to a source
+   program. ocamlc_compile and ocamlc_decode model the external pipeline
+   (pretty-print, run ocamlc, decode bytecode file). The proof is by
+   exhaustive case analysis over seeds + native_compute/vm_compute.
+
+   Trust model: this file defines the correctness statement using only
+   trusted components (bytecode_behavior, behavior_equiv, step_list_of
+   from CompileSpec.v). The untrusted code provides all Parameters and
+   a proof of compile_models_ocamlc_ok.
 
    This file has NO dependencies outside manual/. *)
 
@@ -21,7 +29,6 @@ From OCamlInterp.Manual.Bytecode.Interpret Require Import Run HandleInstrSpec.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
 From OCamlInterp.Manual.Compile Require Import CompileSpec.
-Open Scope list_scope.
 
 Module Type PBTSpec (Import HI : HandleInstrSpec).
 
@@ -31,25 +38,60 @@ Module Type PBTSpec (Import HI : HandleInstrSpec).
   (* Compiler under test (provided by automatic/) *)
   Parameter compile_program : program -> list instruction.
 
-  (* Finite test suite: concrete list of test programs *)
-  Parameter test_programs : list program.
+  (* PBT seed type and deterministic program generator.
+     The auto side defines pbt_seed as a finite inductive type
+     (e.g. Inductive pbt_seed := Seed1 | Seed2 | ... | SeedN)
+     and pbt_program as a function mapping each seed to a
+     concrete test program. *)
+  Parameter pbt_seed : Type.
+  Parameter pbt_program : pbt_seed -> program.
 
-  (* Reference bytecode for each test program, obtained by running ocamlc
-     on pp_program(prog) and decoding the resulting .byte file. *)
-  Parameter oracle_bytecode : program -> list instruction.
+  (* External ocamlc pipeline: pretty-print the program, compile
+     with ocamlc, return raw bytecode file bytes as list Z.
+     Returns None if ocamlc rejects the program. *)
+  Parameter ocamlc_compile : program -> option (list Z).
 
-  (* Non-triviality: the test suite must be substantial *)
-  Axiom test_suite_nonempty : (length test_programs >= 1)%nat.
+  (* Bytecode file decoder: parse ocamlc's bytecode output into
+     an instruction list suitable for our interpreter.
+     Returns None if decoding fails. *)
+  Parameter ocamlc_decode : list Z -> option (list instruction).
 
-  (* Agreement: for every program in the test suite, running bytecode
-     from our compiler and from the oracle through the same interpreter
-     produces equivalent behaviors at every fuel level. *)
-  Axiom pbt_agreement :
-    forall (prog : program),
-      In prog test_programs ->
-      forall (fuel : nat),
-        behavior_equiv
-          (bytecode_behavior step_fn fuel (compile_program prog) [])
-          (bytecode_behavior step_fn fuel (oracle_bytecode prog) []).
+  (* PBT connection theorem: for every seed, if ocamlc compiles the
+     seed's program and we can decode the output, then our compiled
+     bytecode and ocamlc's bytecode exhibit equivalent observable
+     behavior under our interpreter at every fuel level.
+
+     None branches are True: ocamlc rejection or decode failure on a
+     seed is acceptable (not a compiler bug). Only a behavioral
+     *disagreement* where both succeed constitutes a failure. *)
+  Axiom compile_models_ocamlc_ok :
+    forall (seed : pbt_seed),
+      let p := pbt_program seed in
+      match ocamlc_compile p with
+      | Some ocamlc_bytes =>
+        match ocamlc_decode ocamlc_bytes with
+        | Some ocamlc_instrs =>
+          forall (fuel : nat),
+            behavior_equiv
+              (bytecode_behavior step_fn fuel (compile_program p) [])
+              (bytecode_behavior step_fn fuel ocamlc_instrs [])
+        | None => True
+        end
+      | None => True
+      end.
+
+  (* Anti-vacuity: at least one seed compiles and decodes successfully,
+     preventing ocamlc_compile/ocamlc_decode from trivially returning
+     None on all inputs. *)
+  Parameter golden_seed : pbt_seed.
+  Axiom golden_compiles_and_decodes :
+    match ocamlc_compile (pbt_program golden_seed) with
+    | Some bytes =>
+      match ocamlc_decode bytes with
+      | Some _ => True
+      | None => False
+      end
+    | None => False
+    end.
 
 End PBTSpec.

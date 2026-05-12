@@ -86,54 +86,79 @@ Axiom compiler_correctness :
 - Decide whether `ccall_to_events` needs to handle more C-calls (currently only print_int and print_newline produce observable events — this is arguably correct if those are the only side-effecting operations)
 - Verify that the `step_fn` derived from `HandleInstrSpec` matches the bytecode semantics
 
-### Theorem 2: PBT Oracle Agreement
+### Theorem 2: PBT Connection (our compiler vs ocamlc)
 
 **Stated** in `manual/Compile/PBTSpec.v`:
 
 ```coq
-Axiom pbt_agreement :
-  forall (prog : program),
-    In prog test_programs ->
-    forall (fuel : nat),
-      behavior_equiv
-        (bytecode_behavior step_fn fuel (compile_program prog) [])
-        (bytecode_behavior step_fn fuel (oracle_bytecode prog) []).
+Axiom compile_models_ocamlc_ok :
+  forall (seed : pbt_seed),
+    let p := pbt_program seed in
+    match ocamlc_compile p with
+    | Some ocamlc_bytes =>
+      match ocamlc_decode ocamlc_bytes with
+      | Some ocamlc_instrs =>
+        forall (fuel : nat),
+          behavior_equiv
+            (bytecode_behavior step_fn fuel (compile_program p) [])
+            (bytecode_behavior step_fn fuel ocamlc_instrs [])
+      | None => True
+      end
+    | None => True
+    end.
 ```
 
-**What it says**: For every program in a concrete finite test suite, running our compiler's bytecode and reference bytecode (from ocamlc) through the same interpreter produces equivalent behaviors at every fuel level.
+**What it says**: For every PBT seed, if ocamlc compiles the seed's program and we can decode the output, then our compiled bytecode and ocamlc's bytecode exhibit equivalent observable behavior under our interpreter at every fuel level. External tool failures are acceptable (`None => True`); only behavioral disagreement where both succeed constitutes a failure.
 
 **Parameters** (filled by untrusted code):
 - `compile_program : program -> list instruction`
-- `test_programs : list program` (concrete list, >= 1 entry)
-- `oracle_bytecode : program -> list instruction` (reference bytecodes from ocamlc)
+- `pbt_seed : Type` (finite inductive type, e.g. `Seed1 | Seed2 | ... | SeedN`)
+- `pbt_program : pbt_seed -> program` (deterministic program generator)
+- `ocamlc_compile : program -> option (list Z)` (external ocamlc pipeline)
+- `ocamlc_decode : list Z -> option (list instruction)` (bytecode file decoder)
+- `golden_seed : pbt_seed` (anti-vacuity witness)
 
-**How it's proved**: Both `bytecode_behavior` calls reduce to concrete `behavior` values via `native_compute` when all arguments are concrete. The checker embeds test programs and oracle bytecodes as Rocq literals, obtained by running ocamlc at proof-generation time.
+**How it's proved**: Auto side defines `pbt_seed` as a finite inductive type. For each seed, `pbt_program seed` reduces to a concrete program. `ocamlc_compile` and `ocamlc_decode` are concrete functions embedding results from actually running ocamlc. Proof is by exhaustive case analysis over seeds + `native_compute`/`vm_compute` + `reflexivity`.
 
-**Trust model**: Human auditing of the checker code verifies that `oracle_bytecode` actually came from ocamlc (not from copying `compile_program`'s output). The Rocq kernel verifies behavioral equivalence.
+**Anti-vacuity**: `golden_compiles_and_decodes` requires at least one seed where both `ocamlc_compile` and `ocamlc_decode` succeed, preventing trivial satisfaction via always-`None` parameters.
+
+**Trust model**: The theorem is universally quantified over the seed type and machine-checked by `coqc`. Human auditing verifies that `ocamlc_compile`/`ocamlc_decode` actually came from running ocamlc (not from copying `compile_program`'s output). Following the Go verified compiler's pattern of making external tools explicit Parameters.
 
 ### Theorem 3: Extraction Validation
 
 **Stated** in `manual/Compile/ExtractionSpec.v`:
 
 ```coq
-Axiom extraction_faithful :
+Axiom extraction_validates :
   forall (prog : program),
-    In prog validation_programs ->
-    extracted_bytecode prog = compile_program prog.
+    let extracted_source := extract_to_ocaml compile_program in
+    match ocaml_build extracted_source with
+    | Some binary =>
+      match extracted_run binary prog with
+      | Some extracted_instrs =>
+        extracted_instrs = compile_program prog
+      | None => True
+      end
+    | None => False
+    end.
 ```
 
-**What it says**: For every program in a concrete finite validation suite, the bytecodes produced by the extracted OCaml compiler binary are identical to those produced by evaluating the Rocq definition directly.
+**What it says**: The extracted+built compiler, when run on any program where it succeeds, produces IDENTICAL bytecode to the Rocq-level `compile_program`. The extraction pipeline is decomposed into explicit Parameters: `extract_to_ocaml` (Rocq extraction), `ocaml_build` (system compiler), `extracted_run` (running the binary on a program). `ocaml_build` failing is `False` (extraction must produce compilable code). `extracted_run` failing is `True` (untested programs are not claimed to match).
 
 **Parameters** (filled by untrusted code):
 - `compile_program : program -> list instruction`
-- `validation_programs : list program` (concrete list, >= 1 entry)
-- `extracted_bytecode : program -> list instruction` (from running the extracted binary)
+- `extract_to_ocaml : (program -> list instruction) -> string` (extraction mechanism)
+- `ocaml_build : string -> option (list Z)` (system OCaml compiler)
+- `extracted_run : list Z -> program -> option (list instruction)` (run binary on program)
+- `golden_program : program` (anti-vacuity witness)
 
-**How it's proved**: `compile_program prog` reduces by `native_compute` to a concrete `list instruction`. `extracted_bytecode prog` is also concrete (obtained by running the extracted binary at proof-generation time). If extraction is faithful, `reflexivity` closes the goal.
+**How it's proved**: Auto side defines `extract_to_ocaml` to return the actual extraction source, `ocaml_build` to return `Some binary` (embedded bytes), and `extracted_run` as a lookup table mapping tested programs to their instruction lists (returning `None` for untested). For each tested program, `compile_program prog` and the embedded instructions reduce by `native_compute`, and `reflexivity` closes the goal.
 
 **Why instruction-list equality** (not behavioral equivalence): Theorem 3 checks that the *same* compiler produces *identical* bytecodes before and after extraction. This is the correct (and stronger) notion for extraction faithfulness. Theorem 2 uses `behavior_equiv` because it compares two *different* compilers (ours vs ocamlc) that produce different bytecodes.
 
-**Trust model**: Human auditing verifies that `extracted_bytecode` came from the actual extracted binary (not from copying `compile_program`). The Rocq kernel verifies bytecode identity. This provides strong evidence of extraction correctness without requiring verified extraction (an unsolved research problem).
+**Anti-vacuity**: `golden_extraction_succeeds` requires at least one program where the full pipeline succeeds (extraction, build, and run all produce `Some`), preventing trivial satisfaction.
+
+**Trust model**: The theorem is universally quantified over all programs and machine-checked by `coqc`. The extraction pipeline is decomposed into explicit, auditable Parameters following the Go verified compiler's pattern. Human auditing verifies the Parameters faithfully represent the real pipeline. This provides strong evidence of extraction correctness without requiring verified extraction (an unsolved research problem).
 
 ---
 
@@ -162,17 +187,17 @@ Currently handles: `print_int` (idx=0), `print_newline` (idx=1). Review found:
 
 **Fix**: Add `print_char` as a C-call primitive (idx=3 in compiler, new case in `ccall_to_events`). Add `print_string` (idx=2) handling when strings are de-stubbed.
 
-### 1.3 Theorem 2 (PBT Oracle Agreement) — DONE
+### 1.3 Theorem 2 (PBT Connection) — DONE
 
 **File**: `manual/Compile/PBTSpec.v` (already written)
 
-Uses the finite-test-suite approach: for each program in a concrete list, our compiler's bytecode and oracle bytecode (from ocamlc) produce behaviorally equivalent results. Proved by `native_compute` on concrete data. No need to axiomatize `ocamlc` or define `process`.
+Universally quantified over a `pbt_seed` type. External tools (`ocamlc_compile`, `ocamlc_decode`) are Parameters filled by the auto side with embedded results from running ocamlc. Anti-vacuity via `golden_seed`/`golden_compiles_and_decodes`. Follows the Go verified compiler's `compile_models_go_pbt_ok` pattern.
 
 ### 1.4 Theorem 3 (Extraction Validation) — DONE
 
 **File**: `manual/Compile/ExtractionSpec.v` (already written)
 
-Uses instruction-list equality on a finite validation suite. The extracted compiler binary must produce identical bytecodes to the Rocq definition. Proved by `native_compute`. No need for verified extraction.
+Universally quantified over all programs. Extraction pipeline (`extract_to_ocaml`, `ocaml_build`, `extracted_run`) decomposed as Parameters. Uses instruction-list equality (not behavioral equivalence). `ocaml_build` failure is `False` (extraction must compile). Anti-vacuity via `golden_program`/`golden_extraction_succeeds`. Follows the Go verified compiler's `extract_on_compile_ok` pattern.
 
 ### 1.5 Simplification Pass
 
@@ -287,7 +312,7 @@ This is why `Syntax.v` is in `manual/` — it's the single source of truth for w
 
 2. **Error message matching**: Keep as-is (same termination kind, not same message). Source and bytecode interpreters produce different error strings for the same semantic error.
 
-3. **`ocamlc` axiomatization**: Not needed. Theorems 2 and 3 use the finite-test-suite approach — oracle/extracted bytecodes are embedded as concrete Rocq literals at proof-generation time. The build system runs `ocamlc` externally; the Rocq spec never references it.
+3. **`ocamlc` axiomatization**: External tools (ocamlc, extraction, decoder) are modeled as **Parameters** in Module Types, following the Go verified compiler's pattern. The auto side fills these Parameters with concrete implementations that embed results from actually running the tools. The build system runs ocamlc externally; the Rocq spec references it only abstractly through Parameters. Theorems are universally quantified (over seed type for PBT, over all programs for extraction).
 
 4. **CLOSUREREC restriction**: `nf=1` is sufficient (only single recursion in `Syntax.v`), but `nv=0` is too restrictive — the compiler emits `CLOSUREREC 1 nvars [ofs]` with `nvars > 0` for closures capturing free variables. Fix: relax `InstructSpec.v` precondition to `nf=1, any nv`.
 
