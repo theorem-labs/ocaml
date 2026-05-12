@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_GRAB :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (GRAB n) ->
       handler_correct h1 (clight_of (GRAB n))
         (error_message_of (GRAB n))
         (pre_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)) ->
@@ -17,4 +18,7 @@ Lemma unique_GRAB :
         (error_message_of (GRAB n))
         (pre_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

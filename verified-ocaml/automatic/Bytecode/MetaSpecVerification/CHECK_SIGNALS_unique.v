@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_CHECK_SIGNALS :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps CHECK_SIGNALS ->
       handler_correct h1 (clight_of CHECK_SIGNALS)
         (error_message_of CHECK_SIGNALS)
         (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS) ->
@@ -16,4 +17,7 @@ Lemma unique_CHECK_SIGNALS :
         (error_message_of CHECK_SIGNALS)
         (pre_of CHECK_SIGNALS) (P_halt_of CHECK_SIGNALS) (P_ccall_of CHECK_SIGNALS) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

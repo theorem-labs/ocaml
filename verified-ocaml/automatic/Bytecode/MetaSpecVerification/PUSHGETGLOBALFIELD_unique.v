@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_PUSHGETGLOBALFIELD :
   forall n p,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (PUSHGETGLOBALFIELD n p) ->
       handler_correct h1 (clight_of (PUSHGETGLOBALFIELD n p))
         (error_message_of (PUSHGETGLOBALFIELD n p))
         (pre_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p)) ->
@@ -17,4 +18,7 @@ Lemma unique_PUSHGETGLOBALFIELD :
         (error_message_of (PUSHGETGLOBALFIELD n p))
         (pre_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

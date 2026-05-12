@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_RERAISE :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps RERAISE ->
       handler_correct h1 (clight_of RERAISE)
         (error_message_of RERAISE)
         (pre_of RERAISE) (P_halt_of RERAISE) (P_ccall_of RERAISE) ->
@@ -16,4 +17,7 @@ Lemma unique_RERAISE :
         (error_message_of RERAISE)
         (pre_of RERAISE) (P_halt_of RERAISE) (P_ccall_of RERAISE) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_MAKEFLOATBLOCK :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (MAKEFLOATBLOCK n) ->
       handler_correct h1 (clight_of (MAKEFLOATBLOCK n))
         (error_message_of (MAKEFLOATBLOCK n))
         (pre_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)) ->
@@ -17,4 +18,7 @@ Lemma unique_MAKEFLOATBLOCK :
         (error_message_of (MAKEFLOATBLOCK n))
         (pre_of (MAKEFLOATBLOCK n)) (P_halt_of (MAKEFLOATBLOCK n)) (P_ccall_of (MAKEFLOATBLOCK n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

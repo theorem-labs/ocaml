@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_ATOM :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (ATOM n) ->
       handler_correct h1 (clight_of (ATOM n))
         (error_message_of (ATOM n))
         (pre_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)) ->
@@ -17,4 +18,7 @@ Lemma unique_ATOM :
         (error_message_of (ATOM n))
         (pre_of (ATOM n)) (P_halt_of (ATOM n)) (P_ccall_of (ATOM n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

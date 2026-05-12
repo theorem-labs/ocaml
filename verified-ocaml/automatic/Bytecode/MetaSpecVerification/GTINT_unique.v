@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_GTINT :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps GTINT ->
       handler_correct h1 (clight_of GTINT)
         (error_message_of GTINT)
         (pre_of GTINT) (P_halt_of GTINT) (P_ccall_of GTINT) ->
@@ -16,4 +17,7 @@ Lemma unique_GTINT :
         (error_message_of GTINT)
         (pre_of GTINT) (P_halt_of GTINT) (P_ccall_of GTINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

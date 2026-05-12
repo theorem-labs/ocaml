@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_RAISE_NOTRACE :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps RAISE_NOTRACE ->
       handler_correct h1 (clight_of RAISE_NOTRACE)
         (error_message_of RAISE_NOTRACE)
         (pre_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE) ->
@@ -16,4 +17,7 @@ Lemma unique_RAISE_NOTRACE :
         (error_message_of RAISE_NOTRACE)
         (pre_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_POPTRAP :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps POPTRAP ->
       handler_correct h1 (clight_of POPTRAP)
         (error_message_of POPTRAP)
         (pre_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP) ->
@@ -16,4 +17,7 @@ Lemma unique_POPTRAP :
         (error_message_of POPTRAP)
         (pre_of POPTRAP) (P_halt_of POPTRAP) (P_ccall_of POPTRAP) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

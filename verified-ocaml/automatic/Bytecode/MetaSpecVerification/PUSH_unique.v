@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_PUSH :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps PUSH ->
       handler_correct h1 (clight_of PUSH)
         (error_message_of PUSH)
         (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH) ->
@@ -16,4 +17,7 @@ Lemma unique_PUSH :
         (error_message_of PUSH)
         (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

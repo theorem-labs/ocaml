@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_MODINT :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps MODINT ->
       handler_correct h1 (clight_of MODINT)
         (error_message_of MODINT)
         (pre_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT) ->
@@ -16,4 +17,7 @@ Lemma unique_MODINT :
         (error_message_of MODINT)
         (pre_of MODINT) (P_halt_of MODINT) (P_ccall_of MODINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

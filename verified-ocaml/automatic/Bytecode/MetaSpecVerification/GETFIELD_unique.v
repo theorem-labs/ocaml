@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_GETFIELD :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (GETFIELD n) ->
       handler_correct h1 (clight_of (GETFIELD n))
         (error_message_of (GETFIELD n))
         (pre_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)) ->
@@ -17,4 +18,7 @@ Lemma unique_GETFIELD :
         (error_message_of (GETFIELD n))
         (pre_of (GETFIELD n)) (P_halt_of (GETFIELD n)) (P_ccall_of (GETFIELD n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

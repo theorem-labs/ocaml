@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_PUSHACC :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (PUSHACC n) ->
       handler_correct h1 (clight_of (PUSHACC n))
         (error_message_of (PUSHACC n))
         (pre_of (PUSHACC n)) (P_halt_of (PUSHACC n)) (P_ccall_of (PUSHACC n)) ->
@@ -17,4 +18,7 @@ Lemma unique_PUSHACC :
         (error_message_of (PUSHACC n))
         (pre_of (PUSHACC n)) (P_halt_of (PUSHACC n)) (P_ccall_of (PUSHACC n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_ASRINT :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps ASRINT ->
       handler_correct h1 (clight_of ASRINT)
         (error_message_of ASRINT)
         (pre_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT) ->
@@ -16,4 +17,7 @@ Lemma unique_ASRINT :
         (error_message_of ASRINT)
         (pre_of ASRINT) (P_halt_of ASRINT) (P_ccall_of ASRINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

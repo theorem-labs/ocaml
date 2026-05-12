@@ -5,10 +5,12 @@ From compcert Require Import Ctypes Clight Memory Values.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import InstructSpec MetaSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
+From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLemmas.
 
 Lemma unique_C_CALL :
   forall nargs prim_idx,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (C_CALL nargs prim_idx) ->
       handler_correct h1 (clight_of (C_CALL nargs prim_idx))
         (error_message_of (C_CALL nargs prim_idx))
         (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)) ->
@@ -16,4 +18,7 @@ Lemma unique_C_CALL :
         (error_message_of (C_CALL nargs prim_idx))
         (pre_of (C_CALL nargs prim_idx)) (P_halt_of (C_CALL nargs prim_idx)) (P_ccall_of (C_CALL nargs prim_idx)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

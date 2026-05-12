@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_ENVACC :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (ENVACC n) ->
       handler_correct h1 (clight_of (ENVACC n))
         (error_message_of (ENVACC n))
         (pre_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)) ->
@@ -17,4 +18,7 @@ Lemma unique_ENVACC :
         (error_message_of (ENVACC n))
         (pre_of (ENVACC n)) (P_halt_of (ENVACC n)) (P_ccall_of (ENVACC n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

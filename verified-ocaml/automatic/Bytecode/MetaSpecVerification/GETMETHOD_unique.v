@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_GETMETHOD :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps GETMETHOD ->
       handler_correct h1 (clight_of GETMETHOD)
         (error_message_of GETMETHOD)
         (pre_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD) ->
@@ -16,4 +17,7 @@ Lemma unique_GETMETHOD :
         (error_message_of GETMETHOD)
         (pre_of GETMETHOD) (P_halt_of GETMETHOD) (P_ccall_of GETMETHOD) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

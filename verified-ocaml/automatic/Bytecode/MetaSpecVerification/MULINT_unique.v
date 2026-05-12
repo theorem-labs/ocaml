@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_MULINT :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps MULINT ->
       handler_correct h1 (clight_of MULINT)
         (error_message_of MULINT)
         (pre_of MULINT) (P_halt_of MULINT) (P_ccall_of MULINT) ->
@@ -16,4 +17,7 @@ Lemma unique_MULINT :
         (error_message_of MULINT)
         (pre_of MULINT) (P_halt_of MULINT) (P_ccall_of MULINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

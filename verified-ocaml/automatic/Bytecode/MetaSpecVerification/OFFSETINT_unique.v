@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_OFFSETINT :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (OFFSETINT z) ->
       handler_correct h1 (clight_of (OFFSETINT z))
         (error_message_of (OFFSETINT z))
         (pre_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)) ->
@@ -17,4 +18,7 @@ Lemma unique_OFFSETINT :
         (error_message_of (OFFSETINT z))
         (pre_of (OFFSETINT z)) (P_halt_of (OFFSETINT z)) (P_ccall_of (OFFSETINT z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

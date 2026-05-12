@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_NEQ :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps NEQ ->
       handler_correct h1 (clight_of NEQ)
         (error_message_of NEQ)
         (pre_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ) ->
@@ -16,4 +17,7 @@ Lemma unique_NEQ :
         (error_message_of NEQ)
         (pre_of NEQ) (P_halt_of NEQ) (P_ccall_of NEQ) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

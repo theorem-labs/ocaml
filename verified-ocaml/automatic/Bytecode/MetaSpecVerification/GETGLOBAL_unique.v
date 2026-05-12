@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_GETGLOBAL :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (GETGLOBAL n) ->
       handler_correct h1 (clight_of (GETGLOBAL n))
         (error_message_of (GETGLOBAL n))
         (pre_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)) ->
@@ -17,4 +18,7 @@ Lemma unique_GETGLOBAL :
         (error_message_of (GETGLOBAL n))
         (pre_of (GETGLOBAL n)) (P_halt_of (GETGLOBAL n)) (P_ccall_of (GETGLOBAL n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

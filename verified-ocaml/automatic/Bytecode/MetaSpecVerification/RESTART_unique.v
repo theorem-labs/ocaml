@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_RESTART :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps RESTART ->
       handler_correct h1 (clight_of RESTART)
         (error_message_of RESTART)
         (pre_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART) ->
@@ -16,4 +17,7 @@ Lemma unique_RESTART :
         (error_message_of RESTART)
         (pre_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

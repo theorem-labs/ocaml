@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_MAKEBLOCK3 :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (MAKEBLOCK3 n) ->
       handler_correct h1 (clight_of (MAKEBLOCK3 n))
         (error_message_of (MAKEBLOCK3 n))
         (pre_of (MAKEBLOCK3 n)) (P_halt_of (MAKEBLOCK3 n)) (P_ccall_of (MAKEBLOCK3 n)) ->
@@ -17,4 +18,7 @@ Lemma unique_MAKEBLOCK3 :
         (error_message_of (MAKEBLOCK3 n))
         (pre_of (MAKEBLOCK3 n)) (P_halt_of (MAKEBLOCK3 n)) (P_ccall_of (MAKEBLOCK3 n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

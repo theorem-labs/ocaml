@@ -943,3 +943,17 @@ Proof.
   intros. apply handler_correct_determines_em_eq with (f := f) (err := err)
     (step_pre := step_pre) (P_halt := P_halt_p) (P_ccall := P_ccall_p); assumption.
 Qed.
+
+Lemma unique_from_handler_unique_hyps :
+  forall (i : instruction) (h1 h2 : Z -> state -> step_result),
+    handler_unique_hyps i ->
+    handler_correct h1 (clight_of i)
+      (error_message_of i) (pre_of i) (P_halt_of i) (P_ccall_of i) ->
+    handler_correct h2 (clight_of i)
+      (error_message_of i) (pre_of i) (P_halt_of i) (P_ccall_of i) ->
+    forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
+Proof.
+  intros i h1 h2 Hhyps Hc1 Hc2.
+  destruct Hhyps as [Htotal Hfunc Hpre].
+  eapply unique_from_handler_correct; eauto.
+Qed.

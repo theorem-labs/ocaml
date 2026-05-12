@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_CLOSUREREC :
   forall nfuncs nvars code_offsets,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (CLOSUREREC nfuncs nvars code_offsets) ->
       handler_correct h1 (clight_of (CLOSUREREC nfuncs nvars code_offsets))
         (error_message_of (CLOSUREREC nfuncs nvars code_offsets))
         (pre_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets)) ->
@@ -17,4 +18,7 @@ Lemma unique_CLOSUREREC :
         (error_message_of (CLOSUREREC nfuncs nvars code_offsets))
         (pre_of (CLOSUREREC nfuncs nvars code_offsets)) (P_halt_of (CLOSUREREC nfuncs nvars code_offsets)) (P_ccall_of (CLOSUREREC nfuncs nvars code_offsets)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

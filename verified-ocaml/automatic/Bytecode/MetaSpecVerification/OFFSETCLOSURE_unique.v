@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_OFFSETCLOSURE :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (OFFSETCLOSURE z) ->
       handler_correct h1 (clight_of (OFFSETCLOSURE z))
         (error_message_of (OFFSETCLOSURE z))
         (pre_of (OFFSETCLOSURE z)) (P_halt_of (OFFSETCLOSURE z)) (P_ccall_of (OFFSETCLOSURE z)) ->
@@ -17,4 +18,7 @@ Lemma unique_OFFSETCLOSURE :
         (error_message_of (OFFSETCLOSURE z))
         (pre_of (OFFSETCLOSURE z)) (P_halt_of (OFFSETCLOSURE z)) (P_ccall_of (OFFSETCLOSURE z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

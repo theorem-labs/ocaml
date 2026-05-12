@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_APPTERM :
   forall nargs slotsize,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (APPTERM nargs slotsize) ->
       handler_correct h1 (clight_of (APPTERM nargs slotsize))
         (error_message_of (APPTERM nargs slotsize))
         (pre_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)) ->
@@ -17,4 +18,7 @@ Lemma unique_APPTERM :
         (error_message_of (APPTERM nargs slotsize))
         (pre_of (APPTERM nargs slotsize)) (P_halt_of (APPTERM nargs slotsize)) (P_ccall_of (APPTERM nargs slotsize)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

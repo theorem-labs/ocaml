@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_ACC :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (ACC n) ->
       handler_correct h1 (clight_of (ACC n))
         (error_message_of (ACC n))
         (pre_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)) ->
@@ -17,4 +18,7 @@ Lemma unique_ACC :
         (error_message_of (ACC n))
         (pre_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

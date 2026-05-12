@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_VECTLENGTH :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps VECTLENGTH ->
       handler_correct h1 (clight_of VECTLENGTH)
         (error_message_of VECTLENGTH)
         (pre_of VECTLENGTH) (P_halt_of VECTLENGTH) (P_ccall_of VECTLENGTH) ->
@@ -16,4 +17,7 @@ Lemma unique_VECTLENGTH :
         (error_message_of VECTLENGTH)
         (pre_of VECTLENGTH) (P_halt_of VECTLENGTH) (P_ccall_of VECTLENGTH) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

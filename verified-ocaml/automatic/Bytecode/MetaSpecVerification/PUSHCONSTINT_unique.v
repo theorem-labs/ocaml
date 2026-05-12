@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_PUSHCONSTINT :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (PUSHCONSTINT z) ->
       handler_correct h1 (clight_of (PUSHCONSTINT z))
         (error_message_of (PUSHCONSTINT z))
         (pre_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)) ->
@@ -17,4 +18,7 @@ Lemma unique_PUSHCONSTINT :
         (error_message_of (PUSHCONSTINT z))
         (pre_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

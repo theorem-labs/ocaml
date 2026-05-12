@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_PUSHATOM :
   forall n,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (PUSHATOM n) ->
       handler_correct h1 (clight_of (PUSHATOM n))
         (error_message_of (PUSHATOM n))
         (pre_of (PUSHATOM n)) (P_halt_of (PUSHATOM n)) (P_ccall_of (PUSHATOM n)) ->
@@ -17,4 +18,7 @@ Lemma unique_PUSHATOM :
         (error_message_of (PUSHATOM n))
         (pre_of (PUSHATOM n)) (P_halt_of (PUSHATOM n)) (P_ccall_of (PUSHATOM n)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

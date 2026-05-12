@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_GETVECTITEM :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps GETVECTITEM ->
       handler_correct h1 (clight_of GETVECTITEM)
         (error_message_of GETVECTITEM)
         (pre_of GETVECTITEM) (P_halt_of GETVECTITEM) (P_ccall_of GETVECTITEM) ->
@@ -16,4 +17,7 @@ Lemma unique_GETVECTITEM :
         (error_message_of GETVECTITEM)
         (pre_of GETVECTITEM) (P_halt_of GETVECTITEM) (P_ccall_of GETVECTITEM) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

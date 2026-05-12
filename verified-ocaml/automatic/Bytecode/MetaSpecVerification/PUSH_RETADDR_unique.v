@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_PUSH_RETADDR :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (PUSH_RETADDR z) ->
       handler_correct h1 (clight_of (PUSH_RETADDR z))
         (error_message_of (PUSH_RETADDR z))
         (pre_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)) ->
@@ -17,4 +18,7 @@ Lemma unique_PUSH_RETADDR :
         (error_message_of (PUSH_RETADDR z))
         (pre_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

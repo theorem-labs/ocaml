@@ -18,6 +18,7 @@ Reach full formal verification of the OCaml compiler in two stages:
 |-----------|------|-------|--------|
 | Decode roundtrip | `automatic/Bytecode/DecodeProof.v` | 2,683 | 102 Qed |
 | LexParse roundtrip | `automatic/LexParse/LexParseProof.v` | 4,351 | ~130 Qed |
+| Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 0 Admitted | 126 Qed |
 | All checker modules | `checker/*.v` (8 files) | 2,334 | 0 Admitted |
 
 ### Partially Proved
@@ -26,7 +27,6 @@ Reach full formal verification of the OCaml compiler in two stages:
 |-----------|------|----------|-----|---------|
 | Compiler correctness | `automatic/Compile/CompileProof.v` | 27 | 115 | Closures, heap allocation, function application, false step lemmas needing stronger preconditions |
 | Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
-| Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 94 | 31 | Per-instruction uniqueness lemmas still admitted; generic halt/ccall payload issue resolved |
 
 ### Known Gaps in Trusted Code
 
@@ -51,6 +51,8 @@ Reach full formal verification of the OCaml compiler in two stages:
    - Hardcoded fuel 1000
 
 7. **IO.v axioms are output-only**: No stdin, stderr, file writing, networking, environment variables.
+
+8. **Concrete MetaSpec uniqueness is conditional** (`manual/Bytecode/Interpret/MetaSpec.v`). The proven uniqueness theorem now explicitly requires totality, functionality, and `pre_of`-holds hypotheses for `abs_rel_with_ard`; proving those concrete hypotheses, or strengthening the relation until they hold, is separate work.
 
 ### PBT Coverage
 
@@ -251,9 +253,11 @@ Additional simplification principle: **pulling in existing source code is free c
 
 ### 2.3 Complete MetaSpecVerification
 
-**Current state**: 94 Admitted and 31 Qed across 95 files. All 94 per-handler uniqueness lemmas remain Admitted; the shared generic uniqueness lemma is now proved.
+**Current state**: 0 Admitted and 126 Qed across 95 files. The generic uniqueness lemma and all 94 per-handler uniqueness lemmas are proved.
 
-**Work needed**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). `handler_correct_gen` now uses state-indexed option payload specs for halt/ccall, so `handler_correct_gen_determines_em_eq` can prove exact payload equality. Remaining work is to replace the 94 per-instruction uniqueness admits with instantiations of the generic lemma.
+**Resolved**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). `handler_correct_gen` now uses state-indexed option payload specs for halt/ccall, so `handler_correct_gen_determines_em_eq` can prove exact payload equality. The concrete/fine-grained uniqueness specs now carry the same totality, functionality, and `pre_of`-holds hypotheses as the generic theorem, and every per-instruction lemma delegates to the shared proof.
+
+**Remaining obligation**: Prove or refine the concrete `handler_unique_hyps` assumptions for any future consumer that needs unconditional uniqueness over `abs_rel_with_ard`.
 
 ### 2.4 Fix Source Interpreter
 

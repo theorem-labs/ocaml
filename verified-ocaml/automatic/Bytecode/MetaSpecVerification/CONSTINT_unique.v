@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_CONSTINT :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (CONSTINT z) ->
       handler_correct h1 (clight_of (CONSTINT z))
         (error_message_of (CONSTINT z))
         (pre_of (CONSTINT z)) (P_halt_of (CONSTINT z)) (P_ccall_of (CONSTINT z)) ->
@@ -17,4 +18,7 @@ Lemma unique_CONSTINT :
         (error_message_of (CONSTINT z))
         (pre_of (CONSTINT z)) (P_halt_of (CONSTINT z)) (P_ccall_of (CONSTINT z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

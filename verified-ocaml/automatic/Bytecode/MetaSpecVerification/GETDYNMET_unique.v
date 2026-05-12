@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_GETDYNMET :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps GETDYNMET ->
       handler_correct h1 (clight_of GETDYNMET)
         (error_message_of GETDYNMET)
         (pre_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET) ->
@@ -16,4 +17,7 @@ Lemma unique_GETDYNMET :
         (error_message_of GETDYNMET)
         (pre_of GETDYNMET) (P_halt_of GETDYNMET) (P_ccall_of GETDYNMET) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_ADDINT :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps ADDINT ->
       handler_correct h1 (clight_of ADDINT)
         (error_message_of ADDINT)
         (pre_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT) ->
@@ -16,4 +17,7 @@ Lemma unique_ADDINT :
         (error_message_of ADDINT)
         (pre_of ADDINT) (P_halt_of ADDINT) (P_ccall_of ADDINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_GETPUBMET :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (GETPUBMET z) ->
       handler_correct h1 (clight_of (GETPUBMET z))
         (error_message_of (GETPUBMET z))
         (pre_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)) ->
@@ -17,4 +18,7 @@ Lemma unique_GETPUBMET :
         (error_message_of (GETPUBMET z))
         (pre_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

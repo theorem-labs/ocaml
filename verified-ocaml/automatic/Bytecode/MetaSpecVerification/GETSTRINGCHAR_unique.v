@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_GETSTRINGCHAR :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps GETSTRINGCHAR ->
       handler_correct h1 (clight_of GETSTRINGCHAR)
         (error_message_of GETSTRINGCHAR)
         (pre_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR) ->
@@ -16,4 +17,7 @@ Lemma unique_GETSTRINGCHAR :
         (error_message_of GETSTRINGCHAR)
         (pre_of GETSTRINGCHAR) (P_halt_of GETSTRINGCHAR) (P_ccall_of GETSTRINGCHAR) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

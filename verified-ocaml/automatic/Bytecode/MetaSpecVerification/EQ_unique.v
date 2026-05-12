@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_EQ :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps EQ ->
       handler_correct h1 (clight_of EQ)
         (error_message_of EQ)
         (pre_of EQ) (P_halt_of EQ) (P_ccall_of EQ) ->
@@ -16,4 +17,7 @@ Lemma unique_EQ :
         (error_message_of EQ)
         (pre_of EQ) (P_halt_of EQ) (P_ccall_of EQ) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

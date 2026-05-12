@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_SETBYTESCHAR :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps SETBYTESCHAR ->
       handler_correct h1 (clight_of SETBYTESCHAR)
         (error_message_of SETBYTESCHAR)
         (pre_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR) ->
@@ -16,4 +17,7 @@ Lemma unique_SETBYTESCHAR :
         (error_message_of SETBYTESCHAR)
         (pre_of SETBYTESCHAR) (P_halt_of SETBYTESCHAR) (P_ccall_of SETBYTESCHAR) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

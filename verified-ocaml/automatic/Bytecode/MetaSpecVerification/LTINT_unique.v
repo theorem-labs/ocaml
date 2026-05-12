@@ -9,6 +9,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 
 Lemma unique_LTINT :
   forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps LTINT ->
       handler_correct h1 (clight_of LTINT)
         (error_message_of LTINT)
         (pre_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT) ->
@@ -16,4 +17,7 @@ Lemma unique_LTINT :
         (error_message_of LTINT)
         (pre_of LTINT) (P_halt_of LTINT) (P_ccall_of LTINT) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.

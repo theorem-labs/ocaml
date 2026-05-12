@@ -10,6 +10,7 @@ From OCamlInterp.Automatic.Bytecode.MetaSpecVerification Require Import SharedLe
 Lemma unique_BRANCH :
   forall z,
     forall (h1 h2 : Z -> state -> step_result),
+      handler_unique_hyps (BRANCH z) ->
       handler_correct h1 (clight_of (BRANCH z))
         (error_message_of (BRANCH z))
         (pre_of (BRANCH z)) (P_halt_of (BRANCH z)) (P_ccall_of (BRANCH z)) ->
@@ -17,4 +18,7 @@ Lemma unique_BRANCH :
         (error_message_of (BRANCH z))
         (pre_of (BRANCH z)) (P_halt_of (BRANCH z)) (P_ccall_of (BRANCH z)) ->
       forall s, em_eq (h1 s.(pc) s) (h2 s.(pc) s).
-Proof. Admitted.
+Proof.
+  intros.
+  eapply unique_from_handler_unique_hyps; eauto.
+Qed.
