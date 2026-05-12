@@ -952,7 +952,10 @@ Proof.
       assert (Hfetch: nth_error (prefix ++ [CONSTINT 1] ++ [STOP]) (Z.to_nat (pc s)) = Some (CONSTINT 1)).
       { rewrite Hpc. rewrite Nat2Z.id.
         rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-      rewrite (step_constint _ _ _ Hfetch).
+      assert (Hbounds : Int.min_signed <= 1 <= Int.max_signed)
+        by (change Int.min_signed with (-2147483648)%Z;
+            change Int.max_signed with 2147483647%Z; lia).
+      rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
       unfold st. subst base. rewrite Hpc.
       replace (Z.of_nat (Datatypes.length prefix) + 1)
         with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -964,7 +967,10 @@ Proof.
       assert (Hfetch: nth_error (prefix ++ [CONSTINT 0] ++ [STOP]) (Z.to_nat (pc s)) = Some (CONSTINT 0)).
       { rewrite Hpc. rewrite Nat2Z.id.
         rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-      rewrite (step_constint _ _ _ Hfetch).
+      assert (Hbounds : Int.min_signed <= 0 <= Int.max_signed)
+        by (change Int.min_signed with (-2147483648)%Z;
+            change Int.max_signed with 2147483647%Z; lia).
+      rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
       unfold st. subst base. rewrite Hpc.
       replace (Z.of_nat (Datatypes.length prefix) + 1)
         with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -983,7 +989,10 @@ Proof.
     assert (Hfetch: nth_error (prefix ++ [CONSTINT 0] ++ [STOP]) (Z.to_nat (pc s)) = Some (CONSTINT 0)).
     { rewrite Hpc. rewrite Nat2Z.id.
       rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-    rewrite (step_constint _ _ _ Hfetch).
+    assert (Hbounds : Int.min_signed <= 0 <= Int.max_signed)
+      by (change Int.min_signed with (-2147483648)%Z;
+          change Int.max_signed with 2147483647%Z; lia).
+    rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
     unfold st. subst base. rewrite Hpc.
     replace (Z.of_nat (Datatypes.length prefix) + 1)
       with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -1952,7 +1961,10 @@ Proof.
                 (Z.to_nat (pc s)) = Some (CONSTINT 1)).
       { rewrite Hpc, Nat2Z.id.
         rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-      rewrite (step_constint _ _ _ Hfetch).
+      assert (Hbounds : Int.min_signed <= 1 <= Int.max_signed)
+        by (change Int.min_signed with (-2147483648)%Z;
+            change Int.max_signed with 2147483647%Z; lia).
+      rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
       unfold st. rewrite Hpc.
       replace (Z.of_nat base + 1) with (Z.of_nat (base + 1)) by lia.
       reflexivity.
@@ -1964,7 +1976,10 @@ Proof.
                 (Z.to_nat (pc s)) = Some (CONSTINT 0)).
       { rewrite Hpc, Nat2Z.id.
         rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-      rewrite (step_constint _ _ _ Hfetch).
+      assert (Hbounds : Int.min_signed <= 0 <= Int.max_signed)
+        by (change Int.min_signed with (-2147483648)%Z;
+            change Int.max_signed with 2147483647%Z; lia).
+      rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
       unfold st. rewrite Hpc.
       replace (Z.of_nat base + 1) with (Z.of_nat (base + 1)) by lia.
       reflexivity.
@@ -1986,7 +2001,10 @@ Proof.
               (Z.to_nat (pc s)) = Some (CONSTINT 0)).
     { rewrite Hpc, Nat2Z.id.
       rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-    rewrite (step_constint _ _ _ Hfetch).
+    assert (Hbounds : Int.min_signed <= 0 <= Int.max_signed)
+      by (change Int.min_signed with (-2147483648)%Z;
+          change Int.max_signed with 2147483647%Z; lia).
+    rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
     unfold st. rewrite Hpc.
     replace (Z.of_nat base + 1) with (Z.of_nat (base + 1)) by lia.
     reflexivity.
