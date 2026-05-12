@@ -322,11 +322,11 @@ Definition instr_wfb (i : instruction) : bool :=
   | CLOSURE nvars code_ofs =>
       ((0 <=? Z.of_nat (2 + nvars)) && (Z.of_nat (2 + nvars) <=? Int.max_signed) &&
        (Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
-  | CLOSUREREC nf nv co =>
-      match nf, nv, co with
-      | 1%nat, 0%nat, (code_ofs :: nil)%list =>
+  | CLOSUREREC nf _ co =>
+      match nf, co with
+      | 1%nat, (code_ofs :: nil)%list =>
           ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
-      | _, _, _ => false
+      | _, _ => false
       end
   | OFFSETCLOSURE _ => true | PUSHOFFSETCLOSURE _ => true
   | GETGLOBAL n => ((0 <=? Z.of_nat n) && (Z.of_nat n <=? Int.max_signed))%Z
@@ -682,10 +682,10 @@ Definition error_message_of (i : instruction) (s : state) : option string :=
   (* CLOSUREREC: malformed operand or no code offsets *)
   | CLOSUREREC nf nv code_offsets =>
     let wf :=
-      match nf, nv, code_offsets with
-      | 1%nat, 0%nat, (code_ofs :: nil)%list =>
+      match nf, code_offsets with
+      | 1%nat, (code_ofs :: nil)%list =>
           ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
-      | _, _, _ => false
+      | _, _ => false
       end in
     if wf then
       match code_offsets with

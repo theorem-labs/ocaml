@@ -24,13 +24,18 @@ Open Scope list_scope.
 (* === Trusted definitions for running compiled bytecode === *)
 
 (* Convert a C call to output events.
-   Primitive indices match Compile.v's is_builtin:
-     0 = print_int, 1 = print_newline, 2 = print_string
-   Uses z_to_events from Observable.v -- single source of truth. *)
+   Current Compile.v builtins map:
+     0 = print_int, 1 = print_newline, 2 = print_string.
+   The trusted observable mapping also reserves/requires:
+     3 = print_char.
+   print_string is intentionally still a no-op here because strings are
+   stubbed end-to-end. Uses z_to_events from Observable.v as the single
+   source of truth for print_int. *)
 Definition ccall_to_events (prim_idx : nat) (args : list value) : list event :=
   match prim_idx, args with
   | 0%nat, [Val_int n] => z_to_events n
   | 1%nat, _ => [Out_char 10]
+  | 3%nat, [Val_int c] => [Out_char c]
   | _, _ => []
   end.
 

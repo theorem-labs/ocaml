@@ -4,8 +4,10 @@
    mutually-recursive functions, fills in code pointers and infix headers,
    then pushes closures onto the stack.
 
-   This proof handles the simplest non-trivial case:
-     nfuncs = 1, nvars = 0, code_offsets = [code_ofs]
+   The executable/spec well-formedness check accepts nfuncs = 1 with arbitrary
+   nvars and one in-range code offset. This proof handles only the simplest
+   non-trivial case:
+      nfuncs = 1, nvars = 0, code_offsets = [code_ofs]
 
    In this case:
    - nvars > 0 branch is skipped (no env vars to push/copy)
@@ -394,6 +396,7 @@ Proof.
 Admitted.
 
 
+
 Definition CLOSUREREC_correct_for_spec : forall code_ofs,
     Int.min_signed <= code_ofs <= Int.max_signed ->
     handler_correct (handle_CLOSUREREC 1 0 [code_ofs]) f_instr_CLOSUREREC
@@ -413,8 +416,8 @@ Definition CLOSUREREC_correct_for_spec : forall code_ofs,
    P_halt_of and P_ccall_of are vacuously False (not STOP/C_CALL).
    For the malformed-operand cases (instr_wfb = false), error_message_of holds
    because both the handler and error_message_of return the same error.
-   For the Step case (nfuncs=1, nvars=0, code_offsets=[code_ofs] in range),
-   delegates to CLOSUREREC_correct_for_spec. *)
+   The nvars > 0 well-formed cases are intentionally still covered by the
+   admitted body below; this file does not complete that proof. *)
 Definition correct_CLOSUREREC : forall nfuncs nvars code_offsets,
   handler_correct (handle_instr (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
     (clight_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets))
@@ -424,4 +427,3 @@ Definition correct_CLOSUREREC : forall nfuncs nvars code_offsets,
     (P_ccall_of (Bytecode.AST.CLOSUREREC nfuncs nvars code_offsets)).
 Proof.
 Admitted.
-

@@ -305,10 +305,10 @@ Definition handle_CLOSURE (nvars : nat) (code_ofs : Z) (pc' : Z) (s : state) : s
    Each closure_i is pushed as Val_closure(addr, 3*i). *)
 Definition handle_CLOSUREREC (nfuncs nvars : nat) (code_offsets : list Z) (pc' : Z) (s : state) : step_result :=
   let wf :=
-    match nfuncs, nvars, code_offsets with
-    | 1%nat, 0%nat, (code_ofs :: nil)%list =>
+    match nfuncs, code_offsets with
+    | 1%nat, (code_ofs :: nil)%list =>
         ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
-    | _, _, _ => false
+    | _, _ => false
     end in
   if wf then
     let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in

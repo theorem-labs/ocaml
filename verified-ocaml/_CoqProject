@@ -280,6 +280,8 @@ automatic/Bytecode/MetaSpecVerification/XORINT_unique.v
 automatic/Bytecode/StepToBigstep.v
 automatic/Compile/Compile.v
 automatic/Compile/CompileProof.v
+automatic/Compile/PBTProof.v
+automatic/Compile/ExtractionProof.v
 automatic/LexParse/LexParse.v
 automatic/LexParse/LexParseProof.v
 checker/Bytecode/DecodeChecker.v
@@ -288,5 +290,7 @@ checker/Bytecode/InterpretChecker.v
 checker/Bytecode/Main.v
 checker/Bytecode/MetaSpecChecker.v
 checker/Compile/CompileChecker.v
+checker/Compile/PBTChecker.v
+checker/Compile/ExtractionChecker.v
 checker/Extract.v
 checker/LexParse/LexParseChecker.v
