@@ -804,6 +804,31 @@ Proof.
   intros. rewrite app_nil_r. apply rev_involutive.
 Qed.
 
+Lemma firstn_app_exact : forall {A : Type} (l r : list A),
+  firstn (Datatypes.length l) (l ++ r) = l.
+Proof.
+  induction l as [|x xs IH]; intros r; simpl; auto.
+  rewrite IH. reflexivity.
+Qed.
+
+Lemma rev_single_rev_app_nil : forall {A : Type} (x : A) (l : list A),
+  rev ([x] ++ rev l ++ []) = l ++ [x].
+Proof.
+  intros A x l. simpl. rewrite app_nil_r. rewrite rev_involutive. reflexivity.
+Qed.
+
+Lemma rev_cons_rev : forall {A : Type} (x : A) (l : list A),
+  rev (x :: rev l) = l ++ [x].
+Proof.
+  intros A x l. simpl. rewrite rev_involutive. reflexivity.
+Qed.
+
+Lemma empty_timeout_behavior_equiv : forall b,
+  behavior_equiv (mk_behavior [] Term_timeout) b.
+Proof.
+  intros [tr res]. unfold behavior_equiv. simpl. split; auto.
+Qed.
+
 (* --- run_collecting stepping lemmas --- *)
 
 (* When step_list returns Step s', run_collecting advances to s'. *)
@@ -1866,6 +1891,86 @@ Proof.
     rewrite (rc_step (S fuel) [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s1 s2 [] Hpush_a).
     rewrite (rc_error fuel [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s2 constint_malformed_msg [] Hconst_b).
     destruct Hsrc as [-> | ->]; simpl; split; auto.
+Qed.
+
+Lemma print_int_stop_behavior_equiv : forall src_result bc_fuel n,
+  Int.min_signed <= n <= Int.max_signed ->
+  ((exists vsrc, src_result = Term_normal vsrc) \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior (z_to_events n ++ [Out_char 10]) src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP] []).
+Proof.
+  intros src_result bc_fuel n Hn Hsrc.
+  set (code := [CONSTINT n; C_CALL 1 0; CONSTINT 0; C_CALL 1 1; STOP]).
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int n) [] val_unit 0 [] 0).
+  set (cont_print := st s1 2 val_unit [] val_unit 0 [] 0).
+  set (s2 := cont_print <|accu := Val_int 0|>).
+  set (s3 := st s2 3 (Val_int 0) [] val_unit 0 [] 0).
+  set (cont_newline := st s3 4 val_unit [] val_unit 0 [] 0).
+  set (s4 := cont_newline <|accu := Val_int 0|>).
+  assert (Hzero : Int.min_signed <= 0 <= Int.max_signed)
+    by (change Int.min_signed with (-2147483648)%Z;
+        change Int.max_signed with 2147483647%Z; lia).
+  assert (Hconst_n : step_list code s0 = Step s1).
+  { subst code s1 s0. apply step_constint_bounded; [exact Hn | reflexivity]. }
+  assert (Hccall_print : step_list code s1 = CCall_request 0 [Val_int n] cont_print).
+  { subst code cont_print s1 s0. apply step_ccall with (nargs := 1%nat) (prim_idx := 0%nat). reflexivity. }
+  assert (Hconst_zero : step_list code s2 = Step s3).
+  { subst code s3 s2 cont_print s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity]. }
+  assert (Hccall_newline : step_list code s3 = CCall_request 1 [Val_int 0] cont_newline).
+  { subst code cont_newline s3 s2 cont_print s1 s0. apply step_ccall with (nargs := 1%nat) (prim_idx := 1%nat). reflexivity. }
+  assert (Hhalt : step_list code s4 = Halt (Val_int 0)).
+  { subst code s4 cont_newline s3 s2 cont_print s1 s0. apply step_stop. reflexivity. }
+  unfold CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|[|[|fuel]]]]].
+  - unfold behavior_equiv. simpl. split; [rewrite Nat.min_0_r; reflexivity | destruct src_result; exact I].
+  - rewrite (rc_step 0 code s0 s1 [] Hconst_n).
+    unfold behavior_equiv. simpl. split; [rewrite Nat.min_0_r; reflexivity | destruct src_result; exact I].
+  - rewrite (rc_step 1 code s0 s1 [] Hconst_n).
+    rewrite (rc_ccall 0 code s1 0 [Val_int n] cont_print [] Hccall_print).
+    unfold ccall_to_events.
+    change (cont_print <|accu := Val_int 0|>) with s2.
+    unfold behavior_equiv. simpl. rewrite rev_rev_app_nil.
+    split.
+    + replace (Nat.min (Datatypes.length (z_to_events n ++ [Out_char 10])) (Datatypes.length (z_to_events n)))
+        with (Datatypes.length (z_to_events n)) by (rewrite app_length; simpl; lia).
+      rewrite firstn_app_exact. rewrite firstn_all. reflexivity.
+    + destruct Hsrc as [[vsrc ->] | ->]; simpl; auto.
+  - rewrite (rc_step 2 code s0 s1 [] Hconst_n).
+    rewrite (rc_ccall 1 code s1 0 [Val_int n] cont_print [] Hccall_print).
+    unfold ccall_to_events.
+    change (cont_print <|accu := Val_int 0|>) with s2.
+    rewrite (rc_step 0 code s2 s3 (rev (z_to_events n) ++ []) Hconst_zero).
+    unfold behavior_equiv. simpl. rewrite rev_rev_app_nil.
+    split.
+    + replace (Nat.min (Datatypes.length (z_to_events n ++ [Out_char 10])) (Datatypes.length (z_to_events n)))
+        with (Datatypes.length (z_to_events n)) by (rewrite app_length; simpl; lia).
+      rewrite firstn_app_exact. rewrite firstn_all. reflexivity.
+    + destruct Hsrc as [[vsrc ->] | ->]; simpl; auto.
+  - rewrite (rc_step 3 code s0 s1 [] Hconst_n).
+    rewrite (rc_ccall 2 code s1 0 [Val_int n] cont_print [] Hccall_print).
+    unfold ccall_to_events.
+    change (cont_print <|accu := Val_int 0|>) with s2.
+    rewrite (rc_step 1 code s2 s3 (rev (z_to_events n) ++ []) Hconst_zero).
+    rewrite (rc_ccall 0 code s3 1 [Val_int 0] cont_newline (rev (z_to_events n) ++ []) Hccall_newline).
+    unfold ccall_to_events.
+    change (cont_newline <|accu := Val_int 0|>) with s4.
+    unfold behavior_equiv. simpl.
+    try rewrite rev_cons_rev; try rewrite rev_single_rev_app_nil; try rewrite app_nil_r; try rewrite rev_involutive.
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S (S (S fuel)))) code s0 s1 [] Hconst_n).
+    rewrite (rc_ccall (S (S (S fuel))) code s1 0 [Val_int n] cont_print [] Hccall_print).
+    unfold ccall_to_events.
+    change (cont_print <|accu := Val_int 0|>) with s2.
+    rewrite (rc_step (S (S fuel)) code s2 s3 (rev (z_to_events n) ++ []) Hconst_zero).
+    rewrite (rc_ccall (S fuel) code s3 1 [Val_int 0] cont_newline (rev (z_to_events n) ++ []) Hccall_newline).
+    unfold ccall_to_events.
+    change (cont_newline <|accu := Val_int 0|>) with s4.
+    rewrite (rc_halt fuel code s4 (Val_int 0) (rev [Out_char 10] ++ (rev (z_to_events n) ++ [])) Hhalt).
+    unfold behavior_equiv. simpl.
+    try rewrite rev_single_rev_app_nil; try rewrite rev_cons_rev; try rewrite app_nil_r; try rewrite rev_involutive.
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
 Qed.
 
 (* --- Decl_expr (Exp_int n): threshold = 1 --- *)
@@ -2933,9 +3038,63 @@ Proof.
   rewrite rev_involutive. reflexivity.
 Qed.
 
+Lemma interpret_stable_print_int_oob : forall n f,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  interpret (4 + f)%nat [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))] =
+    mk_behavior [] (Term_error constint_malformed_msg).
+Proof.
+  intros n f Hn. unfold interpret; simpl.
+  rewrite (constint_in_range_false_of_oob _ Hn). reflexivity.
+Qed.
+
 Lemma compiler_correct_print_int : forall n,
   compiler_correct [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))].
-Admitted.
+Proof.
+  intros n src_fuel bc_fuel.
+  unfold compiler_correct.
+  rewrite compile_print_int_shape.
+  destruct (constint_in_range n) eqn:Hrange_n.
+  - assert (Hn : Int.min_signed <= n <= Int.max_signed)
+      by (apply constint_in_range_true_bounds; exact Hrange_n).
+    destruct src_fuel as [|[|[|[|sf]]]].
+    + change (interpret 0 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply empty_timeout_behavior_equiv.
+    + change (interpret 1 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply empty_timeout_behavior_equiv.
+    + change (interpret 2 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply empty_timeout_behavior_equiv.
+    + change (interpret 3 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply empty_timeout_behavior_equiv.
+    + replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
+      rewrite (interpret_stable_print_int _ _ Hn).
+      apply print_int_stop_behavior_equiv.
+      * exact Hn.
+      * left. exists (Val_int 0). reflexivity.
+  - assert (Hn : ~ (Int.min_signed <= n <= Int.max_signed)).
+    { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_n. discriminate. }
+    destruct src_fuel as [|[|[|[|sf]]]].
+    + change (interpret 0 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+    + change (interpret 1 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+    + change (interpret 2 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+    + change (interpret 3 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+    + replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
+      rewrite (interpret_stable_print_int_oob _ _ Hn).
+      apply constint_oob_initial_behavior_equiv.
+      * exact Hn.
+      * left. reflexivity.
+Qed.
 
 (* --- Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b))):
        threshold = 3 --- *)
