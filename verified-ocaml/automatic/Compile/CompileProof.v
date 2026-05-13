@@ -1536,6 +1536,167 @@ Proof.
     destruct Hsrc as [-> | ->]; simpl; split; auto.
 Qed.
 
+Lemma if_true_constint_stop_behavior_equiv : forall src_result bc_fuel n1 n2,
+  Int.min_signed <= n1 <= Int.max_signed ->
+  ((exists vsrc, src_result = Term_normal vsrc) \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] []).
+Proof.
+  intros src_result bc_fuel n1 n2 Hn1 Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int 1) [] val_unit 0 [] 0).
+  set (s2 := st s1 2 (Val_int 1) [] val_unit 0 [] 0).
+  set (s3 := st s2 3 (Val_int n1) [] val_unit 0 [] 0).
+  set (s4 := st s3 5 (Val_int n1) [] val_unit 0 [] 0).
+  assert (Hone : Int.min_signed <= 1 <= Int.max_signed)
+    by (change Int.min_signed with (-2147483648)%Z;
+        change Int.max_signed with 2147483647%Z; lia).
+  assert (Hconst_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hone | reflexivity]. }
+  assert (Hbranch_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
+  { subst s2 s1 s0. apply step_branchifnot_nonzero with (target := 4) (n := 1); [reflexivity | reflexivity | lia]. }
+  assert (Hconst_then : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Step s3).
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hn1 | reflexivity]. }
+  assert (Hbranch_end : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s3 = Step s4).
+  { subst s4 s3 s2 s1 s0. apply step_branch. reflexivity. }
+  assert (Hhalt : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s4 = Halt (Val_int n1)).
+  { subst s4. apply step_stop. reflexivity. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|[|[|fuel]]]]].
+  - destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 1 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step 0 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 2 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step 1 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    rewrite (rc_step 0 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 s3 [] Hconst_then).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 3 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step 2 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    rewrite (rc_step 1 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 s3 [] Hconst_then).
+    rewrite (rc_step 0 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s3 s4 [] Hbranch_end).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S (S (S fuel)))) [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step (S (S (S fuel))) [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    rewrite (rc_step (S (S fuel)) [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 s3 [] Hconst_then).
+    rewrite (rc_step (S fuel) [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s3 s4 [] Hbranch_end).
+    rewrite (rc_halt fuel [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s4 (Val_int n1) [] Hhalt).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+Qed.
+
+Lemma if_true_oob_behavior_equiv : forall src_result bc_fuel n1 n2,
+  ~ (Int.min_signed <= n1 <= Int.max_signed) ->
+  (src_result = Term_error constint_malformed_msg \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] []).
+Proof.
+  intros src_result bc_fuel n1 n2 Hn1 Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int 1) [] val_unit 0 [] 0).
+  set (s2 := st s1 2 (Val_int 1) [] val_unit 0 [] 0).
+  assert (Hone : Int.min_signed <= 1 <= Int.max_signed)
+    by (change Int.min_signed with (-2147483648)%Z;
+        change Int.max_signed with 2147483647%Z; lia).
+  assert (Hconst_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hone | reflexivity]. }
+  assert (Hbranch_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
+  { subst s2 s1 s0. apply step_branchifnot_nonzero with (target := 4) (n := 1); [reflexivity | reflexivity | lia]. }
+  assert (Hconst_then : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Error constint_malformed_msg).
+  { subst s2 s1 s0. apply (step_constint_oob _ _ n1); [exact Hn1 | reflexivity]. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|fuel]]].
+  - destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step 1 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step 0 [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S fuel)) [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step (S fuel) [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    rewrite (rc_error fuel [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 constint_malformed_msg [] Hconst_then).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+Qed.
+
+Lemma if_false_constint_stop_behavior_equiv : forall src_result bc_fuel n1 n2,
+  Int.min_signed <= n2 <= Int.max_signed ->
+  ((exists vsrc, src_result = Term_normal vsrc) \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] []).
+Proof.
+  intros src_result bc_fuel n1 n2 Hn2 Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int 0) [] val_unit 0 [] 0).
+  set (s2 := st s1 4 (Val_int 0) [] val_unit 0 [] 0).
+  set (s3 := st s2 5 (Val_int n2) [] val_unit 0 [] 0).
+  assert (Hzero : Int.min_signed <= 0 <= Int.max_signed)
+    by (change Int.min_signed with (-2147483648)%Z;
+        change Int.max_signed with 2147483647%Z; lia).
+  assert (Hconst_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity]. }
+  assert (Hbranch_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
+  { subst s2 s1 s0. apply step_branchifnot_zero; [reflexivity | reflexivity]. }
+  assert (Hconst_else : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Step s3).
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hn2 | reflexivity]. }
+  assert (Hhalt : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s3 = Halt (Val_int n2)).
+  { subst s3. apply step_stop. reflexivity. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|[|fuel]]]].
+  - destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 1 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step 0 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 2 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step 1 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    rewrite (rc_step 0 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 s3 [] Hconst_else).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S (S fuel))) [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step (S (S fuel)) [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    rewrite (rc_step (S fuel) [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 s3 [] Hconst_else).
+    rewrite (rc_halt fuel [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s3 (Val_int n2) [] Hhalt).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+Qed.
+
+Lemma if_false_oob_behavior_equiv : forall src_result bc_fuel n1 n2,
+  ~ (Int.min_signed <= n2 <= Int.max_signed) ->
+  (src_result = Term_error constint_malformed_msg \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] []).
+Proof.
+  intros src_result bc_fuel n1 n2 Hn2 Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int 0) [] val_unit 0 [] 0).
+  set (s2 := st s1 4 (Val_int 0) [] val_unit 0 [] 0).
+  assert (Hzero : Int.min_signed <= 0 <= Int.max_signed)
+    by (change Int.min_signed with (-2147483648)%Z;
+        change Int.max_signed with 2147483647%Z; lia).
+  assert (Hconst_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity]. }
+  assert (Hbranch_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
+  { subst s2 s1 s0. apply step_branchifnot_zero; [reflexivity | reflexivity]. }
+  assert (Hconst_else : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Error constint_malformed_msg).
+  { subst s2 s1 s0. apply (step_constint_oob _ _ n2); [exact Hn2 | reflexivity]. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|fuel]]].
+  - destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step 1 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step 0 [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S fuel)) [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 s1 [] Hconst_cond).
+    rewrite (rc_step (S fuel) [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 s2 [] Hbranch_cond).
+    rewrite (rc_error fuel [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 constint_malformed_msg [] Hconst_else).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+Qed.
+
 (* --- Decl_expr (Exp_int n): threshold = 1 --- *)
 
 Lemma interpret_stable_expr_int : forall n f,
@@ -2285,9 +2446,123 @@ Proof.
     |rewrite (constint_in_range_of_bounds _ Hn2)]; reflexivity.
 Qed.
 
+Lemma interpret_stable_if_bool_true_int : forall n1 n2 f,
+  Int.min_signed <= n1 <= Int.max_signed ->
+  interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))] =
+    mk_behavior [] (Term_normal (Val_int 0)).
+Proof.
+  intros n1 n2 f Hn1. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Hn1). reflexivity.
+Qed.
+
+Lemma interpret_stable_if_bool_true_oob : forall n1 n2 f,
+  ~ (Int.min_signed <= n1 <= Int.max_signed) ->
+  interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))] =
+    mk_behavior [] (Term_error constint_malformed_msg).
+Proof.
+  intros n1 n2 f Hn1. unfold interpret; simpl.
+  rewrite (constint_in_range_false_of_oob _ Hn1). reflexivity.
+Qed.
+
+Lemma interpret_stable_if_bool_false_int : forall n1 n2 f,
+  Int.min_signed <= n2 <= Int.max_signed ->
+  interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))] =
+    mk_behavior [] (Term_normal (Val_int 0)).
+Proof.
+  intros n1 n2 f Hn2. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Hn2). reflexivity.
+Qed.
+
+Lemma interpret_stable_if_bool_false_oob : forall n1 n2 f,
+  ~ (Int.min_signed <= n2 <= Int.max_signed) ->
+  interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))] =
+    mk_behavior [] (Term_error constint_malformed_msg).
+Proof.
+  intros n1 n2 f Hn2. unfold interpret; simpl.
+  rewrite (constint_in_range_false_of_oob _ Hn2). reflexivity.
+Qed.
+
 Lemma compiler_correct_if_bool_ints : forall b n1 n2,
   compiler_correct [Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2))].
-Admitted.
+Proof.
+  intros b n1 n2 src_fuel bc_fuel.
+  unfold compiler_correct.
+  destruct b.
+  - change (compile_program [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))])
+      with [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP].
+    destruct (constint_in_range n1) eqn:Hrange_n1.
+    + assert (Hn1 : Int.min_signed <= n1 <= Int.max_signed)
+        by (apply constint_in_range_true_bounds; exact Hrange_n1).
+      destruct src_fuel as [|[|[|sf]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_true_constint_stop_behavior_equiv; [exact Hn1 | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_true_constint_stop_behavior_equiv; [exact Hn1 | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_true_constint_stop_behavior_equiv; [exact Hn1 | right; reflexivity].
+      * replace (S (S (S sf))) with (3 + sf)%nat by lia.
+        rewrite (interpret_stable_if_bool_true_int _ _ _ Hn1).
+        apply if_true_constint_stop_behavior_equiv.
+        -- exact Hn1.
+        -- left. exists (Val_int 0). reflexivity.
+    + assert (Hn1 : ~ (Int.min_signed <= n1 <= Int.max_signed)).
+      { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_n1. discriminate. }
+      destruct src_fuel as [|[|[|sf]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_true_oob_behavior_equiv; [exact Hn1 | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_true_oob_behavior_equiv; [exact Hn1 | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_true_oob_behavior_equiv; [exact Hn1 | right; reflexivity].
+      * replace (S (S (S sf))) with (3 + sf)%nat by lia.
+        rewrite (interpret_stable_if_bool_true_oob _ _ _ Hn1).
+        apply if_true_oob_behavior_equiv.
+        -- exact Hn1.
+        -- left. reflexivity.
+  - change (compile_program [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))])
+      with [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP].
+    destruct (constint_in_range n2) eqn:Hrange_n2.
+    + assert (Hn2 : Int.min_signed <= n2 <= Int.max_signed)
+        by (apply constint_in_range_true_bounds; exact Hrange_n2).
+      destruct src_fuel as [|[|[|sf]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_false_constint_stop_behavior_equiv; [exact Hn2 | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_false_constint_stop_behavior_equiv; [exact Hn2 | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_false_constint_stop_behavior_equiv; [exact Hn2 | right; reflexivity].
+      * replace (S (S (S sf))) with (3 + sf)%nat by lia.
+        rewrite (interpret_stable_if_bool_false_int _ _ _ Hn2).
+        apply if_false_constint_stop_behavior_equiv.
+        -- exact Hn2.
+        -- left. exists (Val_int 0). reflexivity.
+    + assert (Hn2 : ~ (Int.min_signed <= n2 <= Int.max_signed)).
+      { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_n2. discriminate. }
+      destruct src_fuel as [|[|[|sf]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_false_oob_behavior_equiv; [exact Hn2 | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_false_oob_behavior_equiv; [exact Hn2 | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))])
+          with (mk_behavior [] Term_timeout).
+        apply if_false_oob_behavior_equiv; [exact Hn2 | right; reflexivity].
+      * replace (S (S (S sf))) with (3 + sf)%nat by lia.
+        rewrite (interpret_stable_if_bool_false_oob _ _ _ Hn2).
+        apply if_false_oob_behavior_equiv.
+        -- exact Hn2.
+        -- left. reflexivity.
+Qed.
 
 (* --- Decl_expr (Exp_let x (Exp_int n) (Exp_var x)): threshold = 2 --- *)
 
