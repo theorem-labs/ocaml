@@ -25,7 +25,7 @@ Reach full formal verification of the OCaml compiler in two stages:
 
 | Component | File | Admitted | Qed | Blocker |
 |-----------|------|----------|-----|---------|
-| Compiler correctness | `automatic/Compile/CompileProof.v` | 16 | 128 | Closures, heap allocation, function application, remaining active step lemmas needing stronger preconditions; bounded CONSTINT/POP/GETFIELD/CLOSURE/CLOSUREREC helpers and an unused ENVACC duplicate are proved |
+| Compiler correctness | `automatic/Compile/CompileProof.v` | 14 | 140 | Closures, heap allocation, function application, remaining active step lemmas needing stronger preconditions; source `Exp_int` now range-checks like `CONSTINT`, with `compiler_correct_expr_int` and `compiler_correct_neg_int` proved |
 | Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
 
 ### Known Gaps in Trusted Code
@@ -39,10 +39,11 @@ Reach full formal verification of the OCaml compiler in two stages:
 4. **`Syntax.v` missing constructs**: No `raise`/`try`, `while`/`for`, `ref`/mutable, multi-arg `let rec`, floats, `;;` (double semicolons), character literals, nested modules with signatures.
 
 5. **Source interpreter remaining caveats** (`semi-auto/Interpret/Interpret.v`):
-   - `compare` returns `Val_int 0` always
-   - `Op_and`/`Op_or` are strict to match current compiler `ANDINT`/`ORINT`
-   - `Op_eq`/`Op_neq` remain int-only to match current bytecode physical equality proof
-   - `Decl_open` supports qualified aliases only
+    - `compare` returns `Val_int 0` always
+    - `Op_and`/`Op_or` are strict to match current compiler `ANDINT`/`ORINT`
+    - `Op_eq`/`Op_neq` remain int-only to match current bytecode physical equality proof
+    - `Decl_open` supports qualified aliases only
+    - `Exp_int n` rejects values outside `[Int.min_signed, Int.max_signed]` to match bytecode `CONSTINT`; `Pat_int n` representability is still open because pattern tests compile through `CONSTINT n`
 
 6. **Compiler gaps** (`automatic/Compile/Compile.v`):
    - All constructors share tag 0 (can't distinguish variants)
@@ -234,15 +235,15 @@ Additional simplification principle: **pulling in existing source code is free c
 
 ### 2.1 Complete CompileProof.v
 
-**Current state**: 16 Admitted, 128 Qed. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_not_bool`, plus bounded CONSTINT, POP, GETFIELD, CLOSURE, and CLOSUREREC helper lemmas. An unused duplicate ENVACC helper is also bounded/proved; the active ENVACC variable case still needs an index-bound invariant. Core blockers are extending `val_corresponds` for closures and strengthening the remaining single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
+**Current state**: 14 Admitted, 140 Qed. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_expr_int`, `compiler_correct_not_bool`, `compiler_correct_neg_int`, plus bounded CONSTINT, POP, GETFIELD, CLOSURE, and CLOSUREREC helper lemmas. Source `Exp_int` now returns the same malformed-`CONSTINT` error for out-of-range literals as bytecode. An unused duplicate ENVACC helper is also bounded/proved; the active ENVACC variable case still needs an index-bound invariant. Core blockers are extending `val_corresponds` for closures and strengthening the remaining single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
 
 **Work needed**:
 - Extend `val_corresponds` with a closure clause relating `SVal_closure param body senv` to `Val_closure addr ofs` (heap-allocated)
 - Prove `expr_correct_gen` for `Exp_fun`, `Exp_app`, `Exp_letrec`, `Exp_match`, `Exp_constr`, `Exp_tuple`
-- Decide/enforce integer literal representability: source `Exp_int n` accepts arbitrary `Z`, while bytecode `CONSTINT n` rejects values outside the signed-int range, so the remaining integer-heavy `compiler_correct_*` lemmas are false as stated
+- Finish integer representability: source `Exp_int n` now rejects out-of-range values to match bytecode `CONSTINT n`, but `Pat_int n` still accepts arbitrary `Z` while compiled pattern tests emit `CONSTINT n`; remaining integer-heavy `compiler_correct_*` lemmas need explicit in-range/out-of-range branches
 - Fix compiler: constructor tags must distinguish variants (requires new `constr_env` data structure), nullary constructors with tag > 0 need `ATOM tag`
 - Fix string compilation (currently `CONSTINT 0` — this is a large feature, not a simple fix)
-- The 12 remaining per-program `compiler_correct_*` Admitted are redundant once the main theorem is proved; empty programs, type declarations, unit expressions, bool expressions, and boolean `not` are now proved directly
+- The 10 remaining per-program `compiler_correct_*` Admitted are redundant once the main theorem is proved; empty programs, type declarations, unit expressions, bool/int expressions, integer negation, and boolean `not` are now proved directly
 
 ### 2.2 Complete InstructVerification
 
@@ -268,6 +269,7 @@ Additional simplification principle: **pulling in existing source code is free c
 - `compare` must implement real structural comparison
 - Restore short-circuit `Op_and`/`Op_or` once the compiler emits branch code instead of strict `ANDINT`/`ORINT`
 - Widen structural equality once the compiler emits structural equality instead of bytecode `EQ`/`NEQ`
+- Decide how to handle out-of-range `Pat_int n` literals, since compiled pattern tests currently emit `CONSTINT n`
 
 ### 2.5 Fix Compiler
 

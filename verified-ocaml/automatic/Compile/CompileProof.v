@@ -8,7 +8,7 @@
 
    The proof is checked mechanically by Rocq. *)
 
-From Stdlib Require Import ZArith Strings.String PeanoNat Lia.
+From Stdlib Require Import ZArith Bool Strings.String PeanoNat Lia.
 From Stdlib.Array Require Import PrimArray ArrayAxioms.
 From Stdlib.Numbers.Cyclic.Int63 Require Import Uint63.
 From Stdlib Require Import List. Import ListNotations.
@@ -383,6 +383,48 @@ Proof.
   replace (andb (Int.min_signed <=? n)%Z (n <=? Int.max_signed)%Z) with true.
   - unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
   - symmetry. apply andb_true_intro. split; apply Z.leb_le; lia.
+Qed.
+
+Lemma constint_in_range_true_bounds : forall n,
+  constint_in_range n = true ->
+  Int.min_signed <= n <= Int.max_signed.
+Proof.
+  intros n Hrange.
+  unfold constint_in_range in Hrange.
+  apply andb_true_iff in Hrange as [Hmin Hmax].
+  apply Z.leb_le in Hmin. apply Z.leb_le in Hmax. lia.
+Qed.
+
+Lemma constint_in_range_of_bounds : forall n,
+  Int.min_signed <= n <= Int.max_signed ->
+  constint_in_range n = true.
+Proof.
+  intros n Hbounds.
+  unfold constint_in_range.
+  apply andb_true_intro. split; apply Z.leb_le; lia.
+Qed.
+
+Lemma constint_in_range_false_of_oob : forall n,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  constint_in_range n = false.
+Proof.
+  intros n Hoob.
+  destruct (constint_in_range n) eqn:Hrange; [|reflexivity].
+  exfalso. apply Hoob. apply constint_in_range_true_bounds. exact Hrange.
+Qed.
+
+Lemma step_constint_oob : forall code s n,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  nth_error code (Z.to_nat (pc s)) = Some (CONSTINT n) ->
+  step_list code s = Error "CONSTINT: malformed operand".
+Proof.
+  intros code s n Hoob Hnth.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  unfold handle_CONSTINT.
+  replace (andb (Int.min_signed <=? n)%Z (n <=? Int.max_signed)%Z) with false.
+  - reflexivity.
+  - symmetry. apply constint_in_range_false_of_oob. exact Hoob.
 Qed.
 
 Lemma step_stop : forall code s,
@@ -764,6 +806,14 @@ Proof.
   simpl. rewrite Hstep. reflexivity.
 Qed.
 
+Lemma rc_error : forall fuel code s msg out,
+  step_list code s = Error msg ->
+  run_collecting (S fuel) code s out = mk_behavior (rev out) (Term_error msg).
+Proof.
+  intros fuel code s msg out Hstep.
+  simpl. rewrite Hstep. reflexivity.
+Qed.
+
 (* When step_list returns CCall_request, run_collecting processes it. *)
 Lemma rc_ccall : forall fuel code s prim_idx args cont out,
   step_list code s = CCall_request prim_idx args cont ->
@@ -925,14 +975,18 @@ Lemma expr_correct_int : forall n, expr_correct (Exp_int n).
 Proof.
   unfold expr_correct. intros n fuel ce base s sv out out' prefix Heval Hpc Hout Hplen.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate|].
-  simpl in Heval. injection Heval. intros Hout' Hsv. subst sv out'.
+  cbn [eval] in Heval.
+  destruct (constint_in_range n) eqn:Hrange; [|discriminate].
+  injection Heval. intros Hout' Hsv. subst sv out'.
   exists 1%nat, (Val_int n). split.
   - simpl (compile_expr _ _ _ _ _). simpl (Datatypes.length [_]).
     unfold nsteps.
     assert (Hfetch: nth_error (prefix ++ [CONSTINT n] ++ [STOP]) (Z.to_nat (pc s)) = Some (CONSTINT n)).
     { rewrite Hpc. rewrite Nat2Z.id.
       rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-    rewrite (step_constint _ _ _ Hfetch).
+    assert (Hbounds : Int.min_signed <= n <= Int.max_signed)
+      by (apply constint_in_range_true_bounds; exact Hrange).
+    rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
     unfold st. subst base. rewrite Hpc.
     replace (Z.of_nat (Datatypes.length prefix) + 1)
       with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -1080,6 +1134,42 @@ Proof.
     destruct Hsrc as [[v ->] | ->]; simpl; split; auto.
 Qed.
 
+Lemma constint_oob_stop_behavior_equiv : forall src_result bc_fuel n,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  (src_result = Term_error constint_malformed_msg \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT n; STOP] []).
+Proof.
+  intros src_result bc_fuel n Hoob Hsrc.
+  set (s0 := initial_state []).
+  assert (Hconst : step_list [CONSTINT n; STOP] s0 = Error constint_malformed_msg).
+  { subst s0. apply (step_constint_oob _ _ n); [exact Hoob | reflexivity]. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|fuel].
+  - destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_error fuel [CONSTINT n; STOP] s0 constint_malformed_msg [] Hconst).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+Qed.
+
+Lemma constint_oob_initial_behavior_equiv : forall src_result bc_fuel n suffix,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  (src_result = Term_error constint_malformed_msg \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel (CONSTINT n :: suffix) []).
+Proof.
+  intros src_result bc_fuel n suffix Hoob Hsrc.
+  set (s0 := initial_state []).
+  assert (Hconst : step_list (CONSTINT n :: suffix) s0 = Error constint_malformed_msg).
+  { subst s0. apply (step_constint_oob _ _ n); [exact Hoob | reflexivity]. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|fuel].
+  - destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_error fuel (CONSTINT n :: suffix) s0 constint_malformed_msg [] Hconst).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+Qed.
+
 Lemma constint_boolnot_stop_behavior_equiv : forall src_result bc_fuel n v,
   Int.min_signed <= n <= Int.max_signed ->
   ((n = 0 /\ v = val_true) \/ (n <> 0 /\ v = val_false)) ->
@@ -1115,16 +1205,91 @@ Proof.
     destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
 Qed.
 
+Lemma constint_neg_stop_behavior_equiv : forall src_result bc_fuel n,
+  Int.min_signed <= n <= Int.max_signed ->
+  ((exists vsrc, src_result = Term_normal vsrc) \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT n; NEGINT; STOP] []).
+Proof.
+  intros src_result bc_fuel n Hbounds Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int n) [] val_unit 0 [] 0).
+  set (s2 := st s1 2 (Val_int (- n)) [] val_unit 0 [] 0).
+  assert (Hconst : step_list [CONSTINT n; NEGINT; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity]. }
+  assert (Hneg : step_list [CONSTINT n; NEGINT; STOP] s1 = Step s2).
+  { subst s2 s1 s0. apply step_negint with (n := n); reflexivity. }
+  assert (Hhalt : step_list [CONSTINT n; NEGINT; STOP] s2 = Halt (Val_int (- n))).
+  { subst s2. apply step_stop. reflexivity. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|fuel]]].
+  - destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT n; NEGINT; STOP] s0 s1 [] Hconst).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step 1 [CONSTINT n; NEGINT; STOP] s0 s1 [] Hconst).
+    rewrite (rc_step 0 [CONSTINT n; NEGINT; STOP] s1 s2 [] Hneg).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S fuel)) [CONSTINT n; NEGINT; STOP] s0 s1 [] Hconst).
+    rewrite (rc_step (S fuel) [CONSTINT n; NEGINT; STOP] s1 s2 [] Hneg).
+    rewrite (rc_halt fuel [CONSTINT n; NEGINT; STOP] s2 (Val_int (- n)) [] Hhalt).
+    destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+Qed.
+
 (* --- Decl_expr (Exp_int n): threshold = 1 --- *)
 
 Lemma interpret_stable_expr_int : forall n f,
+  Int.min_signed <= n <= Int.max_signed ->
   interpret (2 + f)%nat [Decl_expr (Exp_int n)] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; reflexivity. Qed.
+Proof.
+  intros n f Hbounds.
+  unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Hbounds). reflexivity.
+Qed.
+
+Lemma interpret_stable_expr_int_oob : forall n f,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  interpret (2 + f)%nat [Decl_expr (Exp_int n)] =
+    mk_behavior [] (Term_error constint_malformed_msg).
+Proof.
+  intros n f Hoob.
+  unfold interpret; simpl.
+  rewrite (constint_in_range_false_of_oob _ Hoob). reflexivity.
+Qed.
 
 Lemma compiler_correct_expr_int : forall n,
   compiler_correct [Decl_expr (Exp_int n)].
-Admitted.
+Proof.
+  intros n src_fuel bc_fuel.
+  unfold compiler_correct.
+  change (compile_program [Decl_expr (Exp_int n)]) with [CONSTINT n; STOP].
+  destruct (constint_in_range n) eqn:Hrange.
+  - assert (Hbounds : Int.min_signed <= n <= Int.max_signed)
+      by (apply constint_in_range_true_bounds; exact Hrange).
+    destruct src_fuel as [|[|sf]].
+    + change (interpret 0 [Decl_expr (Exp_int n)]) with (mk_behavior [] Term_timeout).
+      apply constint_stop_behavior_equiv; [exact Hbounds | right; reflexivity].
+    + change (interpret 1 [Decl_expr (Exp_int n)]) with (mk_behavior [] Term_timeout).
+      apply constint_stop_behavior_equiv; [exact Hbounds | right; reflexivity].
+    + replace (S (S sf)) with (2 + sf)%nat by lia.
+      rewrite (interpret_stable_expr_int _ _ Hbounds).
+      apply constint_stop_behavior_equiv.
+      * exact Hbounds.
+      * left. exists (Val_int 0). reflexivity.
+  - assert (Hoob : ~ (Int.min_signed <= n <= Int.max_signed)).
+    { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange. discriminate. }
+    destruct src_fuel as [|[|sf]].
+    + change (interpret 0 [Decl_expr (Exp_int n)]) with (mk_behavior [] Term_timeout).
+      apply constint_oob_stop_behavior_equiv; [exact Hoob | right; reflexivity].
+    + change (interpret 1 [Decl_expr (Exp_int n)]) with (mk_behavior [] Term_timeout).
+      apply constint_oob_stop_behavior_equiv; [exact Hoob | right; reflexivity].
+    + replace (S (S sf)) with (2 + sf)%nat by lia.
+      rewrite (interpret_stable_expr_int_oob _ _ Hoob).
+      apply constint_oob_stop_behavior_equiv.
+      * exact Hoob.
+      * left. reflexivity.
+Qed.
 
 (* --- Decl_expr (Exp_bool b): threshold = 2 --- *)
 
@@ -1212,9 +1377,15 @@ Qed.
 (* --- Decl_expr (Exp_seq (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
 Lemma interpret_stable_seq_ints : forall a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
   interpret (3 + f)%nat [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; reflexivity. Qed.
+Proof.
+  intros a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Ha).
+  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+Qed.
 
 Lemma compiler_correct_seq_ints : forall a b,
   compiler_correct [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))].
@@ -1223,13 +1394,66 @@ Admitted.
 (* --- Decl_expr (Exp_unop Op_neg (Exp_int n)): threshold = 2 --- *)
 
 Lemma interpret_stable_neg_int : forall n f,
+  Int.min_signed <= n <= Int.max_signed ->
   interpret (3 + f)%nat [Decl_expr (Exp_unop Op_neg (Exp_int n))] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; reflexivity. Qed.
+Proof.
+  intros n f Hn. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Hn). reflexivity.
+Qed.
+
+Lemma interpret_stable_neg_int_oob : forall n f,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  interpret (3 + f)%nat [Decl_expr (Exp_unop Op_neg (Exp_int n))] =
+    mk_behavior [] (Term_error constint_malformed_msg).
+Proof.
+  intros n f Hoob. unfold interpret; simpl.
+  rewrite (constint_in_range_false_of_oob _ Hoob). reflexivity.
+Qed.
 
 Lemma compiler_correct_neg_int : forall n,
   compiler_correct [Decl_expr (Exp_unop Op_neg (Exp_int n))].
-Admitted.
+Proof.
+  intros n src_fuel bc_fuel.
+  unfold compiler_correct.
+  change (compile_program [Decl_expr (Exp_unop Op_neg (Exp_int n))])
+    with [CONSTINT n; NEGINT; STOP].
+  destruct (constint_in_range n) eqn:Hrange.
+  - assert (Hbounds : Int.min_signed <= n <= Int.max_signed)
+      by (apply constint_in_range_true_bounds; exact Hrange).
+    destruct src_fuel as [|[|[|sf]]].
+    + change (interpret 0 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_neg_stop_behavior_equiv; [exact Hbounds | right; reflexivity].
+    + change (interpret 1 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_neg_stop_behavior_equiv; [exact Hbounds | right; reflexivity].
+    + change (interpret 2 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_neg_stop_behavior_equiv; [exact Hbounds | right; reflexivity].
+    + replace (S (S (S sf))) with (3 + sf)%nat by lia.
+      rewrite (interpret_stable_neg_int _ _ Hbounds).
+      apply constint_neg_stop_behavior_equiv.
+      * exact Hbounds.
+      * left. exists (Val_int 0). reflexivity.
+  - assert (Hoob : ~ (Int.min_signed <= n <= Int.max_signed)).
+    { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange. discriminate. }
+    destruct src_fuel as [|[|[|sf]]].
+    + change (interpret 0 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity].
+    + change (interpret 1 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity].
+    + change (interpret 2 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
+        with (mk_behavior [] Term_timeout).
+      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity].
+    + replace (S (S (S sf))) with (3 + sf)%nat by lia.
+      rewrite (interpret_stable_neg_int_oob _ _ Hoob).
+      apply constint_oob_initial_behavior_equiv.
+      * exact Hoob.
+      * left. reflexivity.
+Qed.
 
 (* --- Decl_expr (Exp_unop Op_not (Exp_bool b)): threshold = 2 --- *)
 
@@ -1311,9 +1535,15 @@ Qed.
 (* --- Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
 Lemma interpret_stable_add_ints : forall a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; reflexivity. Qed.
+Proof.
+  intros a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Ha).
+  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+Qed.
 
 Lemma compiler_correct_add_ints : forall a b,
   compiler_correct [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))].
@@ -1322,9 +1552,15 @@ Admitted.
 (* --- Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
 Lemma interpret_stable_sub_ints : forall a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; reflexivity. Qed.
+Proof.
+  intros a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Ha).
+  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+Qed.
 
 Lemma compiler_correct_sub_ints : forall a b,
   compiler_correct [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))].
@@ -1333,9 +1569,15 @@ Admitted.
 (* --- Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b)): threshold = 2 --- *)
 
 Lemma interpret_stable_mul_ints : forall a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; reflexivity. Qed.
+Proof.
+  intros a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Ha).
+  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+Qed.
 
 Lemma compiler_correct_mul_ints : forall a b,
   compiler_correct [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))].
@@ -1344,9 +1586,16 @@ Admitted.
 (* --- Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2)): threshold = 2 --- *)
 
 Lemma interpret_stable_if_bool_ints : forall b n1 n2 f,
+  Int.min_signed <= n1 <= Int.max_signed ->
+  Int.min_signed <= n2 <= Int.max_signed ->
   interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2))] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
+Proof.
+  intros b n1 n2 f Hn1 Hn2. unfold interpret; simpl.
+  destruct b;
+    [rewrite (constint_in_range_of_bounds _ Hn1)
+    |rewrite (constint_in_range_of_bounds _ Hn2)]; reflexivity.
+Qed.
 
 Lemma compiler_correct_if_bool_ints : forall b n1 n2,
   compiler_correct [Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2))].
@@ -1355,10 +1604,12 @@ Admitted.
 (* --- Decl_expr (Exp_let x (Exp_int n) (Exp_var x)): threshold = 2 --- *)
 
 Lemma interpret_stable_let_int_var : forall x n f,
+  Int.min_signed <= n <= Int.max_signed ->
   interpret (3 + f)%nat [Decl_expr (Exp_let x (Exp_int n) (Exp_var x))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros. unfold interpret; simpl.
+  intros x n f Hn. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Hn).
   rewrite String.eqb_refl. reflexivity.
 Qed.
 
@@ -1369,11 +1620,15 @@ Admitted.
 (* --- let x = a ;; x + b (two declarations): threshold = 2 --- *)
 
 Lemma interpret_stable_let_then_add : forall x a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
   interpret (4 + f)%nat [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros. unfold interpret; simpl.
-  rewrite String.eqb_refl. simpl. reflexivity.
+  intros x a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Ha).
+  rewrite String.eqb_refl. simpl.
+  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
 Qed.
 
 Lemma compiler_correct_let_then_add : forall x a b,
@@ -1386,10 +1641,12 @@ Admitted.
 (* This covers the I/O path: print_int n, then print_newline. *)
 
 Lemma interpret_stable_print_int : forall n f,
+  Int.min_signed <= n <= Int.max_signed ->
   interpret (4 + f)%nat [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))] =
     mk_behavior (z_to_events n ++ [Out_char 10]) (Term_normal (Val_int 0)).
 Proof.
-  intros. unfold interpret; simpl.
+  intros n f Hn. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Hn).
   unfold apply_builtin. simpl.
   rewrite rev_app_distr. simpl.
   rewrite rev_involutive. reflexivity.
@@ -1403,11 +1660,15 @@ Admitted.
        threshold = 3 --- *)
 
 Lemma interpret_stable_let_add : forall x a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
   interpret (4 + f)%nat [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros. unfold interpret; simpl.
-  rewrite String.eqb_refl. simpl. reflexivity.
+  intros x a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Ha).
+  rewrite String.eqb_refl. simpl.
+  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
 Qed.
 
 Lemma compiler_correct_let_add : forall x a b,
@@ -1418,10 +1679,14 @@ Admitted.
        threshold = 3 --- *)
 
 Lemma interpret_stable_if_int_cmp : forall a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
   interpret (4 + f)%nat [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros. unfold interpret; simpl.
+  intros a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Hb).
+  rewrite (constint_in_range_of_bounds _ Ha).
   destruct (a >? b); simpl; reflexivity.
 Qed.
 
@@ -1651,7 +1916,11 @@ Proof.
   - simpl in Heval. discriminate.
   - simpl in Heval.
     destruct e.
-    + (* Exp_int *) injection Heval; intros; subst. exists []. reflexivity.
+    + (* Exp_int *)
+      match goal with
+      | n : Z |- _ => destruct (constint_in_range n) eqn:?; try discriminate
+      end.
+      injection Heval; intros; subst. exists []. reflexivity.
     + (* Exp_bool *) injection Heval; intros; subst. exists []. reflexivity.
     + (* Exp_unit *) injection Heval; intros; subst. exists []. reflexivity.
     + (* Exp_var *)
@@ -1930,7 +2199,9 @@ Proof.
   unfold expr_correct_gen.
   intros n fuel senv ce fe base s sv out out' prefix suffix Heval Hout Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
-  simpl in Heval. injection Heval. intros Hout' Hsv. subst sv out'.
+  cbn [eval] in Heval.
+  destruct (constint_in_range n) eqn:Hrange; [|discriminate].
+  injection Heval. intros Hout' Hsv. subst sv out'.
   exists 1%nat, (Val_int n). split.
   - simpl (compile_expr _ _ _ _ _). simpl (Datatypes.length [_]).
     unfold nsteps.
@@ -1938,7 +2209,9 @@ Proof.
               (Z.to_nat (pc s)) = Some (CONSTINT n)).
     { rewrite Hpc, Nat2Z.id.
       rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-    rewrite (step_constint _ _ _ Hfetch).
+    assert (Hbounds : Int.min_signed <= n <= Int.max_signed)
+      by (apply constint_in_range_true_bounds; exact Hrange).
+    rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
     unfold st. rewrite Hpc.
     replace (Z.of_nat base + 1) with (Z.of_nat (base + 1)) by lia.
     reflexivity.

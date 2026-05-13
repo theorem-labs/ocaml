@@ -9,12 +9,18 @@
 From Stdlib Require Import ZArith Bool PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String Strings.Ascii.
+From compcert Require Import Integers.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
 Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope list_scope.
+
+Definition constint_in_range (n : Z) : bool :=
+  ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z.
+
+Definition constint_malformed_msg : string := "CONSTINT: malformed operand".
 
 (* === Source-level values === *)
 
@@ -284,7 +290,9 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
   | O => Eval_timeout out
   | S fuel' =>
   match e with
-  | Exp_int n => Eval_ok (SVal_int n) out
+  | Exp_int n =>
+    if constint_in_range n then Eval_ok (SVal_int n) out
+    else Eval_err constint_malformed_msg out
   | Exp_bool b => Eval_ok (SVal_bool b) out
   | Exp_unit => Eval_ok SVal_unit out
 
