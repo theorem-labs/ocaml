@@ -2009,6 +2009,176 @@ Proof.
     destruct Hsrc as [-> | ->]; simpl; split; auto.
 Qed.
 
+Lemma if_int_cmp_stop_behavior_equiv : forall src_result bc_fuel a b,
+  Int.min_signed <= a <= Int.max_signed ->
+  Int.min_signed <= b <= Int.max_signed ->
+  ((exists vsrc, src_result = Term_normal vsrc) \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] []).
+Proof.
+  intros src_result bc_fuel a b Ha Hb Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int b) [] val_unit 0 [] 0).
+  set (s2 := st s1 2 (Val_int b) [Val_int b] val_unit 0 [] 0).
+  set (s3 := st s2 3 (Val_int a) [Val_int b] val_unit 0 [] 0).
+  set (s4 := st s3 4 (val_bool (a >? b)) [] val_unit 0 [] 0).
+  assert (Hone : Int.min_signed <= 1 <= Int.max_signed)
+    by (change Int.min_signed with (-2147483648)%Z;
+        change Int.max_signed with 2147483647%Z; lia).
+  assert (Hzero : Int.min_signed <= 0 <= Int.max_signed)
+    by (change Int.min_signed with (-2147483648)%Z;
+        change Int.max_signed with 2147483647%Z; lia).
+  assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 = Step s2).
+  { subst s2 s1 s0. apply step_push. reflexivity. }
+  assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 = Step s3).
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  assert (Hgt : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 = Step s4).
+  { subst s4 s3 s2 s1 s0. apply step_gtint with (a := a) (b := b) (rest := []); reflexivity. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct (a >? b) eqn:Hcmp.
+  - set (s5 := st s4 5 (Val_int 1) [] val_unit 0 [] 0).
+    set (s6 := st s5 6 (Val_int 1) [] val_unit 0 [] 0).
+    set (s7 := st s6 8 (Val_int 1) [] val_unit 0 [] 0).
+    assert (Hbranch_cond : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 = Step s5).
+    { subst s5 s4 s3 s2 s1 s0.
+      apply step_branchifnot_nonzero with (target := 7) (n := 1); [reflexivity | reflexivity | lia]. }
+    assert (Hconst_one : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 = Step s6).
+    { subst s6 s5 s4 s3 s2 s1 s0.
+      apply step_constint_bounded; [exact Hone | reflexivity]. }
+    assert (Hbranch_end : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s6 = Step s7).
+    { subst s7 s6 s5 s4 s3 s2 s1 s0. apply step_branch. reflexivity. }
+    assert (Hhalt : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s7 = Halt (Val_int 1)).
+    { subst s7. apply step_stop. reflexivity. }
+    destruct bc_fuel as [|[|[|[|[|[|[|[|fuel]]]]]]]].
+    + destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 3 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 4 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 3 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 s5 [] Hbranch_cond).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 5 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 4 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 3 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 s5 [] Hbranch_cond).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 s6 [] Hconst_one).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 6 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 5 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 4 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step 3 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 s5 [] Hbranch_cond).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 s6 [] Hconst_one).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s6 s7 [] Hbranch_end).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step (S (S (S (S (S (S (S fuel))))))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step (S (S (S (S (S (S fuel)))))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step (S (S (S (S (S fuel))))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step (S (S (S (S fuel)))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      rewrite (rc_step (S (S (S fuel))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 s5 [] Hbranch_cond).
+      rewrite (rc_step (S (S fuel)) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 s6 [] Hconst_one).
+      rewrite (rc_step (S fuel) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s6 s7 [] Hbranch_end).
+      rewrite (rc_halt fuel [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s7 (Val_int 1) [] Hhalt).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+  - set (s5 := st s4 7 (Val_int 0) [] val_unit 0 [] 0).
+    set (s6 := st s5 8 (Val_int 0) [] val_unit 0 [] 0).
+    assert (Hbranch_cond : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 = Step s5).
+    { subst s5 s4 s3 s2 s1 s0.
+      apply step_branchifnot_zero; [reflexivity | reflexivity]. }
+    assert (Hconst_zero : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 = Step s6).
+    { subst s6 s5 s4 s3 s2 s1 s0.
+      apply step_constint_bounded; [exact Hzero | reflexivity]. }
+    assert (Hhalt : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s6 = Halt (Val_int 0)).
+    { subst s6. apply step_stop. reflexivity. }
+    destruct bc_fuel as [|[|[|[|[|[|[|fuel]]]]]]].
+    + destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 3 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 4 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 3 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 s5 [] Hbranch_cond).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step 5 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step 4 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step 3 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step 2 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 s5 [] Hbranch_cond).
+      rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 s6 [] Hconst_zero).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+    + rewrite (rc_step (S (S (S (S (S (S fuel)))))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+      rewrite (rc_step (S (S (S (S (S fuel))))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+      rewrite (rc_step (S (S (S (S fuel)))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 s3 [] Hconst_a).
+      rewrite (rc_step (S (S (S fuel))) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 s4 [] Hgt).
+      rewrite (rc_step (S (S fuel)) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 s5 [] Hbranch_cond).
+      rewrite (rc_step (S fuel) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 s6 [] Hconst_zero).
+      rewrite (rc_halt fuel [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s6 (Val_int 0) [] Hhalt).
+      destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
+Qed.
+
+Lemma if_int_cmp_second_oob_behavior_equiv : forall src_result bc_fuel a b,
+  Int.min_signed <= b <= Int.max_signed ->
+  ~ (Int.min_signed <= a <= Int.max_signed) ->
+  (src_result = Term_error constint_malformed_msg \/ src_result = Term_timeout) ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] []).
+Proof.
+  intros src_result bc_fuel a b Hb Ha Hsrc.
+  set (s0 := initial_state []).
+  set (s1 := st s0 1 (Val_int b) [] val_unit 0 [] 0).
+  set (s2 := st s1 2 (Val_int b) [Val_int b] val_unit 0 [] 0).
+  assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 = Step s1).
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 = Step s2).
+  { subst s2 s1 s0. apply step_push. reflexivity. }
+  assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 = Error constint_malformed_msg).
+  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity]. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|[|[|fuel]]].
+  - destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step 1 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+    rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+  - rewrite (rc_step (S (S fuel)) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
+    rewrite (rc_step (S fuel) [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 s2 [] Hpush).
+    rewrite (rc_error fuel [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 constint_malformed_msg [] Hconst_a).
+    destruct Hsrc as [-> | ->]; simpl; split; auto.
+Qed.
+
 Lemma print_int_stop_behavior_equiv : forall src_result bc_fuel n,
   Int.min_signed <= n <= Int.max_signed ->
   ((exists vsrc, src_result = Term_normal vsrc) \/ src_result = Term_timeout) ->
@@ -3326,7 +3496,7 @@ Proof.
 Qed.
 
 (* --- Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0)):
-       threshold = 3 --- *)
+       threshold = 4 --- *)
 
 Lemma interpret_stable_if_int_cmp : forall a b f,
   Int.min_signed <= a <= Int.max_signed ->
@@ -3340,9 +3510,122 @@ Proof.
   destruct (a >? b); simpl; reflexivity.
 Qed.
 
+Lemma interpret_stable_if_int_cmp_a_oob : forall a b f,
+  ~ (Int.min_signed <= a <= Int.max_signed) ->
+  interpret (4 + f)%nat [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))] =
+    mk_behavior [] (Term_error constint_malformed_msg).
+Proof.
+  intros a b f Ha. unfold interpret; simpl.
+  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+Qed.
+
+Lemma interpret_stable_if_int_cmp_b_oob : forall a b f,
+  Int.min_signed <= a <= Int.max_signed ->
+  ~ (Int.min_signed <= b <= Int.max_signed) ->
+  interpret (4 + f)%nat [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))] =
+    mk_behavior [] (Term_error constint_malformed_msg).
+Proof.
+  intros a b f Ha Hb. unfold interpret; simpl.
+  rewrite (constint_in_range_of_bounds _ Ha).
+  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+Qed.
+
 Lemma compiler_correct_if_int_cmp : forall a b,
   compiler_correct [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))].
-Admitted.
+Proof.
+  intros a b src_fuel bc_fuel.
+  unfold compiler_correct.
+  rewrite compile_if_int_cmp_shape.
+  destruct (constint_in_range b) eqn:Hrange_b.
+  - assert (Hb : Int.min_signed <= b <= Int.max_signed)
+      by (apply constint_in_range_true_bounds; exact Hrange_b).
+    destruct (constint_in_range a) eqn:Hrange_a.
+    + assert (Ha : Int.min_signed <= a <= Int.max_signed)
+        by (apply constint_in_range_true_bounds; exact Hrange_a).
+      destruct src_fuel as [|[|[|[|sf]]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_stop_behavior_equiv; [exact Ha | exact Hb | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_stop_behavior_equiv; [exact Ha | exact Hb | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_stop_behavior_equiv; [exact Ha | exact Hb | right; reflexivity].
+      * change (interpret 3 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_stop_behavior_equiv; [exact Ha | exact Hb | right; reflexivity].
+      * replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
+        rewrite (interpret_stable_if_int_cmp _ _ _ Ha Hb).
+        apply if_int_cmp_stop_behavior_equiv.
+        -- exact Ha.
+        -- exact Hb.
+        -- left. exists (Val_int 0). reflexivity.
+    + assert (Ha : ~ (Int.min_signed <= a <= Int.max_signed)).
+      { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_a. discriminate. }
+      destruct src_fuel as [|[|[|[|sf]]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_second_oob_behavior_equiv; [exact Hb | exact Ha | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_second_oob_behavior_equiv; [exact Hb | exact Ha | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_second_oob_behavior_equiv; [exact Hb | exact Ha | right; reflexivity].
+      * change (interpret 3 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply if_int_cmp_second_oob_behavior_equiv; [exact Hb | exact Ha | right; reflexivity].
+      * replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
+        rewrite (interpret_stable_if_int_cmp_a_oob _ _ _ Ha).
+        apply if_int_cmp_second_oob_behavior_equiv.
+        -- exact Hb.
+        -- exact Ha.
+        -- left. reflexivity.
+  - assert (Hb : ~ (Int.min_signed <= b <= Int.max_signed)).
+    { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_b. discriminate. }
+    destruct (constint_in_range a) eqn:Hrange_a.
+    + assert (Ha : Int.min_signed <= a <= Int.max_signed)
+        by (apply constint_in_range_true_bounds; exact Hrange_a).
+      destruct src_fuel as [|[|[|[|sf]]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * change (interpret 3 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
+        rewrite (interpret_stable_if_int_cmp_b_oob _ _ _ Ha Hb).
+        apply constint_oob_initial_behavior_equiv.
+        -- exact Hb.
+        -- left. reflexivity.
+    + assert (Ha : ~ (Int.min_signed <= a <= Int.max_signed)).
+      { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_a. discriminate. }
+      destruct src_fuel as [|[|[|[|sf]]]].
+      * change (interpret 0 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * change (interpret 1 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * change (interpret 2 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * change (interpret 3 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
+          with (mk_behavior [] Term_timeout).
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+      * replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
+        rewrite (interpret_stable_if_int_cmp_a_oob _ _ _ Ha).
+        apply constint_oob_initial_behavior_equiv.
+        -- exact Hb.
+        -- left. reflexivity.
+Qed.
 
 (* ================================================================== *)
 (* === FUEL MONOTONICITY                                          === *)
