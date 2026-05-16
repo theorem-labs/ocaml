@@ -288,7 +288,7 @@ Theorem verify_SETFLOATFIELD_correct : forall n,
     handler_correct (handle_SETFLOATFIELD n) f_instr_SETFLOATFIELD
       (fun _ => None)
       (setfloatfield_step_pre n)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

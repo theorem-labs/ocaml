@@ -21,7 +21,3 @@ Local Lemma sem_cast_int_to_long_3 : forall m, sem_cast (Vint (Int.repr 3)) tint
 Local Lemma sem_shl_long_3_1 : forall m, sem_binary_operation (genv_cenv clight_ge) Oshl (Vlong (Int64.repr 3)) tlong (Vint (Int.repr 1)) tint m = Some (Vlong (Int64.repr 6)). Proof. intros. reflexivity. Qed.
 Local Lemma sem_add_long_int_6_1 : forall m, sem_binary_operation (genv_cenv clight_ge) Oadd (Vlong (Int64.repr 6)) tlong (Vint (Int.repr 1)) tint m = Some (Vlong (Int64.repr 7)). Proof. intros. reflexivity. Qed.
 Local Lemma val_int_3_load_result : Val.load_result Mint64 (Vlong (Int64.repr 7)) = Vlong (Int64.repr 7). Proof. reflexivity. Qed.
-Theorem verify_CONST3_correct :
-    handler_correct (handle_CONSTINT 3) f_instr_CONST3 (fun _ => None) (fun _ _ _ _ => True) (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.

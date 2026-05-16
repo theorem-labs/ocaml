@@ -321,7 +321,7 @@ Theorem verify_APPLY3_correct :
     handler_correct (fun pc' s => handle_APPLY3 pc' s) f_instr_APPLY3
       (fun _ => None)
       apply3_step_pre
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

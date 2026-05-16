@@ -48,10 +48,3 @@ Local Lemma val_int_1_load_result :
   Val.load_result Mint64 (Vlong (Int64.repr 3)) = Vlong (Int64.repr 3).
 Proof. reflexivity. Qed.
 
-Theorem verify_CONST1_correct :
-    handler_correct (handle_CONSTINT 1) f_instr_CONST1
-      (fun _ => None)
-      (fun _ _ _ _ => True)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.

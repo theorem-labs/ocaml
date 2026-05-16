@@ -28,26 +28,6 @@ Local Lemma body_eq :
   fn_body f_instr_GETBYTESCHAR = fn_body f_instr_GETSTRINGCHAR.
 Proof. reflexivity. Qed.
 
-Theorem verify_GETBYTESCHAR_correct :
-    handler_correct handle_GETSTRINGCHAR f_instr_GETBYTESCHAR
-      (fun _ => None)
-      (fun e m s ard =>
-         getstringchar_heap_pre m s ard /\
-         match s.(Machine.stack) with
-         | Val_int idx :: _ =>
-             0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
-             match field_or_heap s s.(Machine.accu) (Z.to_nat idx) with
-             | Some (Val_int c) => 0 <= c <= 255
-             | _ => True
-             end /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv ->
-              exists z, cv = Vlong z)
-         | _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* ================================================================== *)
 (* Wrapper with the canonical type for InstructVerificationProof.v     *)
 (* ================================================================== *)
@@ -59,4 +39,5 @@ Definition correct_GETBYTESCHAR :
       (error_message_of GETBYTESCHAR)
       (pre_of GETBYTESCHAR) (P_halt_of GETBYTESCHAR) (P_ccall_of GETBYTESCHAR).
 Proof.
-Admitted.
+  exact correct_GETSTRINGCHAR.
+Qed.

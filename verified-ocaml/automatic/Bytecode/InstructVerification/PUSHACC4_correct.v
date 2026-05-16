@@ -36,14 +36,14 @@ Proof.
 Qed.
 
 Theorem verify_PUSHACC4_correct :
-    handler_correct (handle_PUSHACC 4) f_instr_PUSHACC4
-      (fun _ => None)
-      (fun _ m _ ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         exists sp_b sp_ofs,
-           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16)
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (PUSHACC 4)) (clight_of (PUSHACC 4))
+      (error_message_of (PUSHACC 4))
+      (pre_of (PUSHACC 4)) (P_halt_of (PUSHACC 4)) (P_ccall_of (PUSHACC 4)).
 Proof.
 Admitted.
+
+Definition correct_PUSHACC4 :
+    handler_correct (handle_instr (PUSHACC 4)) (clight_of (PUSHACC 4))
+      (error_message_of (PUSHACC 4))
+      (pre_of (PUSHACC 4)) (P_halt_of (PUSHACC 4)) (P_ccall_of (PUSHACC 4)).
+Proof. exact verify_PUSHACC4_correct. Qed.

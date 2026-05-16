@@ -253,7 +253,7 @@ Theorem verify_SETFIELD_correct : forall n,
                   (forall b ofs k p,
                      Mem.valid_block m_sp b -> Mem.perm m_sp b ofs k p ->
                      Mem.perm m_cm b ofs k p)))))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

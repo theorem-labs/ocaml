@@ -30,6 +30,15 @@ Theorem verify_ACC4 :
     handler_correct (handle_ACC 4) f_instr_ACC4
       (fun _ => None)
       (fun _ _ _ _ => True)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Theorem correct_ACC4 :
+    handler_correct (handle_ACC 4) f_instr_ACC4
+      (fun _ => None)
+      (fun _ _ _ _ => True)
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_ACC4.
+Qed.

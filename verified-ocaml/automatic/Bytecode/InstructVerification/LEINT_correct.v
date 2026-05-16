@@ -88,20 +88,17 @@ Theorem verify_LEINT_correct :
     handler_correct handle_LEINT f_instr_LEINT
       (fun _ => None)
       (fun _ => le_int_range_pre)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_LEINT_handler_correct :
-    handler_correct handle_LEINT f_instr_LEINT
-      (fun _ => None)
-      signed_int_op_safe
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
 (* ================================================================== *)
 (* Wrapper with canonical InstructSpec predicates                       *)
+(* Abandoned for this pass: [verify_LEINT_correct] is still admitted, and
+   canonical [pre_of LEINT] is not enough for [handler_correct_weaken]'s
+   unconditional [signed_int_op_safe] obligation.  Successful Clight execution
+   can establish Vlong operands, but not that the abstract operands are both
+   [Val_int] with the required signed tagged bounds. *)
 (* ================================================================== *)
 
 Import Bytecode.AST.

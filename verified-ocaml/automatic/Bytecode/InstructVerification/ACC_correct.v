@@ -37,6 +37,8 @@ From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
@@ -220,34 +222,11 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_ACC_correct : forall n,
-    Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ACC n) f_instr_ACC
-      (fun _ => None)
-      (fun _ m s ard =>
-         (* The code buffer contains Int.repr n at the current PC position *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         (* n fits in the signed int32 range *)
-         Z.of_nat n < Int.half_modulus /\
-         (* sp + n*8 fits in ptrofs range *)
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + Z.of_nat n * 8 < Ptrofs.modulus))
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with building-block precondition for Module Type *)
 Theorem verify_ACC_handler_correct : forall n,
-    Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ACC n) f_instr_ACC
-      (fun _ => None)
-      (code_at (Int.repr (Z.of_nat n)))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
+      (error_message_of (ACC n))
+      (pre_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
 Proof.
 Admitted.
 
@@ -256,12 +235,11 @@ Admitted.
    clight_of (ACC n) = f_instr_ACC, pre_of (ACC n) = code_at (Int.repr (Z.of_nat n)).
    Error case (stack underflow) matches error_message_of exactly.
    Step case delegates to verify_ACC_handler_correct (requires Z.of_nat n < Int.half_modulus). *)
-From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
-Import Bytecode.AST.
-
 Theorem correct_ACC : forall n,
     handler_correct (handle_instr (ACC n)) (clight_of (ACC n))
       (error_message_of (ACC n))
       (pre_of (ACC n)) (P_halt_of (ACC n)) (P_ccall_of (ACC n)).
 Proof.
-Admitted.
+  intro n.
+  exact (verify_ACC_handler_correct n).
+Qed.

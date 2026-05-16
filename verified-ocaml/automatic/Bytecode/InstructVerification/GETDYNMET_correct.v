@@ -476,7 +476,7 @@ Theorem verify_GETDYNMET_correct :
     handler_correct handle_GETDYNMET f_instr_GETDYNMET
       (fun _ => None)
       getdynmet_pre
-      (fun _ => False) (fun _ _ _ => False).
+       (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

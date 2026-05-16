@@ -91,20 +91,17 @@ Theorem verify_LTINT_correct :
     handler_correct handle_LTINT f_instr_LTINT
       (fun _ => None)
       (fun _ => lt_int_range_pre)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_LTINT_handler_correct :
-    handler_correct handle_LTINT f_instr_LTINT
-      (fun _ => None)
-      signed_int_op_safe
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
 (* ================================================================== *)
 (* Wrapper with canonical InstructSpec predicates                       *)
+(* Abandoned for this pass: [verify_LTINT_correct] is still admitted, and
+   weakening from canonical [pre_of LTINT] would require [signed_int_op_safe]
+   for every state whose Clight body executes.  Clight execution only proves
+   Vlong-representability, not the stronger [Val_int] shape and signed tagged
+   range facts required by [signed_int_op_safe]. *)
 (* ================================================================== *)
 
 Import Bytecode.AST.

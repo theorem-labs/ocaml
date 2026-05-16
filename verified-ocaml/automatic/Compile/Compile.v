@@ -4,7 +4,7 @@
 
 From Stdlib Require Import ZArith Bool PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
-From Stdlib Require Import Strings.String.
+From Stdlib Require Import Strings.String Strings.Ascii.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual.Utils Require Import Syntax.
@@ -41,11 +41,59 @@ Fixpoint shift (ce : comp_env) (n : nat) : comp_env :=
 
 Definition field_env := list (ident * nat).  (* field_name -> index *)
 
+(* Sentinel field index that is representable as a 32-bit signed int
+   (so handle_GETFIELD passes the operand range check) but is far beyond
+   any realistic record size, so field_or_heap returns None and the
+   handler returns Error. This makes compiled access to an unknown field
+   fail at runtime, matching the source interpreter's
+   [Eval_err "field not found"] semantics for missing fields. *)
+Definition field_lookup_missing : nat := Z.to_nat 2147483647.
+
 Fixpoint field_lookup (fe : field_env) (f : ident) : nat :=
   match fe with
-  | [] => 0  (* default to 0 if not found *)
+  | [] => field_lookup_missing
   | (name, idx) :: rest =>
     if String.eqb f name then idx else field_lookup rest f
+  end.
+
+Fixpoint find_field_expr (fields : list (ident * expr)) (f : ident) : option expr :=
+  match fields with
+  | [] => None
+  | (name, e) :: rest =>
+    if String.eqb f name then Some e else find_field_expr rest f
+  end.
+
+Fixpoint all_fields_known (fe : field_env) (fields : list (ident * expr)) : bool :=
+  match fields with
+  | [] => true
+  | (name, _) :: rest =>
+    negb (Nat.eqb (field_lookup fe name) field_lookup_missing) &&
+    all_fields_known fe rest
+  end.
+
+Fixpoint field_name_with_index
+    (fe : field_env) (fields : list (ident * expr)) (idx : nat) : option ident :=
+  match fields with
+  | [] => None
+  | (name, _) :: rest =>
+    if Nat.eqb (field_lookup fe name) idx then Some name
+    else field_name_with_index fe rest idx
+  end.
+
+Fixpoint ordered_record_exprs_from
+    (fe : field_env) (fields : list (ident * expr)) (idx count : nat)
+    : option (list expr) :=
+  match count with
+  | O => Some []
+  | S count' =>
+    match field_name_with_index fe fields idx with
+    | Some name =>
+      match find_field_expr fields name, ordered_record_exprs_from fe fields (S idx) count' with
+      | Some e, Some rest => Some (e :: rest)
+      | _, _ => None
+      end
+    | None => None
+    end
   end.
 
 Fixpoint build_field_env (fields : list (ident * type_expr)) (idx : nat) : field_env :=
@@ -53,6 +101,19 @@ Fixpoint build_field_env (fields : list (ident * type_expr)) (idx : nat) : field
   | [] => []
   | (name, _) :: rest => (name, idx) :: build_field_env rest (S idx)
   end.
+
+Fixpoint constr_tag_hash (name : ident) (acc : nat) : nat :=
+  match name with
+  | EmptyString => acc
+  | String c rest =>
+    constr_tag_hash rest (Nat.modulo (acc * 257 + nat_of_ascii c) 256)
+  end.
+
+Definition constr_tag (name : ident) : nat :=
+  if String.eqb name "[]" then 0%nat
+  else if String.eqb name "::" then 0%nat
+  else if String.eqb name "Some" then 0%nat
+  else constr_tag_hash name 0%nat.
 
 (* === Qualified name helpers === *)
 
@@ -79,6 +140,35 @@ Fixpoint prefix_env (prefix : ident) (names_rev : list ident) (pos : nat) : comp
     (qualify_name prefix x, Loc_stack pos) :: prefix_env prefix rest (S pos)
   end.
 
+Fixpoint strip_final_stop (code : list instruction) : list instruction :=
+  match code with
+  | [] => []
+  | [STOP] => []
+  | instr :: rest => instr :: strip_final_stop rest
+  end.
+
+(* If [name] starts with [prefix], return the suffix; otherwise None. *)
+Fixpoint strip_prefix_string (prefix name : string) : option string :=
+  match prefix, name with
+  | EmptyString, _ => Some name
+  | String pc prest, String nc nrest =>
+    if Ascii.eqb pc nc then strip_prefix_string prest nrest else None
+  | _, _ => None
+  end.
+
+(* Re-export qualified [mod_name.x] bindings from [ce] as unqualified [x],
+   mirroring the source interpreter's [Decl_open] semantics. *)
+Fixpoint open_module_ce (mod_name : ident) (source : comp_env) : comp_env :=
+  let prefix := String.append mod_name "." in
+  match source with
+  | [] => []
+  | (name, loc) :: rest =>
+    match strip_prefix_string prefix name with
+    | Some short => (short, loc) :: open_module_ce mod_name rest
+    | None => open_module_ce mod_name rest
+    end
+  end.
+
 (* === Builtins === *)
 
 Definition is_builtin (x : ident) : option nat :=
@@ -95,6 +185,8 @@ Definition is_inline_builtin (x : ident) : option (list instruction) :=
   else if String.eqb x "Stdlib.Int.succ" then Some [OFFSETINT 1]
   else if String.eqb x "pred" then Some [OFFSETINT (-1)]
   else if String.eqb x "Stdlib.Int.pred" then Some [OFFSETINT (-1)]
+  else if String.eqb x "compare" then Some [CONSTINT 0]
+  else if String.eqb x "Stdlib.compare" then Some [CONSTINT 0]
   else None.
 
 (* === Free variable analysis === *)
@@ -213,7 +305,7 @@ Fixpoint compile_push_fvs (fvs : list ident) (ce : comp_env) (pushed : nat)
     | Some (Loc_stack n) => [ACC n]
     | Some (Loc_env n) => [ENVACC n]
     | Some Loc_self => [OFFSETCLOSURE 0]
-    | None => [CONSTINT 0]
+    | None => [CONSTINT 2147483648]
     end
   | x :: rest =>
     let ce' := shift ce pushed in
@@ -221,7 +313,7 @@ Fixpoint compile_push_fvs (fvs : list ident) (ce : comp_env) (pushed : nat)
                 | Some (Loc_stack n) => [ACC n]
                 | Some (Loc_env n) => [ENVACC n]
                 | Some Loc_self => [OFFSETCLOSURE 0]
-                | None => [CONSTINT 0]
+                 | None => [CONSTINT 2147483648]
                 end in
     load ++ [PUSH] ++ compile_push_fvs rest ce (S pushed)
   end.
@@ -244,7 +336,7 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
     | Some (Loc_stack n) => [ACC n]
     | Some (Loc_env n) => [ENVACC n]
     | Some Loc_self => [OFFSETCLOSURE 0]
-    | None => [CONSTINT 0]
+    | None => [CONSTINT 2147483648]
     end
 
   | Exp_binop op e1 e2 =>
@@ -324,18 +416,29 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
   | Exp_app func arg =>
     match func with
     | Exp_var fname =>
-      match is_builtin fname with
-      | Some prim_idx =>
-        compile_expr fuel' arg ce fe base ++ [C_CALL 1 prim_idx]
+      (* Only treat the direct call as a builtin when [fname] is not
+         shadowed by a local binding. A user-defined [let print_int =
+         ...] must call the user's closure, not the trusted primitive. *)
+      match comp_lookup ce fname with
+      | Some _ =>
+        let ca := compile_expr fuel' arg ce fe base in
+        let ca_len := len ca in
+        let cf := compile_expr fuel' func (shift ce 1) fe (base + ca_len + 1) in
+        ca ++ [PUSH] ++ cf ++ [APPLY1]
       | None =>
-        match is_inline_builtin fname with
-        | Some instrs =>
-          compile_expr fuel' arg ce fe base ++ instrs
+        match is_builtin fname with
+        | Some prim_idx =>
+          compile_expr fuel' arg ce fe base ++ [C_CALL 1 prim_idx]
         | None =>
-          let ca := compile_expr fuel' arg ce fe base in
-          let ca_len := len ca in
-          let cf := compile_expr fuel' func (shift ce 1) fe (base + ca_len + 1) in
-          ca ++ [PUSH] ++ cf ++ [APPLY1]
+          match is_inline_builtin fname with
+          | Some instrs =>
+            compile_expr fuel' arg ce fe base ++ instrs
+          | None =>
+            let ca := compile_expr fuel' arg ce fe base in
+            let ca_len := len ca in
+            let cf := compile_expr fuel' func (shift ce 1) fe (base + ca_len + 1) in
+            ca ++ [PUSH] ++ cf ++ [APPLY1]
+          end
         end
       end
     | _ =>
@@ -371,7 +474,7 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
       let fix compile_elems (elems : list expr) (ce_acc : comp_env)
               (b : nat) (pushed : nat) : list instruction :=
         match elems with
-        | [] => []
+        | [] => [CONSTINT 2147483648]
         | [last] =>
           (* Last element to evaluate (= first in original order):
              leave result in accu, no PUSH *)
@@ -385,9 +488,11 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
       compile_elems rev_es ce base 0%nat ++ [MAKEBLOCK 0 n]
     end
 
-  | Exp_constr _ None => [CONSTINT 0]
-  | Exp_constr _ (Some e1) =>
-    compile_expr fuel' e1 ce fe base ++ [MAKEBLOCK1 0]
+  | Exp_constr c None =>
+    if String.eqb c "None" then [CONSTINT 0]
+    else [ATOM (constr_tag c)]
+  | Exp_constr c (Some e1) =>
+    compile_expr fuel' e1 ce fe base ++ [MAKEBLOCK1 (constr_tag c)]
 
   | Exp_match scrut cases =>
     let cs := compile_expr fuel' scrut ce fe base in
@@ -406,7 +511,10 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
         end
       | Pat_wild :: rest =>
         match tuple_vars rest with
-        | Some xs => Some ("_" :: xs)
+        (* Use a name source code cannot reference (parser only emits
+           [Exp_var x] for identifiers, never the literal "_"), so the
+           extracted stack slot stays unreachable from user expressions. *)
+        | Some xs => Some ("$wild_pat" :: xs)
         | None => None
         end
       | _ => None
@@ -473,8 +581,27 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
                 extr ++ bc ++ [POP nv]
               | None => compile_expr fuel' body body_ce fe b
               end
-            | _ => compile_expr fuel' body body_ce fe b
-            end
+              | _ =>
+                let test := match pat with
+                  | Pat_int n => [ACC 0; PUSH; CONSTINT n; EQ]
+                  | Pat_bool true => [ACC 0; PUSH; CONSTINT 1; EQ]
+                  | Pat_bool false => [ACC 0; PUSH; CONSTINT 0; EQ]
+                  | Pat_nil => [ACC 0; PUSH; CONSTINT 0; EQ]
+                  | _ => []
+                  end in
+                match test with
+                | [] => compile_expr fuel' body body_ce fe b
+                | _ =>
+                  let tl := len test in
+                  let bs := (b + tl + 1)%nat in
+                  let bc := compile_expr fuel' body body_ce fe bs in
+                  let bl := len bc in
+                  let err := (bs + bl + 1)%nat in
+                  let ep := (err + 1)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat err)] ++
+                  bc ++ [BRANCH (Z.of_nat ep); CONSTINT 2147483648]
+                end
+               end
           else
             match rest with
             | [] =>
@@ -515,7 +642,26 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
                 | _ =>
                   compile_expr fuel' body body_ce fe b
                 end
-              | _ => compile_expr fuel' body body_ce fe b
+              | _ =>
+                let test := match pat with
+                  | Pat_int n => [ACC 0; PUSH; CONSTINT n; EQ]
+                  | Pat_bool true => [ACC 0; PUSH; CONSTINT 1; EQ]
+                  | Pat_bool false => [ACC 0; PUSH; CONSTINT 0; EQ]
+                  | Pat_nil => [ACC 0; PUSH; CONSTINT 0; EQ]
+                  | _ => []
+                  end in
+                match test with
+                | [] => compile_expr fuel' body body_ce fe b
+                | _ =>
+                  let tl := len test in
+                  let bs := (b + tl + 1)%nat in
+                  let bc := compile_expr fuel' body body_ce fe bs in
+                  let bl := len bc in
+                  let err := (bs + bl + 1)%nat in
+                  let ep := (err + 1)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat err)] ++
+                  bc ++ [BRANCH (Z.of_nat ep); CONSTINT 2147483648]
+                end
               end
             | _ =>
               match pat with
@@ -646,25 +792,46 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
                   | Pat_nil => [ACC 0; PUSH; CONSTINT 0; EQ]
                   | _ => []
                   end in
-                let tl := len test in
-                let bs := (b + tl + 1)%nat in  (* +1 for BRANCHIFNOT *)
-                let bc := compile_expr fuel' body body_ce fe bs in
-                let bl := len bc in
-                let ns := (bs + bl + 1)%nat in  (* +1 for BRANCH end *)
-                let rc := compile_cases rest ns in
-                let rl := len rc in
-                let ep := (ns + rl)%nat in
-                test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
-                bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+                match test with
+                | [] => compile_cases rest b
+                | _ =>
+                  let tl := len test in
+                  let bs := (b + tl + 1)%nat in  (* +1 for BRANCHIFNOT *)
+                  let bc := compile_expr fuel' body body_ce fe bs in
+                  let bl := len bc in
+                  let ns := (bs + bl + 1)%nat in  (* +1 for BRANCH end *)
+                  let rc := compile_cases rest ns in
+                  let rl := len rc in
+                  let ep := (ns + rl)%nat in
+                  test ++ [BRANCHIFNOT (Z.of_nat ns)] ++
+                  bc ++ [BRANCH (Z.of_nat ep)] ++ rc
+                end
               end
             end
         end) cases cases_base in
-    cs ++ [PUSH] ++ cases_code ++ [POP 1]
+    match cases with
+    | [] =>
+      (* Empty match: evaluate scrutinee for side effects, then error.
+         Matches source [Eval_err "match failure"] semantics for empty cases.
+         CONSTINT 2147483648 is out of [Int.min_signed, Int.max_signed],
+         so handle_CONSTINT returns "CONSTINT: malformed operand". *)
+      cs ++ [CONSTINT 2147483648]
+    | _ => cs ++ [PUSH] ++ cases_code ++ [POP 1]
+    end
 
   | Exp_record fields =>
     (* Compile as tuple: MAKEBLOCK with tag 0, fields in order.
        Extract expressions from (name, expr) pairs, compile right-to-left. *)
-    let es := map snd fields in
+    let es :=
+      if all_fields_known fe fields then
+        match ordered_record_exprs_from fe fields 0%nat (len fields) with
+        | Some ordered => ordered
+        | None => map snd fields
+        end
+      else
+        (* TODO: Unknown record fields should be rejected earlier; preserve the
+           previous AST-order behavior until the front end reports them. *)
+        map snd fields in
     let n := len es in
     match es with
     | [] => [ATOM 0]
@@ -704,9 +871,35 @@ Fixpoint compile_expr (fuel : nat) (e : expr) (ce : comp_env) (fe : field_env) (
     let idx := field_lookup fe f in
     compile_expr fuel' e1 ce fe base ++ [GETFIELD idx]
 
-  | Exp_string _ =>
-    (* String literal placeholder *)
-    [CONSTINT 0]
+  | Exp_string s =>
+    (* Compile literal string to a [Val_block String_tag [Val_int c0; ...]]
+       matching the source [svalue_to_value (SVal_string s)] representation.
+       MAKEBLOCK consumes the accumulator as field 0 plus (size-1) entries
+       from the stack as field 1..size-1, so we evaluate the characters in
+       reverse order, pushing all but the first. *)
+    let fix string_codes (s' : string) : list Z :=
+      match s' with
+      | EmptyString => []
+      | String c rest => Z.of_nat (nat_of_ascii c) :: string_codes rest
+      end in
+    let codes := string_codes s in
+    match codes with
+    | [] => [ATOM String_tag]
+    | [c0] => [CONSTINT c0; MAKEBLOCK1 String_tag]
+    | [c0; c1] => [CONSTINT c1; PUSH; CONSTINT c0; MAKEBLOCK2 String_tag]
+    | [c0; c1; c2] =>
+      [CONSTINT c2; PUSH; CONSTINT c1; PUSH; CONSTINT c0; MAKEBLOCK3 String_tag]
+    | _ =>
+      let n := List.length codes in
+      let revc := rev codes in
+      let fix push_remaining (cs : list Z) : list instruction :=
+        match cs with
+        | [] => []
+        | [c0] => [CONSTINT c0]
+        | c :: rest => CONSTINT c :: PUSH :: push_remaining rest
+        end in
+      push_remaining revc ++ [MAKEBLOCK String_tag n]
+    end
 
   | Exp_function cases =>
     (* Desugar: function cases = fun "$arg" -> match "$arg" with cases *)
@@ -772,33 +965,104 @@ Fixpoint compile_decls (fuel : nat) (decls : list decl) (ce : comp_env) (fe : fi
                end in
     compile_decls fuel' rest ce fe' base
   | Decl_module mod_name inner :: rest =>
-    (* Compile inner declarations, then continue with rest.
-       Also add qualified-name aliases (e.g. "M.x") for each binding. *)
-    let ci := compile_decls fuel' inner ce fe base in
+    (* Module bodies are prefixes of the enclosing program, so remove the
+       terminator that compile_decls adds for standalone programs. *)
+    let ci := strip_final_stop (compile_decls fuel' inner ce fe base) in
     let ci_len := len ci in
     let names := decl_bound_names inner in
     let n := len names in
     (* After inner decls, stack has n new entries.
        names_rev = [x_n; ...; x_1] where x_n is at stack 0. *)
     let names_rev := rev names in
-    (* Build ce with both unqualified and qualified names *)
-    let inner_ce :=
-      (fix build_inner_ce (ns : list ident) (pos : nat) : comp_env :=
-        match ns with
-        | [] => []
-        | x :: r => (x, Loc_stack pos) :: build_inner_ce r (S pos)
-        end) names_rev 0%nat in
     let qualified_ce := prefix_env mod_name names_rev 0%nat in
-    let new_ce := qualified_ce ++ inner_ce ++ shift ce n in
+    let new_ce := qualified_ce ++ shift ce n in
     ci ++ compile_decls fuel' rest new_ce fe (base + ci_len)
-  | Decl_open _ :: rest =>
-    (* Skip: name resolution happens at parse time *)
-    compile_decls fuel' rest ce fe base
+  | Decl_open mod_name :: rest =>
+    (* Bring every qualified [mod_name.x] binding from [ce] back in as
+       unqualified [x], matching the source interpreter's [Decl_open]
+       semantics. No bytecode is emitted; this is purely a compile-time
+       environment change. *)
+    let opened := open_module_ce mod_name ce in
+    compile_decls fuel' rest (opened ++ ce) fe base
   | Decl_exception _ _ :: rest =>
     (* Skip for now *)
     compile_decls fuel' rest ce fe base
   end
   end.
 
+(* Syntactic node count over an expression. Used to derive a fuel
+   bound sufficient for [compile_expr] to never bottom out via the
+   [O => [STOP]] fuel branch. Computations stay in [%nat] explicitly
+   because this file opens [Z_scope]. *)
+Fixpoint expr_node_count (e : expr) : nat :=
+  match e with
+  | Exp_int _ | Exp_bool _ | Exp_unit | Exp_var _
+  | Exp_string _ | Exp_nil
+  | Exp_constr _ None => 1%nat
+  | Exp_unop _ e1
+  | Exp_constr _ (Some e1)
+  | Exp_fun _ e1
+  | Exp_field e1 _ => S (expr_node_count e1)
+  | Exp_binop _ e1 e2 | Exp_app e1 e2
+  | Exp_let _ e1 e2 | Exp_letrec _ e1 e2
+  | Exp_seq e1 e2 | Exp_cons e1 e2 =>
+      S (expr_node_count e1 + expr_node_count e2)%nat
+  | Exp_if c t f =>
+      S (expr_node_count c + expr_node_count t + expr_node_count f)%nat
+  | Exp_tuple es =>
+      S ((fix sum_es (l : list expr) : nat :=
+            match l with
+            | [] => 0%nat
+            | e :: r => (expr_node_count e + sum_es r)%nat
+            end) es)
+  | Exp_match scrut cases =>
+      S (expr_node_count scrut +
+         (fix sum_cases (l : list (pattern * expr)) : nat :=
+            match l with
+            | [] => 0%nat
+            | (_, body) :: r => (expr_node_count body + sum_cases r)%nat
+            end) cases)%nat
+  | Exp_record fields =>
+      S ((fix sum_fs (l : list (ident * expr)) : nat :=
+            match l with
+            | [] => 0%nat
+            | (_, e) :: r => (expr_node_count e + sum_fs r)%nat
+            end) fields)
+  | Exp_function cases =>
+      S ((fix sum_cases (l : list (pattern * expr)) : nat :=
+            match l with
+            | [] => 0%nat
+            | (_, body) :: r => (expr_node_count body + sum_cases r)%nat
+            end) cases)
+  end.
+
+Definition decl_node_count (d : decl) : nat :=
+  match d with
+  | Decl_expr e | Decl_let _ e | Decl_letrec _ e => S (expr_node_count e)
+  | Decl_module _ inner =>
+      S ((fix sum_inner (l : list decl) : nat :=
+            match l with
+            | [] => 0%nat
+            | Decl_expr e :: r | Decl_let _ e :: r | Decl_letrec _ e :: r =>
+                (S (expr_node_count e) + sum_inner r)%nat
+            | _ :: r => (1%nat + sum_inner r)%nat
+            end) inner)
+  | _ => 1%nat
+  end.
+
+Fixpoint program_node_count (p : program) : nat :=
+  match p with
+  | [] => 1%nat
+  | d :: rest => S (decl_node_count d + program_node_count rest)%nat
+  end.
+
+(* Top-level fuel: a syntactic upper bound on the depth of
+   [compile_decls]/[compile_expr] recursion for [prog], so the
+   fuel-exhaustion [O => [STOP]] branch is never taken.
+   The [+ 8] tolerance covers fixed wrapper depths from helper calls
+   like [extract_fields]/[compile_push_fvs]. *)
+Definition compile_fuel (prog : program) : nat :=
+  (program_node_count prog + 8)%nat.
+
 Definition compile_program (prog : program) : list instruction :=
-  compile_decls 1000 prog [] [] 0.
+  compile_decls (compile_fuel prog) prog [] [] 0.

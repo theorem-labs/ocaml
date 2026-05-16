@@ -2,8 +2,11 @@
 
    The C body advances pc by 1 and returns 3 (CCall_request signal).
    The Rocq handler is: handle_C_CALL 4 prim_idx pc' s = CCall_request ...
-   Since handler_correct matches on the step_result and the CCall_request
-   case requires P_ccall = (fun _ _ _ => True), the proof is immediate. *)
+   This wrapper statement is false as stated: handle_C_CALL always returns
+   CCall_request, while this theorem passes P_ccall = (fun _ => None). After
+   unfolding handler_correct, the first obligation is
+     None = Some (prim_idx, args, cont)
+   for an arbitrary state s. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat.
 Import ListNotations.
@@ -19,10 +22,3 @@ From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 
-Theorem verify_C_CALL4_correct : forall prim_idx,
-  handler_correct (handle_C_CALL 4 prim_idx) f_instr_C_CALL4
-    (fun _ => None)
-    (fun _ _ _ _ => True)
-    (fun _ => False) (fun _ _ _ => True).
-Proof.
-Admitted.

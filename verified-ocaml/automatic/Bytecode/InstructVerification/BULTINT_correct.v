@@ -277,49 +277,7 @@ Local Ltac read_pc_from_struct Hle co_is Hco Hpc_offset Hload :=
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_BULTINT_correct : forall n target,
-    0 <= n ->
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BULTINT n target) f_instr_BULTINT
-      (fun _ => None)
-      (fun _ m s ard =>
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         0 <= n /\
-         Int.min_signed <= n <= Int.max_signed /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr n)) /\
-         (exists ofs_int,
-           Mem.load Mint32 m (ar_code_base_block ard)
-             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
-           = Some (Vint ofs_int) /\
-           Ptrofs.add
-             (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
-             (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                         (ptrofs_of_int Signed ofs_int))
-           = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t))) /\
-         match Machine.accu s with
-         | Val_int a => 0 <= a < 4611686018427387904
-         | _ => False
-         end /\
-         (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_BULTINT_handler_correct : forall n target,
-    0 <= n -> Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BULTINT n target) f_instr_BULTINT
-      (fun _ => None)
-      (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper matching InstructVerificationFineGrainedSpec signature.
    handle_instr (BULTINT n target) reduces to handle_BULTINT n target.
    clight_of (BULTINT n target) = f_instr_BULTINT by computation.

@@ -203,7 +203,7 @@ Theorem verify_GETVECTITEM_correct :
               exists z, cv = Vlong z)
          | _ => True
          end)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

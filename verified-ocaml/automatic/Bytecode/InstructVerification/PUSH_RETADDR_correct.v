@@ -28,7 +28,9 @@ From compcert Require Import AST.
 From OCamlInterp.Manual Require Import Utils.Value.
 From OCamlInterp.Manual Require Import Bytecode.Machine.
 From OCamlInterp.Automatic.Bytecode Require Import Interpret.
-From OCamlInterp.Manual Require Bytecode.AST.
+From OCamlInterp.Manual Require Import Bytecode.AST.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
+Import Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
@@ -234,10 +236,9 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSH_RETADDR_correct : forall ret_addr,
-    handler_correct (handle_PUSH_RETADDR ret_addr) f_instr_PUSH_RETADDR
-      (fun _ => None)
-      (push_retaddr_step_pre ret_addr)
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (PUSH_RETADDR ret_addr)) (clight_of (PUSH_RETADDR ret_addr))
+      (error_message_of (PUSH_RETADDR ret_addr))
+      (pre_of (PUSH_RETADDR ret_addr)) (P_halt_of (PUSH_RETADDR ret_addr)) (P_ccall_of (PUSH_RETADDR ret_addr)).
 Proof.
 Admitted.
 
@@ -247,10 +248,11 @@ Admitted.
    pre_of (PUSH_RETADDR z) = push_retaddr_step_pre z by computation.
    Since handle_PUSH_RETADDR always returns Step, the P_error/P_halt/P_ccall
    predicates are dead code in the match — the proof term is identical. *)
-Import Bytecode.AST.
 Definition correct_PUSH_RETADDR : forall z,
     handler_correct (handle_instr (PUSH_RETADDR z)) (clight_of (PUSH_RETADDR z))
       (error_message_of (PUSH_RETADDR z))
       (pre_of (PUSH_RETADDR z)) (P_halt_of (PUSH_RETADDR z)) (P_ccall_of (PUSH_RETADDR z)).
 Proof.
-Admitted.
+  intro z.
+  exact (verify_PUSH_RETADDR_correct z).
+Qed.

@@ -191,14 +191,6 @@ Definition offsetclosure_pre (n : Z)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_OFFSETCLOSURE_correct : forall n,
-    handler_correct (handle_OFFSETCLOSURE n) f_instr_OFFSETCLOSURE
-      (fun _ => None)
-      (fun e m s ard => offsetclosure_pre n e m s ard)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr (OFFSETCLOSURE z) / clight_of (OFFSETCLOSURE z) / pre_of (OFFSETCLOSURE z)
    are convertible with handle_OFFSETCLOSURE z / f_instr_OFFSETCLOSURE / offsetclosure_pre z.
@@ -210,5 +202,8 @@ Definition correct_OFFSETCLOSURE : forall z,
       (error_message_of (Bytecode.AST.OFFSETCLOSURE z))
       (pre_of (Bytecode.AST.OFFSETCLOSURE z)) (P_halt_of (Bytecode.AST.OFFSETCLOSURE z)) (P_ccall_of (Bytecode.AST.OFFSETCLOSURE z)).
 Proof.
+(* Blocker: clight_of (OFFSETCLOSURE z) is always f_instr_OFFSETCLOSURE, not
+   one of the specialized f_instr_OFFSETCLOSURE0/3/M3 handlers.  Therefore the
+   specialized closed lemmas are not type-compatible with this canonical
+   forall-z statement. *)
 Admitted.
-

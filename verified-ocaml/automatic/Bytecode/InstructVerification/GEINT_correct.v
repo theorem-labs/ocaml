@@ -96,20 +96,17 @@ Theorem verify_GEINT_correct :
     handler_correct handle_GEINT f_instr_GEINT
       (fun _ => None)
       (fun _ => geint_range_pre)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_GEINT_handler_correct :
-    handler_correct handle_GEINT f_instr_GEINT
-      (fun _ => None)
-      signed_int_op_safe
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
 (* ================================================================== *)
 (* Wrapper with canonical InstructSpec predicates                       *)
+(* Abandoned for this pass: [verify_GEINT_correct] is still admitted, and
+   [handler_correct_weaken] would need canonical [pre_of GEINT] to imply
+   [signed_int_op_safe] for all related states.  That is not derivable from
+   body executability alone, which only forces Vlong-compatible operations and
+   not the abstract [Val_int] shape/range predicate. *)
 (* ================================================================== *)
 
 Import Bytecode.AST.

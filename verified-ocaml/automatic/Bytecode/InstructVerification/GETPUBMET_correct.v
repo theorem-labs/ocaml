@@ -613,7 +613,7 @@ Theorem verify_GETPUBMET_correct : forall tag,
     handler_correct (handle_GETPUBMET tag) f_instr_GETPUBMET
       (fun _ => None)
       (getpubmet_pre tag)
-      (fun _ => False) (fun _ _ _ => False).
+       (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
@@ -632,4 +632,3 @@ Definition correct_GETPUBMET : forall z,
       (pre_of (GETPUBMET z)) (P_halt_of (GETPUBMET z)) (P_ccall_of (GETPUBMET z)).
 Proof.
 Admitted.
-

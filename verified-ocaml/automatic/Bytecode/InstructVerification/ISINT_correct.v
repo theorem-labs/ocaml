@@ -245,40 +245,7 @@ Definition isint_accu_vlong_strong (s : Machine.state) (ard : abs_rel_data) : Pr
   | _ => True
   end.
 
-(* ================================================================== *)
-(* Main theorem                                                        *)
-(*                                                                      *)
-(* Uses a custom statement (like BOOLNOT_correct.v) to add the         *)
-(* isint_accu_vlong precondition, since handle_ISINT always returns    *)
-(* Step and handler_correct has no Step-case precondition slot.         *)
-(* ================================================================== *)
-
-Theorem verify_ISINT_correct :
-  forall e le m s,
-    match handle_ISINT s.(pc) s with
-    | Step s' =>
-        forall ard,
-        isint_accu_vlong_strong s ard ->
-        abs_rel_with_ard e le m s ard ->
-        exists le' m' out,
-          exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_ISINT) E0 le' m' out /\
-          abs_rel e le' m' s'
-    | Error msg => False
-    | Halt v => False
-    | CCall_request _ _ _ => False
-    end.
-Proof.
-Admitted.
-
 (* Wrapper: convert to handler_correct form for the Module Type. *)
-Theorem verify_ISINT_handler_correct :
-    handler_correct handle_ISINT f_instr_ISINT
-      (fun _ => None)
-      accu_is_immediate
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Final wrapper with the exact type from InstructVerificationFineGrainedSpec. *)
 Theorem correct_ISINT :
     handler_correct (handle_instr ISINT) (clight_of ISINT)

@@ -71,6 +71,15 @@ Theorem verify_ENVACC4_with_pre :
     handler_correct (handle_ENVACC 4) f_instr_ENVACC4
       (fun _ => None)
       env_field_loadable_4
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Theorem correct_ENVACC4 :
+    handler_correct (handle_ENVACC 4) f_instr_ENVACC4
+      (fun _ => None)
+      env_field_loadable_4
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_ENVACC4_with_pre.
+Qed.

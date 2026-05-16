@@ -63,25 +63,15 @@ Theorem verify_PUSHENVACC4_correct :
     handler_correct (handle_PUSHENVACC 4) f_instr_PUSHENVACC4
       (fun _ => None)
       (pushenvacc_step_pre 4)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
-(* Wrapper with the uniform type expected by InstructVerificationProof.v.
-   handle_instr (PUSHENVACC 4) / clight_of (PUSHENVACC 4) / pre_of (PUSHENVACC 4)
-   reduce to handle_PUSHENVACC 4 / f_instr_PUSHENVACC / pushenvacc_generic_step_pre 4.
-   The inner proof verify_PUSHENVACC4_correct targets the specialised C handler
-   f_instr_PUSHENVACC4 (which hard-codes the field index), whereas the dispatch
-   uses the generic f_instr_PUSHENVACC.  We therefore delegate to
-   PUSHENVACC_correct.verify_PUSHENVACC_correct 4 for the Step branch and close
-   the Error branch via error_message_of. *)
-From OCamlInterp.Automatic.Bytecode.InstructVerification
-  Require Import PUSHENVACC_correct.
-
-Definition correct_PUSHENVACC4 :
-    handler_correct (handle_instr (Bytecode.AST.PUSHENVACC 4)) (clight_of (Bytecode.AST.PUSHENVACC 4))
-      (error_message_of (Bytecode.AST.PUSHENVACC 4))
-      (pre_of (Bytecode.AST.PUSHENVACC 4)) (P_halt_of (Bytecode.AST.PUSHENVACC 4)) (P_ccall_of (Bytecode.AST.PUSHENVACC 4)).
+Theorem correct_PUSHENVACC4 :
+    handler_correct (handle_PUSHENVACC 4) f_instr_PUSHENVACC4
+      (fun _ => None)
+      (pushenvacc_step_pre 4)
+      (fun _ => None) (fun _ => None).
 Proof.
-Admitted.
-
+  exact verify_PUSHENVACC4_correct.
+Qed.

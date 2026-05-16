@@ -155,48 +155,6 @@ Qed.
 (* ================================================================== *)
 
 #[warnings="-not-a-closed-proof"]
-Theorem verify_PUSHOFFSETCLOSURE_correct : forall ofs,
-    handler_correct (handle_PUSHOFFSETCLOSURE ofs) f_instr_PUSHOFFSETCLOSURE
-      (fun _ => None)
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let hm := ar_heap_map ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         (* sp has room for push *)
-         (exists sp_b sp_ofs,
-            Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-            Ptrofs.unsigned sp_ofs >= 16) /\
-         (* code block separate from stack block *)
-         (forall sp_b sp_ofs sp_ptr,
-            Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some sp_ptr ->
-            sp_ptr = Vptr sp_b sp_ofs ->
-            cb <> sp_b) /\
-         (* code memory at pc contains ofs *)
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint (Int.repr ofs)) /\
-         (* env representability for result *)
-         match s.(Machine.env) with
-         | Val_closure addr base_ofs =>
-             exists env_long,
-               Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
-               val_repr hm cb co (Val_closure addr (Z.to_nat (Z.of_nat base_ofs + ofs)))
-                 (Vlong (Int64.add env_long (Int64.mul (Int64.repr (Int.signed (Int.repr ofs))) (Int64.repr 8))))
-         | Val_block t _ =>
-             exists env_long,
-               Mem.load Mint64 m sb (Ptrofs.unsigned so + 24) = Some (Vlong env_long) /\
-               Int64.add env_long (Int64.mul (Int64.repr (Int.signed (Int.repr ofs))) (Int64.repr 8)) = env_long
-         | _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* ================================================================== *)
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr (PUSHOFFSETCLOSURE z) / clight_of (PUSHOFFSETCLOSURE z) /

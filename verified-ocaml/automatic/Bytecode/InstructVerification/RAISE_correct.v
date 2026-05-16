@@ -161,7 +161,7 @@ Theorem verify_RAISE_correct :
     handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RAISE
       (fun _ => None)
       raise_step_pre
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

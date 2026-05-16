@@ -279,7 +279,7 @@ Theorem verify_VECTLENGTH_correct :
     handler_correct handle_VECTLENGTH f_instr_VECTLENGTH
       (fun _ => None)
       (fun _ => vectlength_pre)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

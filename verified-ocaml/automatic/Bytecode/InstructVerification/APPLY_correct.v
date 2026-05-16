@@ -202,7 +202,7 @@ Theorem verify_APPLY_correct : forall n,
          (1 <= n)%nat /\
          (* Closure code pointer is loadable *)
          apply_step_pre m s ard)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

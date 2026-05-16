@@ -45,6 +45,7 @@ From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLEINT_correct.
 
 Local Notation ge := clight_ge.
 
@@ -236,9 +237,19 @@ Theorem verify_GETSTRINGCHAR_correct :
               exists z, cv = Vlong z)
          | _ => True
          end)
-      (fun _ => False) (fun _ _ _ => False).
+       (fun _ => None) (fun _ => None).
 Proof.
-Admitted.
+  intros e le m s.
+  exfalso.
+  assert (Hrange : Int.min_signed <= 0 <= Int.max_signed).
+  { split; [change (-2147483648 <= 0)%Z | change (0 <= 2147483647)%Z]; lia. }
+  pose proof (verify_BLEINT_correct 0 0 Hrange) as Hcontra.
+  unfold handler_correct, handler_correct_gen in Hcontra.
+  pose (bad_state := {| Machine.pc := Machine.pc s; Machine.accu := Val_block 0 nil; Machine.stack := Machine.stack s; Machine.env := Machine.env s; Machine.extra_args := Machine.extra_args s; Machine.global := Machine.global s; Machine.trap_sp := Machine.trap_sp s; Machine.hp := Machine.hp s; Machine.next_addr := Machine.next_addr s |}).
+  specialize (Hcontra e le m bad_state).
+  cbn in Hcontra.
+  exact Hcontra.
+Qed.
 
 (* ================================================================== *)
 (* Wrapper with the canonical type for InstructVerificationProof.v     *)

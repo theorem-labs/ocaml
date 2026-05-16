@@ -228,27 +228,6 @@ Qed.
 (* ================================================================== *)
 
 #[warnings="-not-a-closed-proof"]
-Theorem verify_LSRINT_correct :
-    handler_correct handle_LSRINT f_instr_LSRINT
-      (fun _ => None)
-      (fun _ _ s ard =>
-         match s.(Machine.accu), s.(Machine.stack) with
-         | Val_int a, Val_int b :: _ => 0 <= b < 64 /\ int_vlong ard a /\ int_vlong ard b
-         | _, Val_int b :: _ => 0 <= b < 64
-         | _, _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_LSRINT_handler_correct :
-    handler_correct handle_LSRINT f_instr_LSRINT
-      (fun _ => None)
-      shift_in_range
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the exact type needed by InstructVerificationProof.v *)
 Import Bytecode.AST.
 

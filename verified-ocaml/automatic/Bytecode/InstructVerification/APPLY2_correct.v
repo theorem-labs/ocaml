@@ -320,7 +320,7 @@ Theorem verify_APPLY2_correct :
     handler_correct (fun pc' s => handle_APPLY2 pc' s) f_instr_APPLY2
       (fun _ => None)
       apply2_step_pre
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

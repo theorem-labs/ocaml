@@ -275,27 +275,13 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_GETGLOBAL_correct : forall n,
-    handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
-      (fun _ => None)
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         0 <= Z.of_nat n <= Int.max_signed /\
-         Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with building-block precondition for Module Type *)
 Theorem verify_GETGLOBAL_handler_correct : forall n,
     0 <= Z.of_nat n <= Int.max_signed ->
     handler_correct (handle_GETGLOBAL n) f_instr_GETGLOBAL
       (fun _ => None)
       (pre_and (code_at (Int.repr (Z.of_nat n))) (global_offset_safe n))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

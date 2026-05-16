@@ -315,7 +315,7 @@ Theorem verify_APPTERM2_correct : forall slotsize,
             appterm2_step_pre m s ard sp_b) /\
          (* extra_args fits for increment *)
          Z.of_nat (Machine.extra_args s) + 1 < Int64.modulus)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

@@ -46,8 +46,11 @@ Local Theorem verify_ANDINT_correct :
     handler_correct handle_ANDINT f_instr_ANDINT
       (fun _ => None)
       (pre_and accu_is_long stack_head_is_long)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
+  (* Intractable as stated: handler_correct checks the Error branch before
+     any abs_rel/precondition assumptions, so type errors or stack underflow
+     leave a bare False goal under (fun _ => None). *)
 Admitted.
 
 Import Bytecode.AST.

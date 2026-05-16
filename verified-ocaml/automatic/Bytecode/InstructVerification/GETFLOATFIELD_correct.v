@@ -303,7 +303,7 @@ Theorem verify_GETFLOATFIELD_correct : forall n,
               (forall gs m0 gb0 gofs0,
                  global_repr hm cb co m0 gs gb0 gofs0 ->
                  global_repr hm' cb co m0 gs gb0 gofs0)))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
@@ -315,7 +315,7 @@ Definition GETFLOATFIELD_correct_for_spec : forall n,
     handler_correct (handle_GETFLOATFIELD n) f_instr_GETFLOATFIELD
       (fun _ => None)
       (getfloatfield_step_pre n)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

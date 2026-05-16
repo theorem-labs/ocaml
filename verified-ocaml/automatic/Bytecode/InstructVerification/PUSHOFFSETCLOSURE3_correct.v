@@ -89,6 +89,15 @@ Theorem verify_PUSHOFFSETCLOSURE3_correct :
     handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE3
       (fun _ => None)
       (sp_at_least 16 /\p closure_offset_pre 2 24)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Definition correct_PUSHOFFSETCLOSURE3 :
+    handler_correct (handle_PUSHOFFSETCLOSURE 2) f_instr_PUSHOFFSETCLOSURE3
+      (fun _ => None)
+      (sp_at_least 16 /\p closure_offset_pre 2 24)
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_PUSHOFFSETCLOSURE3_correct.
+Qed.

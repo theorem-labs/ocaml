@@ -194,7 +194,7 @@ Theorem verify_GETFIELD_correct : forall n,
          = Some (Vint (Int.repr (Z.of_nat n))) /\
          (* n fits in the int32 signed range *)
          Int.min_signed <= Z.of_nat n <= Int.max_signed)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
@@ -202,7 +202,7 @@ Definition GETFIELD_correct_for_spec : forall n, Int.min_signed <= Z.of_nat n <=
     handler_correct (handle_GETFIELD n) f_instr_GETFIELD
       (fun _ => None)
       (heap_field_loadable n /\p code_at (Int.repr (Z.of_nat n)))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
   Proof.
   Admitted.
 

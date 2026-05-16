@@ -223,6 +223,103 @@ Proof.
 Qed.
 
 (* ================================================================== *)
+(* Body-outcome inversion: any successful exec_stmt of f_instr_C_CALLN  *)
+(* must end with [Out_return (Some (Vint (Int.repr 3), tint))]. The     *)
+(* body has no control flow other than the trailing [Sreturn 3], and   *)
+(* every other statement is Sset or Sassign (both always [Out_normal]),*)
+(* so the Sseq_2 (early-exit) branch is structurally impossible.       *)
+(* ================================================================== *)
+
+(* Sset and Sassign always produce [Out_normal]; pinned by inversion. *)
+Lemma exec_Sset_is_normal : forall e le m id a t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m (Sset id a) t le' m' out ->
+  out = Out_normal.
+Proof. intros. inversion H; subst; reflexivity. Qed.
+
+Lemma exec_Sassign_is_normal : forall e le m a1 a2 t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m (Sassign a1 a2) t le' m' out ->
+  out = Out_normal.
+Proof. intros. inversion H; subst; reflexivity. Qed.
+
+Lemma eval_expr_Econst_int_inv : forall e le m n ty v,
+  eval_expr clight_ge e le m (Econst_int n ty) v ->
+  v = Vint n.
+Proof.
+  intros e le m n ty v Hev.
+  inversion Hev; subst; [reflexivity |].
+  (* eval_Elvalue case: requires eval_lvalue of Econst_int, which is impossible. *)
+  match goal with H : eval_lvalue _ _ _ _ (Econst_int _ _) _ _ _ |- _ =>
+    inversion H end.
+Qed.
+
+Lemma exec_Sreturn_const_int : forall e le m n t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m
+    (Sreturn (Some (Econst_int n tint))) t le' m' out ->
+  out = Out_return (Some (Vint n, tint)).
+Proof.
+  intros. inversion H; subst.
+  match goal with He : eval_expr _ _ _ _ (Econst_int _ _) _ |- _ =>
+    apply eval_expr_Econst_int_inv in He end.
+  subst. reflexivity.
+Qed.
+
+(* When [Ssequence s1 s2] succeeds and [s1] is forced into [Out_normal]
+   for every successful execution, the overall outcome is the outcome
+   of [s2]. *)
+Lemma exec_Sseq_normal_first : forall e le m s1 s2 t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m (Ssequence s1 s2) t le' m' out ->
+  (forall t' le0 m0 out0,
+    exec_stmt function_entry1 clight_ge e le m s1 t' le0 m0 out0 ->
+    out0 = Out_normal) ->
+  exists t1 le1 m1 t2,
+    exec_stmt function_entry1 clight_ge e le m s1 t1 le1 m1 Out_normal /\
+    exec_stmt function_entry1 clight_ge e le1 m1 s2 t2 le' m' out.
+Proof.
+  intros e le m s1 s2 t le' m' out Hseq Hs1_normal.
+  remember (Ssequence s1 s2) as stmt eqn:Hstmt.
+  destruct Hseq; try (inversion Hstmt; fail).
+  - (* exec_Sseq_1 *)
+    inversion Hstmt; subst. eauto 8.
+  - (* exec_Sseq_2 *)
+    inversion Hstmt; subst.
+    specialize (Hs1_normal _ _ _ _ Hseq).
+    contradiction.
+Qed.
+
+Lemma C_CALL_body_outcome :
+  forall e le m t le' m' out,
+    exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_C_CALLN)
+      t le' m' out ->
+    out = Out_return (Some (Vint (Int.repr 3), tint)).
+Proof.
+  intros e le m t le' m' out Hexec.
+  cbn [fn_body f_instr_C_CALLN] in Hexec.
+  (* Body = Ssequence A B
+       A = Ssequence (Ssequence (Sset _t'1 _) (Sassign _ _)) (Sset _nargs _)
+       B = Ssequence (Ssequence (Sset _t'2 _) (Sassign _ _))
+                     (Sreturn (Some (Econst_int 3 tint))) *)
+  apply exec_Sseq_normal_first in Hexec.
+  2:{ intros t' le0 m0 out0 HA.
+      apply exec_Sseq_normal_first in HA.
+      2:{ intros t'' le1 m1 out1 HA1.
+          apply exec_Sseq_normal_first in HA1.
+          2:{ intros. eapply exec_Sset_is_normal; eauto. }
+          destruct HA1 as [? [? [? [? [? HA1b]]]]].
+          eapply exec_Sassign_is_normal; eauto. }
+      destruct HA as [? [? [? [? [? HAb]]]]].
+      eapply exec_Sset_is_normal; eauto. }
+  destruct Hexec as [? [? [? [? [_ HB]]]]].
+  apply exec_Sseq_normal_first in HB.
+  2:{ intros t' le0 m0 out0 HBA.
+      apply exec_Sseq_normal_first in HBA.
+      2:{ intros. eapply exec_Sset_is_normal; eauto. }
+      destruct HBA as [? [? [? [? [? HBAb]]]]].
+      eapply exec_Sassign_is_normal; eauto. }
+  destruct HB as [? [? [? [? [_ HRet]]]]].
+  eapply exec_Sreturn_const_int; eauto.
+Qed.
+
+(* ================================================================== *)
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
@@ -240,11 +337,20 @@ Proof.
   split.
   - reflexivity.
   - intros w Hrel Hpre.
-    eapply C_CALLN_clight_returns; [exact Hrel |].
-    (* step_pre = pre_of (C_CALL nargs prim_idx) provides code memory
-       readability via pre_of_gen. Unfold and specialize to get exec_stmt
-       witness, then extract the code load from abs_rel_with_ard. *)
-    (* For now, the code memory load is derivable from step_pre but the
-       extraction is non-trivial. Admit pending full proof. *)
-    admit.
-Admitted.
+    (* [Hpre] = [pre_of (C_CALL ...)] gives us an [exec_stmt] of the
+       handler body for the specific [le] we received, with R_ex on the
+       resulting [le', m'].  [pre_of_gen] pins the trace at [E0], and
+       [C_CALL_body_outcome] forces the outcome to
+       [Out_return (Vint 3)], so the witness IS already a valid
+       [clight_returns f_instr_C_CALLN 3 e le m le' m']. *)
+    unfold pre_of, pre_of_gen in Hpre.
+    cbn [clight_of] in Hpre.
+    specialize (Hpre le Hrel).
+    destruct Hpre as [le' [m' [out [s'' [Hexec _]]]]].
+    assert (Hout : out = Out_return (Some (Vint (Int.repr 3), tint)))
+      by (eapply C_CALL_body_outcome; exact Hexec).
+    rewrite Hout in Hexec.
+    exists le', m'.
+    unfold clight_returns.
+    exact Hexec.
+Qed.

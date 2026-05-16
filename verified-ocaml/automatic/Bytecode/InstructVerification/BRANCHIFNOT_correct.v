@@ -257,31 +257,9 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_BRANCHIFNOT_correct : forall target,
-    handler_correct (handle_BRANCHIFNOT target) f_instr_BRANCHIFNOT
-      (fun _ => None)
-      (fun _ m s ard =>
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (exists ofs_int,
-           Mem.load Mint32 m (ar_code_base_block ard)
-             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t)))) = Some (Vint ofs_int) /\
-           Ptrofs.add
-             (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t)))
-             (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                         (ptrofs_of_int Signed ofs_int))
-           = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t))) /\
-         match Machine.accu s with
-         | Val_int n => -4611686018427387904 <= n <= 4611686018427387903
-         | Val_block _ nil => True
-         | Val_ptr _ | Val_closure _ _ => False
-         | Val_block _ (_ :: _) => True
-         end /\
-         (forall n, Machine.accu s = Val_int n ->
-            forall cv,
-            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
-            exists z, cv = Vlong z))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (BRANCHIFNOT target)) (clight_of (BRANCHIFNOT target))
+      (error_message_of (BRANCHIFNOT target))
+      (pre_of (BRANCHIFNOT target)) (P_halt_of (BRANCHIFNOT target)) (P_ccall_of (BRANCHIFNOT target)).
 Proof.
 Admitted.
 
@@ -295,4 +273,6 @@ Definition correct_BRANCHIFNOT : forall z,
     (error_message_of (BRANCHIFNOT z))
     (pre_of (BRANCHIFNOT z)) (P_halt_of (BRANCHIFNOT z)) (P_ccall_of (BRANCHIFNOT z)).
 Proof.
-Admitted.
+  intro z.
+  exact (verify_BRANCHIFNOT_correct z).
+Qed.

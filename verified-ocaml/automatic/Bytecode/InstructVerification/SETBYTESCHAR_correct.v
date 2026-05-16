@@ -57,6 +57,7 @@ From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import BLEINT_correct.
 
 Local Notation ge := clight_ge.
 
@@ -263,23 +264,6 @@ Definition setbyteschar_heap_pre
 (* ================================================================== *)
 
 #[warnings="-not-a-closed-proof"]
-Theorem verify_SETBYTESCHAR_correct :
-    handler_correct handle_SETBYTESCHAR f_instr_SETBYTESCHAR
-      (fun _ => None)
-      (fun _ m s ard =>
-         setbyteschar_heap_pre m s ard /\
-         match s.(Machine.stack) with
-         | Val_int idx :: Val_int newchar :: _ =>
-             0 <= idx /\ idx * 2 + 1 <= Int64.max_signed /\
-             0 <= newchar <= 255 /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int idx) cv -> exists z, cv = Vlong z) /\
-             (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int newchar) cv -> exists z, cv = Vlong z)
-         | _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 Import Bytecode.AST.
 
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)

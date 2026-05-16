@@ -21,7 +21,3 @@ Local Lemma sem_cast_int_to_long_2 : forall m, sem_cast (Vint (Int.repr 2)) tint
 Local Lemma sem_shl_long_2_1 : forall m, sem_binary_operation (genv_cenv clight_ge) Oshl (Vlong (Int64.repr 2)) tlong (Vint (Int.repr 1)) tint m = Some (Vlong (Int64.repr 4)). Proof. intros. reflexivity. Qed.
 Local Lemma sem_add_long_int_4_1 : forall m, sem_binary_operation (genv_cenv clight_ge) Oadd (Vlong (Int64.repr 4)) tlong (Vint (Int.repr 1)) tint m = Some (Vlong (Int64.repr 5)). Proof. intros. reflexivity. Qed.
 Local Lemma val_int_2_load_result : Val.load_result Mint64 (Vlong (Int64.repr 5)) = Vlong (Int64.repr 5). Proof. reflexivity. Qed.
-Theorem verify_CONST2_correct :
-    handler_correct (handle_CONSTINT 2) f_instr_CONST2 (fun _ => None) (fun _ _ _ _ => True) (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.

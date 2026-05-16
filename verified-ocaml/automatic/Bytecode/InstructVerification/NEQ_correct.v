@@ -106,20 +106,17 @@ Theorem verify_NEQ_correct :
     handler_correct handle_NEQ f_instr_NEQ
       (fun _ => None)
       (fun _ => neq_int_range_pre)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_NEQ_handler_correct :
-    handler_correct handle_NEQ f_instr_NEQ
-      (fun _ => None)
-      int_op_safe
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-(* Wrapper with the exact type required by InstructVerificationProof.v *)
+(* Wrapper with the exact type required by InstructVerificationProof.v.
+   Abandoned for this pass: [verify_NEQ_correct] is still admitted, and
+   [handler_correct_weaken] would also require an unconditional proof that
+   canonical [pre_of NEQ] implies [int_op_safe].  The generic Clight
+   executability precondition only exposes successful Vlong operations, not
+   that the abstract operands are both [Val_int]. *)
 Local Notation NEQ := Bytecode.AST.NEQ.
 Theorem correct_NEQ :
     handler_correct (handle_instr NEQ) (clight_of NEQ)

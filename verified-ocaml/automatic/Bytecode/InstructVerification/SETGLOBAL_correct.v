@@ -54,8 +54,11 @@ Theorem verify_SETGLOBAL_correct : forall n,
     handler_correct (handle_SETGLOBAL n) f_instr_SETGLOBAL
       (fun _ => None)
       (setglobal_step_pre n)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
+  (* Skipped: SETGLOBAL can return interpreter errors, but this statement uses
+     [fun _ => None], making the Error branch of [handler_correct]
+     unprovable before the global-store precondition is available. *)
 Admitted.
 
 (* ================================================================== *)
@@ -78,4 +81,5 @@ Definition correct_SETGLOBAL : forall n,
     (error_message_of (SETGLOBAL n))
     (pre_of (SETGLOBAL n)) (P_halt_of (SETGLOBAL n)) (P_ccall_of (SETGLOBAL n)).
 Proof.
+  (* Skipped: depends on the aborted SETGLOBAL proof above. *)
 Admitted.

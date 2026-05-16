@@ -17,22 +17,24 @@ Reach full formal verification of the OCaml compiler in two stages:
 | Component | File | Lines | Lemmas |
 |-----------|------|-------|--------|
 | Decode roundtrip | `automatic/Bytecode/DecodeProof.v` | 2,683 | 102 Qed |
-| LexParse roundtrip | `automatic/LexParse/LexParseProof.v` | 4,351 | ~130 Qed |
+| LexParse roundtrip | `automatic/LexParse/LexParseProof.v` | 4,351 | 135 Qed |
 | Handler uniqueness (MetaSpec) | `automatic/Bytecode/MetaSpecVerification/` (95 files) | 0 Admitted | 126 Qed |
-| All checker modules | `checker/*.v` (8 files) | 2,334 | 0 Admitted |
+| All checker modules | `checker/` (10 `.v` files) | 2,354 | 0 Admitted |
 
 ### Partially Proved
 
 | Component | File | Admitted | Qed | Blocker |
 |-----------|------|----------|-----|---------|
-| Compiler correctness | `automatic/Compile/CompileProof.v` | 4 | 195 | Closures, heap allocation, function application, remaining active step lemmas needing stronger preconditions; source `Exp_int` now range-checks like bytecode `CONSTINT`, and concrete int/seq/neg/add/sub/mul/if/let/print comparison examples are proved with explicit in-range/out-of-range cases |
-| Handler correctness | `automatic/Bytecode/InstructVerification/` (147 files) | 315 | 1,214 | Only STOP and CHECK_SIGNALS fully proved |
+| Compiler correctness | `automatic/Compile/CompileProof.v` | 1 real admit (2 text occurrences; 1 is in a comment) | 199 | Final theorem remains over-broad for current source/compiler semantics; false unbounded step admits are removed, unbound variables now compile to a bytecode error, deterministic constructor tag hashing and record field reordering are in place, source-level max bindings are removed, and concrete int/seq/neg/add/sub/mul/if/let/print/unbound-var examples are proved with explicit in-range/out-of-range/error cases |
+| Handler correctness | `automatic/Bytecode/InstructVerification/` plus `automatic/Bytecode/InstructVerificationProof.v` | Gate is 317 admits total; IVP has 85 remaining | 1,256+ | 11 handler files are fully closed (`ATOM0`, `CHECK_SIGNALS`, `CONST0`, `CONST1`, `CONST2`, `CONST3`, `C_CALL`, `PUSHACC`, `RAISE_NOTRACE`, `RERAISE`, `STOP`). `InstructVerificationProof.v` has 10 canonical wrappers wired: newer `CONSTINT`, `PUSHCONSTINT`, `PUSHENVACC`, `PUSHACC` plus pre-existing `STOP`, `CHECK_SIGNALS`, `C_CALL`, `GETBYTESCHAR`, `RERAISE`, `RAISE_NOTRACE`. Remaining admits are structurally blocked by `pre_of` not implying exact operand types, `handler_correct` requiring an exact `Step` post-state, and `R_ex` preservation across heap mutation for the `MAKEBLOCK` family |
+| PBT connection auto obligations | `automatic/Compile/PBTProof.v` | 0 `Admitted`, 0 local `Axiom`/`Parameter` placeholders | 3 | Checker interface exists with a minimal concrete golden-seed witness table; still needs generated ocamlc/decode evidence expansion |
+| Extraction validation auto obligations | `automatic/Compile/ExtractionProof.v` | 0 `Admitted`, 0 local `Axiom`/`Parameter` placeholders | 2 | Checker interface exists with concrete witness definitions; still needs generated extraction/build/run evidence expansion |
 
 ### Known Gaps in Trusted Code
 
 1. **`behavior_equiv` doesn't compare return values** (`manual/Compile/CompileSpec.v:67-79`). When both sides terminate normally, it checks trace length equality but not `Term_normal v1 = Term_normal v2`. This means two programs producing the same output but different return values are considered equivalent.
 
-2. **`ccall_to_events` only handles output C-calls for the current compiled subset** (`CompileSpec.v:34-40`). `print_int` (idx=0), `print_newline` (idx=1), and `print_char` (idx=3) produce events. `print_string` (idx=2) remains a no-op until string compilation/bytecode string representation is implemented. Compare `checker/Bytecode/Main.v` which handles ~25 C-calls at the pipeline level.
+2. **`ccall_to_events` only handles output C-calls for the current compiled subset** (`CompileSpec.v:34-40`). `print_int` (idx=0), `print_newline` (idx=1), and `print_char` (idx=3) produce events. String concatenation runtime behavior is now fixed for `print_string ("hello" ^ "world")`, but broader `print_string` proof/spec coverage remains incomplete. Compare `checker/Bytecode/Main.v` which handles ~25 C-calls at the pipeline level.
 
 3. **`Observable.v` has no input events**. Only `Out_char` exists. Programs reading stdin, files, or environment variables cannot be distinguished by their behavior.
 
@@ -42,14 +44,15 @@ Reach full formal verification of the OCaml compiler in two stages:
     - `compare` returns `Val_int 0` always
     - `Op_and`/`Op_or` are strict to match current compiler `ANDINT`/`ORINT`
     - `Op_eq`/`Op_neq` remain int-only to match current bytecode physical equality proof
+    - Source-level max bindings have been removed
     - `Decl_open` supports qualified aliases only
     - `Exp_int n` rejects values outside `[Int.min_signed, Int.max_signed]` to match bytecode `CONSTINT`; `Pat_int n` is still not `CONSTINT`-range-checked in source pattern matching, while compiled pattern tests emit `CONSTINT n`
 
 6. **Compiler gaps** (`automatic/Compile/Compile.v`):
-   - All constructors share tag 0 (can't distinguish variants)
-   - Strings compile to `CONSTINT 0` (placeholder)
+    - Constructor tags are now computed by deterministic `constr_tag` hashing, but this is still a local hash-based policy rather than a typed constructor environment; collisions and source/type compatibility remain open.
+    - Strings now compile to `ATOM String_tag` / `MAKEBLOCK{1,2,3}` / `MAKEBLOCK String_tag n`, matching `svalue_to_value` for string values. The string-concat NUL byte issue is resolved: `let () = print_string ("hello" ^ "world"); print_newline ()` produces `helloworld\n`, matching `ocamlrun`. Remaining string work is proof coverage and broader runtime representation.
    - No tail-call optimization (always `APPLY1`, never `APPTERM`)
-   - Hardcoded fuel 1000
+   - Top-level compiler fuel is now AST-derived via `compile_fuel`; remaining work is proof coverage, not replacing a hardcoded `1000`.
 
 7. **IO.v axioms are output-only**: No stdin, stderr, file writing, networking, environment variables.
 
@@ -57,7 +60,18 @@ Reach full formal verification of the OCaml compiler in two stages:
 
 ### PBT Coverage
 
-5,200 QCheck tests + 41 deterministic tests across 11 files. Strong coverage for the features that exist, but coverage is limited to the subset of OCaml modeled by `Syntax.v`.
+4,641 current passing tests across compile, source, correctness, advanced, Rocq, and LexParse suites. Strong coverage for the features that exist, but coverage is limited to the subset of OCaml modeled by `Syntax.v`.
+
+Latest hand-run PBT pass against the regenerated extraction (after deterministic constructor tag hashing, record field reordering, source-level max binding removal, string-concat fix, and `PBTProof.v`/`ExtractionProof.v` placeholder removal):
+
+- `checker/Compile/test/pbt.exe`: 1300/1300 compile-vs-`ocamlc` pass.
+- `checker/Interpret/test/source_interp_test.exe`: 500/500 source-vs-`ocamlc` pass.
+- `checker/Interpret/test/correctness_test.exe`: 1500/1500 interpret-vs-`compile+interpret-bytecode` pass.
+- `checker/Interpret/test/advanced_test.exe`: 14/14 hand-crafted programs pass.
+- `checker/Interpret/test/rocq_source_test.exe`: 27/27 Rocq-style programs pass.
+- `checker/LexParse/test/pbt.exe` declaration suite: 300/300 pass.
+- `checker/LexParse/test/pbt.exe` expression suite: 1000/1000 pass.
+- Runtime correctness regression: `let () = print_string ("hello" ^ "world"); print_newline ()` produces `helloworld\n`, matching `ocamlrun`.
 
 ---
 
@@ -84,7 +98,7 @@ Axiom compiler_correctness :
 
 **Stage 1 work needed**:
 - Keep `behavior_equiv` trace-based for the current OS-observable behavior model
-- Decide whether `ccall_to_events` needs to handle more C-calls (`print_char` now produces events; `print_string` remains intentionally stubbed until strings are de-stubbed)
+- Decide whether `ccall_to_events` needs to handle more C-calls (`print_char` now produces events; string-concat through `print_string` has a passing runtime regression, but general `print_string` observable handling still needs proof/spec coverage)
 - Verify that the `step_fn` derived from `HandleInstrSpec` matches the bytecode semantics
 
 ### Theorem 2: PBT Connection (our compiler vs ocamlc)
@@ -183,22 +197,22 @@ Error message matching (`msg1 = msg2` for `Term_error`) is also impractical — 
 
 Currently handles: `print_int` (idx=0), `print_newline` (idx=1), `print_char` (idx=3). Review found:
 - `print_char` is handled by the source interpreter and now mapped as an observable C-call
-- `print_string` (idx=2) is mapped by the compiler but is a stub in both the source interpreter and `ccall_to_events`
+- `print_string` (idx=2) now has a passing string-concat runtime regression, but broader `ccall_to_events`/proof coverage remains incomplete
 - Only output-producing C-calls need event handling; pure C-calls (comparison, etc.) correctly produce no events
 
-**Remaining fix**: Add `print_string` (idx=2) handling when strings are de-stubbed.
+**Remaining fix**: Finish and prove general `print_string` (idx=2) observable handling beyond the current string-concat regression.
 
-### 1.3 Theorem 2 (PBT Connection) — DONE
+### 1.3 Theorem 2 (PBT Connection) — SPEC/CHECKER WIRED; MINIMAL AUTO WITNESS
 
 **File**: `manual/Compile/PBTSpec.v` (already written)
 
-Universally quantified over a `pbt_seed` type. External tools (`ocamlc_compile`, `ocamlc_decode`) are Parameters filled by the auto side with embedded results from running ocamlc. Anti-vacuity via `golden_seed`/`golden_compiles_and_decodes`. Checker exposure exists in `checker/Compile/PBTChecker.v`. Follows the Go verified compiler's `compile_models_go_pbt_ok` pattern.
+Universally quantified over a `pbt_seed` type. External tools (`ocamlc_compile`, `ocamlc_decode`) are Parameters in the manual spec and are filled by the auto side with concrete definitions. Anti-vacuity via `golden_seed`/`golden_compiles_and_decodes`. Checker exposure exists in `checker/Compile/PBTChecker.v`; `automatic/Compile/PBTProof.v` is now axiom-free for this interface, using a minimal golden-seed witness table. Remaining work is replacing the minimal table with generated ocamlc/decode evidence. Follows the Go verified compiler's `compile_models_go_pbt_ok` pattern.
 
-### 1.4 Theorem 3 (Extraction Validation) — DONE
+### 1.4 Theorem 3 (Extraction Validation) — SPEC/CHECKER WIRED; MINIMAL AUTO WITNESS
 
 **File**: `manual/Compile/ExtractionSpec.v` (already written)
 
-Universally quantified over all programs. Extraction pipeline (`extract_to_ocaml`, `ocaml_build`, `extracted_run`) decomposed as Parameters. Uses instruction-list equality (not behavioral equivalence). `ocaml_build` failure is `False` (extraction must compile). Anti-vacuity via `golden_program`/`golden_extraction_succeeds`. Checker exposure exists in `checker/Compile/ExtractionChecker.v`. Follows the Go verified compiler's `extract_on_compile_ok` pattern.
+Universally quantified over all programs. Extraction pipeline (`extract_to_ocaml`, `ocaml_build`, `extracted_run`) decomposed as Parameters in the manual spec and filled by automatic concrete definitions. Uses instruction-list equality (not behavioral equivalence). `ocaml_build` failure is `False` (extraction must compile). Anti-vacuity via `golden_program`/`golden_extraction_succeeds`. Checker exposure exists in `checker/Compile/ExtractionChecker.v`; `automatic/Compile/ExtractionProof.v` is now axiom-free for this interface, using concrete witness definitions. Remaining work is replacing the minimal witnesses with generated extraction/build/run evidence. Follows the Go verified compiler's `extract_on_compile_ok` pattern.
 
 ### 1.5 Simplification Pass
 
@@ -235,21 +249,21 @@ Additional simplification principle: **pulling in existing source code is free c
 
 ### 2.1 Complete CompileProof.v
 
-**Current state**: 4 Admitted, 195 Qed. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_expr_int`, `compiler_correct_seq_ints`, `compiler_correct_not_bool`, `compiler_correct_neg_int`, `compiler_correct_add_ints`, `compiler_correct_sub_ints`, `compiler_correct_mul_ints`, `compiler_correct_if_bool_ints`, `compiler_correct_let_int_var`, `compiler_correct_let_then_add`, `compiler_correct_print_int`, `compiler_correct_let_add`, `compiler_correct_if_int_cmp`, plus bounded CONSTINT, ACC, POP, GETFIELD, CLOSURE, and CLOSUREREC helper lemmas. Source `Exp_int` now returns the same malformed-`CONSTINT` error for out-of-range literals as bytecode, and the proved seq/add/neg/sub/mul/if-bool/let-var/let-then-add/print-int/let-add/if-int-comparison cases explicitly cover both representable and out-of-range selected operands. `Pat_int` remains unresolved: source matching compares integer patterns directly without the `CONSTINT` range policy, but compiled pattern tests use `CONSTINT n`. An unused duplicate ENVACC helper is also bounded/proved; the active ENVACC variable case still needs an index-bound invariant. Core blockers are extending `val_corresponds` for closures and strengthening the remaining single-step lemmas with operand bounds/preconditions where handlers reject malformed operands.
+**Current state**: 1 real `Admitted` (2 text occurrences, one in a comment), 199 Qed, and 0 local automatic placeholders. Recent progress proved `compiler_correct_empty`, `compiler_correct_type_decl`, `compiler_correct_expr_unit`, `compiler_correct_expr_bool`, `compiler_correct_expr_int`, `compiler_correct_seq_ints`, `compiler_correct_not_bool`, `compiler_correct_neg_int`, `compiler_correct_add_ints`, `compiler_correct_sub_ints`, `compiler_correct_mul_ints`, `compiler_correct_if_bool_ints`, `compiler_correct_let_int_var`, `compiler_correct_let_then_add`, `compiler_correct_print_int`, `compiler_correct_let_add`, `compiler_correct_if_int_cmp`, `compiler_correct_unbound_var`, plus bounded CONSTINT, ACC, ENVACC, POP, GETFIELD, CLOSURE, and CLOSUREREC helper lemmas. Source `Exp_int` now returns the same malformed-`CONSTINT` error for out-of-range literals as bytecode, and missing variables now compile to an out-of-range `CONSTINT` so source and bytecode both error. The former `code_pc_well_formed` axiom is gone. Deterministic constructor tag hashing, record field reordering, and source-level max binding removal are in place. The proved seq/add/neg/sub/mul/if-bool/let-var/let-then-add/print-int/let-add/if-int-comparison/unbound-var cases explicitly cover representable, out-of-range, and selected error operands. `Pat_int` remains unresolved: source matching compares integer patterns directly without the `CONSTINT` range policy, but compiled pattern tests use `CONSTINT n`. Core blockers are proving or narrowing the final theorem across remaining source/compiler semantic gaps, especially closures, heap allocation, function application, pattern-match failure paths, broader string printing/runtime behavior, constructor tag policy, modules, record fields, dynamic type errors, and evaluation order.
 
 **Work needed**:
 - Extend `val_corresponds` with a closure clause relating `SVal_closure param body senv` to `Val_closure addr ofs` (heap-allocated)
 - Prove `expr_correct_gen` for `Exp_fun`, `Exp_app`, `Exp_letrec`, `Exp_match`, `Exp_constr`, `Exp_tuple`
-- Finish integer representability for patterns: `Exp_int`-only seq/add/neg/sub/mul/if-bool/let-var/let-then-add/print-int/let-add/if-int-comparison cases now handle both in-range and out-of-range selected literals, but `Pat_int n` still lacks a `CONSTINT`-range policy even though compiled pattern tests emit `CONSTINT n`
-- Fix compiler: constructor tags must distinguish variants (requires new `constr_env` data structure), nullary constructors with tag > 0 need `ATOM tag`
-- Fix string compilation (currently `CONSTINT 0` — this is a large feature, not a simple fix)
+- Finish integer representability and failure behavior for patterns: `Exp_int`-only seq/add/neg/sub/mul/if-bool/let-var/let-then-add/print-int/let-add/if-int-comparison cases now handle both in-range and out-of-range selected literals, but `Pat_int n` still lacks a `CONSTINT`-range policy. A local patch attempted literal/bool/nil final-pattern failure paths via malformed `CONSTINT`, but audit found it is likely in an unreachable branch; other final non-irrefutable patterns can still compile to normal body execution.
+- Fix compiler constructor semantics: replace the current local hash-based `constr_tag` policy with a typed constructor environment, handle collisions deliberately, and prove nullary constructor `ATOM tag` behavior.
+- Finish broader string semantics beyond literal allocation and the fixed string-concat regression; proof/test coverage for general `print_string` runtime behavior remains incomplete.
 - No concrete per-program `compiler_correct_*` admits remain; empty programs, type declarations, unit expressions, bool/int expressions, integer sequence/addition/subtraction/multiplication/negation, boolean `not`, boolean-conditioned integer `if` expressions, integer-comparison-conditioned `if` expressions, simple integer let/var expressions, two-declaration let/add expressions, `print_int; print_newline` expressions, and expression-level let/add expressions are now proved directly
 
 ### 2.2 Complete InstructVerification
 
-**Current state**: 315 Admitted (per-handler) + 92 Admitted (assembly), 1214 Qed across 147 files. Only STOP and CHECK_SIGNALS fully proved.
+**Current state**: the overall gate reports `317` admits and `0` placeholders. `InstructVerificationProof.v` has `85` admits remaining and `10` canonical wrappers wired: newer `CONSTINT`, `PUSHCONSTINT`, `PUSHENVACC`, `PUSHACC` plus pre-existing `STOP`, `CHECK_SIGNALS`, `C_CALL`, `GETBYTESCHAR`, `RERAISE`, and `RAISE_NOTRACE`. 11 handler files are fully closed (`admit=0`): `ATOM0`, `CHECK_SIGNALS`, `CONST0`, `CONST1`, `CONST2`, `CONST3`, `C_CALL`, `PUSHACC`, `RAISE_NOTRACE`, `RERAISE`, and `STOP`. `PUSHACC` is fully closed and wired after the case-split breakthrough, with `handle_PUSHACC` tightened to match `instr_wfb` (`1..7` only).
 
-**Work needed**: Prove each handler correct against the Clight AST. Largely mechanical — follows established pattern (construct exec_stmt derivation, prove abs_rel preservation). Complexity varies: STOP is 51 lines, CLOSUREREC is 427 lines.
+**Work needed**: Prove each handler correct against the Clight AST and fix the structural spec blockers. Generic `pre_of i` does not imply specific operand types (`Vlong` vs `Vptr`), `handler_correct`'s `Step` branch requires identifying the exact abstract post-state while `pre_of` only guarantees some `R_ex` post-state, and `R_ex` preservation across heap mutation remains unresolved for the `MAKEBLOCK` family.
 
 **Resolved**: The CLOSUREREC restriction in `manual/Bytecode/Interpret/InstructSpec.v` now permits `nf=1, any nv`, so closures capturing free variables are not rejected solely because `nv > 0`.
 
@@ -260,6 +274,12 @@ Additional simplification principle: **pulling in existing source code is free c
 **Resolved**: MetaSpec is **logically independent** of InstructVerification (does not depend on per-handler proofs). `handler_correct_gen` now uses state-indexed option payload specs for halt/ccall, so `handler_correct_gen_determines_em_eq` can prove exact payload equality. The concrete/fine-grained uniqueness specs now carry the same totality, functionality, and `pre_of`-holds hypotheses as the generic theorem, and every per-instruction lemma delegates to the shared proof.
 
 **Remaining obligation**: Prove or refine the concrete `handler_unique_hyps` assumptions for any future consumer that needs unconditional uniqueness over `abs_rel_with_ard`.
+
+### 2.x Expand PBT/Extraction Witness Evidence
+
+- `automatic/Compile/PBTProof.v` and `automatic/Compile/ExtractionProof.v` no longer contain local `Axiom`/`Parameter` placeholders.
+- Replace the current minimal PBT witness table with checked-in generated ocamlc/decode evidence.
+- Replace the current minimal extraction witnesses with checked-in extraction/build/run evidence.
 
 ### 2.4 Fix Source Interpreter
 
@@ -276,10 +296,14 @@ Additional simplification principle: **pulling in existing source code is free c
 **File**: `automatic/Compile/Compile.v`
 
 **Fixes needed**:
-- Constructor tags must distinguish different variants (not all tag 0)
-- String compilation must produce real string values
+- Constructor tags must come from a typed constructor environment instead of the current deterministic local hash policy.
+- String literals now produce `String_tag` blocks, and the string-concat NUL byte issue is fixed; remaining string work is broader observable `print_string` behavior and end-to-end runtime/proof coverage.
 - Consider adding tail-call optimization (APPTERM)
-- Fuel should not be hardcoded
+- Prove the AST-derived `compile_fuel` bound is sufficient everywhere.
+- Fix source/compiler evaluation-order mismatches for effectful subexpressions.
+- Finish module semantics/proofs for qualified aliases and accepted dotted-name representation; inner `STOP` stripping and compiler-side `Decl_open` are implemented.
+- Finish record field ambiguity semantics; record fields are now reordered deterministically and missing field lookup uses a sentinel instead of defaulting to index `0`.
+- Align builtin coverage with the source stdlib; direct builtin special-casing is now shadowing-aware.
 
 ### 2.6 PBT Expansion
 
@@ -322,7 +346,7 @@ This is why `Syntax.v` is in `manual/` — it's the single source of truth for w
 
 1. **`behavior_equiv` trivial satisfaction**: An `interpret` always returning `Term_timeout` with empty trace vacuously satisfies `compiler_correctness`. The length penalty on `interpret` is the mitigation but is external to the formal spec.
 
-2. **PBT generator coverage**: Current generators only produce integer-arithmetic programs. `compare`, `print_string`, string literals, `Pat_nil`, `Decl_module`, non-integer equality, constructors with multiple tags — none are tested.
+2. **PBT generator coverage**: Current generators remain narrow despite the passing string-concat regression. Broader `compare`, `print_string`, string literal, `Pat_nil`, `Decl_module`, non-integer equality, and multi-tag constructor coverage is still needed.
 
 3. **Progressive expansion requires controlled `manual/` changes**: Every new syntax constructor requires updating `Syntax.v` and `WellFormed.v` in `manual/`. Theorem statements stay stable, but these type-level changes are unavoidable.
 

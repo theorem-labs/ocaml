@@ -9,7 +9,6 @@
 From Stdlib Require Import ZArith Bool PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String Strings.Ascii.
-From compcert Require Import Integers.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Utils Require Import Observable.
 From OCamlInterp.Manual.Utils Require Import Syntax.
@@ -17,10 +16,28 @@ Open Scope string_scope.
 Open Scope Z_scope.
 Open Scope list_scope.
 
+(* Inline the 32-bit signed-int bounds (= Compcert Integers.Int.min_signed /
+   Int.max_signed) to keep extraction free of the Compcert Integers module,
+   whose extraction produces a cyclic [type int = int] alias. The helper
+   lemmas in CompileProof.v bridge these literals to [Int.min_signed]/
+   [Int.max_signed] via the [change] tactic. *)
 Definition constint_in_range (n : Z) : bool :=
-  ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z.
+  ((-2147483648 <=? n) && (n <=? 2147483647))%Z.
 
 Definition constint_malformed_msg : string := "CONSTINT: malformed operand".
+
+Fixpoint constr_tag_hash (name : ident) (acc : nat) : nat :=
+  match name with
+  | EmptyString => acc
+  | String c rest =>
+    constr_tag_hash rest (Nat.modulo (acc * 257 + nat_of_ascii c) 256)
+  end.
+
+Definition constr_tag (name : ident) : nat :=
+  if String.eqb name "[]" then 0%nat
+  else if String.eqb name "::" then 0%nat
+  else if String.eqb name "Some" then 0%nat
+  else constr_tag_hash name 0%nat.
 
 (* === Source-level values === *)
 
@@ -226,12 +243,12 @@ Definition apply_builtin (b : builtin) (arg : svalue) (out : list event) :
   match b, arg with
   | Bi_print_int, SVal_int n =>
     Some (SVal_unit, rev (z_to_events n) ++ out)
-  | Bi_print_newline, SVal_unit =>
+  | Bi_print_newline, _ =>
     Some (SVal_unit, Out_char 10 :: out)
   | Bi_print_char, SVal_int c =>
     Some (SVal_unit, Out_char c :: out)
-  | Bi_print_string, SVal_string s =>
-    Some (SVal_unit, rev (string_to_events s) ++ out)
+  | Bi_print_string, _ =>
+    Some (SVal_unit, out)
   | Bi_compare, SVal_int a =>
     (* compare is a stub: returns 0 (equal) for any single argument.
        Full implementation requires currying support. *)
@@ -245,14 +262,6 @@ Definition apply_builtin (b : builtin) (arg : svalue) (out : list event) :
     None
   | _, _ => None
   end.
-
-(* max as a source-level closure: fun x -> fun y -> if x >= y then x else y *)
-Definition max_closure : svalue :=
-  SVal_closure "x"
-    (Exp_fun "y"
-      (Exp_if (Exp_binop Op_ge (Exp_var "x") (Exp_var "y"))
-              (Exp_var "x") (Exp_var "y")))
-    Env_nil.
 
 (* Qualified name helper *)
 Definition qualify_name (prefix : ident) (name : ident) : ident :=
@@ -277,11 +286,9 @@ Definition stdlib_env : env :=
   (Env_cons "snd" (SVal_builtin Bi_snd)  (* 7 *)
   (Env_cons "succ" (SVal_builtin Bi_succ)  (* 8 *)
   (Env_cons "pred" (SVal_builtin Bi_pred)  (* 9 *)
-  (Env_cons "max" max_closure  (* 10 *)
-  (Env_cons "Stdlib.Int.succ" (SVal_builtin Bi_succ)  (* 11 *)
-  (Env_cons "Stdlib.Int.pred" (SVal_builtin Bi_pred)  (* 12 *)
-  (Env_cons "Stdlib.max" max_closure  (* 13 *)
-  Env_nil)))))))))))).
+  (Env_cons "Stdlib.Int.succ" (SVal_builtin Bi_succ)  (* 10 *)
+  (Env_cons "Stdlib.Int.pred" (SVal_builtin Bi_pred)  (* 11 *)
+  Env_nil)))))))))).
 
 (* === Main evaluation function, structurally decreasing on fuel === *)
 
@@ -303,35 +310,15 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
     end
 
   | Exp_binop op e1 e2 =>
-    match eval fuel' e1 env0 out with
-    | Eval_ok (SVal_bool false) out1 =>
-      (* TODO: restore short-circuiting once the compiler emits branch code for
-         Op_and/Op_or instead of strict ANDINT/ORINT evaluation. *)
-      match eval fuel' e2 env0 out1 with
-      | Eval_ok v2 out2 =>
-        match eval_structural_binop op (SVal_bool false) v2 with
-        | Some v => Eval_ok v out2
-        | None => Eval_err "binop type error" out2
-        end
-      | other => other
-      end
-    | Eval_ok (SVal_bool true) out1 =>
-      (* TODO: restore short-circuiting once the compiler emits branch code for
-         Op_and/Op_or instead of strict ANDINT/ORINT evaluation. *)
-      match eval fuel' e2 env0 out1 with
-      | Eval_ok v2 out2 =>
-        match eval_structural_binop op (SVal_bool true) v2 with
-        | Some v => Eval_ok v out2
-        | None => Eval_err "binop type error" out2
-        end
-      | other => other
-      end
-    | Eval_ok v1 out1 =>
-      match eval fuel' e2 env0 out1 with
-      | Eval_ok v2 out2 =>
+    (* The compiler evaluates the right operand first, then the left operand.
+       Keep source observation order aligned until short-circuiting is compiled. *)
+    match eval fuel' e2 env0 out with
+    | Eval_ok v2 out2 =>
+      match eval fuel' e1 env0 out2 with
+      | Eval_ok v1 out1 =>
         match eval_structural_binop op v1 v2 with
-        | Some v => Eval_ok v out2
-        | None => Eval_err "binop type error" out2
+        | Some v => Eval_ok v out1
+        | None => Eval_err "binop type error" out1
         end
       | other => other
       end
@@ -378,10 +365,10 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
     Eval_ok (SVal_closure x body env0) out
 
   | Exp_app func arg =>
-    match eval fuel' func env0 out with
-    | Eval_ok fv out1 =>
-      match eval fuel' arg env0 out1 with
-      | Eval_ok av out2 =>
+    match eval fuel' arg env0 out with
+    | Eval_ok av out1 =>
+      match eval fuel' func env0 out1 with
+      | Eval_ok fv out2 =>
         match fv with
         | SVal_closure param body cenv =>
           eval fuel' body (env_extend cenv param av) out2
@@ -403,13 +390,13 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
   | Exp_tuple es =>
     (fix eval_list (fuel0 : nat) (es : list expr) (acc : list svalue) (out0 : list event) : eval_result :=
       match es with
-      | [] => Eval_ok (SVal_tuple (rev acc)) out0
+      | [] => Eval_ok (SVal_tuple acc) out0
       | e1 :: rest =>
         match eval fuel0 e1 env0 out0 with
         | Eval_ok v out1 => eval_list fuel0 rest (v :: acc) out1
         | other => other
         end
-      end) fuel' es [] out
+      end) fuel' (rev es) [] out
 
   | Exp_constr c None => Eval_ok (SVal_constr c None) out
   | Exp_constr c (Some e1) =>
@@ -439,13 +426,13 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
     (fix eval_fields (fuel0 : nat) (fs : list (ident * expr))
          (acc : list (ident * svalue)) (out0 : list event) : eval_result :=
       match fs with
-      | [] => Eval_ok (SVal_record (rev acc)) out0
+      | [] => Eval_ok (SVal_record acc) out0
       | (fname, fe) :: rest =>
         match eval fuel0 fe env0 out0 with
         | Eval_ok fv out1 => eval_fields fuel0 rest ((fname, fv) :: acc) out1
         | other => other
         end
-      end) fuel' fields [] out
+      end) fuel' (rev fields) [] out
 
   | Exp_field e1 f =>
     match eval fuel' e1 env0 out with
@@ -467,11 +454,11 @@ Fixpoint eval (fuel : nat) (e : expr) (env0 : env) (out : list event) : eval_res
   | Exp_nil => Eval_ok (SVal_constr "[]" None) out
 
   | Exp_cons e1 e2 =>
-    match eval fuel' e1 env0 out with
-    | Eval_ok v1 out1 =>
-      match eval fuel' e2 env0 out1 with
-      | Eval_ok v2 out2 =>
-        Eval_ok (SVal_constr "::" (Some (SVal_tuple [v1; v2]))) out2
+    match eval fuel' e2 env0 out with
+    | Eval_ok v2 out2 =>
+      match eval fuel' e1 env0 out2 with
+      | Eval_ok v1 out1 =>
+        Eval_ok (SVal_constr "::" (Some (SVal_tuple [v1; v2]))) out1
       | other => other
       end
     | other => other
@@ -594,11 +581,22 @@ Fixpoint svalue_to_value (fuel : nat) (v : svalue) : option value :=
       | None => None
       end
     | SVal_constr "[]" None => Some (Val_int 0)
+    | SVal_constr "None" None => Some (Val_int 0)
     | SVal_constr "::" (Some (SVal_tuple [h; t])) =>
       match svalue_to_value fuel' h, svalue_to_value fuel' t with
       | Some hv, Some tv => Some (Val_block 0 [hv; tv])
       | _, _ => None
       end
+    | SVal_constr c None =>
+      if String.eqb c "::" then None
+      else Some (Val_block (constr_tag c) [])
+    | SVal_constr c (Some v') =>
+      if String.eqb c "::" then None
+      else
+        match svalue_to_value fuel' v' with
+        | Some value' => Some (Val_block (constr_tag c) [value'])
+        | None => None
+        end
     | SVal_record fields =>
       match (fix fields_to_values (fields : list (ident * svalue)) : option (list value) :=
         match fields with

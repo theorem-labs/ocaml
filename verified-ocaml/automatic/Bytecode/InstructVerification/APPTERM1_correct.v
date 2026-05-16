@@ -280,7 +280,7 @@ Theorem verify_APPTERM1_correct : forall slotsize,
             Mem.load Mint64 m (ar_sptr_block ard)
               (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
             appterm1_step_pre m s ard sp_b))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

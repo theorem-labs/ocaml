@@ -44,15 +44,3 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-Theorem verify_PUSHCONST0_correct :
-    handler_correct (handle_PUSHCONSTINT 0) f_instr_PUSHCONST0
-      (fun _ => None)
-      (fun _ m _ ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         exists sp_b sp_ofs,
-           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.

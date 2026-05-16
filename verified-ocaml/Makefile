@@ -56,6 +56,19 @@ extract: build
 	  checker/common/interp_extracted.ml
 	sed -i 's/^  App\.main$$/  let module M = App() in M.main/' \
 	  checker/common/interp_extracted.ml
+	@# Rewrite cyclic [type int = int] inside extracted Compcert Int module
+	@# to a [nonrec] alias so OCaml accepts it.
+	sed -i 's/^  type int = int$$/  type nonrec int = int/' \
+	  checker/common/interp_extracted.ml
+	@# Coq's extraction now produces [step0], [run0], [run_pure0] aliases
+	@# when these names appear inside a functor. test_common.ml expects the
+	@# unsuffixed names, so re-export them at top level.
+	@if ! grep -q '^let step = step0' checker/common/interp_extracted.ml; then \
+	  printf '\n(* Backwards-compatible top-level aliases used by test_common.ml. *)\n' \
+	    >> checker/common/interp_extracted.ml; \
+	  printf 'let step = step0\nlet run = run0\nlet run_pure = run_pure0\n' \
+	    >> checker/common/interp_extracted.ml; \
+	fi
 
 # ---- Tests ----
 

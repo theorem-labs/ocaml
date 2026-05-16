@@ -63,6 +63,15 @@ Theorem verify_PUSHENVACC3_correct :
     handler_correct (handle_PUSHENVACC 3) f_instr_PUSHENVACC3
       (fun _ => None)
       (pushenvacc_step_pre 3)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Theorem correct_PUSHENVACC3 :
+    handler_correct (handle_PUSHENVACC 3) f_instr_PUSHENVACC3
+      (fun _ => None)
+      (pushenvacc_step_pre 3)
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_PUSHENVACC3_correct.
+Qed.

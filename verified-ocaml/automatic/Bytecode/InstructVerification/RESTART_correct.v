@@ -710,8 +710,16 @@ Theorem verify_RESTART_correct :
     handler_correct handle_RESTART f_instr_RESTART
       (fun _ => None)
       restart_step_pre
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
+  (* Structurally blocked with the current precondition.  The C handler
+     mutates stack memory by copying closure fields back onto the stack,
+     then updates [sp], [env], and [extra_args].  The existing
+     [restart_step_pre] exposes loadability and loop-copy facts, but closing
+     [R_ex] for the exact Rocq post-state still requires preservation of the
+     whole stack/global/heap abstraction across those stores.  In particular,
+     the canonical [pre_of RESTART] cannot imply these state-specific
+     preservation facts: it only gives an existential post-state. *)
 Admitted.
 
 (* Bridge lemma: when handle_RESTART returns Error, error_message_of
@@ -755,4 +763,9 @@ Definition correct_RESTART :
       (error_message_of RESTART)
       (pre_of RESTART) (P_halt_of RESTART) (P_ccall_of RESTART).
 Proof.
+  (* Blocked for the same reason as [verify_RESTART_correct], plus the
+     canonical wrapper loses the stronger [restart_step_pre] facts needed for
+     the heap/stack mutation proof.  Error cases are bridgeable by
+     [handle_RESTART_error_implies_error_message]; the Step case is the
+     missing preservation argument. *)
 Admitted.

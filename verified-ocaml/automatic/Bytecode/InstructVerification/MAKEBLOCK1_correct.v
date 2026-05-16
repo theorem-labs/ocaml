@@ -227,7 +227,7 @@ Theorem verify_MAKEBLOCK1_correct : forall t, 0 <= Z.of_nat t <= 255 ->
                  (forall b ofs chunk v, b <> new_b ->
                     Mem.load chunk m_alloc b ofs = Some v ->
                     Mem.load chunk m_store b ofs = Some v))))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
@@ -236,7 +236,7 @@ Definition MAKEBLOCK1_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
       (fun _ => None)
       (heap_alloc_with_stores 1 (Z.of_nat t) alloc_store_1
        /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
   Proof.
   Admitted.
 

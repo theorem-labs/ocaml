@@ -304,46 +304,6 @@ Qed.
 (* ================================================================== *)
 
 #[warnings="-not-a-closed-proof"]
-Theorem verify_RETURN_correct : forall stacksize,
-    handler_correct (fun _ => handle_RETURN stacksize) f_instr_RETURN
-      (fun _ => None)
-      (fun _ m s ard =>
-         (* Common preamble: code buffer has stacksize at current PC *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat stacksize))) /\
-         (* stacksize fits in int32 signed range *)
-         Z.of_nat stacksize < Int.half_modulus /\
-         (* extra_args fits in Int64 signed range *)
-         Z.of_nat (extra_args s) <= Int64.max_signed /\
-         (* sp + stacksize * 8 fits in ptrofs *)
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + Z.of_nat stacksize * 8 < Ptrofs.modulus) /\
-         (* stacksize <= length of stack *)
-         (stacksize <= Datatypes.length (Machine.stack s))%nat /\
-         (* Then-branch precondition: closure code pointer *)
-         (Nat.ltb 0 (extra_args s) = true ->
-          forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            return_tailcall_pre m s ard sp_b) /\
-         (* Else-branch precondition: return frame *)
-         (Nat.ltb 0 (extra_args s) = false ->
-          forall sp_b sp_ofs ret_pc saved_env saved_ea rest,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            skipn stacksize (Machine.stack s) =
-              Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest ->
-            return_frame_pre m s ard sp_b
-              (Ptrofs.add sp_ofs (Ptrofs.repr (Z.of_nat stacksize * 8)))
-              ret_pc saved_env saved_ea rest))
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* ================================================================== *)
 (* Error bridge lemma                                                  *)
 (* ================================================================== *)
@@ -380,4 +340,10 @@ Definition correct_RETURN : forall n,
     (error_message_of (RETURN n))
     (pre_of (RETURN n)) (P_halt_of (RETURN n)) (P_ccall_of (RETURN n)).
 Proof.
+  (* Blocked by the canonical [pre_of] shape.  Even with
+     [handle_RETURN_error_implies_error_message] for error states,
+     the Step case needs [R_ex ... s'] for the specific Rocq post-state
+     [s']; [pre_of (RETURN n)] supplies only [exists s'', R_ex ... s''].
+     A future proof needs either the full concrete RETURN big-step proof
+     above or a determinism/uniqueness bridge from generated [pre_of]. *)
 Admitted.

@@ -611,6 +611,16 @@ module Coq0_Pos =
 
   let rec mul = ( * )
 
+  (** val iter : ('a1 -> 'a1) -> 'a1 -> int -> 'a1 **)
+
+  let rec iter f x n0 =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun n' -> f (iter f (iter f x n') n'))
+      (fun n' -> iter f (iter f x n') n')
+      (fun _ -> f x)
+      n0
+
   (** val iter_op : ('a1 -> 'a1 -> 'a1) -> int -> 'a1 -> 'a1 **)
 
   let rec iter_op op p a =
@@ -625,6 +635,16 @@ module Coq0_Pos =
 
   let to_nat x =
     iter_op Coq__1.add x (Stdlib.Int.succ 0)
+
+  (** val size : int -> int **)
+
+  let rec size p =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun p0 -> succ (size p0))
+      (fun p0 -> succ (size p0))
+      (fun _ -> 1)
+      p
 
   (** val testbit : int -> int -> bool **)
 
@@ -646,6 +666,34 @@ module Coq0_Pos =
         (fun _ -> true)
         (fun _ -> false)
         n0)
+      p
+
+  (** val eq_dec : int -> int -> bool **)
+
+  let rec eq_dec p x0 =
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun p0 ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun p1 -> eq_dec p0 p1)
+        (fun _ -> false)
+        (fun _ -> false)
+        x0)
+      (fun p0 ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun _ -> false)
+        (fun p1 -> eq_dec p0 p1)
+        (fun _ -> false)
+        x0)
+      (fun _ ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun _ -> false)
+        (fun _ -> false)
+        (fun _ -> true)
+        x0)
       p
  end
 
@@ -1159,6 +1207,15 @@ module Z =
     | Gt -> true
     | _ -> false
 
+  (** val iter : int -> ('a1 -> 'a1) -> 'a1 -> 'a1 **)
+
+  let iter n0 f x =
+    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      (fun _ -> x)
+      (fun p -> Coq0_Pos.iter f x p)
+      (fun _ -> x)
+      n0
+
   (** val odd : int -> bool **)
 
   let odd z0 =
@@ -1180,6 +1237,21 @@ module Z =
         p)
       z0
 
+  (** val log2 : int -> int **)
+
+  let log2 z0 =
+    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      (fun _ -> 0)
+      (fun p0 ->
+      (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+        (fun p -> (Coq0_Pos.size p))
+        (fun p -> (Coq0_Pos.size p))
+        (fun _ -> 0)
+        p0)
+      (fun _ -> 0)
+      z0
+
   (** val testbit : int -> int -> bool **)
 
   let testbit a n0 =
@@ -1194,6 +1266,30 @@ module Z =
       (fun _ -> false)
       n0
 
+  (** val eq_dec : int -> int -> bool **)
+
+  let eq_dec x y =
+    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      (fun _ ->
+      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+        (fun _ -> true)
+        (fun _ -> false)
+        (fun _ -> false)
+        y)
+      (fun p ->
+      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+        (fun _ -> false)
+        (fun p0 -> Coq0_Pos.eq_dec p p0)
+        (fun _ -> false)
+        y)
+      (fun p ->
+      (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+        (fun _ -> false)
+        (fun _ -> false)
+        (fun p0 -> Coq0_Pos.eq_dec p p0)
+        y)
+      x
+
   (** val lnot : int -> int **)
 
   let lnot a =
@@ -1204,6 +1300,25 @@ module Z =
   let ones n0 =
     pred (shiftl 1 n0)
  end
+
+(** val z_lt_dec : int -> int -> bool **)
+
+let z_lt_dec x y =
+  match Z.compare x y with
+  | Lt -> true
+  | _ -> false
+
+(** val z_le_dec : int -> int -> bool **)
+
+let z_le_dec x y =
+  match Z.compare x y with
+  | Gt -> false
+  | _ -> true
+
+(** val z_le_gt_dec : int -> int -> bool **)
+
+let z_le_gt_dec =
+  z_le_dec
 
 (** val map : ('a1 -> 'a2) -> 'a1 list -> 'a2 list **)
 
@@ -1267,6 +1382,38 @@ let rec fold_left f l a0 =
 let rec filter f = function
 | [] -> []
 | x :: l0 -> if f x then x :: (filter f l0) else filter f l0
+
+(** val shift_nat : int -> int -> int **)
+
+let rec shift_nat n0 z0 =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> z0)
+    (fun n1 -> (fun p->2*p) (shift_nat n1 z0))
+    n0
+
+(** val shift_pos : int -> int -> int **)
+
+let shift_pos n0 z0 =
+  Coq0_Pos.iter (fun x -> (fun p->2*p) x) z0 n0
+
+(** val two_power_nat : int -> int **)
+
+let two_power_nat n0 =
+  (shift_nat n0 1)
+
+(** val two_power_pos : int -> int **)
+
+let two_power_pos x =
+  (shift_pos x 1)
+
+(** val two_p : int -> int **)
+
+let two_p x =
+  (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+    (fun _ -> 1)
+    (fun y -> two_power_pos y)
+    (fun _ -> 0)
+    x
 
 (** val zero : char **)
 
@@ -1377,9 +1524,9 @@ let sub0 = (-)
 
 let ltb0 = (<)
 
-(** val size : int **)
+(** val size0 : int **)
 
-let size =
+let size0 =
   Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
@@ -1416,7 +1563,7 @@ let rec of_pos_rec n0 p =
 (** val of_pos : int -> int **)
 
 let of_pos =
-  of_pos_rec size
+  of_pos_rec size0
 
 (** val of_Z : int -> int **)
 
@@ -1818,12 +1965,6 @@ type instruction =
 | BULTINT of int * int
 | BUGEINT of int * int
 | STOP
-| EVENT
-| BREAK
-| PERFORM
-| RESUME
-| RESUMETERM of int
-| REPERFORMTERM of int
 
 module PositiveMap =
  struct
@@ -1885,11 +2026,13 @@ type state = { pc : int; accu : value; stack : value list; env : value;
                extra_args : int; global : value list; trap_sp : int;
                hp : heap; next_addr : int }
 
-type step_result =
-| Step of state
+type 's step_result_gen =
+| Step of 's
 | Halt of value
 | Error of char list
-| CCall_request of int * value list * state
+| CCall_request of int * value list * 's
+
+type step_result = state step_result_gen
 
 type run_result =
 | Finished of value
@@ -1978,48 +2121,981 @@ let initial_state global_data =
   { pc = 0; accu = val_unit; stack = []; env = val_unit; extra_args = 0;
     global = global_data; trap_sp = 0; hp = PositiveMap.empty; next_addr = 0 }
 
-type 'a array = 'a Code_arr.t
+(** val instr_word_size : instruction -> int **)
 
-(** val make : int -> 'a1 -> 'a1 array **)
+let instr_word_size = function
+| ACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| POP _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| ASSIGN _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| ENVACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHENVACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSH_RETADDR _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPLY _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPTERM (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| APPTERM1 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPTERM2 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| APPTERM3 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| RETURN _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GRAB _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| CLOSURE (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| CLOSUREREC (_, _, ofs) ->
+  add (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))) (length ofs)
+| OFFSETCLOSURE _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHOFFSETCLOSURE _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHGETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETGLOBALFIELD (_, _) ->
+  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| PUSHGETGLOBALFIELD (_, _) ->
+  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| SETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| ATOM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHATOM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEBLOCK (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| MAKEBLOCK1 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEBLOCK2 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEBLOCK3 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| MAKEFLOATBLOCK _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETFLOATFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| SETFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| SETFLOATFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| BRANCH _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| BRANCHIF _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| BRANCHIFNOT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| SWITCH (_, _, ct, bt) ->
+  add (add (Stdlib.Int.succ (Stdlib.Int.succ 0)) (length ct)) (length bt)
+| PUSHTRAP _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| C_CALL (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| CONSTINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| PUSHCONSTINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| OFFSETINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| OFFSETREF _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
+| GETPUBMET _ -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BEQ (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BNEQ (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BLTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BLEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BGTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BGEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BULTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| BUGEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
+| _ -> Stdlib.Int.succ 0
 
-let make = Code_arr.make
+(** val build_offset_list : instruction list -> int -> int list **)
 
-(** val get : 'a1 array -> int -> 'a1 **)
+let rec build_offset_list code acc =
+  match code with
+  | [] -> []
+  | i :: rest -> acc :: (build_offset_list rest (add acc (instr_word_size i)))
 
-let get = Code_arr.get
+(** val offset_map : instruction list -> int list **)
 
-(** val set0 : 'a1 array -> int -> 'a1 -> 'a1 array **)
+let offset_map code =
+  build_offset_list code 0
 
-let set0 = Code_arr.set
+(** val lookup_offset : int list -> int -> int **)
 
-(** val length1 : 'a1 array -> int **)
+let lookup_offset omap idx =
+  match nth_error omap (Z.to_nat idx) with
+  | Some n0 -> Z.of_nat n0
+  | None -> 0
 
-let length1 = Code_arr.length
+(** val encode_word_le : int -> int list **)
 
-(** val fetch_instr : instruction array -> int -> instruction option **)
+let encode_word_le v =
+  let u =
+    Z.coq_land v ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      1)))))))))))))))))))))))))))))))
+  in
+  let b0 =
+    Z.coq_land u ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  let b1 =
+    Z.coq_land (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  let b2 =
+    Z.coq_land
+      (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+        1)))))
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  let b3 =
+    Z.coq_land
+      (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+        1)))))
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
+  in
+  b0 :: (b1 :: (b2 :: (b3 :: [])))
 
-let fetch_instr code pc0 =
-  let idx = of_Z pc0 in
-  if ltb0 idx (length1 code) then Some (get code idx) else None
+(** val emit_words : int list -> int list **)
 
-(** val list_to_code_array : instruction list -> instruction array **)
+let emit_words ws =
+  flat_map encode_word_le ws
 
-let list_to_code_array l =
-  let len = of_Z (Z.of_nat (length l)) in
-  let arr = make len STOP in
-  let rec go i rest a =
-    match rest with
-    | [] -> a
-    | x :: xs -> go (Stdlib.Int.succ i) xs (set0 a (of_Z (Z.of_nat i)) x)
-  in go 0 l arr
+(** val rel_offset : int list -> int -> int -> int **)
 
-(** val z_lsr : int -> int -> int **)
+let rel_offset omap from_word target_idx =
+  Z.sub (lookup_offset omap target_idx) from_word
 
-let z_lsr = fun a b -> a lsr b
+(** val encode_instr : int list -> int -> instruction -> int list **)
 
-(** val z_flip_sign : int -> int **)
+let encode_instr omap idx i =
+  let w = Z.of_nat (match nth_error omap idx with
+                    | Some n0 -> n0
+                    | None -> 0)
+  in
+  (match i with
+   | ACC n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))) :: ((Z.of_nat n0) :: []))
+   | PUSH ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))) :: [])
+   | PUSHACC n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | POP n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | ASSIGN n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | ENVACC n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       1)))) :: ((Z.of_nat n0) :: []))
+   | PUSHENVACC n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1)))) :: ((Z.of_nat n0) :: []))
+   | PUSH_RETADDR t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1)))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
+   | APPLY n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | APPLY1 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | APPLY2 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | APPLY3 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | APPTERM (n0, s) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: ((Z.of_nat s) :: [])))
+   | APPTERM1 s ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
+   | APPTERM2 s ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
+   | APPTERM3 s ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
+   | RETURN n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | RESTART ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) 1))))) :: [])
+   | GRAB n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | CLOSURE (nv, codeptr) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1))))) :: ((Z.of_nat nv) :: ((rel_offset omap
+                                      (Z.add w ((fun p->2*p) 1)) codeptr) :: [])))
+   | CLOSUREREC (nf, nv, ofs_list) ->
+     emit_words
+       (app (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         ((fun p->2*p) 1))))) :: ((Z.of_nat nf) :: ((Z.of_nat nv) :: [])))
+         (map (fun t0 -> rel_offset omap (Z.add w ((fun p->1+2*p) 1)) t0)
+           ofs_list))
+   | OFFSETCLOSURE n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: (n0 :: []))
+   | PUSHOFFSETCLOSURE n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: (n0 :: []))
+   | GETGLOBAL n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | PUSHGETGLOBAL n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | GETGLOBALFIELD (n0, p) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p)
+       1))))) :: ((Z.of_nat n0) :: ((Z.of_nat p) :: [])))
+   | PUSHGETGLOBALFIELD (n0, p) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: ((Z.of_nat p) :: [])))
+   | SETGLOBAL n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
+   | ATOM t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t0) :: []))
+   | PUSHATOM t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t0) :: []))
+   | MAKEBLOCK (tag, sz) ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p)
+       1))))) :: ((Z.of_nat sz) :: ((Z.of_nat tag) :: [])))
+   | MAKEBLOCK1 t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t0) :: []))
+   | MAKEBLOCK2 t0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat t0) :: []))
+   | MAKEBLOCK3 t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat t0) :: []))
+   | MAKEFLOATBLOCK s ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat s) :: []))
+   | GETFIELD n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))))) :: ((Z.of_nat n0) :: []))
+   | GETFLOATFIELD n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat n0) :: []))
+   | SETFIELD n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))))) :: ((Z.of_nat n0) :: []))
+   | SETFLOATFIELD n0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       1)))))) :: ((Z.of_nat n0) :: []))
+   | VECTLENGTH ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1)))))) :: [])
+   | GETVECTITEM ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | SETVECTITEM ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | GETBYTESCHAR ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | SETBYTESCHAR ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | GETSTRINGCHAR ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | BRANCH t0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
+   | BRANCHIF t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
+   | BRANCHIFNOT t0 ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
+   | SWITCH (nc, nb, ct, bt) ->
+     let sizes =
+       Z.coq_lor (Z.of_nat nc)
+         (Z.shiftl (Z.of_nat nb) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) 1)))))
+     in
+     let base = Z.add w ((fun p->2*p) 1) in
+     let ct_rels = map (fun t0 -> rel_offset omap base t0) ct in
+     let bt_rels = map (fun t0 -> rel_offset omap base t0) bt in
+     emit_words
+       (app (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+         ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: (sizes :: []))
+         (app ct_rels bt_rels))
+   | BOOLNOT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | PUSHTRAP t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p)
+       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
+   | POPTRAP ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | RAISE ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | RERAISE ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | RAISE_NOTRACE ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | CHECK_SIGNALS ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
+   | C_CALL (narg, prim) ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->1+2*p)
+       1)))))) :: ((Z.of_nat narg) :: ((Z.of_nat prim) :: [])))
+   | CONSTINT n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
+   | PUSHCONSTINT n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
+   | NEGINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ADDINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | SUBINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | MULINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | DIVINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | MODINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ANDINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ORINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | XORINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LSLINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LSRINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | ASRINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | EQ ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | NEQ ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LTINT ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | LEINT ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | GTINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | GEINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
+   | OFFSETINT n0 ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
+   | OFFSETREF n0 ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: (n0 :: []))
+   | ISINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | GETMETHOD ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | GETPUBMET t0 ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (t0 :: (0 :: [])))
+   | GETDYNMET ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: [])
+   | BEQ (n0, t0) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | BNEQ (n0, t0) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | BLTINT (n0, t0) ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | BLEINT (n0, t0) ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | BGTINT (n0, t0) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | BGEINT (n0, t0) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | ULTINT ->
+     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | UGEINT ->
+     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
+   | BULTINT (n0, t0) ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | BUGEINT (n0, t0) ->
+     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
+   | STOP ->
+     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+       1))))))) :: []))
 
-let z_flip_sign = fun a -> a lxor min_int
+(** val encode_instrs : int list -> int -> instruction list -> int list **)
+
+let rec encode_instrs omap idx = function
+| [] -> []
+| i :: rest ->
+  app (encode_instr omap idx i)
+    (encode_instrs omap (Stdlib.Int.succ idx) rest)
+
+(** val encode_bytecode : instruction list -> int list **)
+
+let encode_bytecode code =
+  let omap = offset_map code in encode_instrs omap 0 code
+
+(** val zeq : int -> int -> bool **)
+
+let zeq =
+  Z.eq_dec
+
+(** val zlt : int -> int -> bool **)
+
+let zlt =
+  z_lt_dec
+
+(** val zle : int -> int -> bool **)
+
+let zle =
+  z_le_gt_dec
+
+(** val proj_sumbool : bool -> bool **)
+
+let proj_sumbool = function
+| true -> true
+| false -> false
+
+(** val p_mod_two_p : int -> int -> int **)
+
+let rec p_mod_two_p p n0 =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> 0)
+    (fun m ->
+    (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+      (fun q -> Z.succ_double (p_mod_two_p q m))
+      (fun q -> Z.double (p_mod_two_p q m))
+      (fun _ -> 1)
+      p)
+    n0
+
+(** val zshiftin : bool -> int -> int **)
+
+let zshiftin b x =
+  if b then Z.succ_double x else Z.double x
+
+(** val zzero_ext : int -> int -> int **)
+
+let zzero_ext n0 x =
+  Z.iter n0 (fun rec0 x0 -> zshiftin (Z.odd x0) (rec0 (Z.div2 x0))) (fun _ ->
+    0) x
+
+(** val zsign_ext : int -> int -> int **)
+
+let zsign_ext n0 x =
+  Z.iter (Z.pred n0) (fun rec0 x0 -> zshiftin (Z.odd x0) (rec0 (Z.div2 x0)))
+    (fun x0 ->
+    if (&&) (Z.odd x0) (proj_sumbool (zlt 0 n0)) then (~-) 1 else 0) x
+
+(** val z_one_bits : int -> int -> int -> int list **)
+
+let rec z_one_bits n0 x i =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> [])
+    (fun m ->
+    if Z.odd x
+    then i :: (z_one_bits m (Z.div2 x) (Z.add i 1))
+    else z_one_bits m (Z.div2 x) (Z.add i 1))
+    n0
+
+(** val p_is_power2 : int -> bool **)
+
+let rec p_is_power2 p =
+  (fun f2p1 f2p f1 p ->
+  if p<=1 then f1 () else if p mod 2 = 0 then f2p (p/2) else f2p1 (p/2))
+    (fun _ -> false)
+    (fun q -> p_is_power2 q)
+    (fun _ -> true)
+    p
+
+(** val z_is_power2 : int -> int option **)
+
+let z_is_power2 x =
+  (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+    (fun _ -> None)
+    (fun p -> if p_is_power2 p then Some (Z.log2 x) else None)
+    (fun _ -> None)
+    x
+
+(** val zsize : int -> int **)
+
+let zsize x =
+  (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+    (fun _ -> 0)
+    (fun p -> (Coq0_Pos.size p))
+    (fun _ -> 0)
+    x
+
+type comparison0 =
+| Ceq
+| Cne
+| Clt
+| Cle
+| Cgt
+| Cge
+
+module type WORDSIZE =
+ sig
+  val wordsize : int
+ end
+
+module Make =
+ functor (WS:WORDSIZE) ->
+ struct
+  (** val wordsize : int **)
+
+  let wordsize =
+    WS.wordsize
+
+  (** val zwordsize : int **)
+
+  let zwordsize =
+    Z.of_nat wordsize
+
+  (** val modulus : int **)
+
+  let modulus =
+    two_power_nat wordsize
+
+  (** val half_modulus : int **)
+
+  let half_modulus =
+    Z.div modulus ((fun p->2*p) 1)
+
+  (** val max_unsigned : int **)
+
+  let max_unsigned =
+    Z.sub modulus 1
+
+  (** val max_signed : int **)
+
+  let max_signed =
+    Z.sub half_modulus 1
+
+  (** val min_signed : int **)
+
+  let min_signed =
+    Z.opp half_modulus
+
+  type nonrec int = int
+    (* singleton inductive, whose constructor was mkint *)
+
+  (** val intval : int -> int **)
+
+  let intval i =
+    i
+
+  (** val coq_Z_mod_modulus : int -> int **)
+
+  let coq_Z_mod_modulus x =
+    (fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
+      (fun _ -> 0)
+      (fun p -> p_mod_two_p p wordsize)
+      (fun p ->
+      let r = p_mod_two_p p wordsize in if zeq r 0 then 0 else Z.sub modulus r)
+      x
+
+  (** val unsigned : int -> int **)
+
+  let unsigned n0 =
+    n0
+
+  (** val signed : int -> int **)
+
+  let signed n0 =
+    let x = unsigned n0 in if zlt x half_modulus then x else Z.sub x modulus
+
+  (** val repr : int -> int **)
+
+  let repr =
+    coq_Z_mod_modulus
+
+  (** val zero : int **)
+
+  let zero =
+    repr 0
+
+  (** val one : int **)
+
+  let one =
+    repr 1
+
+  (** val mone : int **)
+
+  let mone =
+    repr ((~-) 1)
+
+  (** val iwordsize : int **)
+
+  let iwordsize =
+    repr zwordsize
+
+  (** val eq_dec : int -> int -> bool **)
+
+  let eq_dec =
+    zeq
+
+  (** val eq : int -> int -> bool **)
+
+  let eq x y =
+    if zeq (unsigned x) (unsigned y) then true else false
+
+  (** val lt : int -> int -> bool **)
+
+  let lt x y =
+    if zlt (signed x) (signed y) then true else false
+
+  (** val ltu : int -> int -> bool **)
+
+  let ltu x y =
+    if zlt (unsigned x) (unsigned y) then true else false
+
+  (** val neg : int -> int **)
+
+  let neg x =
+    repr (Z.opp (unsigned x))
+
+  (** val add : int -> int -> int **)
+
+  let add x y =
+    repr (Z.add (unsigned x) (unsigned y))
+
+  (** val sub : int -> int -> int **)
+
+  let sub x y =
+    repr (Z.sub (unsigned x) (unsigned y))
+
+  (** val mul : int -> int -> int **)
+
+  let mul x y =
+    repr (Z.mul (unsigned x) (unsigned y))
+
+  (** val divs : int -> int -> int **)
+
+  let divs x y =
+    repr (Z.quot (signed x) (signed y))
+
+  (** val mods : int -> int -> int **)
+
+  let mods x y =
+    repr (Z.rem (signed x) (signed y))
+
+  (** val divu : int -> int -> int **)
+
+  let divu x y =
+    repr (Z.div (unsigned x) (unsigned y))
+
+  (** val modu : int -> int -> int **)
+
+  let modu x y =
+    repr (Z.modulo (unsigned x) (unsigned y))
+
+  (** val coq_and : int -> int -> int **)
+
+  let coq_and x y =
+    repr (Z.coq_land (unsigned x) (unsigned y))
+
+  (** val coq_or : int -> int -> int **)
+
+  let coq_or x y =
+    repr (Z.coq_lor (unsigned x) (unsigned y))
+
+  (** val xor : int -> int -> int **)
+
+  let xor x y =
+    repr (Z.coq_lxor (unsigned x) (unsigned y))
+
+  (** val not : int -> int **)
+
+  let not x =
+    xor x mone
+
+  (** val shl : int -> int -> int **)
+
+  let shl x y =
+    repr (Z.shiftl (unsigned x) (unsigned y))
+
+  (** val shru : int -> int -> int **)
+
+  let shru x y =
+    repr (Z.shiftr (unsigned x) (unsigned y))
+
+  (** val shr : int -> int -> int **)
+
+  let shr x y =
+    repr (Z.shiftr (signed x) (unsigned y))
+
+  (** val rol : int -> int -> int **)
+
+  let rol x y =
+    let n0 = Z.modulo (unsigned y) zwordsize in
+    repr
+      (Z.coq_lor (Z.shiftl (unsigned x) n0)
+        (Z.shiftr (unsigned x) (Z.sub zwordsize n0)))
+
+  (** val ror : int -> int -> int **)
+
+  let ror x y =
+    let n0 = Z.modulo (unsigned y) zwordsize in
+    repr
+      (Z.coq_lor (Z.shiftr (unsigned x) n0)
+        (Z.shiftl (unsigned x) (Z.sub zwordsize n0)))
+
+  (** val rolm : int -> int -> int -> int **)
+
+  let rolm x a m =
+    coq_and (rol x a) m
+
+  (** val shrx : int -> int -> int **)
+
+  let shrx x y =
+    divs x (shl one y)
+
+  (** val mulhu : int -> int -> int **)
+
+  let mulhu x y =
+    repr (Z.div (Z.mul (unsigned x) (unsigned y)) modulus)
+
+  (** val mulhs : int -> int -> int **)
+
+  let mulhs x y =
+    repr (Z.div (Z.mul (signed x) (signed y)) modulus)
+
+  (** val negative : int -> int **)
+
+  let negative x =
+    if lt x zero then one else zero
+
+  (** val add_carry : int -> int -> int -> int **)
+
+  let add_carry x y cin =
+    if zlt (Z.add (Z.add (unsigned x) (unsigned y)) (unsigned cin)) modulus
+    then zero
+    else one
+
+  (** val add_overflow : int -> int -> int -> int **)
+
+  let add_overflow x y cin =
+    let s = Z.add (Z.add (signed x) (signed y)) (signed cin) in
+    if (&&) (proj_sumbool (zle min_signed s))
+         (proj_sumbool (zle s max_signed))
+    then zero
+    else one
+
+  (** val sub_borrow : int -> int -> int -> int **)
+
+  let sub_borrow x y bin =
+    if zlt (Z.sub (Z.sub (unsigned x) (unsigned y)) (unsigned bin)) 0
+    then one
+    else zero
+
+  (** val sub_overflow : int -> int -> int -> int **)
+
+  let sub_overflow x y bin =
+    let s = Z.sub (Z.sub (signed x) (signed y)) (signed bin) in
+    if (&&) (proj_sumbool (zle min_signed s))
+         (proj_sumbool (zle s max_signed))
+    then zero
+    else one
+
+  (** val shr_carry : int -> int -> int **)
+
+  let shr_carry x y =
+    if (&&) (lt x zero) (negb (eq (coq_and x (sub (shl one y) one)) zero))
+    then one
+    else zero
+
+  (** val zero_ext : int -> int -> int **)
+
+  let zero_ext n0 x =
+    repr (zzero_ext n0 (unsigned x))
+
+  (** val sign_ext : int -> int -> int **)
+
+  let sign_ext n0 x =
+    repr (zsign_ext n0 (unsigned x))
+
+  (** val one_bits : int -> int list **)
+
+  let one_bits x =
+    map repr (z_one_bits wordsize (unsigned x) 0)
+
+  (** val is_power2 : int -> int option **)
+
+  let is_power2 x =
+    match z_is_power2 (unsigned x) with
+    | Some i -> Some (repr i)
+    | None -> None
+
+  (** val cmp : comparison0 -> int -> int -> bool **)
+
+  let cmp c x y =
+    match c with
+    | Ceq -> eq x y
+    | Cne -> negb (eq x y)
+    | Clt -> lt x y
+    | Cle -> negb (lt y x)
+    | Cgt -> lt y x
+    | Cge -> negb (lt x y)
+
+  (** val cmpu : comparison0 -> int -> int -> bool **)
+
+  let cmpu c x y =
+    match c with
+    | Ceq -> eq x y
+    | Cne -> negb (eq x y)
+    | Clt -> ltu x y
+    | Cle -> negb (ltu y x)
+    | Cgt -> ltu y x
+    | Cge -> negb (ltu x y)
+
+  (** val notbool : int -> int **)
+
+  let notbool x =
+    if eq x zero then one else zero
+
+  (** val divmodu2 : int -> int -> int -> (int * int) option **)
+
+  let divmodu2 nhi nlo d =
+    if eq_dec d zero
+    then None
+    else let (q, r) =
+           Z.div_eucl (Z.add (Z.mul (unsigned nhi) modulus) (unsigned nlo))
+             (unsigned d)
+         in
+         if zle q max_unsigned then Some ((repr q), (repr r)) else None
+
+  (** val divmods2 : int -> int -> int -> (int * int) option **)
+
+  let divmods2 nhi nlo d =
+    if eq_dec d zero
+    then None
+    else let (q, r) =
+           Z.quotrem (Z.add (Z.mul (signed nhi) modulus) (unsigned nlo))
+             (signed d)
+         in
+         if (&&) (proj_sumbool (zle min_signed q))
+              (proj_sumbool (zle q max_signed))
+         then Some ((repr q), (repr r))
+         else None
+
+  (** val testbit : int -> int -> bool **)
+
+  let testbit x i =
+    Z.testbit (unsigned x) i
+
+  (** val int_of_one_bits : int list -> int **)
+
+  let rec int_of_one_bits = function
+  | [] -> zero
+  | a :: b -> add (shl one a) (int_of_one_bits b)
+
+  (** val no_overlap : int -> int -> int -> int -> bool **)
+
+  let no_overlap ofs1 sz1 ofs2 sz2 =
+    let x1 = unsigned ofs1 in
+    let x2 = unsigned ofs2 in
+    (&&)
+      ((&&) (proj_sumbool (zlt (Z.add x1 sz1) modulus))
+        (proj_sumbool (zlt (Z.add x2 sz2) modulus)))
+      ((||) (proj_sumbool (zle (Z.add x1 sz1) x2))
+        (proj_sumbool (zle (Z.add x2 sz2) x1)))
+
+  (** val size : int -> int **)
+
+  let size x =
+    zsize (unsigned x)
+
+  (** val unsigned_bitfield_extract : int -> int -> int -> int **)
+
+  let unsigned_bitfield_extract pos width n0 =
+    zero_ext width (shru n0 (repr pos))
+
+  (** val signed_bitfield_extract : int -> int -> int -> int **)
+
+  let signed_bitfield_extract pos width n0 =
+    sign_ext width (shru n0 (repr pos))
+
+  (** val bitfield_insert : int -> int -> int -> int -> int **)
+
+  let bitfield_insert pos width n0 p =
+    let mask0 = shl (repr (Z.sub (two_p width) 1)) (repr pos) in
+    coq_or (shl (zero_ext width p) (repr pos)) (coq_and n0 (not mask0))
+ end
+
+module Wordsize_32 =
+ struct
+  (** val wordsize : int **)
+
+  let wordsize =
+    Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+      0)))))))))))))))))))))))))))))))
+ end
+
+module Int = Make(Wordsize_32)
 
 (** val get_code_ptr_from : value list -> int -> int option **)
 
@@ -2060,6 +3136,14 @@ let get_code_ptr_s s = function
      let (t0, fields) = p in
      if (=) t0 closure_tag then get_code_ptr_from fields ofs else None
    | None -> None)
+
+(** val z_lsr : int -> int -> int **)
+
+let z_lsr = fun a b -> a lsr b
+
+(** val z_flip_sign : int -> int **)
+
+let z_flip_sign = fun a -> a lxor min_int
 
 (** val make_exn_string : int list -> value **)
 
@@ -2131,6 +3215,35 @@ let make_exn_string chars =
     0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
     (map (fun x -> Val_int x) chars))
 
+(** val div_by_zero_list_Z : int list **)
+
+let div_by_zero_list_Z =
+  ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+    ((fun p->2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+    ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+    ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+    ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+    ((fun p->1+2*p) 1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->2*p) 1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+    ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p)
+    ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+    1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->2*p)
+    ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
+    1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
+    ((fun p->1+2*p) 1)))))) :: [])))))))))))))))
+
 (** val div_by_zero_exn : value **)
 
 let div_by_zero_exn =
@@ -2198,37 +3311,8 @@ let div_by_zero_exn =
     (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
     (Stdlib.Int.succ
     0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))),
-    ((make_exn_string (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1)))))) :: (((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) 1)))))) :: (((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       1)))))) :: (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       1)))))) :: (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) 1)))))) :: (((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       1)))))) :: []))))))))))))))))) :: ((Val_int
-    ((~-) ((fun p->2*p) ((fun p->1+2*p) 1)))) :: [])))
+    ((make_exn_string div_by_zero_list_Z) :: ((Val_int ((~-) ((fun p->2*p)
+    ((fun p->1+2*p) 1)))) :: [])))
 
 (** val do_raise : value -> state -> step_result **)
 
@@ -2326,22 +3410,26 @@ let do_raise exn s =
 (** val handle_ACC : int -> int -> state -> step_result **)
 
 let handle_ACC n0 pc' s =
-  match nth_error s.stack n0 with
-  | Some v ->
-    Step
-      (set (fun s0 -> s0.accu) (fun f ->
-        let v0 = fun r -> f r.accu in
-        (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
-        (set (fun s0 -> s0.pc) (fun f ->
-          let z0 = fun r -> f r.pc in
-          (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-          x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-          x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s))
-  | None ->
-    Error
-      ('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))
+  if Z.ltb (Z.of_nat n0) Int.half_modulus
+  then (match nth_error s.stack n0 with
+        | Some v ->
+          Step
+            (set (fun s0 -> s0.accu) (fun f ->
+              let v0 = fun r -> f r.accu in
+              (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
+              (set (fun s0 -> s0.pc) (fun f ->
+                let z0 = fun r -> f r.pc in
+                (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                env = x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> pc') s))
+        | None ->
+          Error
+            ('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))
+  else Error
+         ('A'::('C'::('C'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))
 
 (** val handle_PUSH : int -> state -> step_result **)
 
@@ -2361,44 +3449,234 @@ let handle_PUSH pc' s =
 (** val handle_PUSHACC : int -> int -> state -> step_result **)
 
 let handle_PUSHACC n0 pc' s =
-  let new_stack = s.accu :: s.stack in
-  (match nth_error new_stack n0 with
-   | Some v ->
-     Step
-       (set (fun s0 -> s0.stack) (fun f ->
-         let l = fun r -> f r.stack in
-         (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-         extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-         hp = x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
-         (set (fun s0 -> s0.accu) (fun f ->
-           let v0 = fun r -> f r.accu in
-           (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
-           x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-           x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> Error
+    ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))
+    (fun n1 ->
+    (fun fO fS n -> if n=0 then fO () else fS (n-1))
+      (fun _ ->
+      let new_stack = s.accu :: s.stack in
+      (match nth_error new_stack n0 with
+       | Some v ->
+         Step
+           (set (fun s0 -> s0.stack) (fun f ->
+             let l = fun r -> f r.stack in
+             (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env =
+             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+             new_stack)
+             (set (fun s0 -> s0.accu) (fun f ->
+               let v0 = fun r -> f r.accu in
+               (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+               x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+               x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
+               (set (fun s0 -> s0.pc) (fun f ->
+                 let z0 = fun r -> f r.pc in
+                 (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                 env = x.env; extra_args = x.extra_args; global = x.global;
+                 trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                 (fun _ -> pc') s)))
+       | None ->
+         Error
+           ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+      (fun n2 ->
+      (fun fO fS n -> if n=0 then fO () else fS (n-1))
+        (fun _ ->
+        let new_stack = s.accu :: s.stack in
+        (match nth_error new_stack n0 with
+         | Some v ->
+           Step
+             (set (fun s0 -> s0.stack) (fun f ->
+               let l = fun r -> f r.stack in
+               (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env =
+               x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+               x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+               new_stack)
+               (set (fun s0 -> s0.accu) (fun f ->
+                 let v0 = fun r -> f r.accu in
+                 (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+                 x.env; extra_args = x.extra_args; global = x.global;
+                 trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                 (fun _ -> v)
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)))
+         | None ->
+           Error
+             ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+        (fun n3 ->
+        (fun fO fS n -> if n=0 then fO () else fS (n-1))
+          (fun _ ->
+          let new_stack = s.accu :: s.stack in
+          (match nth_error new_stack n0 with
+           | Some v ->
+             Step
+               (set (fun s0 -> s0.stack) (fun f ->
+                 let l = fun r -> f r.stack in
+                 (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env =
+                 x.env; extra_args = x.extra_args; global = x.global;
+                 trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                 (fun _ -> new_stack)
+                 (set (fun s0 -> s0.accu) (fun f ->
+                   let v0 = fun r -> f r.accu in
+                   (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> v)
+                   (set (fun s0 -> s0.pc) (fun f ->
+                     let z0 = fun r -> f r.pc in
+                     (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                     env = x.env; extra_args = x.extra_args; global =
+                     x.global; trap_sp = x.trap_sp; hp = x.hp; next_addr =
+                     x.next_addr })) (fun _ -> pc') s)))
+           | None ->
+             Error
+               ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+          (fun n4 ->
+          (fun fO fS n -> if n=0 then fO () else fS (n-1))
+            (fun _ ->
+            let new_stack = s.accu :: s.stack in
+            (match nth_error new_stack n0 with
+             | Some v ->
+               Step
+                 (set (fun s0 -> s0.stack) (fun f ->
+                   let l = fun r -> f r.stack in
+                   (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env =
+                   x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> new_stack)
+                   (set (fun s0 -> s0.accu) (fun f ->
+                     let v0 = fun r -> f r.accu in
+                     (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack;
+                     env = x.env; extra_args = x.extra_args; global =
+                     x.global; trap_sp = x.trap_sp; hp = x.hp; next_addr =
+                     x.next_addr })) (fun _ -> v)
+                     (set (fun s0 -> s0.pc) (fun f ->
+                       let z0 = fun r -> f r.pc in
+                       (fun x -> { pc = (z0 x); accu = x.accu; stack =
+                       x.stack; env = x.env; extra_args = x.extra_args;
+                       global = x.global; trap_sp = x.trap_sp; hp = x.hp;
+                       next_addr = x.next_addr })) (fun _ -> pc') s)))
+             | None ->
+               Error
+                 ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+            (fun n5 ->
+            (fun fO fS n -> if n=0 then fO () else fS (n-1))
+              (fun _ ->
+              let new_stack = s.accu :: s.stack in
+              (match nth_error new_stack n0 with
+               | Some v ->
+                 Step
+                   (set (fun s0 -> s0.stack) (fun f ->
+                     let l = fun r -> f r.stack in
+                     (fun x -> { pc = x.pc; accu = x.accu; stack = (l x);
+                     env = x.env; extra_args = x.extra_args; global =
+                     x.global; trap_sp = x.trap_sp; hp = x.hp; next_addr =
+                     x.next_addr })) (fun _ -> new_stack)
+                     (set (fun s0 -> s0.accu) (fun f ->
+                       let v0 = fun r -> f r.accu in
+                       (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack;
+                       env = x.env; extra_args = x.extra_args; global =
+                       x.global; trap_sp = x.trap_sp; hp = x.hp; next_addr =
+                       x.next_addr })) (fun _ -> v)
+                       (set (fun s0 -> s0.pc) (fun f ->
+                         let z0 = fun r -> f r.pc in
+                         (fun x -> { pc = (z0 x); accu = x.accu; stack =
+                         x.stack; env = x.env; extra_args = x.extra_args;
+                         global = x.global; trap_sp = x.trap_sp; hp = x.hp;
+                         next_addr = x.next_addr })) (fun _ -> pc') s)))
+               | None ->
+                 Error
+                   ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+              (fun n6 ->
+              (fun fO fS n -> if n=0 then fO () else fS (n-1))
+                (fun _ ->
+                let new_stack = s.accu :: s.stack in
+                (match nth_error new_stack n0 with
+                 | Some v ->
+                   Step
+                     (set (fun s0 -> s0.stack) (fun f ->
+                       let l = fun r -> f r.stack in
+                       (fun x -> { pc = x.pc; accu = x.accu; stack = 
+                       (l x); env = x.env; extra_args = x.extra_args;
+                       global = x.global; trap_sp = x.trap_sp; hp = x.hp;
+                       next_addr = x.next_addr })) (fun _ -> new_stack)
+                       (set (fun s0 -> s0.accu) (fun f ->
+                         let v0 = fun r -> f r.accu in
+                         (fun x -> { pc = x.pc; accu = (v0 x); stack =
+                         x.stack; env = x.env; extra_args = x.extra_args;
+                         global = x.global; trap_sp = x.trap_sp; hp = x.hp;
+                         next_addr = x.next_addr })) (fun _ -> v)
+                         (set (fun s0 -> s0.pc) (fun f ->
+                           let z0 = fun r -> f r.pc in
+                           (fun x -> { pc = (z0 x); accu = x.accu; stack =
+                           x.stack; env = x.env; extra_args = x.extra_args;
+                           global = x.global; trap_sp = x.trap_sp; hp = x.hp;
+                           next_addr = x.next_addr })) (fun _ -> pc') s)))
+                 | None ->
+                   Error
+                     ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+                (fun n7 ->
+                (fun fO fS n -> if n=0 then fO () else fS (n-1))
+                  (fun _ ->
+                  let new_stack = s.accu :: s.stack in
+                  (match nth_error new_stack n0 with
+                   | Some v ->
+                     Step
+                       (set (fun s0 -> s0.stack) (fun f ->
+                         let l = fun r -> f r.stack in
+                         (fun x -> { pc = x.pc; accu = x.accu; stack = 
+                         (l x); env = x.env; extra_args = x.extra_args;
+                         global = x.global; trap_sp = x.trap_sp; hp = x.hp;
+                         next_addr = x.next_addr })) (fun _ -> new_stack)
+                         (set (fun s0 -> s0.accu) (fun f ->
+                           let v0 = fun r -> f r.accu in
+                           (fun x -> { pc = x.pc; accu = (v0 x); stack =
+                           x.stack; env = x.env; extra_args = x.extra_args;
+                           global = x.global; trap_sp = x.trap_sp; hp = x.hp;
+                           next_addr = x.next_addr })) (fun _ -> v)
+                           (set (fun s0 -> s0.pc) (fun f ->
+                             let z0 = fun r -> f r.pc in
+                             (fun x -> { pc = (z0 x); accu = x.accu; stack =
+                             x.stack; env = x.env; extra_args = x.extra_args;
+                             global = x.global; trap_sp = x.trap_sp; hp =
+                             x.hp; next_addr = x.next_addr })) (fun _ -> pc')
+                             s)))
+                   | None ->
+                     Error
+                       ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[]))))))))))))))))))))))))))
+                  (fun _ -> Error
+                  ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))
+                  n7)
+                n6)
+              n5)
+            n4)
+          n3)
+        n2)
+      n1)
+    n0
+
+(** val handle_POP : int -> int -> state -> step_result **)
+
+let handle_POP n0 pc' s =
+  if Z.ltb (Z.of_nat n0) Int.half_modulus
+  then Step
+         (set (fun s0 -> s0.stack) (fun f ->
+           let l = fun r -> f r.stack in
+           (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
+           extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+           hp = x.hp; next_addr = x.next_addr })) (fun _ -> skipn n0 s.stack)
            (set (fun s0 -> s0.pc) (fun f ->
              let z0 = fun r -> f r.pc in
              (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)))
-   | None ->
-     Error
-       ('P'::('U'::('S'::('H'::('A'::('C'::('C'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))
-
-(** val handle_POP : int -> int -> state -> step_result **)
-
-let handle_POP n0 pc' s =
-  Step
-    (set (fun s0 -> s0.stack) (fun f ->
-      let l = fun r -> f r.stack in
-      (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> skipn n0 s.stack)
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s))
+             s))
+  else Error
+         ('P'::('O'::('P'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))
 
 (** val handle_ASSIGN : int -> int -> state -> step_result **)
 
@@ -2429,22 +3707,26 @@ let handle_ASSIGN n0 pc' s =
 (** val handle_ENVACC : int -> int -> state -> step_result **)
 
 let handle_ENVACC n0 pc' s =
-  match field_or_heap s s.env n0 with
-  | Some v ->
-    Step
-      (set (fun s0 -> s0.accu) (fun f ->
-        let v0 = fun r -> f r.accu in
-        (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
-        (set (fun s0 -> s0.pc) (fun f ->
-          let z0 = fun r -> f r.pc in
-          (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-          x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-          x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s))
-  | None ->
-    Error
-      ('E'::('N'::('V'::('A'::('C'::('C'::(':'::(' '::('e'::('n'::('v'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))))))))))))))))))
+  if Z.ltb (Z.of_nat n0) Int.half_modulus
+  then (match field_or_heap s s.env n0 with
+        | Some v ->
+          Step
+            (set (fun s0 -> s0.accu) (fun f ->
+              let v0 = fun r -> f r.accu in
+              (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
+              (set (fun s0 -> s0.pc) (fun f ->
+                let z0 = fun r -> f r.pc in
+                (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                env = x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> pc') s))
+        | None ->
+          Error
+            ('E'::('N'::('V'::('A'::('C'::('C'::(':'::(' '::('e'::('n'::('v'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))
+  else Error
+         ('E'::('N'::('V'::('A'::('C'::('C'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))
 
 (** val handle_PUSHENVACC : int -> int -> state -> step_result **)
 
@@ -3074,98 +4356,130 @@ let handle_GRAB required pc' s =
 (** val handle_CLOSURE : int -> int -> int -> state -> step_result **)
 
 let handle_CLOSURE nvars code_ofs pc' s =
-  let stk = if Nat.ltb 0 nvars then s.accu :: s.stack else s.stack in
-  let vars = firstn nvars stk in
-  let rest = skipn nvars stk in
-  let closinfo = Val_int 0 in
-  let fields = (Val_int code_ofs) :: (closinfo :: vars) in
-  let (s', base_ptr) = heap_alloc s closure_tag fields in
-  let addr = match base_ptr with
-             | Val_ptr a -> a
-             | _ -> 0 in
-  let closure = Val_closure (addr, 0) in
-  Step
-  (set (fun s0 -> s0.stack) (fun f ->
-    let l = fun r -> f r.stack in
-    (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-    extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-    x.hp; next_addr = x.next_addr })) (fun _ -> rest)
-    (set (fun s0 -> s0.accu) (fun f ->
-      let v = fun r -> f r.accu in
-      (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> closure)
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s')))
+  if (&&)
+       ((&&)
+         ((&&)
+           (Z.leb 0
+             (Z.of_nat (add (Stdlib.Int.succ (Stdlib.Int.succ 0)) nvars)))
+           (Z.leb
+             (Z.of_nat (add (Stdlib.Int.succ (Stdlib.Int.succ 0)) nvars))
+             Int.max_signed))
+         (Z.leb Int.min_signed code_ofs))
+       (Z.leb code_ofs Int.max_signed)
+  then let stk = if Nat.ltb 0 nvars then s.accu :: s.stack else s.stack in
+       let vars = firstn nvars stk in
+       let rest = skipn nvars stk in
+       let closinfo = Val_int 0 in
+       let fields = (Val_int code_ofs) :: (closinfo :: vars) in
+       let (s', base_ptr) = heap_alloc s closure_tag fields in
+       let addr = match base_ptr with
+                  | Val_ptr a -> a
+                  | _ -> 0 in
+       let closure = Val_closure (addr, 0) in
+       Step
+       (set (fun s0 -> s0.stack) (fun f ->
+         let l = fun r -> f r.stack in
+         (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
+         extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+         hp = x.hp; next_addr = x.next_addr })) (fun _ -> rest)
+         (set (fun s0 -> s0.accu) (fun f ->
+           let v = fun r -> f r.accu in
+           (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
+           extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+           hp = x.hp; next_addr = x.next_addr })) (fun _ -> closure)
+           (set (fun s0 -> s0.pc) (fun f ->
+             let z0 = fun r -> f r.pc in
+             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
+             s')))
+  else Error
+         ('C'::('L'::('O'::('S'::('U'::('R'::('E'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))
 
 (** val handle_CLOSUREREC :
     int -> int -> int list -> int -> state -> step_result **)
 
 let handle_CLOSUREREC nfuncs nvars code_offsets pc' s =
-  let stk = if Nat.ltb 0 nvars then s.accu :: s.stack else s.stack in
-  let vars = firstn nvars stk in
-  let rest = skipn nvars stk in
-  (match code_offsets with
-   | [] ->
-     Error
-       ('C'::('L'::('O'::('S'::('U'::('R'::('E'::('R'::('E'::('C'::(':'::(' '::('n'::('o'::(' '::('c'::('o'::('d'::('e'::(' '::('o'::('f'::('f'::('s'::('e'::('t'::('s'::[])))))))))))))))))))))))))))
-   | _ :: _ ->
-     let closinfo = Val_int 0 in
-     let infix_hdr = Val_block (infix_tag, []) in
-     let build_closure_fields =
-       let rec build_closure_fields i = function
-       | [] -> vars
-       | ofs :: rest_ofs ->
-         if (=) i 0
-         then (Val_int
-                ofs) :: (closinfo :: (build_closure_fields (Stdlib.Int.succ
-                                       0) rest_ofs))
-         else infix_hdr :: ((Val_int
-                ofs) :: (closinfo :: (build_closure_fields (Stdlib.Int.succ
-                                       i) rest_ofs)))
-       in build_closure_fields
-     in
-     let fields = build_closure_fields 0 code_offsets in
-     let (s', base_ptr) = heap_alloc s closure_tag fields in
-     let addr = match base_ptr with
-                | Val_ptr a -> a
-                | _ -> 0 in
-     let closure_at = fun i ->
-       if (=) i 0
-       then Val_closure (addr, 0)
-       else Val_closure (addr,
-              (mul (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))) i))
-     in
-     let push_closures =
-       let rec push_closures i stk0 =
-         (fun fO fS n -> if n=0 then fO () else fS (n-1))
-           (fun _ -> stk0)
-           (fun i' ->
-           let stk' = push_closures i' stk0 in (closure_at i') :: stk')
-           i
-       in push_closures
-     in
-     let new_stack = push_closures nfuncs rest in
-     Step
-     (set (fun s0 -> s0.stack) (fun f ->
-       let l = fun r -> f r.stack in
-       (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-       extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-       hp = x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
-       (set (fun s0 -> s0.accu) (fun f ->
-         let v = fun r -> f r.accu in
-         (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-         extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-         hp = x.hp; next_addr = x.next_addr })) (fun _ -> closure_at 0)
-         (set (fun s0 -> s0.pc) (fun f ->
-           let z0 = fun r -> f r.pc in
-           (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-           x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-           x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-           s'))))
+  let offsets_wf =
+    let rec offsets_wf = function
+    | [] -> true
+    | code_ofs :: rest ->
+      (&&)
+        ((&&) (Z.leb Int.min_signed code_ofs) (Z.leb code_ofs Int.max_signed))
+        (offsets_wf rest)
+    in offsets_wf
+  in
+  let wf =
+    (&&) ((&&) (negb ((=) nfuncs 0)) ((=) (length code_offsets) nfuncs))
+      (offsets_wf code_offsets)
+  in
+  if wf
+  then let stk = if Nat.ltb 0 nvars then s.accu :: s.stack else s.stack in
+       let vars = firstn nvars stk in
+       let rest = skipn nvars stk in
+       (match code_offsets with
+        | [] ->
+          Error
+            ('C'::('L'::('O'::('S'::('U'::('R'::('E'::('R'::('E'::('C'::(':'::(' '::('n'::('o'::(' '::('c'::('o'::('d'::('e'::(' '::('o'::('f'::('f'::('s'::('e'::('t'::('s'::[])))))))))))))))))))))))))))
+        | _ :: _ ->
+          let closinfo = Val_int 0 in
+          let infix_hdr = Val_block (infix_tag, []) in
+          let build_closure_fields =
+            let rec build_closure_fields i = function
+            | [] -> vars
+            | ofs :: rest_ofs ->
+              if (=) i 0
+              then (Val_int
+                     ofs) :: (closinfo :: (build_closure_fields
+                                            (Stdlib.Int.succ 0) rest_ofs))
+              else infix_hdr :: ((Val_int
+                     ofs) :: (closinfo :: (build_closure_fields
+                                            (Stdlib.Int.succ i) rest_ofs)))
+            in build_closure_fields
+          in
+          let fields = build_closure_fields 0 code_offsets in
+          let (s', base_ptr) = heap_alloc s closure_tag fields in
+          let addr = match base_ptr with
+                     | Val_ptr a -> a
+                     | _ -> 0 in
+          let closure_at = fun i ->
+            if (=) i 0
+            then Val_closure (addr, 0)
+            else Val_closure (addr,
+                   (mul (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                     0))) i))
+          in
+          let push_closures =
+            let rec push_closures i stk0 =
+              (fun fO fS n -> if n=0 then fO () else fS (n-1))
+                (fun _ -> stk0)
+                (fun i' ->
+                let stk' = push_closures i' stk0 in (closure_at i') :: stk')
+                i
+            in push_closures
+          in
+          let new_stack = push_closures nfuncs rest in
+          Step
+          (set (fun s0 -> s0.stack) (fun f ->
+            let l = fun r -> f r.stack in
+            (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
+            extra_args = x.extra_args; global = x.global; trap_sp =
+            x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+            new_stack)
+            (set (fun s0 -> s0.accu) (fun f ->
+              let v = fun r -> f r.accu in
+              (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+              closure_at 0)
+              (set (fun s0 -> s0.pc) (fun f ->
+                let z0 = fun r -> f r.pc in
+                (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                env = x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> pc') s'))))
+  else Error
+         ('C'::('L'::('O'::('S'::('U'::('R'::('E'::('R'::('E'::('C'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))))
 
 (** val handle_OFFSETCLOSURE : int -> int -> state -> step_result **)
 
@@ -3260,49 +4574,58 @@ let handle_PUSHOFFSETCLOSURE ofs pc' s =
 (** val handle_GETGLOBAL : int -> int -> state -> step_result **)
 
 let handle_GETGLOBAL n0 pc' s =
-  match nth_error s.global n0 with
-  | Some v ->
-    Step
-      (set (fun s0 -> s0.accu) (fun f ->
-        let v0 = fun r -> f r.accu in
-        (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
-        (set (fun s0 -> s0.pc) (fun f ->
-          let z0 = fun r -> f r.pc in
-          (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-          x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-          x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s))
-  | None ->
-    Error
-      ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))))))))))))))))
+  if (&&) (Z.leb 0 (Z.of_nat n0)) (Z.leb (Z.of_nat n0) Int.max_signed)
+  then (match nth_error s.global n0 with
+        | Some v ->
+          Step
+            (set (fun s0 -> s0.accu) (fun f ->
+              let v0 = fun r -> f r.accu in
+              (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
+              (set (fun s0 -> s0.pc) (fun f ->
+                let z0 = fun r -> f r.pc in
+                (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                env = x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> pc') s))
+        | None ->
+          Error
+            ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))
+  else Error
+         ('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))))
 
 (** val handle_PUSHGETGLOBAL : int -> int -> state -> step_result **)
 
 let handle_PUSHGETGLOBAL n0 pc' s =
-  let new_stack = s.accu :: s.stack in
-  (match nth_error s.global n0 with
-   | Some v ->
-     Step
-       (set (fun s0 -> s0.stack) (fun f ->
-         let l = fun r -> f r.stack in
-         (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-         extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-         hp = x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
-         (set (fun s0 -> s0.accu) (fun f ->
-           let v0 = fun r -> f r.accu in
-           (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
-           x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-           x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)))
-   | None ->
-     Error
-       ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+  if (&&) (Z.leb 0 (Z.of_nat n0)) (Z.leb (Z.of_nat n0) Int.max_signed)
+  then let new_stack = s.accu :: s.stack in
+       (match nth_error s.global n0 with
+        | Some v ->
+          Step
+            (set (fun s0 -> s0.stack) (fun f ->
+              let l = fun r -> f r.stack in
+              (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+              new_stack)
+              (set (fun s0 -> s0.accu) (fun f ->
+                let v0 = fun r -> f r.accu in
+                (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+                x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> v)
+                (set (fun s0 -> s0.pc) (fun f ->
+                  let z0 = fun r -> f r.pc in
+                  (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                  env = x.env; extra_args = x.extra_args; global = x.global;
+                  trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                  (fun _ -> pc') s)))
+        | None ->
+          Error
+            ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('i'::('n'::('d'::('e'::('x'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[])))))))))))))))))))))))))))))))))))
+  else Error
+         ('P'::('U'::('S'::('H'::('G'::('E'::('T'::('G'::('L'::('O'::('B'::('A'::('L'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))))))))
 
 (** val handle_GETGLOBALFIELD : int -> int -> int -> state -> step_result **)
 
@@ -3392,127 +4715,74 @@ let handle_SETGLOBAL n0 pc' s =
 (** val handle_ATOM : int -> int -> state -> step_result **)
 
 let handle_ATOM t0 pc' s =
-  let (s', ptr) = heap_alloc s t0 [] in
-  Step
-  (set (fun s0 -> s0.accu) (fun f ->
-    let v = fun r -> f r.accu in
-    (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-    extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-    x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
-    (set (fun s0 -> s0.pc) (fun f ->
-      let z0 = fun r -> f r.pc in
-      (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> pc') s'))
+  if Z.leb (Z.of_nat t0) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))))))))))))))))))
+  then Step
+         (set (fun s0 -> s0.accu) (fun f ->
+           let v = fun r -> f r.accu in
+           (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
+           extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+           hp = x.hp; next_addr = x.next_addr })) (fun _ -> Val_block (t0,
+           []))
+           (set (fun s0 -> s0.pc) (fun f ->
+             let z0 = fun r -> f r.pc in
+             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
+             s))
+  else Error
+         ('A'::('T'::('O'::('M'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))
 
 (** val handle_PUSHATOM : int -> int -> state -> step_result **)
 
 let handle_PUSHATOM t0 pc' s =
-  let new_stack = s.accu :: s.stack in
-  let (s', ptr) = heap_alloc s t0 [] in
-  Step
-  (set (fun s0 -> s0.stack) (fun f ->
-    let l = fun r -> f r.stack in
-    (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-    extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-    x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
-    (set (fun s0 -> s0.accu) (fun f ->
-      let v = fun r -> f r.accu in
-      (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s')))
+  if Z.leb (Z.of_nat t0) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+       ((fun p->1+2*p) 1))))))))))))))))))))
+  then Step
+         (set (fun s0 -> s0.stack) (fun f ->
+           let l = fun r -> f r.stack in
+           (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
+           extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+           hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+           s.accu :: s.stack)
+           (set (fun s0 -> s0.accu) (fun f ->
+             let v = fun r -> f r.accu in
+             (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env =
+             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+             Val_block (t0, []))
+             (set (fun s0 -> s0.pc) (fun f ->
+               let z0 = fun r -> f r.pc in
+               (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+               x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+               x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+               pc') s)))
+  else Error
+         ('P'::('U'::('S'::('H'::('A'::('T'::('O'::('M'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))
 
 (** val handle_MAKEBLOCK : int -> int -> int -> state -> step_result **)
 
-let handle_MAKEBLOCK t0 size0 pc' s =
-  let fields = s.accu :: (firstn (Nat.sub size0 (Stdlib.Int.succ 0)) s.stack)
-  in
-  let new_stack = skipn (Nat.sub size0 (Stdlib.Int.succ 0)) s.stack in
-  let (s', ptr) = heap_alloc s t0 fields in
-  Step
-  (set (fun s0 -> s0.stack) (fun f ->
-    let l = fun r -> f r.stack in
-    (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-    extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-    x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
-    (set (fun s0 -> s0.accu) (fun f ->
-      let v = fun r -> f r.accu in
-      (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s')))
-
-(** val handle_MAKEBLOCK1 : int -> int -> state -> step_result **)
-
-let handle_MAKEBLOCK1 t0 pc' s =
-  let (s', ptr) = heap_alloc s t0 (s.accu :: []) in
-  Step
-  (set (fun s0 -> s0.accu) (fun f ->
-    let v = fun r -> f r.accu in
-    (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-    extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-    x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
-    (set (fun s0 -> s0.pc) (fun f ->
-      let z0 = fun r -> f r.pc in
-      (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> pc') s'))
-
-(** val handle_MAKEBLOCK2 : int -> int -> state -> step_result **)
-
-let handle_MAKEBLOCK2 t0 pc' s =
-  match s.stack with
-  | [] ->
-    Error
-      ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('2'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
-  | v1 :: rest ->
-    let (s', ptr) = heap_alloc s t0 (s.accu :: (v1 :: [])) in
-    Step
-    (set (fun s0 -> s0.stack) (fun f ->
-      let l = fun r -> f r.stack in
-      (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> rest)
-      (set (fun s0 -> s0.accu) (fun f ->
-        let v = fun r -> f r.accu in
-        (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
-        (set (fun s0 -> s0.pc) (fun f ->
-          let z0 = fun r -> f r.pc in
-          (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-          x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-          x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s')))
-
-(** val handle_MAKEBLOCK3 : int -> int -> state -> step_result **)
-
-let handle_MAKEBLOCK3 t0 pc' s =
-  match s.stack with
-  | [] ->
-    Error
-      ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('3'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
-  | v1 :: l ->
-    (match l with
-     | [] ->
-       Error
-         ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('3'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
-     | v2 :: rest ->
-       let (s', ptr) = heap_alloc s t0 (s.accu :: (v1 :: (v2 :: []))) in
+let handle_MAKEBLOCK t0 size1 pc' s =
+  if (<=) (Stdlib.Int.succ 0) size1
+  then let fields =
+         s.accu :: (firstn (Nat.sub size1 (Stdlib.Int.succ 0)) s.stack)
+       in
+       let new_stack = skipn (Nat.sub size1 (Stdlib.Int.succ 0)) s.stack in
+       let (s', ptr) = heap_alloc s t0 fields in
        Step
        (set (fun s0 -> s0.stack) (fun f ->
-         let l0 = fun r -> f r.stack in
-         (fun x -> { pc = x.pc; accu = x.accu; stack = (l0 x); env = x.env;
+         let l = fun r -> f r.stack in
+         (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
          extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-         hp = x.hp; next_addr = x.next_addr })) (fun _ -> rest)
+         hp = x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
          (set (fun s0 -> s0.accu) (fun f ->
            let v = fun r -> f r.accu in
            (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
@@ -3523,117 +4793,248 @@ let handle_MAKEBLOCK3 t0 pc' s =
              (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s'))))
+             s')))
+  else Error
+         ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))))
+
+(** val handle_MAKEBLOCK1 : int -> int -> state -> step_result **)
+
+let handle_MAKEBLOCK1 t0 pc' s =
+  if (&&) (Z.leb 0 (Z.of_nat t0))
+       (Z.leb (Z.of_nat t0) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         1))))))))
+  then let (s', ptr) = heap_alloc s t0 (s.accu :: []) in
+       Step
+       (set (fun s0 -> s0.accu) (fun f ->
+         let v = fun r -> f r.accu in
+         (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
+         extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+         hp = x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
+         (set (fun s0 -> s0.pc) (fun f ->
+           let z0 = fun r -> f r.pc in
+           (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+           x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+           x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
+           s'))
+  else Error
+         ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('1'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))))
+
+(** val handle_MAKEBLOCK2 : int -> int -> state -> step_result **)
+
+let handle_MAKEBLOCK2 t0 pc' s =
+  if (&&) (Z.leb 0 (Z.of_nat t0))
+       (Z.leb (Z.of_nat t0) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         1))))))))
+  then (match s.stack with
+        | [] ->
+          Error
+            ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('2'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
+        | v1 :: rest ->
+          let (s', ptr) = heap_alloc s t0 (s.accu :: (v1 :: [])) in
+          Step
+          (set (fun s0 -> s0.stack) (fun f ->
+            let l = fun r -> f r.stack in
+            (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
+            extra_args = x.extra_args; global = x.global; trap_sp =
+            x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> rest)
+            (set (fun s0 -> s0.accu) (fun f ->
+              let v = fun r -> f r.accu in
+              (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+              ptr)
+              (set (fun s0 -> s0.pc) (fun f ->
+                let z0 = fun r -> f r.pc in
+                (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                env = x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> pc') s'))))
+  else Error
+         ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('2'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))))
+
+(** val handle_MAKEBLOCK3 : int -> int -> state -> step_result **)
+
+let handle_MAKEBLOCK3 t0 pc' s =
+  if (&&) (Z.leb 0 (Z.of_nat t0))
+       (Z.leb (Z.of_nat t0) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+         1))))))))
+  then (match s.stack with
+        | [] ->
+          Error
+            ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('3'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
+        | v1 :: l ->
+          (match l with
+           | [] ->
+             Error
+               ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('3'::(':'::(' '::('s'::('t'::('a'::('c'::('k'::(' '::('u'::('n'::('d'::('e'::('r'::('f'::('l'::('o'::('w'::[])))))))))))))))))))))))))))
+           | v2 :: rest ->
+             let (s', ptr) = heap_alloc s t0 (s.accu :: (v1 :: (v2 :: []))) in
+             Step
+             (set (fun s0 -> s0.stack) (fun f ->
+               let l0 = fun r -> f r.stack in
+               (fun x -> { pc = x.pc; accu = x.accu; stack = (l0 x); env =
+               x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+               x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+               rest)
+               (set (fun s0 -> s0.accu) (fun f ->
+                 let v = fun r -> f r.accu in
+                 (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env =
+                 x.env; extra_args = x.extra_args; global = x.global;
+                 trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                 (fun _ -> ptr)
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s')))))
+  else Error
+         ('M'::('A'::('K'::('E'::('B'::('L'::('O'::('C'::('K'::('3'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))))
 
 (** val handle_MAKEFLOATBLOCK : int -> int -> state -> step_result **)
 
 let handle_MAKEFLOATBLOCK n0 pc' s =
-  let fields = s.accu :: (firstn (Nat.sub n0 (Stdlib.Int.succ 0)) s.stack) in
-  let new_stack = skipn (Nat.sub n0 (Stdlib.Int.succ 0)) s.stack in
-  let (s', ptr) =
-    heap_alloc s (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-      0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-      fields
-  in
-  Step
-  (set (fun s0 -> s0.stack) (fun f ->
-    let l = fun r -> f r.stack in
-    (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
-    extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-    x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
-    (set (fun s0 -> s0.accu) (fun f ->
-      let v = fun r -> f r.accu in
-      (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s')))
+  if (<=) (Stdlib.Int.succ 0) n0
+  then let fields =
+         s.accu :: (firstn (Nat.sub n0 (Stdlib.Int.succ 0)) s.stack)
+       in
+       let new_stack = skipn (Nat.sub n0 (Stdlib.Int.succ 0)) s.stack in
+       let (s', ptr) =
+         heap_alloc s (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+           (Stdlib.Int.succ (Stdlib.Int.succ
+           0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+           fields
+       in
+       Step
+       (set (fun s0 -> s0.stack) (fun f ->
+         let l = fun r -> f r.stack in
+         (fun x -> { pc = x.pc; accu = x.accu; stack = (l x); env = x.env;
+         extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+         hp = x.hp; next_addr = x.next_addr })) (fun _ -> new_stack)
+         (set (fun s0 -> s0.accu) (fun f ->
+           let v = fun r -> f r.accu in
+           (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
+           extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+           hp = x.hp; next_addr = x.next_addr })) (fun _ -> ptr)
+           (set (fun s0 -> s0.pc) (fun f ->
+             let z0 = fun r -> f r.pc in
+             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
+             s')))
+  else Error
+         ('M'::('A'::('K'::('E'::('F'::('L'::('O'::('A'::('T'::('B'::('L'::('O'::('C'::('K'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))))))))
 
 (** val handle_GETFIELD : int -> int -> state -> step_result **)
 
 let handle_GETFIELD n0 pc' s =
-  match field_or_heap s s.accu n0 with
-  | Some v ->
-    Step
-      (set (fun s0 -> s0.accu) (fun f ->
-        let v0 = fun r -> f r.accu in
-        (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
-        (set (fun s0 -> s0.pc) (fun f ->
-          let z0 = fun r -> f r.pc in
-          (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-          x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-          x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s))
-  | None ->
-    Error
-      ('G'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[])))))))))))))))))))))))
+  if (&&) (Z.leb Int.min_signed (Z.of_nat n0))
+       (Z.leb (Z.of_nat n0) Int.max_signed)
+  then (match field_or_heap s s.accu n0 with
+        | Some v ->
+          Step
+            (set (fun s0 -> s0.accu) (fun f ->
+              let v0 = fun r -> f r.accu in
+              (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
+              (set (fun s0 -> s0.pc) (fun f ->
+                let z0 = fun r -> f r.pc in
+                (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                env = x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> pc') s))
+        | None ->
+          Error
+            ('G'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('a'::('c'::('c'::('e'::('s'::('s'::(' '::('f'::('a'::('i'::('l'::('e'::('d'::[]))))))))))))))))))))))))
+  else Error
+         ('G'::('E'::('T'::('F'::('I'::('E'::('L'::('D'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))
 
 (** val handle_GETFLOATFIELD : int -> int -> state -> step_result **)
 
@@ -4280,17 +5681,21 @@ let handle_C_CALL nargs prim_idx pc' s =
 (** val handle_CONSTINT : int -> int -> state -> step_result **)
 
 let handle_CONSTINT n0 pc' s =
-  Step
-    (set (fun s0 -> s0.accu) (fun f ->
-      let v = fun r -> f r.accu in
-      (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> Val_int n0)
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s))
+  if (&&) (Z.leb Int.min_signed n0) (Z.leb n0 Int.max_signed)
+  then Step
+         (set (fun s0 -> s0.accu) (fun f ->
+           let v = fun r -> f r.accu in
+           (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
+           extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
+           hp = x.hp; next_addr = x.next_addr })) (fun _ -> Val_int n0)
+           (set (fun s0 -> s0.pc) (fun f ->
+             let z0 = fun r -> f r.pc in
+             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
+             s))
+  else Error
+         ('C'::('O'::('N'::('S'::('T'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))))
 
 (** val handle_PUSHCONSTINT : int -> int -> state -> step_result **)
 
@@ -4964,23 +6369,28 @@ let handle_GEINT pc' s =
 (** val handle_OFFSETINT : int -> int -> state -> step_result **)
 
 let handle_OFFSETINT n0 pc' s =
-  match s.accu with
-  | Val_int a ->
-    Step
-      (set (fun s0 -> s0.accu) (fun f ->
-        let v = fun r -> f r.accu in
-        (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> Val_int
-        (Z.add a n0))
-        (set (fun s0 -> s0.pc) (fun f ->
-          let z0 = fun r -> f r.pc in
-          (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-          x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-          x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s))
-  | _ ->
-    Error
-      ('O'::('F'::('F'::('S'::('E'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))))
+  if (&&) (Z.leb Int.min_signed (Z.mul n0 ((fun p->2*p) 1)))
+       (Z.leb (Z.mul n0 ((fun p->2*p) 1)) Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          Step
+            (set (fun s0 -> s0.accu) (fun f ->
+              let v = fun r -> f r.accu in
+              (fun x -> { pc = x.pc; accu = (v x); stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+              Val_int (Z.add a n0))
+              (set (fun s0 -> s0.pc) (fun f ->
+                let z0 = fun r -> f r.pc in
+                (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                env = x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> pc') s))
+        | _ ->
+          Error
+            ('O'::('F'::('F'::('S'::('E'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))))
+  else Error
+         ('O'::('F'::('F'::('S'::('E'::('T'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))))
 
 (** val handle_OFFSETREF : int -> int -> state -> step_result **)
 
@@ -5188,154 +6598,174 @@ let handle_GETDYNMET pc' s =
 (** val handle_BEQ : int -> int -> int -> state -> step_result **)
 
 let handle_BEQ n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.eqb a n0
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-  | _ ->
-    Step
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc') s)
+  if (&&) (Z.leb Int.min_signed n0) (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.eqb a n0
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+        | _ ->
+          Step
+            (set (fun s0 -> s0.pc) (fun f ->
+              let z0 = fun r -> f r.pc in
+              (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+              pc') s))
+  else Error
+         ('B'::('E'::('Q'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))
 
 (** val handle_BNEQ : int -> int -> int -> state -> step_result **)
 
 let handle_BNEQ n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.eqb a n0
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-  | _ ->
-    Step
-      (set (fun s0 -> s0.pc) (fun f ->
-        let z0 = fun r -> f r.pc in
-        (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-        extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp;
-        hp = x.hp; next_addr = x.next_addr })) (fun _ -> target) s)
+  if (&&) (Z.leb Int.min_signed n0) (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.eqb a n0
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+        | _ ->
+          Step
+            (set (fun s0 -> s0.pc) (fun f ->
+              let z0 = fun r -> f r.pc in
+              (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
+              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
+              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
+              target) s))
+  else Error
+         ('B'::('N'::('E'::('Q'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))
 
 (** val handle_BLTINT : int -> int -> int -> state -> step_result **)
 
 let handle_BLTINT n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.ltb n0 a
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-  | _ ->
-    Error
-      ('B'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))
+  if (&&) (Z.leb Int.min_signed n0) (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.ltb n0 a
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+        | _ ->
+          Error
+            ('B'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
+  else Error
+         ('B'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))
 
 (** val handle_BLEINT : int -> int -> int -> state -> step_result **)
 
 let handle_BLEINT n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.leb n0 a
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-  | _ ->
-    Error
-      ('B'::('L'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))
+  if (&&) (Z.leb Int.min_signed n0) (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.leb n0 a
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+        | _ ->
+          Error
+            ('B'::('L'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
+  else Error
+         ('B'::('L'::('E'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))
 
 (** val handle_BGTINT : int -> int -> int -> state -> step_result **)
 
 let handle_BGTINT n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.gtb n0 a
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-  | _ ->
-    Error
-      ('B'::('G'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))
+  if (&&) (Z.leb Int.min_signed n0) (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.gtb n0 a
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+        | _ ->
+          Error
+            ('B'::('G'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
+  else Error
+         ('B'::('G'::('T'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))
 
 (** val handle_BGEINT : int -> int -> int -> state -> step_result **)
 
 let handle_BGEINT n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.geb n0 a
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-  | _ ->
-    Error
-      ('B'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))
+  if (&&) (Z.leb Int.min_signed n0) (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.geb n0 a
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+        | _ ->
+          Error
+            ('B'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
+  else Error
+         ('B'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[])))))))))))))))))))))))))
 
 (** val handle_ULTINT : int -> state -> step_result **)
 
@@ -5416,742 +6846,320 @@ let handle_UGEINT pc' s =
 (** val handle_BULTINT : int -> int -> int -> state -> step_result **)
 
 let handle_BULTINT n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.ltb (z_flip_sign n0) (z_flip_sign a)
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-  | _ ->
-    Error
-      ('B'::('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
+  if (&&) ((&&) (Z.leb 0 n0) (Z.leb Int.min_signed n0))
+       (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.ltb (z_flip_sign n0) (z_flip_sign a)
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+        | _ ->
+          Error
+            ('B'::('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))
+  else Error
+         ('B'::('U'::('L'::('T'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))
 
 (** val handle_BUGEINT : int -> int -> int -> state -> step_result **)
 
 let handle_BUGEINT n0 target pc' s =
-  match s.accu with
-  | Val_int a ->
-    if Z.geb (z_flip_sign n0) (z_flip_sign a)
-    then Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ ->
-             target) s)
-    else Step
-           (set (fun s0 -> s0.pc) (fun f ->
-             let z0 = fun r -> f r.pc in
-             (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env =
-             x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-             x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> pc')
-             s)
-  | _ ->
-    Error
-      ('B'::('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[])))))))))))))))))))))))
+  if (&&) ((&&) (Z.leb 0 n0) (Z.leb Int.min_signed n0))
+       (Z.leb n0 Int.max_signed)
+  then (match s.accu with
+        | Val_int a ->
+          if Z.geb (z_flip_sign n0) (z_flip_sign a)
+          then Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> target) s)
+          else Step
+                 (set (fun s0 -> s0.pc) (fun f ->
+                   let z0 = fun r -> f r.pc in
+                   (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack;
+                   env = x.env; extra_args = x.extra_args; global = x.global;
+                   trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                   (fun _ -> pc') s)
+        | _ ->
+          Error
+            ('B'::('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('n'::('o'::('t'::(' '::('a'::('n'::(' '::('i'::('n'::('t'::('e'::('g'::('e'::('r'::[]))))))))))))))))))))))))
+  else Error
+         ('B'::('U'::('G'::('E'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))
 
 (** val handle_STOP : state -> step_result **)
 
 let handle_STOP s =
   Halt s.accu
 
-(** val handle_EVENT : int -> state -> step_result **)
+(** val handle_instr : instruction -> int -> state -> step_result **)
 
-let handle_EVENT pc' s =
-  Step
-    (set (fun s0 -> s0.pc) (fun f ->
-      let z0 = fun r -> f r.pc in
-      (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> pc') s)
+let handle_instr instr pc' s =
+  match instr with
+  | ACC n0 -> handle_ACC n0 pc' s
+  | PUSH -> handle_PUSH pc' s
+  | PUSHACC n0 -> handle_PUSHACC n0 pc' s
+  | POP n0 -> handle_POP n0 pc' s
+  | ASSIGN n0 -> handle_ASSIGN n0 pc' s
+  | ENVACC n0 -> handle_ENVACC n0 pc' s
+  | PUSHENVACC n0 -> handle_PUSHENVACC n0 pc' s
+  | PUSH_RETADDR ret_addr -> handle_PUSH_RETADDR ret_addr pc' s
+  | APPLY n0 -> handle_APPLY n0 s
+  | APPLY1 -> handle_APPLY1 pc' s
+  | APPLY2 -> handle_APPLY2 pc' s
+  | APPLY3 -> handle_APPLY3 pc' s
+  | APPTERM (nargs, slotsize) -> handle_APPTERM nargs slotsize s
+  | APPTERM1 slotsize -> handle_APPTERM1 slotsize s
+  | APPTERM2 slotsize -> handle_APPTERM2 slotsize s
+  | APPTERM3 slotsize -> handle_APPTERM3 slotsize s
+  | RETURN stacksize -> handle_RETURN stacksize s
+  | RESTART -> handle_RESTART pc' s
+  | GRAB required -> handle_GRAB required pc' s
+  | CLOSURE (nvars, code_ofs) -> handle_CLOSURE nvars code_ofs pc' s
+  | CLOSUREREC (nfuncs, nvars, code_offsets) ->
+    handle_CLOSUREREC nfuncs nvars code_offsets pc' s
+  | OFFSETCLOSURE ofs -> handle_OFFSETCLOSURE ofs pc' s
+  | PUSHOFFSETCLOSURE ofs -> handle_PUSHOFFSETCLOSURE ofs pc' s
+  | GETGLOBAL n0 -> handle_GETGLOBAL n0 pc' s
+  | PUSHGETGLOBAL n0 -> handle_PUSHGETGLOBAL n0 pc' s
+  | GETGLOBALFIELD (n0, p) -> handle_GETGLOBALFIELD n0 p pc' s
+  | PUSHGETGLOBALFIELD (n0, p) -> handle_PUSHGETGLOBALFIELD n0 p pc' s
+  | SETGLOBAL n0 -> handle_SETGLOBAL n0 pc' s
+  | ATOM t0 -> handle_ATOM t0 pc' s
+  | PUSHATOM t0 -> handle_PUSHATOM t0 pc' s
+  | MAKEBLOCK (t0, size1) -> handle_MAKEBLOCK t0 size1 pc' s
+  | MAKEBLOCK1 t0 -> handle_MAKEBLOCK1 t0 pc' s
+  | MAKEBLOCK2 t0 -> handle_MAKEBLOCK2 t0 pc' s
+  | MAKEBLOCK3 t0 -> handle_MAKEBLOCK3 t0 pc' s
+  | MAKEFLOATBLOCK n0 -> handle_MAKEFLOATBLOCK n0 pc' s
+  | GETFIELD n0 -> handle_GETFIELD n0 pc' s
+  | GETFLOATFIELD n0 -> handle_GETFLOATFIELD n0 pc' s
+  | SETFIELD n0 -> handle_SETFIELD n0 pc' s
+  | SETFLOATFIELD n0 -> handle_SETFLOATFIELD n0 pc' s
+  | VECTLENGTH -> handle_VECTLENGTH pc' s
+  | GETVECTITEM -> handle_GETVECTITEM pc' s
+  | SETVECTITEM -> handle_SETVECTITEM pc' s
+  | GETBYTESCHAR -> handle_GETSTRINGCHAR pc' s
+  | SETBYTESCHAR -> handle_SETBYTESCHAR pc' s
+  | GETSTRINGCHAR -> handle_GETSTRINGCHAR pc' s
+  | BRANCH target -> handle_BRANCH target s
+  | BRANCHIF target -> handle_BRANCHIF target pc' s
+  | BRANCHIFNOT target -> handle_BRANCHIFNOT target pc' s
+  | SWITCH (_nc, _nb, const_targets, block_targets) ->
+    handle_SWITCH _nc _nb const_targets block_targets s
+  | BOOLNOT -> handle_BOOLNOT pc' s
+  | PUSHTRAP handler_pc -> handle_PUSHTRAP handler_pc pc' s
+  | POPTRAP -> handle_POPTRAP pc' s
+  | CHECK_SIGNALS -> handle_CHECK_SIGNALS pc' s
+  | C_CALL (nargs, prim_idx) -> handle_C_CALL nargs prim_idx pc' s
+  | CONSTINT n0 -> handle_CONSTINT n0 pc' s
+  | PUSHCONSTINT n0 -> handle_PUSHCONSTINT n0 pc' s
+  | NEGINT -> handle_NEGINT pc' s
+  | ADDINT -> handle_ADDINT pc' s
+  | SUBINT -> handle_SUBINT pc' s
+  | MULINT -> handle_MULINT pc' s
+  | DIVINT -> handle_DIVINT pc' s
+  | MODINT -> handle_MODINT pc' s
+  | ANDINT -> handle_ANDINT pc' s
+  | ORINT -> handle_ORINT pc' s
+  | XORINT -> handle_XORINT pc' s
+  | LSLINT -> handle_LSLINT pc' s
+  | LSRINT -> handle_LSRINT pc' s
+  | ASRINT -> handle_ASRINT pc' s
+  | EQ -> handle_EQ pc' s
+  | NEQ -> handle_NEQ pc' s
+  | LTINT -> handle_LTINT pc' s
+  | LEINT -> handle_LEINT pc' s
+  | GTINT -> handle_GTINT pc' s
+  | GEINT -> handle_GEINT pc' s
+  | OFFSETINT n0 -> handle_OFFSETINT n0 pc' s
+  | OFFSETREF n0 -> handle_OFFSETREF n0 pc' s
+  | ISINT -> handle_ISINT pc' s
+  | GETMETHOD -> handle_GETMETHOD pc' s
+  | GETPUBMET tag -> handle_GETPUBMET tag pc' s
+  | GETDYNMET -> handle_GETDYNMET pc' s
+  | BEQ (n0, target) -> handle_BEQ n0 target pc' s
+  | BNEQ (n0, target) -> handle_BNEQ n0 target pc' s
+  | BLTINT (n0, target) -> handle_BLTINT n0 target pc' s
+  | BLEINT (n0, target) -> handle_BLEINT n0 target pc' s
+  | BGTINT (n0, target) -> handle_BGTINT n0 target pc' s
+  | BGEINT (n0, target) -> handle_BGEINT n0 target pc' s
+  | ULTINT -> handle_ULTINT pc' s
+  | UGEINT -> handle_UGEINT pc' s
+  | BULTINT (n0, target) -> handle_BULTINT n0 target pc' s
+  | BUGEINT (n0, target) -> handle_BUGEINT n0 target pc' s
+  | STOP -> handle_STOP s
+  | _ -> do_raise s.accu s
 
-(** val handle_BREAK : int -> state -> step_result **)
+module type HandleInstrSpec =
+ sig
+  val handle_instr : instruction -> int -> state -> step_result
+ end
 
-let handle_BREAK pc' s =
-  Step
-    (set (fun s0 -> s0.pc) (fun f ->
-      let z0 = fun r -> f r.pc in
-      (fun x -> { pc = (z0 x); accu = x.accu; stack = x.stack; env = x.env;
-      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
-      x.hp; next_addr = x.next_addr })) (fun _ -> pc') s)
+type 'a array = 'a Code_arr.t
 
-(** val step : instruction array -> state -> step_result **)
+(** val make : int -> 'a1 -> 'a1 array **)
 
-let step code s =
-  match fetch_instr code s.pc with
-  | Some instr ->
-    let pc' = Z.add s.pc 1 in
-    (match instr with
-     | ACC n0 -> handle_ACC n0 pc' s
-     | PUSH -> handle_PUSH pc' s
-     | PUSHACC n0 -> handle_PUSHACC n0 pc' s
-     | POP n0 -> handle_POP n0 pc' s
-     | ASSIGN n0 -> handle_ASSIGN n0 pc' s
-     | ENVACC n0 -> handle_ENVACC n0 pc' s
-     | PUSHENVACC n0 -> handle_PUSHENVACC n0 pc' s
-     | PUSH_RETADDR ret_addr -> handle_PUSH_RETADDR ret_addr pc' s
-     | APPLY n0 -> handle_APPLY n0 s
-     | APPLY1 -> handle_APPLY1 pc' s
-     | APPLY2 -> handle_APPLY2 pc' s
-     | APPLY3 -> handle_APPLY3 pc' s
-     | APPTERM (nargs, slotsize) -> handle_APPTERM nargs slotsize s
-     | APPTERM1 slotsize -> handle_APPTERM1 slotsize s
-     | APPTERM2 slotsize -> handle_APPTERM2 slotsize s
-     | APPTERM3 slotsize -> handle_APPTERM3 slotsize s
-     | RETURN stacksize -> handle_RETURN stacksize s
-     | RESTART -> handle_RESTART pc' s
-     | GRAB required -> handle_GRAB required pc' s
-     | CLOSURE (nvars, code_ofs) -> handle_CLOSURE nvars code_ofs pc' s
-     | CLOSUREREC (nfuncs, nvars, code_offsets) ->
-       handle_CLOSUREREC nfuncs nvars code_offsets pc' s
-     | OFFSETCLOSURE ofs -> handle_OFFSETCLOSURE ofs pc' s
-     | PUSHOFFSETCLOSURE ofs -> handle_PUSHOFFSETCLOSURE ofs pc' s
-     | GETGLOBAL n0 -> handle_GETGLOBAL n0 pc' s
-     | PUSHGETGLOBAL n0 -> handle_PUSHGETGLOBAL n0 pc' s
-     | GETGLOBALFIELD (n0, p) -> handle_GETGLOBALFIELD n0 p pc' s
-     | PUSHGETGLOBALFIELD (n0, p) -> handle_PUSHGETGLOBALFIELD n0 p pc' s
-     | SETGLOBAL n0 -> handle_SETGLOBAL n0 pc' s
-     | ATOM t0 -> handle_ATOM t0 pc' s
-     | PUSHATOM t0 -> handle_PUSHATOM t0 pc' s
-     | MAKEBLOCK (t0, size0) -> handle_MAKEBLOCK t0 size0 pc' s
-     | MAKEBLOCK1 t0 -> handle_MAKEBLOCK1 t0 pc' s
-     | MAKEBLOCK2 t0 -> handle_MAKEBLOCK2 t0 pc' s
-     | MAKEBLOCK3 t0 -> handle_MAKEBLOCK3 t0 pc' s
-     | MAKEFLOATBLOCK n0 -> handle_MAKEFLOATBLOCK n0 pc' s
-     | GETFIELD n0 -> handle_GETFIELD n0 pc' s
-     | GETFLOATFIELD n0 -> handle_GETFLOATFIELD n0 pc' s
-     | SETFIELD n0 -> handle_SETFIELD n0 pc' s
-     | SETFLOATFIELD n0 -> handle_SETFLOATFIELD n0 pc' s
-     | VECTLENGTH -> handle_VECTLENGTH pc' s
-     | GETVECTITEM -> handle_GETVECTITEM pc' s
-     | SETVECTITEM -> handle_SETVECTITEM pc' s
-     | GETBYTESCHAR -> handle_GETSTRINGCHAR pc' s
-     | SETBYTESCHAR -> handle_SETBYTESCHAR pc' s
-     | GETSTRINGCHAR -> handle_GETSTRINGCHAR pc' s
-     | BRANCH target -> handle_BRANCH target s
-     | BRANCHIF target -> handle_BRANCHIF target pc' s
-     | BRANCHIFNOT target -> handle_BRANCHIFNOT target pc' s
-     | SWITCH (_nc, _nb, const_targets, block_targets) ->
-       handle_SWITCH _nc _nb const_targets block_targets s
-     | BOOLNOT -> handle_BOOLNOT pc' s
-     | PUSHTRAP handler_pc -> handle_PUSHTRAP handler_pc pc' s
-     | POPTRAP -> handle_POPTRAP pc' s
-     | CHECK_SIGNALS -> handle_CHECK_SIGNALS pc' s
-     | C_CALL (nargs, prim_idx) -> handle_C_CALL nargs prim_idx pc' s
-     | CONSTINT n0 -> handle_CONSTINT n0 pc' s
-     | PUSHCONSTINT n0 -> handle_PUSHCONSTINT n0 pc' s
-     | NEGINT -> handle_NEGINT pc' s
-     | ADDINT -> handle_ADDINT pc' s
-     | SUBINT -> handle_SUBINT pc' s
-     | MULINT -> handle_MULINT pc' s
-     | DIVINT -> handle_DIVINT pc' s
-     | MODINT -> handle_MODINT pc' s
-     | ANDINT -> handle_ANDINT pc' s
-     | ORINT -> handle_ORINT pc' s
-     | XORINT -> handle_XORINT pc' s
-     | LSLINT -> handle_LSLINT pc' s
-     | LSRINT -> handle_LSRINT pc' s
-     | ASRINT -> handle_ASRINT pc' s
-     | EQ -> handle_EQ pc' s
-     | NEQ -> handle_NEQ pc' s
-     | LTINT -> handle_LTINT pc' s
-     | LEINT -> handle_LEINT pc' s
-     | GTINT -> handle_GTINT pc' s
-     | GEINT -> handle_GEINT pc' s
-     | OFFSETINT n0 -> handle_OFFSETINT n0 pc' s
-     | OFFSETREF n0 -> handle_OFFSETREF n0 pc' s
-     | ISINT -> handle_ISINT pc' s
-     | GETMETHOD -> handle_GETMETHOD pc' s
-     | GETPUBMET tag -> handle_GETPUBMET tag pc' s
-     | GETDYNMET -> handle_GETDYNMET pc' s
-     | BEQ (n0, target) -> handle_BEQ n0 target pc' s
-     | BNEQ (n0, target) -> handle_BNEQ n0 target pc' s
-     | BLTINT (n0, target) -> handle_BLTINT n0 target pc' s
-     | BLEINT (n0, target) -> handle_BLEINT n0 target pc' s
-     | BGTINT (n0, target) -> handle_BGTINT n0 target pc' s
-     | BGEINT (n0, target) -> handle_BGEINT n0 target pc' s
-     | ULTINT -> handle_ULTINT pc' s
-     | UGEINT -> handle_UGEINT pc' s
-     | BULTINT (n0, target) -> handle_BULTINT n0 target pc' s
-     | BUGEINT (n0, target) -> handle_BUGEINT n0 target pc' s
-     | STOP -> handle_STOP s
-     | EVENT -> handle_EVENT pc' s
-     | BREAK -> handle_BREAK pc' s
-     | PERFORM ->
-       Error
-         ('P'::('E'::('R'::('F'::('O'::('R'::('M'::(':'::(' '::('e'::('f'::('f'::('e'::('c'::('t'::('s'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))))
-     | RESUME ->
-       Error
-         ('R'::('E'::('S'::('U'::('M'::('E'::(':'::(' '::('e'::('f'::('f'::('e'::('c'::('t'::('s'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))))
-     | RESUMETERM _ ->
-       Error
-         ('R'::('E'::('S'::('U'::('M'::('E'::('T'::('E'::('R'::('M'::(':'::(' '::('e'::('f'::('f'::('e'::('c'::('t'::('s'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[])))))))))))))))))))))))))))))))))
-     | REPERFORMTERM _ ->
-       Error
-         ('R'::('E'::('P'::('E'::('R'::('F'::('O'::('R'::('M'::('T'::('E'::('R'::('M'::(':'::(' '::('e'::('f'::('f'::('e'::('c'::('t'::('s'::(' '::('n'::('o'::('t'::(' '::('s'::('u'::('p'::('p'::('o'::('r'::('t'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))
-     | _ -> do_raise s.accu s)
-  | None ->
-    Error
-      ('p'::('c'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))
+let make = Code_arr.make
 
-(** val run_micro : int -> instruction array -> state -> bcmicro **)
+(** val get : 'a1 array -> int -> 'a1 **)
 
-let rec run_micro fuel code s =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ -> MFuel s)
-    (fun fuel' ->
-    match step code s with
-    | Step s' -> run_micro fuel' code s'
-    | Halt v -> MRet v
-    | Error msg -> MErr msg
-    | CCall_request (prim_idx, args, cont) ->
-      MVis (prim_idx, args, (fun result0 ->
-        match result0 with
-        | Some v ->
-          run_micro fuel' code
-            (set (fun s0 -> s0.accu) (fun f ->
-              let v0 = fun r -> f r.accu in
-              (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
-              x.env; extra_args = x.extra_args; global = x.global; trap_sp =
-              x.trap_sp; hp = x.hp; next_addr = x.next_addr })) (fun _ -> v)
-              cont)
-        | None ->
-          MErr
-            ('C'::(' '::('c'::('a'::('l'::('l'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::('e'::('d'::(' '::('N'::('o'::('n'::('e'::[])))))))))))))))))))))))
-    fuel
+let get = Code_arr.get
 
-(** val handle_bcmicro :
+(** val set0 : 'a1 array -> int -> 'a1 -> 'a1 array **)
+
+let set0 = Code_arr.set
+
+(** val length1 : 'a1 array -> int **)
+
+let length1 = Code_arr.length
+
+(** val fetch_instr : instruction array -> int -> instruction option **)
+
+let fetch_instr code pc0 =
+  let idx = of_Z pc0 in
+  if ltb0 idx (length1 code) then Some (get code idx) else None
+
+(** val list_to_code_array : instruction list -> instruction array **)
+
+let list_to_code_array l =
+  let len = of_Z (Z.of_nat (length l)) in
+  let arr = make len STOP in
+  let rec go i rest a =
+    match rest with
+    | [] -> a
+    | x :: xs -> go (Stdlib.Int.succ i) xs (set0 a (of_Z (Z.of_nat i)) x)
+  in go 0 l arr
+
+module Coq_Make =
+ functor (H:HandleInstrSpec) ->
+ struct
+  (** val step : instruction array -> state -> step_result **)
+
+  let step code s =
+    match fetch_instr code s.pc with
+    | Some instr -> H.handle_instr instr (Z.add s.pc 1) s
+    | None ->
+      Error
+        ('p'::('c'::(' '::('o'::('u'::('t'::(' '::('o'::('f'::(' '::('b'::('o'::('u'::('n'::('d'::('s'::[]))))))))))))))))
+
+  (** val run_micro : int -> instruction array -> state -> bcmicro **)
+
+  let rec run_micro fuel code s =
+    (fun fO fS n -> if n=0 then fO () else fS (n-1))
+      (fun _ -> MFuel s)
+      (fun fuel' ->
+      match step code s with
+      | Step s' -> run_micro fuel' code s'
+      | Halt v -> MRet v
+      | Error msg -> MErr msg
+      | CCall_request (prim_idx, args, cont) ->
+        MVis (prim_idx, args, (fun result0 ->
+          match result0 with
+          | Some v ->
+            run_micro fuel' code
+              (set (fun s0 -> s0.accu) (fun f ->
+                let v0 = fun r -> f r.accu in
+                (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env =
+                x.env; extra_args = x.extra_args; global = x.global;
+                trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                (fun _ -> v) cont)
+          | None ->
+            MErr
+              ('C'::(' '::('c'::('a'::('l'::('l'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::('e'::('d'::(' '::('N'::('o'::('n'::('e'::[])))))))))))))))))))))))
+      fuel
+
+  (** val handle_bcmicro :
+      int -> bcmicro -> (int -> value list -> value option) -> run_result **)
+
+  let rec handle_bcmicro fuel t0 h =
+    (fun fO fS n -> if n=0 then fO () else fS (n-1))
+      (fun _ ->
+      match t0 with
+      | MFuel s -> Out_of_fuel s
+      | _ ->
+        Run_error
+          ('h'::('a'::('n'::('d'::('l'::('e'::('r'::(' '::('f'::('u'::('e'::('l'::(' '::('e'::('x'::('h'::('a'::('u'::('s'::('t'::('e'::('d'::[])))))))))))))))))))))))
+      (fun fuel' ->
+      match t0 with
+      | MRet v -> Finished v
+      | MErr msg -> Run_error msg
+      | MFuel s -> Out_of_fuel s
+      | MVis (idx, args, k) -> handle_bcmicro fuel' (k (h idx args)) h)
+      fuel
+
+  (** val run :
+      int -> instruction array -> state -> (int -> value list -> value
+      option) -> run_result **)
+
+  let run fuel code s handle_ccall =
+    handle_bcmicro fuel (run_micro fuel code s) handle_ccall
+
+  (** val run_pure : int -> instruction array -> value list -> run_result **)
+
+  let run_pure fuel code global_data =
+    run fuel code (initial_state global_data) (fun _ _ -> None)
+ end
+
+module Check =
+ struct
+  (** val handle_instr : instruction -> int -> state -> step_result **)
+
+  let handle_instr =
+    handle_instr
+ end
+
+module Interp = Coq_Make(Check)
+
+(** val step0 : instruction array -> state -> step_result **)
+
+let step0 =
+  Interp.step
+
+(** val run_micro0 : int -> instruction array -> state -> bcmicro **)
+
+let run_micro0 =
+  Interp.run_micro
+
+(** val handle_bcmicro0 :
     int -> bcmicro -> (int -> value list -> value option) -> run_result **)
 
-let rec handle_bcmicro fuel t0 h =
-  (fun fO fS n -> if n=0 then fO () else fS (n-1))
-    (fun _ ->
-    match t0 with
-    | MFuel s -> Out_of_fuel s
-    | _ ->
-      Run_error
-        ('h'::('a'::('n'::('d'::('l'::('e'::('r'::(' '::('f'::('u'::('e'::('l'::(' '::('e'::('x'::('h'::('a'::('u'::('s'::('t'::('e'::('d'::[])))))))))))))))))))))))
-    (fun fuel' ->
-    match t0 with
-    | MRet v -> Finished v
-    | MErr msg -> Run_error msg
-    | MFuel s -> Out_of_fuel s
-    | MVis (idx, args, k) -> handle_bcmicro fuel' (k (h idx args)) h)
-    fuel
+let handle_bcmicro0 =
+  Interp.handle_bcmicro
 
-(** val run :
+(** val run0 :
     int -> instruction array -> state -> (int -> value list -> value option)
     -> run_result **)
 
-let run fuel code s handle_ccall =
-  handle_bcmicro fuel (run_micro fuel code s) handle_ccall
+let run0 =
+  Interp.run
 
-(** val run_pure : int -> instruction array -> value list -> run_result **)
+(** val run_pure0 : int -> instruction array -> value list -> run_result **)
 
-let run_pure fuel code global_data =
-  run fuel code (initial_state global_data) (fun _ _ -> None)
+let run_pure0 =
+  Interp.run_pure
 
-(** val instr_word_size : instruction -> int **)
+(** val fetch_instr0 : instruction array -> int -> instruction option **)
 
-let instr_word_size = function
-| ACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| PUSHACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| POP _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| ASSIGN _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| ENVACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| PUSHENVACC _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| PUSH_RETADDR _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| APPLY _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| APPTERM (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| APPTERM1 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| APPTERM2 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| APPTERM3 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| RETURN _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| GRAB _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| CLOSURE (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| CLOSUREREC (_, _, ofs) ->
-  add (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))) (length ofs)
-| OFFSETCLOSURE _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| PUSHOFFSETCLOSURE _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| GETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| PUSHGETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| GETGLOBALFIELD (_, _) ->
-  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| PUSHGETGLOBALFIELD (_, _) ->
-  Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| SETGLOBAL _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| ATOM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| PUSHATOM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| MAKEBLOCK (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| MAKEBLOCK1 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| MAKEBLOCK2 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| MAKEBLOCK3 _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| MAKEFLOATBLOCK _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| GETFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| GETFLOATFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| SETFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| SETFLOATFIELD _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| BRANCH _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| BRANCHIF _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| BRANCHIFNOT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| SWITCH (_, _, ct, bt) ->
-  add (add (Stdlib.Int.succ (Stdlib.Int.succ 0)) (length ct)) (length bt)
-| PUSHTRAP _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| C_CALL (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| CONSTINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| PUSHCONSTINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| OFFSETINT _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| OFFSETREF _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| GETPUBMET _ -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BEQ (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BNEQ (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BLTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BLEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BGTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BGEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BULTINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| BUGEINT (_, _) -> Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ 0))
-| RESUMETERM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| REPERFORMTERM _ -> Stdlib.Int.succ (Stdlib.Int.succ 0)
-| _ -> Stdlib.Int.succ 0
+let fetch_instr0 =
+  fetch_instr
 
-(** val build_offset_list : instruction list -> int -> int list **)
+(** val list_to_code_array0 : instruction list -> instruction array **)
 
-let rec build_offset_list code acc =
-  match code with
-  | [] -> []
-  | i :: rest -> acc :: (build_offset_list rest (add acc (instr_word_size i)))
-
-(** val offset_map : instruction list -> int list **)
-
-let offset_map code =
-  build_offset_list code 0
-
-(** val lookup_offset : int list -> int -> int **)
-
-let lookup_offset omap idx =
-  match nth_error omap (Z.to_nat idx) with
-  | Some n0 -> Z.of_nat n0
-  | None -> 0
-
-(** val encode_word_le : int -> int list **)
-
-let encode_word_le v =
-  let u =
-    Z.coq_land v ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      1)))))))))))))))))))))))))))))))
-  in
-  let b0 =
-    Z.coq_land u ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
-  in
-  let b1 =
-    Z.coq_land (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
-  in
-  let b2 =
-    Z.coq_land
-      (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-        1)))))
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
-  in
-  let b3 =
-    Z.coq_land
-      (Z.shiftr u ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-        1)))))
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))
-  in
-  b0 :: (b1 :: (b2 :: (b3 :: [])))
-
-(** val emit_words : int list -> int list **)
-
-let emit_words ws =
-  flat_map encode_word_le ws
-
-(** val rel_offset : int list -> int -> int -> int **)
-
-let rel_offset omap from_word target_idx =
-  Z.sub (lookup_offset omap target_idx) from_word
-
-(** val encode_instr : int list -> int -> instruction -> int list **)
-
-let encode_instr omap idx i =
-  let w = Z.of_nat (match nth_error omap idx with
-                    | Some n0 -> n0
-                    | None -> 0)
-  in
-  (match i with
-   | ACC n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))) :: ((Z.of_nat n0) :: []))
-   | PUSH ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))) :: [])
-   | PUSHACC n0 ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       1)))) :: ((Z.of_nat n0) :: []))
-   | POP n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       1)))) :: ((Z.of_nat n0) :: []))
-   | ASSIGN n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       1)))) :: ((Z.of_nat n0) :: []))
-   | ENVACC n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       1)))) :: ((Z.of_nat n0) :: []))
-   | PUSHENVACC n0 ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) 1)))) :: ((Z.of_nat n0) :: []))
-   | PUSH_RETADDR t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) 1)))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
-   | APPLY n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
-   | APPLY1 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) 1))))) :: [])
-   | APPLY2 ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) 1))))) :: [])
-   | APPLY3 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) 1))))) :: [])
-   | APPTERM (n0, s) ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: ((Z.of_nat s) :: [])))
-   | APPTERM1 s ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
-   | APPTERM2 s ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
-   | APPTERM3 s ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) 1))))) :: ((Z.of_nat s) :: []))
-   | RETURN n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
-   | RESTART ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) 1))))) :: [])
-   | GRAB n0 ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) 1))))) :: ((Z.of_nat n0) :: []))
-   | CLOSURE (nv, codeptr) ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p)
-       1))))) :: ((Z.of_nat nv) :: ((rel_offset omap
-                                      (Z.add w ((fun p->2*p) 1)) codeptr) :: [])))
-   | CLOSUREREC (nf, nv, ofs_list) ->
-     emit_words
-       (app (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-         ((fun p->2*p) 1))))) :: ((Z.of_nat nf) :: ((Z.of_nat nv) :: [])))
-         (map (fun t0 -> rel_offset omap (Z.add w ((fun p->1+2*p) 1)) t0)
-           ofs_list))
-   | OFFSETCLOSURE n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) 1))))) :: (n0 :: []))
-   | PUSHOFFSETCLOSURE n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) 1))))) :: (n0 :: []))
-   | GETGLOBAL n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
-   | PUSHGETGLOBAL n0 ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
-   | GETGLOBALFIELD (n0, p) ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->1+2*p)
-       1))))) :: ((Z.of_nat n0) :: ((Z.of_nat p) :: [])))
-   | PUSHGETGLOBALFIELD (n0, p) ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: ((Z.of_nat p) :: [])))
-   | SETGLOBAL n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) 1))))) :: ((Z.of_nat n0) :: []))
-   | ATOM t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t0) :: []))
-   | PUSHATOM t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t0) :: []))
-   | MAKEBLOCK (tag, sz) ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p)
-       1))))) :: ((Z.of_nat sz) :: ((Z.of_nat tag) :: [])))
-   | MAKEBLOCK1 t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1))))) :: ((Z.of_nat t0) :: []))
-   | MAKEBLOCK2 t0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat t0) :: []))
-   | MAKEBLOCK3 t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat t0) :: []))
-   | MAKEFLOATBLOCK s ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat s) :: []))
-   | GETFIELD n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1)))))) :: ((Z.of_nat n0) :: []))
-   | GETFLOATFIELD n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) 1)))))) :: ((Z.of_nat n0) :: []))
-   | SETFIELD n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       1)))))) :: ((Z.of_nat n0) :: []))
-   | SETFLOATFIELD n0 ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       1)))))) :: ((Z.of_nat n0) :: []))
-   | VECTLENGTH ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1)))))) :: [])
-   | GETVECTITEM ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | SETVECTITEM ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | GETBYTESCHAR ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | SETBYTESCHAR ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | GETSTRINGCHAR ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | BRANCH t0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p)
-       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
-   | BRANCHIF t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p)
-       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
-   | BRANCHIFNOT t0 ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p)
-       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
-   | SWITCH (nc, nb, ct, bt) ->
-     let sizes =
-       Z.coq_lor (Z.of_nat nc)
-         (Z.shiftl (Z.of_nat nb) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-           ((fun p->2*p) 1)))))
-     in
-     let base = Z.add w ((fun p->2*p) 1) in
-     let ct_rels = map (fun t0 -> rel_offset omap base t0) ct in
-     let bt_rels = map (fun t0 -> rel_offset omap base t0) bt in
-     emit_words
-       (app (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-         ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: (sizes :: []))
-         (app ct_rels bt_rels))
-   | BOOLNOT ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | PUSHTRAP t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p)
-       1)))))) :: ((rel_offset omap (Z.add w 1) t0) :: []))
-   | POPTRAP ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | RAISE ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | RERAISE ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | RAISE_NOTRACE ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | CHECK_SIGNALS ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) 1)))))) :: [])
-   | C_CALL (narg, prim) ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->1+2*p)
-       1)))))) :: ((Z.of_nat narg) :: ((Z.of_nat prim) :: [])))
-   | CONSTINT n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
-   | PUSHCONSTINT n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
-   | NEGINT ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | ADDINT ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | SUBINT ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | MULINT ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | DIVINT ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | MODINT ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | ANDINT ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | ORINT ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | XORINT ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | LSLINT ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | LSRINT ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | ASRINT ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | EQ ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | NEQ ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | LTINT ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | LEINT ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | GTINT ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | GEINT ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: [])
-   | OFFSETINT n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) 1)))))) :: (n0 :: []))
-   | OFFSETREF n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: (n0 :: []))
-   | ISINT ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | GETMETHOD ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | GETPUBMET t0 ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (t0 :: (0 :: [])))
-   | GETDYNMET ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: [])
-   | BEQ (n0, t0) ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | BNEQ (n0, t0) ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | BLTINT (n0, t0) ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | BLEINT (n0, t0) ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | BGTINT (n0, t0) ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | BGEINT (n0, t0) ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | ULTINT ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | UGEINT ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | BULTINT (n0, t0) ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | BUGEINT (n0, t0) ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: (n0 :: ((rel_offset omap (Z.add w ((fun p->2*p) 1)) t0) :: [])))
-   | STOP ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: [])
-   | EVENT ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | BREAK ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | PERFORM ->
-     emit_words (((fun p->1+2*p) ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | RESUME ->
-     emit_words (((fun p->2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p) 1))))))) :: [])
-   | RESUMETERM n0 ->
-     emit_words (((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
-       ((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: ((Z.of_nat n0) :: []))
-   | REPERFORMTERM n0 ->
-     emit_words (((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->1+2*p)
-       ((fun p->1+2*p) ((fun p->2*p) ((fun p->2*p)
-       1))))))) :: ((Z.of_nat n0) :: [])))
-
-(** val encode_instrs : int list -> int -> instruction list -> int list **)
-
-let rec encode_instrs omap idx = function
-| [] -> []
-| i :: rest ->
-  app (encode_instr omap idx i)
-    (encode_instrs omap (Stdlib.Int.succ idx) rest)
-
-(** val encode_bytecode : instruction list -> int list **)
-
-let encode_bytecode code =
-  let omap = offset_map code in encode_instrs omap 0 code
+let list_to_code_array0 =
+  list_to_code_array
 
 type byte_string = bytes
 
@@ -6314,7 +7322,7 @@ let rec decode_value_aux data fuel =
            | tag :: l0 ->
              (match l0 with
               | [] -> ((Val_int 0), [])
-              | size0 :: rest ->
+              | size1 :: rest ->
                 let (fields, rest') =
                   let rec read_fields r n0 =
                     (fun fO fS n -> if n=0 then fO () else fS (n-1))
@@ -6323,7 +7331,7 @@ let rec decode_value_aux data fuel =
                       let (v, r') = decode_value_aux r fuel' in
                       let (vs, r'') = read_fields r' n' in ((v :: vs), r''))
                       n0
-                  in read_fields rest (Z.to_nat size0)
+                  in read_fields rest (Z.to_nat size1)
                 in
                 ((Val_block ((Z.to_nat tag), fields)), rest')))
            p)
@@ -6703,6 +7711,14 @@ let rec mk_zeros n0 =
     (fun n' -> (Val_int 0) :: (mk_zeros n'))
     n0
 
+(** val repeat_value : int -> value -> value list **)
+
+let rec repeat_value n0 v =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> [])
+    (fun n' -> v :: (repeat_value n' v))
+    n0
+
 (** val print_io : int list -> int -> int **)
 
 let print_io cs v =
@@ -7079,6 +8095,47 @@ let handle_string_concat = function
          | _ -> Some (Val_int 0)))
    | _ -> Some (Val_int 0))
 
+(** val handle_blit_string : value list -> value option **)
+
+let handle_blit_string = function
+| [] -> Some (Val_int 0)
+| v :: l ->
+  (match v with
+   | Val_block (_, src) ->
+     (match l with
+      | [] -> Some (Val_int 0)
+      | v0 :: l0 ->
+        (match v0 with
+         | Val_int src_off ->
+           (match l0 with
+            | [] -> Some (Val_int 0)
+            | v1 :: l1 ->
+              (match v1 with
+               | Val_block (tag, dst) ->
+                 (match l1 with
+                  | [] -> Some (Val_int 0)
+                  | v2 :: l2 ->
+                    (match v2 with
+                     | Val_int dst_off ->
+                       (match l2 with
+                        | [] -> Some (Val_int 0)
+                        | v3 :: _ ->
+                          (match v3 with
+                           | Val_int len ->
+                             let n_src_off = Z.to_nat src_off in
+                             let n_dst_off = Z.to_nat dst_off in
+                             let n_len = Z.to_nat len in
+                             let copied = firstn n_len (skipn n_src_off src)
+                             in
+                             Some (Val_block (tag,
+                             (app (firstn n_dst_off dst)
+                               (app copied (skipn (add n_dst_off n_len) dst)))))
+                           | _ -> Some (Val_int 0)))
+                     | _ -> Some (Val_int 0)))
+               | _ -> Some (Val_int 0)))
+         | _ -> Some (Val_int 0)))
+   | _ -> Some (Val_int 0))
+
 (** val handle_identity : value list -> value option **)
 
 let handle_identity = function
@@ -7102,6 +8159,72 @@ let handle_string_get = function
             | None -> Some (Val_int 0))
          | _ -> Some (Val_int 0)))
    | _ -> Some (Val_int 0))
+
+(** val handle_make_vect : value list -> value option **)
+
+let handle_make_vect = function
+| [] -> Some (Val_block (0, []))
+| v :: l ->
+  (match v with
+   | Val_int n0 ->
+     (match l with
+      | [] -> Some (Val_block (0, []))
+      | init :: _ -> Some (Val_block (0, (repeat_value (Z.to_nat n0) init))))
+   | _ -> Some (Val_block (0, [])))
+
+(** val string_value : char list -> value **)
+
+let string_value s =
+  Val_block (string_tag, (map (fun x -> Val_int x) (str_to_codes s)))
+
+(** val replace_first_value : value -> value -> value list -> value list **)
+
+let rec replace_first_value old new0 = function
+| [] -> []
+| x :: rest ->
+  if value_eqb x old
+  then new0 :: rest
+  else x :: (replace_first_value old new0 rest)
+
+(** val is_blit_primitive : int list -> bool **)
+
+let is_blit_primitive name =
+  (||)
+    (list_z_eqb name
+      (str_to_codes
+        ('c'::('a'::('m'::('l'::('_'::('b'::('l'::('i'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))))))))
+    (list_z_eqb name
+      (str_to_codes
+        ('c'::('a'::('m'::('l'::('_'::('b'::('l'::('i'::('t'::('_'::('b'::('y'::('t'::('e'::('s'::[])))))))))))))))))
+
+(** val resume_after_ccall :
+    int list -> value list -> state -> value -> state **)
+
+let resume_after_ccall name args cont v =
+  let cont' =
+    set (fun s -> s.accu) (fun f ->
+      let v0 = fun r -> f r.accu in
+      (fun x -> { pc = x.pc; accu = (v0 x); stack = x.stack; env = x.env;
+      extra_args = x.extra_args; global = x.global; trap_sp = x.trap_sp; hp =
+      x.hp; next_addr = x.next_addr })) (fun _ -> v) cont
+  in
+  if is_blit_primitive name
+  then (match args with
+        | [] -> cont'
+        | _ :: l ->
+          (match l with
+           | [] -> cont'
+           | _ :: l0 ->
+             (match l0 with
+              | [] -> cont'
+              | dst :: _ ->
+                set (fun s -> s.stack) (fun f ->
+                  let l1 = fun r -> f r.stack in
+                  (fun x -> { pc = x.pc; accu = x.accu; stack = (l1 x); env =
+                  x.env; extra_args = x.extra_args; global = x.global;
+                  trap_sp = x.trap_sp; hp = x.hp; next_addr = x.next_addr }))
+                  (fun _ -> replace_first_value dst v cont'.stack) cont')))
+  else cont'
 
 (** val make_ccall_handler :
     int list list -> int -> value list -> value option **)
@@ -7173,26 +8296,74 @@ let make_ccall_handler prims idx args =
                                                       ((fun p->1+2*p) 1))))))
                                                else if list_z_eqb name
                                                          (str_to_codes
-                                                           ('c'::('a'::('m'::('l'::('_'::('o'::('b'::('j'::('_'::('t'::('a'::('g'::[])))))))))))))
-                                                    then handle_obj_tag args
-                                                    else if (||)
-                                                              (list_z_eqb
-                                                                name
-                                                                (str_to_codes
-                                                                  ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[]))))))))))))))))))))
-                                                              (list_z_eqb
-                                                                name
-                                                                (str_to_codes
-                                                                  ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[])))))))))))))))))))))))
-                                                         then handle_string_length
-                                                                args
+                                                           ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('w'::('o'::('r'::('d'::('_'::('s'::('i'::('z'::('e'::[])))))))))))))))))))))))))
+                                                    then Some (Val_int
+                                                           ((fun p->2*p)
+                                                           ((fun p->2*p)
+                                                           ((fun p->2*p)
+                                                           ((fun p->2*p)
+                                                           ((fun p->2*p)
+                                                           ((fun p->2*p)
+                                                           1)))))))
+                                                    else if list_z_eqb name
+                                                              (str_to_codes
+                                                                ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('b'::('i'::('g'::('_'::('e'::('n'::('d'::('i'::('a'::('n'::[]))))))))))))))))))))))))))
+                                                         then Some (Val_int 0)
                                                          else if list_z_eqb
                                                                    name
                                                                    (str_to_codes
-                                                                    ('c'::('a'::('m'::('l'::('_'::('c'::('r'::('e'::('a'::('t'::('e'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))
-                                                              then handle_create_bytes
-                                                                    args
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('o'::('s'::('t'::('y'::('p'::('e'::('_'::('u'::('n'::('i'::('x'::[])))))))))))))))))))))))))))
+                                                              then Some
+                                                                    (Val_int
+                                                                    1)
                                                               else if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('o'::('s'::('t'::('y'::('p'::('e'::('_'::('w'::('i'::('n'::('3'::('2'::[])))))))))))))))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('o'::('s'::('t'::('y'::('p'::('e'::('_'::('c'::('y'::('g'::('w'::('i'::('n'::[]))))))))))))))))))))))))))))))
+                                                                   then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                   else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('o'::('b'::('j'::('_'::('t'::('a'::('g'::[])))))))))))))
+                                                                    then 
+                                                                    handle_obj_tag
+                                                                    args
+                                                                    else 
+                                                                    if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[]))))))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('l'::('e'::('n'::('g'::('t'::('h'::[])))))))))))))))))))))))
+                                                                    then 
+                                                                    handle_string_length
+                                                                    args
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('c'::('r'::('e'::('a'::('t'::('e'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))))
+                                                                    then 
+                                                                    handle_create_bytes
+                                                                    args
+                                                                    else 
+                                                                    if 
                                                                     (||)
                                                                     (list_z_eqb
                                                                     name
@@ -7202,11 +8373,10 @@ let make_ccall_handler prims idx args =
                                                                     name
                                                                     (str_to_codes
                                                                     ('c'::('a'::('m'::('l'::('_'::('b'::('l'::('i'::('t'::('_'::('b'::('y'::('t'::('e'::('s'::[])))))))))))))))))
-                                                                   then 
-                                                                    Some
-                                                                    (Val_int
-                                                                    0)
-                                                                   else 
+                                                                    then 
+                                                                    handle_blit_string
+                                                                    args
+                                                                    else 
                                                                     if 
                                                                     list_z_eqb
                                                                     name
@@ -7267,9 +8437,160 @@ let make_ccall_handler prims idx args =
                                                                     handle_string_get
                                                                     args
                                                                     else 
+                                                                    if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('m'::('a'::('k'::('e'::('_'::('v'::('e'::('c'::('t'::[]))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('m'::('a'::('k'::('e'::('_'::('a'::('r'::('r'::('a'::('y'::[])))))))))))))))))
+                                                                    then 
+                                                                    handle_make_vect
+                                                                    args
+                                                                    else 
+                                                                    if 
+                                                                    (||)
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::('_'::('s'::('e'::('t'::[])))))))))))))))))
+                                                                    (list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('b'::('y'::('t'::('e'::('s'::('_'::('s'::('e'::('t'::[]))))))))))))))))
+                                                                    then 
                                                                     Some
                                                                     (Val_int
                                                                     0)
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('f'::('i'::('l'::('l'::('_'::('b'::('y'::('t'::('e'::('s'::[]))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('i'::('n'::('t'::('6'::('4'::('_'::('f'::('l'::('o'::('a'::('t'::('_'::('o'::('f'::('_'::('b'::('i'::('t'::('s'::[])))))))))))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('n'::('a'::('k'::('e'::('d'::('_'::('p'::('o'::('i'::('n'::('t'::('e'::('r'::('s'::('_'::('c'::('h'::('e'::('c'::('k'::('e'::('d'::[]))))))))))))))))))))))))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('o'::('u'::('t'::('_'::('c'::('h'::('a'::('n'::('n'::('e'::('l'::('s'::('_'::('l'::('i'::('s'::('t'::[]))))))))))))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('m'::('l'::('_'::('c'::('h'::('a'::('n'::('n'::('e'::('l'::('_'::('s'::('i'::('z'::('e'::[])))))))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('g'::('e'::('t'::('e'::('n'::('v'::[]))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('e'::('x'::('e'::('c'::('u'::('t'::('a'::('b'::('l'::('e'::('_'::('n'::('a'::('m'::('e'::[])))))))))))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (string_value
+                                                                    ('p'::('i'::('p'::('e'::('l'::('i'::('n'::('e'::('_'::('r'::('u'::('n'::('n'::('e'::('r'::('.'::('e'::('x'::('e'::[]))))))))))))))))))))
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('g'::('e'::('t'::('_'::('c'::('o'::('n'::('f'::('i'::('g'::[]))))))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_block
+                                                                    (0,
+                                                                    ((string_value
+                                                                    ('U'::('n'::('i'::('x'::[]))))) :: ((Val_int
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    ((fun p->2*p)
+                                                                    1))))))) :: ((Val_int
+                                                                    0) :: [])))))
+                                                                    else 
+                                                                    if 
+                                                                    list_z_eqb
+                                                                    name
+                                                                    (str_to_codes
+                                                                    ('c'::('a'::('m'::('l'::('_'::('s'::('y'::('s'::('_'::('c'::('o'::('n'::('s'::('t'::('_'::('b'::('a'::('c'::('k'::('e'::('n'::('d'::('_'::('t'::('y'::('p'::('e'::[]))))))))))))))))))))))))))))
+                                                                    then 
+                                                                    Some
+                                                                    (Val_int
+                                                                    0)
+                                                                    else None
+
+(** val run_effectful :
+    int -> instruction array -> state -> int list list -> run_result **)
+
+let rec run_effectful fuel code s prims =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> Out_of_fuel s)
+    (fun fuel' ->
+    match step0 code s with
+    | Step s' -> run_effectful fuel' code s' prims
+    | Halt v -> Finished v
+    | Error msg -> Run_error msg
+    | CCall_request (prim_idx, args, cont) ->
+      let name =
+        match nth_error prims prim_idx with
+        | Some n0 -> n0
+        | None -> []
+      in
+      (match make_ccall_handler prims prim_idx args with
+       | Some v ->
+         run_effectful fuel' code (resume_after_ccall name args cont v) prims
+       | None ->
+         Run_error
+           ('C'::(' '::('c'::('a'::('l'::('l'::(' '::('r'::('e'::('t'::('u'::('r'::('n'::('e'::('d'::(' '::('N'::('o'::('n'::('e'::[]))))))))))))))))))))))
+    fuel
 
 module Pipeline =
  functor (D:DecoderSpec) ->
@@ -7302,7 +8623,6 @@ module Pipeline =
                (Z.of_nat s.sec_length)
            | None -> []
          in
-         let handler = make_ccall_handler prims in
          let init = initial_state globals in
          let fuel =
            Z.to_nat ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
@@ -7313,8 +8633,8 @@ module Pipeline =
              ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
              ((fun p->1+2*p) ((fun p->2*p) 1))))))))))))))))))))))))))
          in
-         let code_arr = list_to_code_array code in
-         (match run fuel code_arr init handler with
+         let code_arr = list_to_code_array0 code in
+         (match run_effectful fuel code_arr init prims with
           | Finished _ -> 0
           | Run_error _ ->
             print_io
@@ -7833,6 +9153,205 @@ let pp_program prog =
   intercalate ('\n'::[])
     (map (fun d -> append (pp_decl d) (';'::(';'::[]))) prog)
 
+(** val constint_in_range : int -> bool **)
+
+let constint_in_range n0 =
+  (&&)
+    (Z.leb ((~-) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+      ((fun p->2*p) ((fun p->2*p) 1)))))))))))))))))))))))))))))))) n0)
+    (Z.leb n0 ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+      ((fun p->1+2*p) ((fun p->1+2*p) 1)))))))))))))))))))))))))))))))
+
+(** val constint_malformed_msg : char list **)
+
+let constint_malformed_msg =
+  'C'::('O'::('N'::('S'::('T'::('I'::('N'::('T'::(':'::(' '::('m'::('a'::('l'::('f'::('o'::('r'::('m'::('e'::('d'::(' '::('o'::('p'::('e'::('r'::('a'::('n'::('d'::[]))))))))))))))))))))))))))
+
+(** val constr_tag_hash : ident -> int -> int **)
+
+let rec constr_tag_hash name acc =
+  match name with
+  | [] -> acc
+  | c::rest ->
+    constr_tag_hash rest
+      (Nat.modulo
+        (add
+          (mul acc (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ
+            0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+          (nat_of_ascii c))
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+(** val constr_tag : ident -> int **)
+
+let constr_tag name =
+  if eqb0 name ('['::(']'::[]))
+  then 0
+  else if eqb0 name (':'::(':'::[]))
+       then 0
+       else if eqb0 name ('S'::('o'::('m'::('e'::[]))))
+            then 0
+            else constr_tag_hash name 0
+
 type builtin =
 | Bi_print_int
 | Bi_print_string
@@ -7966,12 +9485,6 @@ let rec match_pattern p v =
      | _ -> None)
   | Pat_nil ->
     (match v with
-     | SVal_int z0 ->
-       ((fun f0 fp fn z -> if z=0 then f0 () else if z>0 then fp z else fn (-z))
-          (fun _ -> Some Env_nil)
-          (fun _ -> None)
-          (fun _ -> None)
-          z0)
      | SVal_constr (i, o) ->
        (match i with
         | [] -> None
@@ -8202,20 +9715,6 @@ let eval_binop op v1 v2 =
           if Z.eqb b 0 then None else Some (SVal_int (Z.rem a b))
         | _ -> None)
      | _ -> None)
-  | Op_eq ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (Z.eqb a b))
-        | _ -> None)
-     | _ -> None)
-  | Op_neq ->
-    (match v1 with
-     | SVal_int a ->
-       (match v2 with
-        | SVal_int b -> Some (SVal_bool (negb (Z.eqb a b)))
-        | _ -> None)
-     | _ -> None)
   | Op_lt ->
     (match v1 with
      | SVal_int a ->
@@ -8258,6 +9757,27 @@ let eval_binop op v1 v2 =
         | SVal_bool b -> Some (SVal_bool ((||) a b))
         | _ -> None)
      | _ -> None)
+  | _ -> None
+
+(** val eval_structural_binop : binop -> svalue -> svalue -> svalue option **)
+
+let eval_structural_binop op v1 v2 =
+  match op with
+  | Op_eq ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (Z.eqb a b))
+        | _ -> eval_binop op v1 v2)
+     | _ -> eval_binop op v1 v2)
+  | Op_neq ->
+    (match v1 with
+     | SVal_int a ->
+       (match v2 with
+        | SVal_int b -> Some (SVal_bool (negb (Z.eqb a b)))
+        | _ -> eval_binop op v1 v2)
+     | _ -> eval_binop op v1 v2)
+  | _ -> eval_binop op v1 v2
 
 (** val eval_unop : unop -> svalue -> svalue option **)
 
@@ -8272,6 +9792,12 @@ let eval_unop op v =
      | SVal_bool b -> Some (SVal_bool (negb b))
      | _ -> None)
 
+(** val string_to_events : char list -> event list **)
+
+let rec string_to_events = function
+| [] -> []
+| c::rest -> (Z.of_nat (nat_of_ascii c)) :: (string_to_events rest)
+
 (** val apply_builtin :
     builtin -> svalue -> event list -> (svalue * event list) option **)
 
@@ -8281,19 +9807,10 @@ let apply_builtin b arg out =
     (match arg with
      | SVal_int n0 -> Some (SVal_unit, (app (rev (z_to_events n0)) out))
      | _ -> None)
-  | Bi_print_string ->
-    (match arg with
-     | SVal_tuple l ->
-       (match l with
-        | [] -> Some (SVal_unit, out)
-        | _ :: _ -> None)
-     | _ -> None)
+  | Bi_print_string -> Some (SVal_unit, out)
   | Bi_print_newline ->
-    (match arg with
-     | SVal_unit ->
-       Some (SVal_unit, (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
-         1))) :: out))
-     | _ -> None)
+    Some (SVal_unit, (((fun p->2*p) ((fun p->1+2*p) ((fun p->2*p)
+      1))) :: out))
   | Bi_print_char ->
     (match arg with
      | SVal_int c -> Some (SVal_unit, (c :: out))
@@ -8327,17 +9844,20 @@ let apply_builtin b arg out =
      | _ -> None)
   | Bi_max -> None
 
-(** val max_closure : svalue **)
-
-let max_closure =
-  SVal_closure (('x'::[]), (Exp_fun (('y'::[]), (Exp_if ((Exp_binop (Op_ge,
-    (Exp_var ('x'::[])), (Exp_var ('y'::[])))), (Exp_var ('x'::[])), (Exp_var
-    ('y'::[])))))), Env_nil)
-
 (** val qualify_name : ident -> ident -> ident **)
 
 let qualify_name prefix name =
   append prefix (append ('.'::[]) name)
+
+(** val strip_prefix : char list -> char list -> char list option **)
+
+let rec strip_prefix prefix name =
+  match prefix with
+  | [] -> Some name
+  | pc0::prest ->
+    (match name with
+     | [] -> None
+     | nc::nrest -> if (=) pc0 nc then strip_prefix prest nrest else None)
 
 (** val stdlib_env : env0 **)
 
@@ -8356,13 +9876,10 @@ let stdlib_env =
     (Env_cons (('s'::('n'::('d'::[]))), (SVal_builtin Bi_snd), (Env_cons
     (('s'::('u'::('c'::('c'::[])))), (SVal_builtin Bi_succ), (Env_cons
     (('p'::('r'::('e'::('d'::[])))), (SVal_builtin Bi_pred), (Env_cons
-    (('m'::('a'::('x'::[]))), max_closure, (Env_cons
     (('S'::('t'::('d'::('l'::('i'::('b'::('.'::('I'::('n'::('t'::('.'::('s'::('u'::('c'::('c'::[]))))))))))))))),
     (SVal_builtin Bi_succ), (Env_cons
     (('S'::('t'::('d'::('l'::('i'::('b'::('.'::('I'::('n'::('t'::('.'::('p'::('r'::('e'::('d'::[]))))))))))))))),
-    (SVal_builtin Bi_pred), (Env_cons
-    (('S'::('t'::('d'::('l'::('i'::('b'::('.'::('m'::('a'::('x'::[])))))))))),
-    max_closure, Env_nil)))))))))))))))))))))))))
+    (SVal_builtin Bi_pred), Env_nil)))))))))))))))))))))
 
 (** val eval : int -> expr -> env0 -> event list -> eval_result **)
 
@@ -8371,7 +9888,10 @@ let rec eval fuel e env1 out =
     (fun _ -> Eval_timeout out)
     (fun fuel' ->
     match e with
-    | Exp_int n0 -> Eval_ok ((SVal_int n0), out)
+    | Exp_int n0 ->
+      if constint_in_range n0
+      then Eval_ok ((SVal_int n0), out)
+      else Eval_err (constint_malformed_msg, out)
     | Exp_bool b -> Eval_ok ((SVal_bool b), out)
     | Exp_unit -> Eval_ok (SVal_unit, out)
     | Exp_var x ->
@@ -8382,16 +9902,16 @@ let rec eval fuel e env1 out =
            (('u'::('n'::('b'::('o'::('u'::('n'::('d'::(' '::('v'::('a'::('r'::('i'::('a'::('b'::('l'::('e'::[])))))))))))))))),
            out))
     | Exp_binop (op, e1, e2) ->
-      (match eval fuel' e1 env1 out with
-       | Eval_ok (v1, out1) ->
-         (match eval fuel' e2 env1 out1 with
-          | Eval_ok (v2, out2) ->
-            (match eval_binop op v1 v2 with
-             | Some v -> Eval_ok (v, out2)
+      (match eval fuel' e2 env1 out with
+       | Eval_ok (v2, out2) ->
+         (match eval fuel' e1 env1 out2 with
+          | Eval_ok (v1, out1) ->
+            (match eval_structural_binop op v1 v2 with
+             | Some v -> Eval_ok (v, out1)
              | None ->
                Eval_err
                  (('b'::('i'::('n'::('o'::('p'::(' '::('t'::('y'::('p'::('e'::(' '::('e'::('r'::('r'::('o'::('r'::[])))))))))))))))),
-                 out2))
+                 out1))
           | x -> x)
        | x -> x)
     | Exp_unop (op, e1) ->
@@ -8432,10 +9952,10 @@ let rec eval fuel e env1 out =
           | x -> x))
     | Exp_fun (x, body) -> Eval_ok ((SVal_closure (x, body, env1)), out)
     | Exp_app (func, arg) ->
-      (match eval fuel' func env1 out with
-       | Eval_ok (fv, out1) ->
-         (match eval fuel' arg env1 out1 with
-          | Eval_ok (av, out2) ->
+      (match eval fuel' arg env1 out with
+       | Eval_ok (av, out1) ->
+         (match eval fuel' func env1 out1 with
+          | Eval_ok (fv, out2) ->
             (match fv with
              | SVal_closure (param, body, cenv) ->
                eval fuel' body (env_extend cenv param av) out2
@@ -8458,12 +9978,12 @@ let rec eval fuel e env1 out =
     | Exp_tuple es ->
       let rec eval_list fuel0 es0 acc out0 =
         match es0 with
-        | [] -> Eval_ok ((SVal_tuple (rev acc)), out0)
+        | [] -> Eval_ok ((SVal_tuple acc), out0)
         | e1 :: rest ->
           (match eval fuel0 e1 env1 out0 with
            | Eval_ok (v, out1) -> eval_list fuel0 rest (v :: acc) out1
            | x -> x)
-      in eval_list fuel' es [] out
+      in eval_list fuel' (rev es) [] out
     | Exp_constr (c, o) ->
       (match o with
        | Some e1 ->
@@ -8490,14 +10010,14 @@ let rec eval fuel e env1 out =
     | Exp_record fields ->
       let rec eval_fields fuel0 fs acc out0 =
         match fs with
-        | [] -> Eval_ok ((SVal_record (rev acc)), out0)
+        | [] -> Eval_ok ((SVal_record acc), out0)
         | p :: rest ->
           let (fname, fe) = p in
           (match eval fuel0 fe env1 out0 with
            | Eval_ok (fv, out1) ->
              eval_fields fuel0 rest ((fname, fv) :: acc) out1
            | x -> x)
-      in eval_fields fuel' fields [] out
+      in eval_fields fuel' (rev fields) [] out
     | Exp_field (e1, f) ->
       (match eval fuel' e1 env1 out with
        | Eval_ok (s, out1) ->
@@ -8520,12 +10040,12 @@ let rec eval fuel e env1 out =
         ((Exp_var ('$'::('a'::('r'::('g'::[]))))), cases)), env1)), out)
     | Exp_nil -> Eval_ok ((SVal_constr (('['::(']'::[])), None)), out)
     | Exp_cons (e1, e2) ->
-      (match eval fuel' e1 env1 out with
-       | Eval_ok (v1, out1) ->
-         (match eval fuel' e2 env1 out1 with
-          | Eval_ok (v2, out2) ->
+      (match eval fuel' e2 env1 out with
+       | Eval_ok (v2, out2) ->
+         (match eval fuel' e1 env1 out2 with
+          | Eval_ok (v1, out1) ->
             Eval_ok ((SVal_constr ((':'::(':'::[])), (Some (SVal_tuple
-              (v1 :: (v2 :: [])))))), out2)
+              (v1 :: (v2 :: [])))))), out1)
           | x -> x)
        | x -> x))
     fuel
@@ -8553,6 +10073,20 @@ let rec add_qualified_bindings prefix names inner_env env_acc =
       | None -> env_acc
     in
     add_qualified_bindings prefix rest inner_env env_acc'
+
+(** val open_module_bindings : ident -> env0 -> env0 -> env0 **)
+
+let rec open_module_bindings mod_name source env_acc =
+  let prefix = append mod_name ('.'::[]) in
+  (match source with
+   | Env_nil -> env_acc
+   | Env_cons (x, v, rest) ->
+     let env_acc' =
+       match strip_prefix prefix x with
+       | Some short -> env_extend env_acc short v
+       | None -> env_acc
+     in
+     open_module_bindings mod_name rest env_acc')
 
 (** val eval_program :
     int -> program -> env0 -> event list -> env0 * eval_result **)
@@ -8590,11 +10124,2019 @@ let rec eval_program fuel prog env1 out =
           | Eval_ok (_, out') ->
             let names = decl_bound_names inner_decls in
             let env_with_qual =
-              add_qualified_bindings mod_name names inner_env inner_env
+              add_qualified_bindings mod_name names inner_env env1
             in
             eval_program fuel' rest env_with_qual out'
           | _ -> (env1, other))
+       | Decl_open mod_name ->
+         eval_program fuel' rest (open_module_bindings mod_name env1 env1) out
        | _ -> eval_program fuel' rest env1 out))
+    fuel
+
+(** val svalue_to_value : int -> svalue -> value option **)
+
+let rec svalue_to_value fuel v =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> None)
+    (fun fuel' ->
+    match v with
+    | SVal_int n0 -> Some (Val_int n0)
+    | SVal_bool b -> Some (val_bool b)
+    | SVal_unit -> Some val_unit
+    | SVal_tuple vs ->
+      (match let rec list_to_values = function
+             | [] -> Some []
+             | v0 :: rest ->
+               (match svalue_to_value fuel' v0 with
+                | Some v' ->
+                  (match list_to_values rest with
+                   | Some rest' -> Some (v' :: rest')
+                   | None -> None)
+                | None -> None)
+             in list_to_values vs with
+       | Some vals -> Some (Val_block (0, vals))
+       | None -> None)
+    | SVal_constr (c, o) ->
+      (match c with
+       | [] ->
+         (match o with
+          | Some v' ->
+            if eqb0 c (':'::(':'::[]))
+            then None
+            else (match svalue_to_value fuel' v' with
+                  | Some value' ->
+                    Some (Val_block ((constr_tag c), (value' :: [])))
+                  | None -> None)
+          | None ->
+            if eqb0 c (':'::(':'::[]))
+            then None
+            else Some (Val_block ((constr_tag c), [])))
+       | a::s ->
+         (* If this appears, you're using Ascii internals. Please don't *)
+ (fun f c ->
+  let n = Char.code c in
+  let h i = (n land (1 lsl i)) <> 0 in
+  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
+           (fun b b0 b1 b2 b3 b4 b5 b6 ->
+           if b
+           then if b0
+                then if b1
+                     then (match o with
+                           | Some v' ->
+                             if eqb0 c (':'::(':'::[]))
+                             then None
+                             else (match svalue_to_value fuel' v' with
+                                   | Some value' ->
+                                     Some (Val_block ((constr_tag c),
+                                       (value' :: [])))
+                                   | None -> None)
+                           | None ->
+                             if eqb0 c (':'::(':'::[]))
+                             then None
+                             else Some (Val_block ((constr_tag c), [])))
+                     else if b2
+                          then if b3
+                               then if b4
+                                    then (match o with
+                                          | Some v' ->
+                                            if eqb0 c (':'::(':'::[]))
+                                            then None
+                                            else (match svalue_to_value fuel'
+                                                          v' with
+                                                  | Some value' ->
+                                                    Some (Val_block
+                                                      ((constr_tag c),
+                                                      (value' :: [])))
+                                                  | None -> None)
+                                          | None ->
+                                            if eqb0 c (':'::(':'::[]))
+                                            then None
+                                            else Some (Val_block
+                                                   ((constr_tag c), [])))
+                                    else if b5
+                                         then if b6
+                                              then (match o with
+                                                    | Some v' ->
+                                                      if eqb0 c
+                                                           (':'::(':'::[]))
+                                                      then None
+                                                      else (match svalue_to_value
+                                                                    fuel' v' with
+                                                            | Some value' ->
+                                                              Some (Val_block
+                                                                ((constr_tag
+                                                                   c),
+                                                                (value' :: [])))
+                                                            | None -> None)
+                                                    | None ->
+                                                      if eqb0 c
+                                                           (':'::(':'::[]))
+                                                      then None
+                                                      else Some (Val_block
+                                                             ((constr_tag c),
+                                                             [])))
+                                              else (match s with
+                                                    | [] ->
+                                                      (match o with
+                                                       | Some v' ->
+                                                         if eqb0 c
+                                                              (':'::(':'::[]))
+                                                         then None
+                                                         else (match 
+                                                               svalue_to_value
+                                                                 fuel' v' with
+                                                               | Some value' ->
+                                                                 Some
+                                                                   (Val_block
+                                                                   ((constr_tag
+                                                                    c),
+                                                                   (value' :: [])))
+                                                               | None -> None)
+                                                       | None ->
+                                                         if eqb0 c
+                                                              (':'::(':'::[]))
+                                                         then None
+                                                         else Some (Val_block
+                                                                ((constr_tag
+                                                                   c),
+                                                                [])))
+                                                    | a0::s0 ->
+                                                      (* If this appears, you're using Ascii internals. Please don't *)
+ (fun f c ->
+  let n = Char.code c in
+  let h i = (n land (1 lsl i)) <> 0 in
+  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
+                                                        (fun b7 b8 b9 b10 b11 b12 b13 b14 ->
+                                                        if b7
+                                                        then if b8
+                                                             then (match o with
+                                                                   | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                   | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                             else if b9
+                                                                  then 
+                                                                    if b10
+                                                                    then 
+                                                                    if b11
+                                                                    then 
+                                                                    if b12
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b13
+                                                                    then 
+                                                                    if b14
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match s0 with
+                                                                    | [] ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    Some
+                                                                    (Val_int
+                                                                    0))
+                                                                    | _::_ ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), []))))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                  else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                        else (match o with
+                                                              | Some v' ->
+                                                                if eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                then None
+                                                                else 
+                                                                  (match 
+                                                                   svalue_to_value
+                                                                    fuel' v' with
+                                                                   | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                   | None ->
+                                                                    None)
+                                                              | None ->
+                                                                if eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                then None
+                                                                else 
+                                                                  Some
+                                                                    (Val_block
+                                                                    (
+                                                                    (constr_tag
+                                                                    c), []))))
+                                                        a0)
+                                         else (match o with
+                                               | Some v' ->
+                                                 if eqb0 c (':'::(':'::[]))
+                                                 then None
+                                                 else (match svalue_to_value
+                                                               fuel' v' with
+                                                       | Some value' ->
+                                                         Some (Val_block
+                                                           ((constr_tag c),
+                                                           (value' :: [])))
+                                                       | None -> None)
+                                               | None ->
+                                                 if eqb0 c (':'::(':'::[]))
+                                                 then None
+                                                 else Some (Val_block
+                                                        ((constr_tag c), [])))
+                               else (match o with
+                                     | Some v' ->
+                                       if eqb0 c (':'::(':'::[]))
+                                       then None
+                                       else (match svalue_to_value fuel' v' with
+                                             | Some value' ->
+                                               Some (Val_block
+                                                 ((constr_tag c),
+                                                 (value' :: [])))
+                                             | None -> None)
+                                     | None ->
+                                       if eqb0 c (':'::(':'::[]))
+                                       then None
+                                       else Some (Val_block ((constr_tag c),
+                                              [])))
+                          else (match o with
+                                | Some v' ->
+                                  if eqb0 c (':'::(':'::[]))
+                                  then None
+                                  else (match svalue_to_value fuel' v' with
+                                        | Some value' ->
+                                          Some (Val_block ((constr_tag c),
+                                            (value' :: [])))
+                                        | None -> None)
+                                | None ->
+                                  if eqb0 c (':'::(':'::[]))
+                                  then None
+                                  else Some (Val_block ((constr_tag c), [])))
+                else (match o with
+                      | Some v' ->
+                        if eqb0 c (':'::(':'::[]))
+                        then None
+                        else (match svalue_to_value fuel' v' with
+                              | Some value' ->
+                                Some (Val_block ((constr_tag c),
+                                  (value' :: [])))
+                              | None -> None)
+                      | None ->
+                        if eqb0 c (':'::(':'::[]))
+                        then None
+                        else Some (Val_block ((constr_tag c), [])))
+           else if b0
+                then if b1
+                     then if b2
+                          then if b3
+                               then (match o with
+                                     | Some v' ->
+                                       if eqb0 c (':'::(':'::[]))
+                                       then None
+                                       else (match svalue_to_value fuel' v' with
+                                             | Some value' ->
+                                               Some (Val_block
+                                                 ((constr_tag c),
+                                                 (value' :: [])))
+                                             | None -> None)
+                                     | None ->
+                                       if eqb0 c (':'::(':'::[]))
+                                       then None
+                                       else Some (Val_block ((constr_tag c),
+                                              [])))
+                               else if b4
+                                    then (match o with
+                                          | Some v' ->
+                                            if eqb0 c (':'::(':'::[]))
+                                            then None
+                                            else (match svalue_to_value fuel'
+                                                          v' with
+                                                  | Some value' ->
+                                                    Some (Val_block
+                                                      ((constr_tag c),
+                                                      (value' :: [])))
+                                                  | None -> None)
+                                          | None ->
+                                            if eqb0 c (':'::(':'::[]))
+                                            then None
+                                            else Some (Val_block
+                                                   ((constr_tag c), [])))
+                                    else if b5
+                                         then if b6
+                                              then (match o with
+                                                    | Some v' ->
+                                                      if eqb0 c
+                                                           (':'::(':'::[]))
+                                                      then None
+                                                      else (match svalue_to_value
+                                                                    fuel' v' with
+                                                            | Some value' ->
+                                                              Some (Val_block
+                                                                ((constr_tag
+                                                                   c),
+                                                                (value' :: [])))
+                                                            | None -> None)
+                                                    | None ->
+                                                      if eqb0 c
+                                                           (':'::(':'::[]))
+                                                      then None
+                                                      else Some (Val_block
+                                                             ((constr_tag c),
+                                                             [])))
+                                              else (match s with
+                                                    | [] ->
+                                                      (match o with
+                                                       | Some v' ->
+                                                         if eqb0 c
+                                                              (':'::(':'::[]))
+                                                         then None
+                                                         else (match 
+                                                               svalue_to_value
+                                                                 fuel' v' with
+                                                               | Some value' ->
+                                                                 Some
+                                                                   (Val_block
+                                                                   ((constr_tag
+                                                                    c),
+                                                                   (value' :: [])))
+                                                               | None -> None)
+                                                       | None ->
+                                                         if eqb0 c
+                                                              (':'::(':'::[]))
+                                                         then None
+                                                         else Some (Val_block
+                                                                ((constr_tag
+                                                                   c),
+                                                                [])))
+                                                    | a0::s0 ->
+                                                      (* If this appears, you're using Ascii internals. Please don't *)
+ (fun f c ->
+  let n = Char.code c in
+  let h i = (n land (1 lsl i)) <> 0 in
+  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
+                                                        (fun b7 b8 b9 b10 b11 b12 b13 b14 ->
+                                                        if b7
+                                                        then if b8
+                                                             then if b9
+                                                                  then 
+                                                                    if b10
+                                                                    then 
+                                                                    if b11
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b12
+                                                                    then 
+                                                                    if b13
+                                                                    then 
+                                                                    if b14
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match s0 with
+                                                                    | [] ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    | a1::s1 ->
+                                                                    (* If this appears, you're using Ascii internals. Please don't *)
+ (fun f c ->
+  let n = Char.code c in
+  let h i = (n land (1 lsl i)) <> 0 in
+  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
+                                                                    (fun b15 b16 b17 b18 b19 b20 b21 b22 ->
+                                                                    if b15
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b16
+                                                                    then 
+                                                                    if b17
+                                                                    then 
+                                                                    if b18
+                                                                    then 
+                                                                    if b19
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b20
+                                                                    then 
+                                                                    if b21
+                                                                    then 
+                                                                    if b22
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match s1 with
+                                                                    | [] ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    | a2::s2 ->
+                                                                    (* If this appears, you're using Ascii internals. Please don't *)
+ (fun f c ->
+  let n = Char.code c in
+  let h i = (n land (1 lsl i)) <> 0 in
+  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
+                                                                    (fun b23 b24 b25 b26 b27 b28 b29 b30 ->
+                                                                    if b23
+                                                                    then 
+                                                                    if b24
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b25
+                                                                    then 
+                                                                    if b26
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b27
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b28
+                                                                    then 
+                                                                    if b29
+                                                                    then 
+                                                                    if b30
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match s2 with
+                                                                    | [] ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    Some
+                                                                    (Val_int
+                                                                    0))
+                                                                    | _::_ ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), []))))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), []))))
+                                                                    a2)
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), []))))
+                                                                    a1)
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                  else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                             else (match o with
+                                                                   | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                   | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                        else (match o with
+                                                              | Some v' ->
+                                                                if eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                then None
+                                                                else 
+                                                                  (match 
+                                                                   svalue_to_value
+                                                                    fuel' v' with
+                                                                   | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                   | None ->
+                                                                    None)
+                                                              | None ->
+                                                                if eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                then None
+                                                                else 
+                                                                  Some
+                                                                    (Val_block
+                                                                    (
+                                                                    (constr_tag
+                                                                    c), []))))
+                                                        a0)
+                                         else (match o with
+                                               | Some v' ->
+                                                 if eqb0 c (':'::(':'::[]))
+                                                 then None
+                                                 else (match svalue_to_value
+                                                               fuel' v' with
+                                                       | Some value' ->
+                                                         Some (Val_block
+                                                           ((constr_tag c),
+                                                           (value' :: [])))
+                                                       | None -> None)
+                                               | None ->
+                                                 if eqb0 c (':'::(':'::[]))
+                                                 then None
+                                                 else Some (Val_block
+                                                        ((constr_tag c), [])))
+                          else (match o with
+                                | Some v' ->
+                                  if eqb0 c (':'::(':'::[]))
+                                  then None
+                                  else (match svalue_to_value fuel' v' with
+                                        | Some value' ->
+                                          Some (Val_block ((constr_tag c),
+                                            (value' :: [])))
+                                        | None -> None)
+                                | None ->
+                                  if eqb0 c (':'::(':'::[]))
+                                  then None
+                                  else Some (Val_block ((constr_tag c), [])))
+                     else if b2
+                          then if b3
+                               then if b4
+                                    then if b5
+                                         then (match o with
+                                               | Some v' ->
+                                                 if eqb0 c (':'::(':'::[]))
+                                                 then None
+                                                 else (match svalue_to_value
+                                                               fuel' v' with
+                                                       | Some value' ->
+                                                         Some (Val_block
+                                                           ((constr_tag c),
+                                                           (value' :: [])))
+                                                       | None -> None)
+                                               | None ->
+                                                 if eqb0 c (':'::(':'::[]))
+                                                 then None
+                                                 else Some (Val_block
+                                                        ((constr_tag c), [])))
+                                         else if b6
+                                              then (match o with
+                                                    | Some v' ->
+                                                      if eqb0 c
+                                                           (':'::(':'::[]))
+                                                      then None
+                                                      else (match svalue_to_value
+                                                                    fuel' v' with
+                                                            | Some value' ->
+                                                              Some (Val_block
+                                                                ((constr_tag
+                                                                   c),
+                                                                (value' :: [])))
+                                                            | None -> None)
+                                                    | None ->
+                                                      if eqb0 c
+                                                           (':'::(':'::[]))
+                                                      then None
+                                                      else Some (Val_block
+                                                             ((constr_tag c),
+                                                             [])))
+                                              else (match s with
+                                                    | [] ->
+                                                      (match o with
+                                                       | Some v' ->
+                                                         if eqb0 c
+                                                              (':'::(':'::[]))
+                                                         then None
+                                                         else (match 
+                                                               svalue_to_value
+                                                                 fuel' v' with
+                                                               | Some value' ->
+                                                                 Some
+                                                                   (Val_block
+                                                                   ((constr_tag
+                                                                    c),
+                                                                   (value' :: [])))
+                                                               | None -> None)
+                                                       | None ->
+                                                         if eqb0 c
+                                                              (':'::(':'::[]))
+                                                         then None
+                                                         else Some (Val_block
+                                                                ((constr_tag
+                                                                   c),
+                                                                [])))
+                                                    | a0::s0 ->
+                                                      (* If this appears, you're using Ascii internals. Please don't *)
+ (fun f c ->
+  let n = Char.code c in
+  let h i = (n land (1 lsl i)) <> 0 in
+  f (h 0) (h 1) (h 2) (h 3) (h 4) (h 5) (h 6) (h 7))
+                                                        (fun b7 b8 b9 b10 b11 b12 b13 b14 ->
+                                                        if b7
+                                                        then (match o with
+                                                              | Some v' ->
+                                                                if eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                then None
+                                                                else 
+                                                                  (match 
+                                                                   svalue_to_value
+                                                                    fuel' v' with
+                                                                   | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                   | None ->
+                                                                    None)
+                                                              | None ->
+                                                                if eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                then None
+                                                                else 
+                                                                  Some
+                                                                    (Val_block
+                                                                    (
+                                                                    (constr_tag
+                                                                    c), [])))
+                                                        else if b8
+                                                             then if b9
+                                                                  then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                  else 
+                                                                    if b10
+                                                                    then 
+                                                                    if b11
+                                                                    then 
+                                                                    if b12
+                                                                    then 
+                                                                    if b13
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    if b14
+                                                                    then 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match s0 with
+                                                                    | [] ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    (match v' with
+                                                                    | SVal_tuple l ->
+                                                                    (match l with
+                                                                    | [] ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | h :: l0 ->
+                                                                    (match l0 with
+                                                                    | [] ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | t0 :: l1 ->
+                                                                    (match l1 with
+                                                                    | [] ->
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' h with
+                                                                    | Some hv ->
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' t0 with
+                                                                    | Some tv ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    (0,
+                                                                    (hv :: (tv :: []))))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    None)
+                                                                    | _ :: _ ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None))))
+                                                                    | _ ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None))
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    | _::_ ->
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), []))))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                                    else 
+                                                                    (match o with
+                                                                    | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                    | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), [])))
+                                                             else (match o with
+                                                                   | Some v' ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    (match 
+                                                                    svalue_to_value
+                                                                    fuel' v' with
+                                                                    | Some value' ->
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c),
+                                                                    (value' :: [])))
+                                                                    | None ->
+                                                                    None)
+                                                                   | None ->
+                                                                    if 
+                                                                    eqb0 c
+                                                                    (':'::(':'::[]))
+                                                                    then None
+                                                                    else 
+                                                                    Some
+                                                                    (Val_block
+                                                                    ((constr_tag
+                                                                    c), []))))
+                                                        a0)
+                                    else (match o with
+                                          | Some v' ->
+                                            if eqb0 c (':'::(':'::[]))
+                                            then None
+                                            else (match svalue_to_value fuel'
+                                                          v' with
+                                                  | Some value' ->
+                                                    Some (Val_block
+                                                      ((constr_tag c),
+                                                      (value' :: [])))
+                                                  | None -> None)
+                                          | None ->
+                                            if eqb0 c (':'::(':'::[]))
+                                            then None
+                                            else Some (Val_block
+                                                   ((constr_tag c), [])))
+                               else (match o with
+                                     | Some v' ->
+                                       if eqb0 c (':'::(':'::[]))
+                                       then None
+                                       else (match svalue_to_value fuel' v' with
+                                             | Some value' ->
+                                               Some (Val_block
+                                                 ((constr_tag c),
+                                                 (value' :: [])))
+                                             | None -> None)
+                                     | None ->
+                                       if eqb0 c (':'::(':'::[]))
+                                       then None
+                                       else Some (Val_block ((constr_tag c),
+                                              [])))
+                          else (match o with
+                                | Some v' ->
+                                  if eqb0 c (':'::(':'::[]))
+                                  then None
+                                  else (match svalue_to_value fuel' v' with
+                                        | Some value' ->
+                                          Some (Val_block ((constr_tag c),
+                                            (value' :: [])))
+                                        | None -> None)
+                                | None ->
+                                  if eqb0 c (':'::(':'::[]))
+                                  then None
+                                  else Some (Val_block ((constr_tag c), [])))
+                else (match o with
+                      | Some v' ->
+                        if eqb0 c (':'::(':'::[]))
+                        then None
+                        else (match svalue_to_value fuel' v' with
+                              | Some value' ->
+                                Some (Val_block ((constr_tag c),
+                                  (value' :: [])))
+                              | None -> None)
+                      | None ->
+                        if eqb0 c (':'::(':'::[]))
+                        then None
+                        else Some (Val_block ((constr_tag c), []))))
+           a)
+    | SVal_record fields ->
+      (match let rec fields_to_values = function
+             | [] -> Some []
+             | p :: rest ->
+               let (_, v0) = p in
+               (match svalue_to_value fuel' v0 with
+                | Some v' ->
+                  (match fields_to_values rest with
+                   | Some rest' -> Some (v' :: rest')
+                   | None -> None)
+                | None -> None)
+             in fields_to_values fields with
+       | Some vals -> Some (Val_block (0, vals))
+       | None -> None)
+    | SVal_string s ->
+      Some (Val_block (string_tag,
+        (map (fun ev -> Val_int ev) (string_to_events s))))
+    | _ -> None)
     fuel
 
 (** val interpret : int -> program -> behavior **)
@@ -8602,8 +12144,11 @@ let rec eval_program fuel prog env1 out =
 let interpret fuel prog =
   let (_, e0) = eval_program fuel prog stdlib_env [] in
   (match e0 with
-   | Eval_ok (_, out) ->
-     { trace = (rev out); result = (Term_normal (Val_int 0)) }
+   | Eval_ok (v, out) ->
+     { trace = (rev out); result = (Term_normal
+       (match svalue_to_value fuel v with
+        | Some rv -> rv
+        | None -> Val_int 0)) }
    | Eval_err (msg, out) -> { trace = (rev out); result = (Term_error msg) }
    | Eval_timeout out -> { trace = (rev out); result = Term_timeout })
 
@@ -8635,13 +12180,74 @@ let rec shift0 ce n0 =
 
 type field_env = (ident * int) list
 
+(** val field_lookup_missing : int **)
+
+let field_lookup_missing =
+  Z.to_nat ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p) ((fun p->1+2*p)
+    ((fun p->1+2*p) ((fun p->1+2*p) 1))))))))))))))))))))))))))))))
+
 (** val field_lookup : field_env -> ident -> int **)
 
 let rec field_lookup fe f =
   match fe with
-  | [] -> 0
+  | [] -> field_lookup_missing
   | p :: rest ->
     let (name, idx) = p in if eqb0 f name then idx else field_lookup rest f
+
+(** val find_field_expr : (ident * expr) list -> ident -> expr option **)
+
+let rec find_field_expr fields f =
+  match fields with
+  | [] -> None
+  | p :: rest ->
+    let (name, e) = p in
+    if eqb0 f name then Some e else find_field_expr rest f
+
+(** val all_fields_known : field_env -> (ident * expr) list -> bool **)
+
+let rec all_fields_known fe = function
+| [] -> true
+| p :: rest ->
+  let (name, _) = p in
+  (&&) (negb ((=) (field_lookup fe name) field_lookup_missing))
+    (all_fields_known fe rest)
+
+(** val field_name_with_index :
+    field_env -> (ident * expr) list -> int -> ident option **)
+
+let rec field_name_with_index fe fields idx =
+  match fields with
+  | [] -> None
+  | p :: rest ->
+    let (name, _) = p in
+    if (=) (field_lookup fe name) idx
+    then Some name
+    else field_name_with_index fe rest idx
+
+(** val ordered_record_exprs_from :
+    field_env -> (ident * expr) list -> int -> int -> expr list option **)
+
+let rec ordered_record_exprs_from fe fields idx count =
+  (fun fO fS n -> if n=0 then fO () else fS (n-1))
+    (fun _ -> Some [])
+    (fun count' ->
+    match field_name_with_index fe fields idx with
+    | Some name ->
+      (match find_field_expr fields name with
+       | Some e ->
+         (match ordered_record_exprs_from fe fields (Stdlib.Int.succ idx)
+                  count' with
+          | Some rest -> Some (e :: rest)
+          | None -> None)
+       | None -> None)
+    | None -> None)
+    count
 
 (** val build_field_env : (ident * type_expr) list -> int -> field_env **)
 
@@ -8651,6 +12257,180 @@ let rec build_field_env fields idx =
   | p :: rest ->
     let (name, _) = p in
     (name, idx) :: (build_field_env rest (Stdlib.Int.succ idx))
+
+(** val constr_tag_hash0 : ident -> int -> int **)
+
+let rec constr_tag_hash0 name acc =
+  match name with
+  | [] -> acc
+  | c::rest ->
+    constr_tag_hash0 rest
+      (Nat.modulo
+        (add
+          (mul acc (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+            (Stdlib.Int.succ (Stdlib.Int.succ
+            0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+          (nat_of_ascii c))
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+        0)))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
+
+(** val constr_tag0 : ident -> int **)
+
+let constr_tag0 name =
+  if eqb0 name ('['::(']'::[]))
+  then 0
+  else if eqb0 name (':'::(':'::[]))
+       then 0
+       else if eqb0 name ('S'::('o'::('m'::('e'::[]))))
+            then 0
+            else constr_tag_hash0 name 0
 
 (** val qualify_name0 : ident -> ident -> ident **)
 
@@ -8676,6 +12456,41 @@ let rec prefix_env prefix names_rev pos =
     ((qualify_name0 prefix x), (Loc_stack
       pos)) :: (prefix_env prefix rest (Stdlib.Int.succ pos))
 
+(** val strip_final_stop : instruction list -> instruction list **)
+
+let rec strip_final_stop = function
+| [] -> []
+| instr :: rest ->
+  (match instr with
+   | STOP ->
+     (match rest with
+      | [] -> []
+      | _ :: _ -> instr :: (strip_final_stop rest))
+   | _ -> instr :: (strip_final_stop rest))
+
+(** val strip_prefix_string : char list -> char list -> char list option **)
+
+let rec strip_prefix_string prefix name =
+  match prefix with
+  | [] -> Some name
+  | pc0::prest ->
+    (match name with
+     | [] -> None
+     | nc::nrest ->
+       if (=) pc0 nc then strip_prefix_string prest nrest else None)
+
+(** val open_module_ce : ident -> comp_env -> comp_env **)
+
+let rec open_module_ce mod_name source =
+  let prefix = append mod_name ('.'::[]) in
+  (match source with
+   | [] -> []
+   | p :: rest ->
+     let (name, loc) = p in
+     (match strip_prefix_string prefix name with
+      | Some short -> (short, loc) :: (open_module_ce mod_name rest)
+      | None -> open_module_ce mod_name rest))
+
 (** val is_builtin : ident -> int option **)
 
 let is_builtin x =
@@ -8687,7 +12502,11 @@ let is_builtin x =
        else if eqb0 x
                  ('p'::('r'::('i'::('n'::('t'::('_'::('s'::('t'::('r'::('i'::('n'::('g'::[]))))))))))))
             then Some (Stdlib.Int.succ (Stdlib.Int.succ 0))
-            else None
+            else if eqb0 x
+                      ('p'::('r'::('i'::('n'::('t'::('_'::('c'::('h'::('a'::('r'::[]))))))))))
+                 then Some (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+                        0)))
+                 else None
 
 (** val is_inline_builtin : ident -> instruction list option **)
 
@@ -8706,7 +12525,13 @@ let is_inline_builtin x =
                       else if eqb0 x
                                 ('S'::('t'::('d'::('l'::('i'::('b'::('.'::('I'::('n'::('t'::('.'::('p'::('r'::('e'::('d'::[])))))))))))))))
                            then Some ((OFFSETINT ((~-) 1)) :: [])
-                           else None
+                           else if eqb0 x
+                                     ('c'::('o'::('m'::('p'::('a'::('r'::('e'::[])))))))
+                                then Some ((CONSTINT 0) :: [])
+                                else if eqb0 x
+                                          ('S'::('t'::('d'::('l'::('i'::('b'::('.'::('c'::('o'::('m'::('p'::('a'::('r'::('e'::[]))))))))))))))
+                                     then Some ((CONSTINT 0) :: [])
+                                     else None
 
 (** val mem_ident : ident -> ident list -> bool **)
 
@@ -8848,7 +12673,16 @@ let rec compile_push_fvs fvs ce pushed =
            | Loc_stack n0 -> (ACC n0) :: []
            | Loc_env n0 -> (ENVACC n0) :: []
            | Loc_self -> (OFFSETCLOSURE 0) :: [])
-        | None -> (CONSTINT 0) :: [])
+        | None ->
+          (CONSTINT ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+            1)))))))))))))))))))))))))))))))) :: [])
      | _ :: _ ->
        let ce' = shift0 ce pushed in
        let load =
@@ -8858,7 +12692,16 @@ let rec compile_push_fvs fvs ce pushed =
             | Loc_stack n0 -> (ACC n0) :: []
             | Loc_env n0 -> (ENVACC n0) :: []
             | Loc_self -> (OFFSETCLOSURE 0) :: [])
-         | None -> (CONSTINT 0) :: []
+         | None ->
+           (CONSTINT ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+             1)))))))))))))))))))))))))))))))) :: []
        in
        app load
          (app (PUSH :: [])
@@ -8881,7 +12724,16 @@ let rec compile_expr fuel e ce fe base =
           | Loc_stack n0 -> (ACC n0) :: []
           | Loc_env n0 -> (ENVACC n0) :: []
           | Loc_self -> (OFFSETCLOSURE 0) :: [])
-       | None -> (CONSTINT 0) :: [])
+       | None ->
+         (CONSTINT ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           1)))))))))))))))))))))))))))))))) :: [])
     | Exp_binop (op, e1, e2) ->
       let c2 = compile_expr fuel' e2 ce fe base in
       let c1 =
@@ -8997,21 +12849,32 @@ let rec compile_expr fuel e ce fe base =
     | Exp_app (func, arg) ->
       (match func with
        | Exp_var fname ->
-         (match is_builtin fname with
-          | Some prim_idx ->
-            app (compile_expr fuel' arg ce fe base) ((C_CALL
-              ((Stdlib.Int.succ 0), prim_idx)) :: [])
+         (match comp_lookup ce fname with
+          | Some _ ->
+            let ca = compile_expr fuel' arg ce fe base in
+            let ca_len = length ca in
+            let cf =
+              compile_expr fuel' func (shift0 ce (Stdlib.Int.succ 0)) fe
+                (add (add base ca_len) (Stdlib.Int.succ 0))
+            in
+            app ca (app (PUSH :: []) (app cf (APPLY1 :: [])))
           | None ->
-            (match is_inline_builtin fname with
-             | Some instrs -> app (compile_expr fuel' arg ce fe base) instrs
+            (match is_builtin fname with
+             | Some prim_idx ->
+               app (compile_expr fuel' arg ce fe base) ((C_CALL
+                 ((Stdlib.Int.succ 0), prim_idx)) :: [])
              | None ->
-               let ca = compile_expr fuel' arg ce fe base in
-               let ca_len = length ca in
-               let cf =
-                 compile_expr fuel' func (shift0 ce (Stdlib.Int.succ 0)) fe
-                   (add (add base ca_len) (Stdlib.Int.succ 0))
-               in
-               app ca (app (PUSH :: []) (app cf (APPLY1 :: [])))))
+               (match is_inline_builtin fname with
+                | Some instrs ->
+                  app (compile_expr fuel' arg ce fe base) instrs
+                | None ->
+                  let ca = compile_expr fuel' arg ce fe base in
+                  let ca_len = length ca in
+                  let cf =
+                    compile_expr fuel' func (shift0 ce (Stdlib.Int.succ 0))
+                      fe (add (add base ca_len) (Stdlib.Int.succ 0))
+                  in
+                  app ca (app (PUSH :: []) (app cf (APPLY1 :: []))))))
        | _ ->
          let ca = compile_expr fuel' arg ce fe base in
          let ca_len = length ca in
@@ -9064,7 +12927,19 @@ let rec compile_expr fuel e ce fe base =
                   let compile_elems =
                     let rec compile_elems elems ce_acc b pushed =
                       match elems with
-                      | [] -> []
+                      | [] ->
+                        (CONSTINT ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                          ((fun p->2*p)
+                          1)))))))))))))))))))))))))))))))) :: []
                       | e_i :: rest ->
                         (match rest with
                          | [] -> compile_expr fuel' e_i ce_acc fe b
@@ -9081,11 +12956,15 @@ let rec compile_expr fuel e ce fe base =
                   in
                   app (compile_elems rev_es ce base 0) ((MAKEBLOCK (0,
                     n0)) :: [])))))
-    | Exp_constr (_, o) ->
+    | Exp_constr (c, o) ->
       (match o with
        | Some e1 ->
-         app (compile_expr fuel' e1 ce fe base) ((MAKEBLOCK1 0) :: [])
-       | None -> (CONSTINT 0) :: [])
+         app (compile_expr fuel' e1 ce fe base) ((MAKEBLOCK1
+           (constr_tag0 c)) :: [])
+       | None ->
+         if eqb0 c ('N'::('o'::('n'::('e'::[]))))
+         then (CONSTINT 0) :: []
+         else (ATOM (constr_tag0 c)) :: [])
     | Exp_match (scrut, cases) ->
       let cs = compile_expr fuel' scrut ce fe base in
       let cs_len = length cs in
@@ -9102,7 +12981,9 @@ let rec compile_expr fuel e ce fe base =
               | None -> None)
            | Pat_wild ->
              (match tuple_vars rest with
-              | Some xs -> Some (('_'::[]) :: xs)
+              | Some xs ->
+                Some
+                  (('$'::('w'::('i'::('l'::('d'::('_'::('p'::('a'::('t'::[]))))))))) :: xs)
               | None -> None)
            | _ -> None)
         in tuple_vars
@@ -9153,6 +13034,158 @@ let rec compile_expr fuel e ce fe base =
             in
             if irrefutable
             then (match pat with
+                  | Pat_var _ ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
+                  | Pat_int _ ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
+                  | Pat_bool _ ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
+                  | Pat_unit ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
                   | Pat_tuple ps ->
                     (match tuple_vars ps with
                      | Some vars ->
@@ -9167,6 +13200,196 @@ let rec compile_expr fuel e ce fe base =
                        in
                        app extr (app bc ((POP nv) :: []))
                      | None -> compile_expr fuel' body body_ce fe b)
+                  | Pat_constr (_, _) ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
+                  | Pat_wild ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
+                  | Pat_or (_, _) ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
+                  | Pat_record _ ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
+                  | Pat_nil ->
+                    let test =
+                      match pat with
+                      | Pat_var _ -> []
+                      | Pat_int n0 ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                      | Pat_bool b0 ->
+                        if b0
+                        then (ACC 0) :: (PUSH :: ((CONSTINT 1) :: (EQ :: [])))
+                        else (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | Pat_nil ->
+                        (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                      | _ -> []
+                    in
+                    (match test with
+                     | [] -> compile_expr fuel' body body_ce fe b
+                     | _ :: _ ->
+                       let tl = length test in
+                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                       let bc = compile_expr fuel' body body_ce fe bs in
+                       let bl = length bc in
+                       let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                       let ep = add err (Stdlib.Int.succ 0) in
+                       app test
+                         (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                           (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                             ((fun p->2*p)
+                             1)))))))))))))))))))))))))))))))) :: [])))))
                   | Pat_cons (ph, pt) ->
                     (match tuple_vars (ph :: (pt :: [])) with
                      | Some vars ->
@@ -9180,11 +13403,170 @@ let rec compile_expr fuel e ce fe base =
                        let bc = compile_expr fuel' body cons_ce fe (add b el)
                        in
                        app extr (app bc ((POP nv) :: []))
-                     | None -> compile_expr fuel' body body_ce fe b)
-                  | _ -> compile_expr fuel' body body_ce fe b)
+                     | None -> compile_expr fuel' body body_ce fe b))
             else (match rest with
                   | [] ->
                     (match pat with
+                     | Pat_var _ ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
+                     | Pat_int _ ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
+                     | Pat_bool _ ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
+                     | Pat_unit ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
                      | Pat_tuple ps ->
                        (match tuple_vars ps with
                         | Some vars ->
@@ -9218,7 +13600,208 @@ let rec compile_expr fuel e ce fe base =
                              app extr
                                (app bc ((POP (Stdlib.Int.succ 0)) :: []))
                            | _ -> compile_expr fuel' body body_ce fe b)
-                        | None -> compile_expr fuel' body body_ce fe b)
+                        | None ->
+                          let test =
+                            match pat with
+                            | Pat_var _ -> []
+                            | Pat_int n0 ->
+                              (ACC 0) :: (PUSH :: ((CONSTINT
+                                n0) :: (EQ :: [])))
+                            | Pat_bool b0 ->
+                              if b0
+                              then (ACC 0) :: (PUSH :: ((CONSTINT
+                                     1) :: (EQ :: [])))
+                              else (ACC 0) :: (PUSH :: ((CONSTINT
+                                     0) :: (EQ :: [])))
+                            | Pat_nil ->
+                              (ACC 0) :: (PUSH :: ((CONSTINT
+                                0) :: (EQ :: [])))
+                            | _ -> []
+                          in
+                          (match test with
+                           | [] -> compile_expr fuel' body body_ce fe b
+                           | _ :: _ ->
+                             let tl = length test in
+                             let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                             let bc = compile_expr fuel' body body_ce fe bs in
+                             let bl = length bc in
+                             let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                             let ep = add err (Stdlib.Int.succ 0) in
+                             app test
+                               (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                                 (app bc ((BRANCH
+                                   (Z.of_nat ep)) :: ((CONSTINT ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                   1)))))))))))))))))))))))))))))))) :: []))))))
+                     | Pat_wild ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
+                     | Pat_or (_, _) ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
+                     | Pat_record _ ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
+                     | Pat_nil ->
+                       let test =
+                         match pat with
+                         | Pat_var _ -> []
+                         | Pat_int n0 ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT n0) :: (EQ :: [])))
+                         | Pat_bool b0 ->
+                           if b0
+                           then (ACC 0) :: (PUSH :: ((CONSTINT
+                                  1) :: (EQ :: [])))
+                           else (ACC 0) :: (PUSH :: ((CONSTINT
+                                  0) :: (EQ :: [])))
+                         | Pat_nil ->
+                           (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
+                         | _ -> []
+                       in
+                       (match test with
+                        | [] -> compile_expr fuel' body body_ce fe b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let err = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let ep = add err (Stdlib.Int.succ 0) in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat err)) :: [])
+                              (app bc ((BRANCH (Z.of_nat ep)) :: ((CONSTINT
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+                                ((fun p->2*p)
+                                1)))))))))))))))))))))))))))))))) :: [])))))
                      | Pat_cons (ph, pt) ->
                        (match tuple_vars (ph :: (pt :: [])) with
                         | Some vars ->
@@ -9233,8 +13816,7 @@ let rec compile_expr fuel e ce fe base =
                             compile_expr fuel' body cons_ce fe (add b el)
                           in
                           app extr (app bc ((POP nv) :: []))
-                        | None -> compile_expr fuel' body body_ce fe b)
-                     | _ -> compile_expr fuel' body body_ce fe b)
+                        | None -> compile_expr fuel' body body_ce fe b))
                   | _ :: _ ->
                     (match pat with
                      | Pat_var _ ->
@@ -9253,17 +13835,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_int _ ->
                        let test =
                          match pat with
@@ -9280,17 +13865,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_bool _ ->
                        let test =
                          match pat with
@@ -9307,17 +13895,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_unit ->
                        let test =
                          match pat with
@@ -9334,17 +13925,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_tuple _ ->
                        let test =
                          match pat with
@@ -9361,17 +13955,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_constr (_, o) ->
                        (match o with
                         | Some cpat ->
@@ -9525,17 +14122,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_or (_, _) ->
                        let test =
                          match pat with
@@ -9552,17 +14152,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_record _ ->
                        let test =
                          match pat with
@@ -9579,17 +14182,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_nil ->
                        let test =
                          match pat with
@@ -9606,17 +14212,20 @@ let rec compile_expr fuel e ce fe base =
                            (ACC 0) :: (PUSH :: ((CONSTINT 0) :: (EQ :: [])))
                          | _ -> []
                        in
-                       let tl = length test in
-                       let bs = add (add b tl) (Stdlib.Int.succ 0) in
-                       let bc = compile_expr fuel' body body_ce fe bs in
-                       let bl = length bc in
-                       let ns = add (add bs bl) (Stdlib.Int.succ 0) in
-                       let rc = compile_cases rest ns in
-                       let rl = length rc in
-                       let ep = add ns rl in
-                       app test
-                         (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
-                           (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc)))
+                       (match test with
+                        | [] -> compile_cases rest b
+                        | _ :: _ ->
+                          let tl = length test in
+                          let bs = add (add b tl) (Stdlib.Int.succ 0) in
+                          let bc = compile_expr fuel' body body_ce fe bs in
+                          let bl = length bc in
+                          let ns = add (add bs bl) (Stdlib.Int.succ 0) in
+                          let rc = compile_cases rest ns in
+                          let rl = length rc in
+                          let ep = add ns rl in
+                          app test
+                            (app ((BRANCHIFNOT (Z.of_nat ns)) :: [])
+                              (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))
                      | Pat_cons (ph, pt) ->
                        let test = (ACC 0) :: (ISINT :: (BOOLNOT :: [])) in
                        let tl = length test in
@@ -9660,13 +14269,32 @@ let rec compile_expr fuel e ce fe base =
                               (app bc (app ((BRANCH (Z.of_nat ep)) :: []) rc))))))
         in compile_cases cases cases_base
       in
-      app cs
-        (app (PUSH :: []) (app cases_code ((POP (Stdlib.Int.succ 0)) :: [])))
+      (match cases with
+       | [] ->
+         app cs ((CONSTINT ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           ((fun p->2*p) ((fun p->2*p) ((fun p->2*p) ((fun p->2*p)
+           1)))))))))))))))))))))))))))))))) :: [])
+       | _ :: _ ->
+         app cs
+           (app (PUSH :: [])
+             (app cases_code ((POP (Stdlib.Int.succ 0)) :: []))))
     | Exp_seq (e1, e2) ->
       let c1 = compile_expr fuel' e1 ce fe base in
       let c2 = compile_expr fuel' e2 ce fe (add base (length c1)) in app c1 c2
     | Exp_record fields ->
-      let es = map snd fields in
+      let es =
+        if all_fields_known fe fields
+        then (match ordered_record_exprs_from fe fields 0 (length fields) with
+              | Some ordered -> ordered
+              | None -> map snd fields)
+        else map snd fields
+      in
       let n0 = length es in
       (match es with
        | [] -> (ATOM 0) :: []
@@ -9730,6 +14358,45 @@ let rec compile_expr fuel e ce fe base =
     | Exp_field (e1, f) ->
       let idx = field_lookup fe f in
       app (compile_expr fuel' e1 ce fe base) ((GETFIELD idx) :: [])
+    | Exp_string s ->
+      let string_codes =
+        let rec string_codes = function
+        | [] -> []
+        | c::rest -> (Z.of_nat (nat_of_ascii c)) :: (string_codes rest)
+        in string_codes
+      in
+      let codes = string_codes s in
+      (match codes with
+       | [] -> (ATOM string_tag) :: []
+       | c0 :: l ->
+         (match l with
+          | [] -> (CONSTINT c0) :: ((MAKEBLOCK1 string_tag) :: [])
+          | c1 :: l0 ->
+            (match l0 with
+             | [] ->
+               (CONSTINT c1) :: (PUSH :: ((CONSTINT c0) :: ((MAKEBLOCK2
+                 string_tag) :: [])))
+             | c2 :: l1 ->
+               (match l1 with
+                | [] ->
+                  (CONSTINT c2) :: (PUSH :: ((CONSTINT
+                    c1) :: (PUSH :: ((CONSTINT c0) :: ((MAKEBLOCK3
+                    string_tag) :: [])))))
+                | _ :: _ ->
+                  let n0 = length codes in
+                  let revc = rev codes in
+                  let push_remaining =
+                    let rec push_remaining = function
+                    | [] -> []
+                    | c :: rest ->
+                      (match rest with
+                       | [] -> (CONSTINT c) :: []
+                       | _ :: _ ->
+                         (CONSTINT c) :: (PUSH :: (push_remaining rest)))
+                    in push_remaining
+                  in
+                  app (push_remaining revc) ((MAKEBLOCK (string_tag,
+                    n0)) :: [])))))
     | Exp_function cases ->
       compile_expr fuel' (Exp_fun (('$'::('a'::('r'::('g'::[])))), (Exp_match
         ((Exp_var ('$'::('a'::('r'::('g'::[]))))), cases)))) ce fe base
@@ -9807,282 +14474,113 @@ let rec compile_decls fuel decls ce fe base =
          let c = compile_expr fuel' e ce fe base in
          app c (compile_decls fuel' rest ce fe (add base (length c)))
        | Decl_module (mod_name, inner) ->
-         let ci = compile_decls fuel' inner ce fe base in
+         let ci = strip_final_stop (compile_decls fuel' inner ce fe base) in
          let ci_len = length ci in
          let names = decl_bound_names0 inner in
          let n0 = length names in
          let names_rev = rev names in
-         let inner_ce =
-           let rec build_inner_ce ns pos =
-             match ns with
-             | [] -> []
-             | x :: r ->
-               (x, (Loc_stack
-                 pos)) :: (build_inner_ce r (Stdlib.Int.succ pos))
-           in build_inner_ce names_rev 0
-         in
          let qualified_ce = prefix_env mod_name names_rev 0 in
-         let new_ce = app qualified_ce (app inner_ce (shift0 ce n0)) in
+         let new_ce = app qualified_ce (shift0 ce n0) in
          app ci (compile_decls fuel' rest new_ce fe (add base ci_len))
-       | _ -> compile_decls fuel' rest ce fe base))
+       | Decl_open mod_name ->
+         let opened = open_module_ce mod_name ce in
+         compile_decls fuel' rest (app opened ce) fe base
+       | Decl_exception (_, _) -> compile_decls fuel' rest ce fe base))
     fuel
+
+(** val expr_node_count : expr -> int **)
+
+let rec expr_node_count = function
+| Exp_binop (_, e1, e2) ->
+  Stdlib.Int.succ (add (expr_node_count e1) (expr_node_count e2))
+| Exp_unop (_, e1) -> Stdlib.Int.succ (expr_node_count e1)
+| Exp_if (c, t0, f) ->
+  Stdlib.Int.succ
+    (add (add (expr_node_count c) (expr_node_count t0)) (expr_node_count f))
+| Exp_let (_, e1, e2) ->
+  Stdlib.Int.succ (add (expr_node_count e1) (expr_node_count e2))
+| Exp_letrec (_, e1, e2) ->
+  Stdlib.Int.succ (add (expr_node_count e1) (expr_node_count e2))
+| Exp_fun (_, e1) -> Stdlib.Int.succ (expr_node_count e1)
+| Exp_app (e1, e2) ->
+  Stdlib.Int.succ (add (expr_node_count e1) (expr_node_count e2))
+| Exp_tuple es ->
+  Stdlib.Int.succ
+    (let rec sum_es = function
+     | [] -> 0
+     | e0 :: r -> add (expr_node_count e0) (sum_es r)
+     in sum_es es)
+| Exp_constr (_, o) ->
+  (match o with
+   | Some e1 -> Stdlib.Int.succ (expr_node_count e1)
+   | None -> Stdlib.Int.succ 0)
+| Exp_match (scrut, cases) ->
+  Stdlib.Int.succ
+    (add (expr_node_count scrut)
+      (let rec sum_cases = function
+       | [] -> 0
+       | p :: r ->
+         let (_, body) = p in add (expr_node_count body) (sum_cases r)
+       in sum_cases cases))
+| Exp_seq (e1, e2) ->
+  Stdlib.Int.succ (add (expr_node_count e1) (expr_node_count e2))
+| Exp_record fields ->
+  Stdlib.Int.succ
+    (let rec sum_fs = function
+     | [] -> 0
+     | p :: r -> let (_, e0) = p in add (expr_node_count e0) (sum_fs r)
+     in sum_fs fields)
+| Exp_field (e1, _) -> Stdlib.Int.succ (expr_node_count e1)
+| Exp_function cases ->
+  Stdlib.Int.succ
+    (let rec sum_cases = function
+     | [] -> 0
+     | p :: r -> let (_, body) = p in add (expr_node_count body) (sum_cases r)
+     in sum_cases cases)
+| Exp_cons (e1, e2) ->
+  Stdlib.Int.succ (add (expr_node_count e1) (expr_node_count e2))
+| _ -> Stdlib.Int.succ 0
+
+(** val decl_node_count : decl -> int **)
+
+let decl_node_count = function
+| Decl_let (_, e) -> Stdlib.Int.succ (expr_node_count e)
+| Decl_letrec (_, e) -> Stdlib.Int.succ (expr_node_count e)
+| Decl_expr e -> Stdlib.Int.succ (expr_node_count e)
+| Decl_module (_, inner) ->
+  Stdlib.Int.succ
+    (let rec sum_inner = function
+     | [] -> 0
+     | d0 :: r ->
+       (match d0 with
+        | Decl_let (_, e) ->
+          add (Stdlib.Int.succ (expr_node_count e)) (sum_inner r)
+        | Decl_letrec (_, e) ->
+          add (Stdlib.Int.succ (expr_node_count e)) (sum_inner r)
+        | Decl_expr e ->
+          add (Stdlib.Int.succ (expr_node_count e)) (sum_inner r)
+        | _ -> add (Stdlib.Int.succ 0) (sum_inner r))
+     in sum_inner inner)
+| _ -> Stdlib.Int.succ 0
+
+(** val program_node_count : program -> int **)
+
+let rec program_node_count = function
+| [] -> Stdlib.Int.succ 0
+| d :: rest ->
+  Stdlib.Int.succ (add (decl_node_count d) (program_node_count rest))
+
+(** val compile_fuel : program -> int **)
+
+let compile_fuel prog =
+  add (program_node_count prog) (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
+    (Stdlib.Int.succ (Stdlib.Int.succ 0))))))))
 
 (** val compile_program : program -> instruction list **)
 
 let compile_program prog =
-  compile_decls (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ (Stdlib.Int.succ
-    (Stdlib.Int.succ
-    0))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))))
-    prog [] [] 0
+  compile_decls (compile_fuel prog) prog [] [] 0
 
 (** val byte_at : int list -> int -> int **)
 
@@ -13109,7 +17607,7 @@ let resolve_one omap ri =
                                                                     ((fun p->2*p)
                                                                     ((fun p->2*p)
                                                                     1)))))))
-                                                                    then EVENT
+                                                                    then STOP
                                                                     else 
                                                                     if 
                                                                     Z.eqb op
@@ -13121,7 +17619,7 @@ let resolve_one omap ri =
                                                                     ((fun p->2*p)
                                                                     ((fun p->2*p)
                                                                     1)))))))
-                                                                    then BREAK
+                                                                    then STOP
                                                                     else 
                                                                     if 
                                                                     Z.eqb op
@@ -13161,64 +17659,6 @@ let resolve_one omap ri =
                                                                     1)))))))
                                                                     then 
                                                                     GETSTRINGCHAR
-                                                                    else 
-                                                                    if 
-                                                                    Z.eqb op
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->2*p)
-                                                                    1)))))))
-                                                                    then 
-                                                                    PERFORM
-                                                                    else 
-                                                                    if 
-                                                                    Z.eqb op
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->2*p)
-                                                                    1)))))))
-                                                                    then 
-                                                                    RESUME
-                                                                    else 
-                                                                    if 
-                                                                    Z.eqb op
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->2*p)
-                                                                    1)))))))
-                                                                    then 
-                                                                    RESUMETERM
-                                                                    (nat_of_z
-                                                                    (znth 0
-                                                                    ops))
-                                                                    else 
-                                                                    if 
-                                                                    Z.eqb op
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->1+2*p)
-                                                                    ((fun p->2*p)
-                                                                    ((fun p->2*p)
-                                                                    1)))))))
-                                                                    then 
-                                                                    REPERFORMTERM
-                                                                    (nat_of_z
-                                                                    (znth 0
-                                                                    ops))
                                                                     else STOP
 
 (** val resolve_all : raw_instr list -> instruction list **)
@@ -13402,15 +17842,15 @@ let is_ident_char c =
 let is_ident_start c =
   (||) (is_alpha c) ((=) c '_')
 
-(** val strip_prefix : char list -> char list -> char list option **)
+(** val strip_prefix0 : char list -> char list -> char list option **)
 
-let rec strip_prefix pre s =
+let rec strip_prefix0 pre s =
   match pre with
   | [] -> Some s
   | c1::pre' ->
     (match s with
      | [] -> None
-     | c2::s' -> if (=) c1 c2 then strip_prefix pre' s' else None)
+     | c2::s' -> if (=) c1 c2 then strip_prefix0 pre' s' else None)
 
 (** val read_digits : char list -> int -> int * char list **)
 
@@ -13476,7 +17916,7 @@ let parse_nat = function
 (** val try_neg_int : char list -> (int * char list) option **)
 
 let try_neg_int s =
-  match strip_prefix ('('::('-'::[])) s with
+  match strip_prefix0 ('('::('-'::[])) s with
   | Some rest ->
     (match rest with
      | [] -> None
@@ -13485,7 +17925,7 @@ let try_neg_int s =
        then (match parse_nat rest with
              | Some p ->
                let (n0, rest') = p in
-               (match strip_prefix (')'::[]) rest' with
+               (match strip_prefix0 (')'::[]) rest' with
                 | Some rest'' -> Some ((Z.opp (Z.of_nat n0)), rest'')
                 | None -> None)
              | None -> None)
@@ -13514,44 +17954,44 @@ let parse_ident = function
 (** val try_binop : char list -> (binop * char list) option **)
 
 let try_binop s =
-  match strip_prefix (' '::('+'::(' '::[]))) s with
+  match strip_prefix0 (' '::('+'::(' '::[]))) s with
   | Some rest -> Some (Op_add, rest)
   | None ->
-    (match strip_prefix (' '::('-'::(' '::[]))) s with
+    (match strip_prefix0 (' '::('-'::(' '::[]))) s with
      | Some rest -> Some (Op_sub, rest)
      | None ->
-       (match strip_prefix (' '::('*'::(' '::[]))) s with
+       (match strip_prefix0 (' '::('*'::(' '::[]))) s with
         | Some rest -> Some (Op_mul, rest)
         | None ->
-          (match strip_prefix (' '::('/'::(' '::[]))) s with
+          (match strip_prefix0 (' '::('/'::(' '::[]))) s with
            | Some rest -> Some (Op_div, rest)
            | None ->
-             (match strip_prefix (' '::('m'::('o'::('d'::(' '::[]))))) s with
+             (match strip_prefix0 (' '::('m'::('o'::('d'::(' '::[]))))) s with
               | Some rest -> Some (Op_mod, rest)
               | None ->
-                (match strip_prefix (' '::('<'::('>'::(' '::[])))) s with
+                (match strip_prefix0 (' '::('<'::('>'::(' '::[])))) s with
                  | Some rest -> Some (Op_neq, rest)
                  | None ->
-                   (match strip_prefix (' '::('<'::('='::(' '::[])))) s with
+                   (match strip_prefix0 (' '::('<'::('='::(' '::[])))) s with
                     | Some rest -> Some (Op_le, rest)
                     | None ->
-                      (match strip_prefix (' '::('<'::(' '::[]))) s with
+                      (match strip_prefix0 (' '::('<'::(' '::[]))) s with
                        | Some rest -> Some (Op_lt, rest)
                        | None ->
-                         (match strip_prefix (' '::('>'::('='::(' '::[])))) s with
+                         (match strip_prefix0 (' '::('>'::('='::(' '::[])))) s with
                           | Some rest -> Some (Op_ge, rest)
                           | None ->
-                            (match strip_prefix (' '::('>'::(' '::[]))) s with
+                            (match strip_prefix0 (' '::('>'::(' '::[]))) s with
                              | Some rest -> Some (Op_gt, rest)
                              | None ->
-                               (match strip_prefix (' '::('='::(' '::[]))) s with
+                               (match strip_prefix0 (' '::('='::(' '::[]))) s with
                                 | Some rest -> Some (Op_eq, rest)
                                 | None ->
-                                  (match strip_prefix
+                                  (match strip_prefix0
                                            (' '::('&'::('&'::(' '::[])))) s with
                                    | Some rest -> Some (Op_and, rest)
                                    | None ->
-                                     (match strip_prefix
+                                     (match strip_prefix0
                                               (' '::('|'::('|'::(' '::[])))) s with
                                       | Some rest -> Some (Op_or, rest)
                                       | None -> None))))))))))))
@@ -13565,15 +18005,15 @@ let rec parse_pattern fuel s =
     match try_neg_int s with
     | Some p -> let (z0, rest) = p in Some ((Pat_int z0), rest)
     | None ->
-      (match strip_prefix ('('::(')'::[])) s with
+      (match strip_prefix0 ('('::(')'::[])) s with
        | Some rest -> Some (Pat_unit, rest)
        | None ->
-         (match strip_prefix ('('::[]) s with
+         (match strip_prefix0 ('('::[]) s with
           | Some rest1 ->
             (match parse_pattern fuel' rest1 with
              | Some p ->
                let (p1, rest2) = p in
-               (match strip_prefix (','::(' '::[])) rest2 with
+               (match strip_prefix0 (','::(' '::[])) rest2 with
                 | Some rest3 ->
                   let parse_more =
                     let rec parse_more n0 s0 =
@@ -13583,7 +18023,7 @@ let rec parse_pattern fuel s =
                         match parse_pattern fuel' s0 with
                         | Some p0 ->
                           let (p2, rest4) = p0 in
-                          (match strip_prefix (','::(' '::[])) rest4 with
+                          (match strip_prefix0 (','::(' '::[])) rest4 with
                            | Some rest5 ->
                              (match parse_more n' rest5 with
                               | Some p3 ->
@@ -13591,7 +18031,7 @@ let rec parse_pattern fuel s =
                                 Some ((p2 :: ps), rest6)
                               | None -> None)
                            | None ->
-                             (match strip_prefix (')'::[]) rest4 with
+                             (match strip_prefix0 (')'::[]) rest4 with
                               | Some rest5 -> Some ((p2 :: []), rest5)
                               | None -> None))
                         | None -> None)
@@ -13604,27 +18044,27 @@ let rec parse_pattern fuel s =
                      Some ((Pat_tuple (p1 :: ps)), rest4)
                    | None -> None)
                 | None ->
-                  (match strip_prefix (' '::('|'::(' '::[]))) rest2 with
+                  (match strip_prefix0 (' '::('|'::(' '::[]))) rest2 with
                    | Some rest3 ->
                      (match parse_pattern fuel' rest3 with
                       | Some p0 ->
                         let (p2, rest4) = p0 in
-                        (match strip_prefix (')'::[]) rest4 with
+                        (match strip_prefix0 (')'::[]) rest4 with
                          | Some rest5 -> Some ((Pat_or (p1, p2)), rest5)
                          | None -> None)
                       | None -> None)
                    | None ->
-                     (match strip_prefix (' '::(':'::(':'::(' '::[])))) rest2 with
+                     (match strip_prefix0 (' '::(':'::(':'::(' '::[])))) rest2 with
                       | Some rest3 ->
                         (match parse_pattern fuel' rest3 with
                          | Some p0 ->
                            let (p2, rest4) = p0 in
-                           (match strip_prefix (')'::[]) rest4 with
+                           (match strip_prefix0 (')'::[]) rest4 with
                             | Some rest5 -> Some ((Pat_cons (p1, p2)), rest5)
                             | None -> None)
                          | None -> None)
                       | None ->
-                        (match strip_prefix (' '::[]) rest2 with
+                        (match strip_prefix0 (' '::[]) rest2 with
                          | Some rest3 ->
                            (match p1 with
                             | Pat_constr (c, o) ->
@@ -13634,7 +18074,7 @@ let rec parse_pattern fuel s =
                                  (match parse_pattern fuel' rest3 with
                                   | Some p0 ->
                                     let (arg, rest4) = p0 in
-                                    (match strip_prefix (')'::[]) rest4 with
+                                    (match strip_prefix0 (')'::[]) rest4 with
                                      | Some rest5 ->
                                        Some ((Pat_constr (c, (Some arg))),
                                          rest5)
@@ -13644,7 +18084,7 @@ let rec parse_pattern fuel s =
                          | None -> None))))
              | None -> None)
           | None ->
-            (match strip_prefix ('{'::(' '::[])) s with
+            (match strip_prefix0 ('{'::(' '::[])) s with
              | Some rest1 ->
                let parse_rec_fields =
                  let rec parse_rec_fields n0 s0 =
@@ -13654,12 +18094,12 @@ let rec parse_pattern fuel s =
                      match parse_ident s0 with
                      | Some p ->
                        let (fname, rest2) = p in
-                       (match strip_prefix (' '::('='::(' '::[]))) rest2 with
+                       (match strip_prefix0 (' '::('='::(' '::[]))) rest2 with
                         | Some rest3 ->
                           (match parse_pattern fuel' rest3 with
                            | Some p0 ->
                              let (p1, rest4) = p0 in
-                             (match strip_prefix (';'::(' '::[])) rest4 with
+                             (match strip_prefix0 (';'::(' '::[])) rest4 with
                               | Some rest5 ->
                                 (match parse_rec_fields n' rest5 with
                                  | Some p2 ->
@@ -13667,7 +18107,7 @@ let rec parse_pattern fuel s =
                                    Some (((fname, p1) :: fs), rest6)
                                  | None -> None)
                               | None ->
-                                (match strip_prefix (' '::('}'::[])) rest4 with
+                                (match strip_prefix0 (' '::('}'::[])) rest4 with
                                  | Some rest5 ->
                                    Some (((fname, p1) :: []), rest5)
                                  | None -> None))
@@ -13682,7 +18122,7 @@ let rec parse_pattern fuel s =
                   let (fields, rest2) = p in Some ((Pat_record fields), rest2)
                 | None -> None)
              | None ->
-               (match strip_prefix ('['::(']'::[])) s with
+               (match strip_prefix0 ('['::(']'::[])) s with
                 | Some rest -> Some (Pat_nil, rest)
                 | None ->
                   (match s with
@@ -13736,17 +18176,17 @@ let rec parse_type_expr fuel s =
       match parse_type_expr fuel' rest1 with
       | Some p ->
         let (t1, rest2) = p in
-        (match strip_prefix (' '::('-'::('>'::(' '::[])))) rest2 with
+        (match strip_prefix0 (' '::('-'::('>'::(' '::[])))) rest2 with
          | Some rest3 ->
            (match parse_type_expr fuel' rest3 with
             | Some p0 ->
               let (t2, rest4) = p0 in
-              (match strip_prefix (')'::[]) rest4 with
+              (match strip_prefix0 (')'::[]) rest4 with
                | Some rest5 -> Some ((Ty_arrow (t1, t2)), rest5)
                | None -> None)
             | None -> None)
          | None ->
-           (match strip_prefix (' '::('*'::(' '::[]))) rest2 with
+           (match strip_prefix0 (' '::('*'::(' '::[]))) rest2 with
             | Some rest3 ->
               let parse_star =
                 let rec parse_star n0 s0 =
@@ -13756,14 +18196,14 @@ let rec parse_type_expr fuel s =
                     match parse_type_expr fuel' s0 with
                     | Some p0 ->
                       let (t0, rest4) = p0 in
-                      (match strip_prefix (' '::('*'::(' '::[]))) rest4 with
+                      (match strip_prefix0 (' '::('*'::(' '::[]))) rest4 with
                        | Some rest5 ->
                          (match parse_star n' rest5 with
                           | Some p1 ->
                             let (ts, rest6) = p1 in Some ((t0 :: ts), rest6)
                           | None -> None)
                        | None ->
-                         (match strip_prefix (')'::[]) rest4 with
+                         (match strip_prefix0 (')'::[]) rest4 with
                           | Some rest5 -> Some ((t0 :: []), rest5)
                           | None -> None))
                     | None -> None)
@@ -13775,12 +18215,12 @@ let rec parse_type_expr fuel s =
                  let (ts, rest4) = p0 in Some ((Ty_tuple (t1 :: ts)), rest4)
                | None -> None)
             | None ->
-              (match strip_prefix (' '::[]) rest2 with
+              (match strip_prefix0 (' '::[]) rest2 with
                | Some rest3 ->
                  (match parse_ident rest3 with
                   | Some p0 ->
                     let (name, rest4) = p0 in
-                    (match strip_prefix (')'::[]) rest4 with
+                    (match strip_prefix0 (')'::[]) rest4 with
                      | Some rest5 ->
                        Some ((Ty_constr (name, (t1 :: []))), rest5)
                      | None -> None)
@@ -13788,9 +18228,9 @@ let rec parse_type_expr fuel s =
                | None -> None)))
       | None -> None
     in
-    (match strip_prefix ('('::[]) s with
+    (match strip_prefix0 ('('::[]) s with
      | Some rest1 ->
-       (match strip_prefix ('('::[]) rest1 with
+       (match strip_prefix0 ('('::[]) rest1 with
         | Some rest1_inner ->
           let parse_type_args =
             let rec parse_type_args n0 s0 =
@@ -13800,14 +18240,14 @@ let rec parse_type_expr fuel s =
                 match parse_type_expr fuel' s0 with
                 | Some p ->
                   let (t0, rest2) = p in
-                  (match strip_prefix (','::(' '::[])) rest2 with
+                  (match strip_prefix0 (','::(' '::[])) rest2 with
                    | Some rest3 ->
                      (match parse_type_args n' rest3 with
                       | Some p0 ->
                         let (ts, rest4) = p0 in Some ((t0 :: ts), rest4)
                       | None -> None)
                    | None ->
-                     (match strip_prefix (')'::(' '::[])) rest2 with
+                     (match strip_prefix0 (')'::(' '::[])) rest2 with
                       | Some rest3 -> Some ((t0 :: []), rest3)
                       | None -> None))
                 | None -> None)
@@ -13820,7 +18260,7 @@ let rec parse_type_expr fuel s =
              (match parse_ident rest2 with
               | Some p0 ->
                 let (name, rest3) = p0 in
-                (match strip_prefix (')'::[]) rest3 with
+                (match strip_prefix0 (')'::[]) rest3 with
                  | Some rest4 -> Some ((Ty_constr (name, args)), rest4)
                  | None -> None)
               | None -> None)
@@ -13869,10 +18309,10 @@ let rec parse_expr fuel s =
     match try_neg_int s with
     | Some p -> let (z0, rest) = p in Some ((Exp_int z0), rest)
     | None ->
-      (match strip_prefix ('('::(')'::[])) s with
+      (match strip_prefix0 ('('::(')'::[])) s with
        | Some rest -> Some (Exp_unit, rest)
        | None ->
-         (match strip_prefix ('{'::(' '::[])) s with
+         (match strip_prefix0 ('{'::(' '::[])) s with
           | Some rest1 ->
             let parse_rec_fields =
               let rec parse_rec_fields n0 s0 =
@@ -13882,12 +18322,12 @@ let rec parse_expr fuel s =
                   match parse_ident s0 with
                   | Some p ->
                     let (fname, rest2) = p in
-                    (match strip_prefix (' '::('='::(' '::[]))) rest2 with
+                    (match strip_prefix0 (' '::('='::(' '::[]))) rest2 with
                      | Some rest3 ->
                        (match parse_expr fuel' rest3 with
                         | Some p0 ->
                           let (e, rest4) = p0 in
-                          (match strip_prefix (';'::(' '::[])) rest4 with
+                          (match strip_prefix0 (';'::(' '::[])) rest4 with
                            | Some rest5 ->
                              (match parse_rec_fields n' rest5 with
                               | Some p1 ->
@@ -13895,7 +18335,7 @@ let rec parse_expr fuel s =
                                 Some (((fname, e) :: fs), rest6)
                               | None -> None)
                            | None ->
-                             (match strip_prefix (' '::('}'::[])) rest4 with
+                             (match strip_prefix0 (' '::('}'::[])) rest4 with
                               | Some rest5 -> Some (((fname, e) :: []), rest5)
                               | None -> None))
                         | None -> None)
@@ -13909,20 +18349,20 @@ let rec parse_expr fuel s =
                let (fields, rest2) = p in Some ((Exp_record fields), rest2)
              | None -> None)
           | None ->
-            (match strip_prefix ('('::[]) s with
+            (match strip_prefix0 ('('::[]) s with
              | Some rest1 ->
-               (match strip_prefix ('"'::[]) rest1 with
+               (match strip_prefix0 ('"'::[]) rest1 with
                 | Some rest_str ->
                   (match read_string_contents fuel' rest_str [] with
                    | Some p ->
                      let (str_val, rest_after_quote) = p in
-                     (match strip_prefix (')'::[]) rest_after_quote with
+                     (match strip_prefix0 (')'::[]) rest_after_quote with
                       | Some rest_final ->
                         Some ((Exp_string str_val), rest_final)
                       | None -> None)
                    | None -> None)
                 | None ->
-                  (match strip_prefix
+                  (match strip_prefix0
                            ('f'::('u'::('n'::('c'::('t'::('i'::('o'::('n'::(' '::[])))))))))
                            rest1 with
                    | Some rest2 ->
@@ -13931,18 +18371,18 @@ let rec parse_expr fuel s =
                          (fun fO fS n -> if n=0 then fO () else fS (n-1))
                            (fun _ -> None)
                            (fun n' ->
-                           match strip_prefix ('|'::(' '::[])) s0 with
+                           match strip_prefix0 ('|'::(' '::[])) s0 with
                            | Some rest3 ->
                              (match parse_pattern fuel' rest3 with
                               | Some p ->
                                 let (pat, rest4) = p in
-                                (match strip_prefix
+                                (match strip_prefix0
                                          (' '::('-'::('>'::(' '::[])))) rest4 with
                                  | Some rest5 ->
                                    (match parse_expr fuel' rest5 with
                                     | Some p0 ->
                                       let (body, rest6) = p0 in
-                                      (match strip_prefix (' '::[]) rest6 with
+                                      (match strip_prefix0 (' '::[]) rest6 with
                                        | Some rest7 ->
                                          (match parse_func_cases n' rest7 with
                                           | Some p1 ->
@@ -13951,7 +18391,7 @@ let rec parse_expr fuel s =
                                             rest8)
                                           | None -> None)
                                        | None ->
-                                         (match strip_prefix (')'::[]) rest6 with
+                                         (match strip_prefix0 (')'::[]) rest6 with
                                           | Some rest7 ->
                                             Some (((pat, body) :: []), rest7)
                                           | None -> None))
@@ -13968,49 +18408,49 @@ let rec parse_expr fuel s =
                         Some ((Exp_function cases), rest3)
                       | None -> None)
                    | None ->
-                     (match strip_prefix ('-'::(' '::[])) rest1 with
+                     (match strip_prefix0 ('-'::(' '::[])) rest1 with
                       | Some rest2 ->
                         (match parse_expr fuel' rest2 with
                          | Some p ->
                            let (e, rest3) = p in
-                           (match strip_prefix (')'::[]) rest3 with
+                           (match strip_prefix0 (')'::[]) rest3 with
                             | Some rest4 ->
                               Some ((Exp_unop (Op_neg, e)), rest4)
                             | None -> None)
                          | None -> None)
                       | None ->
-                        (match strip_prefix ('n'::('o'::('t'::(' '::[]))))
+                        (match strip_prefix0 ('n'::('o'::('t'::(' '::[]))))
                                  rest1 with
                          | Some rest2 ->
                            (match parse_expr fuel' rest2 with
                             | Some p ->
                               let (e, rest3) = p in
-                              (match strip_prefix (')'::[]) rest3 with
+                              (match strip_prefix0 (')'::[]) rest3 with
                                | Some rest4 ->
                                  Some ((Exp_unop (Op_not, e)), rest4)
                                | None -> None)
                             | None -> None)
                          | None ->
-                           (match strip_prefix ('i'::('f'::(' '::[]))) rest1 with
+                           (match strip_prefix0 ('i'::('f'::(' '::[]))) rest1 with
                             | Some rest2 ->
                               (match parse_expr fuel' rest2 with
                                | Some p ->
                                  let (cond, rest3) = p in
-                                 (match strip_prefix
+                                 (match strip_prefix0
                                           (' '::('t'::('h'::('e'::('n'::(' '::[]))))))
                                           rest3 with
                                   | Some rest4 ->
                                     (match parse_expr fuel' rest4 with
                                      | Some p0 ->
                                        let (then_e, rest5) = p0 in
-                                       (match strip_prefix
+                                       (match strip_prefix0
                                                 (' '::('e'::('l'::('s'::('e'::(' '::[]))))))
                                                 rest5 with
                                         | Some rest6 ->
                                           (match parse_expr fuel' rest6 with
                                            | Some p1 ->
                                              let (else_e, rest7) = p1 in
-                                             (match strip_prefix (')'::[])
+                                             (match strip_prefix0 (')'::[])
                                                       rest7 with
                                               | Some rest8 ->
                                                 Some ((Exp_if (cond, then_e,
@@ -14022,28 +18462,28 @@ let rec parse_expr fuel s =
                                   | None -> None)
                                | None -> None)
                             | None ->
-                              (match strip_prefix
+                              (match strip_prefix0
                                        ('l'::('e'::('t'::(' '::('r'::('e'::('c'::(' '::[]))))))))
                                        rest1 with
                                | Some rest2 ->
                                  (match parse_ident rest2 with
                                   | Some p ->
                                     let (name, rest3) = p in
-                                    (match strip_prefix
+                                    (match strip_prefix0
                                              (' '::('='::(' '::[]))) rest3 with
                                      | Some rest4 ->
                                        (match parse_expr fuel' rest4 with
                                         | Some p0 ->
                                           let (e1, rest5) = p0 in
-                                          (match strip_prefix
+                                          (match strip_prefix0
                                                    (' '::('i'::('n'::(' '::[]))))
                                                    rest5 with
                                            | Some rest6 ->
                                              (match parse_expr fuel' rest6 with
                                               | Some p1 ->
                                                 let (e2, rest7) = p1 in
-                                                (match strip_prefix (')'::[])
-                                                         rest7 with
+                                                (match strip_prefix0
+                                                         (')'::[]) rest7 with
                                                  | Some rest8 ->
                                                    Some ((Exp_letrec (name,
                                                      e1, e2)), rest8)
@@ -14054,26 +18494,26 @@ let rec parse_expr fuel s =
                                      | None -> None)
                                   | None -> None)
                                | None ->
-                                 (match strip_prefix
+                                 (match strip_prefix0
                                           ('l'::('e'::('t'::(' '::[])))) rest1 with
                                   | Some rest2 ->
                                     (match parse_ident rest2 with
                                      | Some p ->
                                        let (name, rest3) = p in
-                                       (match strip_prefix
+                                       (match strip_prefix0
                                                 (' '::('='::(' '::[]))) rest3 with
                                         | Some rest4 ->
                                           (match parse_expr fuel' rest4 with
                                            | Some p0 ->
                                              let (e1, rest5) = p0 in
-                                             (match strip_prefix
+                                             (match strip_prefix0
                                                       (' '::('i'::('n'::(' '::[]))))
                                                       rest5 with
                                               | Some rest6 ->
                                                 (match parse_expr fuel' rest6 with
                                                  | Some p1 ->
                                                    let (e2, rest7) = p1 in
-                                                   (match strip_prefix
+                                                   (match strip_prefix0
                                                             (')'::[]) rest7 with
                                                     | Some rest8 ->
                                                       Some ((Exp_let (name,
@@ -14085,22 +18525,22 @@ let rec parse_expr fuel s =
                                         | None -> None)
                                      | None -> None)
                                   | None ->
-                                    (match strip_prefix
+                                    (match strip_prefix0
                                              ('f'::('u'::('n'::(' '::[]))))
                                              rest1 with
                                      | Some rest2 ->
                                        (match parse_ident rest2 with
                                         | Some p ->
                                           let (name, rest3) = p in
-                                          (match strip_prefix
+                                          (match strip_prefix0
                                                    (' '::('-'::('>'::(' '::[]))))
                                                    rest3 with
                                            | Some rest4 ->
                                              (match parse_expr fuel' rest4 with
                                               | Some p0 ->
                                                 let (body, rest5) = p0 in
-                                                (match strip_prefix (')'::[])
-                                                         rest5 with
+                                                (match strip_prefix0
+                                                         (')'::[]) rest5 with
                                                  | Some rest6 ->
                                                    Some ((Exp_fun (name,
                                                      body)), rest6)
@@ -14109,14 +18549,14 @@ let rec parse_expr fuel s =
                                            | None -> None)
                                         | None -> None)
                                      | None ->
-                                       (match strip_prefix
+                                       (match strip_prefix0
                                                 ('m'::('a'::('t'::('c'::('h'::(' '::[]))))))
                                                 rest1 with
                                         | Some rest2 ->
                                           (match parse_expr fuel' rest2 with
                                            | Some p ->
                                              let (scrutinee, rest3) = p in
-                                             (match strip_prefix
+                                             (match strip_prefix0
                                                       (' '::('w'::('i'::('t'::('h'::(' '::[]))))))
                                                       rest3 with
                                               | Some rest4 ->
@@ -14126,7 +18566,7 @@ let rec parse_expr fuel s =
                                                       (fun _ ->
                                                       None)
                                                       (fun n' ->
-                                                      match strip_prefix
+                                                      match strip_prefix0
                                                               ('|'::(' '::[]))
                                                               s0 with
                                                       | Some rest5 ->
@@ -14136,7 +18576,7 @@ let rec parse_expr fuel s =
                                                            let (pat, rest6) =
                                                              p0
                                                            in
-                                                           (match strip_prefix
+                                                           (match strip_prefix0
                                                                     (' '::('-'::('>'::(' '::[]))))
                                                                     rest6 with
                                                             | Some rest7 ->
@@ -14149,7 +18589,7 @@ let rec parse_expr fuel s =
                                                                    p1
                                                                  in
                                                                  (match 
-                                                                  strip_prefix
+                                                                  strip_prefix0
                                                                     (' '::[])
                                                                     rest8 with
                                                                   | Some rest9 ->
@@ -14170,7 +18610,7 @@ let rec parse_expr fuel s =
                                                                     None)
                                                                   | None ->
                                                                     (match 
-                                                                    strip_prefix
+                                                                    strip_prefix0
                                                                     (')'::[])
                                                                     rest8 with
                                                                     | Some rest9 ->
@@ -14205,7 +18645,7 @@ let rec parse_expr fuel s =
                                                 (match parse_expr fuel' rest3 with
                                                  | Some p1 ->
                                                    let (e2, rest4) = p1 in
-                                                   (match strip_prefix
+                                                   (match strip_prefix0
                                                             (')'::[]) rest4 with
                                                     | Some rest5 ->
                                                       Some ((Exp_binop (op,
@@ -14213,14 +18653,14 @@ let rec parse_expr fuel s =
                                                     | None -> None)
                                                  | None -> None)
                                               | None ->
-                                                (match strip_prefix ('.'::[])
-                                                         rest2 with
+                                                (match strip_prefix0
+                                                         ('.'::[]) rest2 with
                                                  | Some rest3 ->
                                                    (match parse_ident rest3 with
                                                     | Some p0 ->
                                                       let (fname, rest4) = p0
                                                       in
-                                                      (match strip_prefix
+                                                      (match strip_prefix0
                                                                (')'::[]) rest4 with
                                                        | Some rest5 ->
                                                          Some ((Exp_field
@@ -14229,7 +18669,7 @@ let rec parse_expr fuel s =
                                                        | None -> None)
                                                     | None -> None)
                                                  | None ->
-                                                   (match strip_prefix
+                                                   (match strip_prefix0
                                                             (','::(' '::[]))
                                                             rest2 with
                                                     | Some rest3 ->
@@ -14246,7 +18686,7 @@ let rec parse_expr fuel s =
                                                                 p0
                                                               in
                                                               (match 
-                                                               strip_prefix
+                                                               strip_prefix0
                                                                  (','::(' '::[]))
                                                                  rest4 with
                                                                | Some rest5 ->
@@ -14265,7 +18705,7 @@ let rec parse_expr fuel s =
                                                                     None)
                                                                | None ->
                                                                  (match 
-                                                                  strip_prefix
+                                                                  strip_prefix0
                                                                     (')'::[])
                                                                     rest4 with
                                                                   | Some rest5 ->
@@ -14287,7 +18727,7 @@ let rec parse_expr fuel s =
                                                          (e1 :: es)), rest4)
                                                        | None -> None)
                                                     | None ->
-                                                      (match strip_prefix
+                                                      (match strip_prefix0
                                                                (' '::(':'::(':'::(' '::[]))))
                                                                rest2 with
                                                        | Some rest3 ->
@@ -14297,7 +18737,7 @@ let rec parse_expr fuel s =
                                                             let (e2, rest4) =
                                                               p0
                                                             in
-                                                            (match strip_prefix
+                                                            (match strip_prefix0
                                                                     (')'::[])
                                                                     rest4 with
                                                              | Some rest5 ->
@@ -14308,7 +18748,7 @@ let rec parse_expr fuel s =
                                                              | None -> None)
                                                           | None -> None)
                                                        | None ->
-                                                         (match strip_prefix
+                                                         (match strip_prefix0
                                                                   (';'::(' '::[]))
                                                                   rest2 with
                                                           | Some rest3 ->
@@ -14320,7 +18760,7 @@ let rec parse_expr fuel s =
                                                                  p0
                                                                in
                                                                (match 
-                                                                strip_prefix
+                                                                strip_prefix0
                                                                   (')'::[])
                                                                   rest4 with
                                                                 | Some rest5 ->
@@ -14332,7 +18772,7 @@ let rec parse_expr fuel s =
                                                                 | None -> None)
                                                              | None -> None)
                                                           | None ->
-                                                            (match strip_prefix
+                                                            (match strip_prefix0
                                                                     (' '::[])
                                                                     rest2 with
                                                              | Some rest3 ->
@@ -14345,7 +18785,7 @@ let rec parse_expr fuel s =
                                                                     p0
                                                                   in
                                                                   (match 
-                                                                   strip_prefix
+                                                                   strip_prefix0
                                                                     (')'::[])
                                                                     rest4 with
                                                                    | Some rest5 ->
@@ -14377,7 +18817,7 @@ let rec parse_expr fuel s =
                                                              | None -> None))))))
                                            | None -> None))))))))))
              | None ->
-               (match strip_prefix ('['::(']'::[])) s with
+               (match strip_prefix0 ('['::(']'::[])) s with
                 | Some rest -> Some (Exp_nil, rest)
                 | None ->
                   (match s with
@@ -14416,12 +18856,12 @@ let rec parse_variant fuel s =
     match parse_ident s with
     | Some p ->
       let (name, rest) = p in
-      (match strip_prefix (' '::('o'::('f'::(' '::[])))) rest with
+      (match strip_prefix0 (' '::('o'::('f'::(' '::[])))) rest with
        | Some rest2 ->
          (match parse_type_expr fuel' rest2 with
           | Some p0 ->
             let (t0, rest3) = p0 in
-            (match strip_prefix (' '::('|'::(' '::[]))) rest3 with
+            (match strip_prefix0 (' '::('|'::(' '::[]))) rest3 with
              | Some rest4 ->
                (match parse_variant fuel' rest4 with
                 | Some p1 ->
@@ -14431,7 +18871,7 @@ let rec parse_variant fuel s =
              | None -> Some (((name, (Some t0)) :: []), rest3))
           | None -> None)
        | None ->
-         (match strip_prefix (' '::('|'::(' '::[]))) rest with
+         (match strip_prefix0 (' '::('|'::(' '::[]))) rest with
           | Some rest2 ->
             (match parse_variant fuel' rest2 with
              | Some p0 ->
@@ -14451,19 +18891,19 @@ let rec parse_td_record_fields fuel s =
     match parse_ident s with
     | Some p ->
       let (fname, rest) = p in
-      (match strip_prefix (' '::(':'::(' '::[]))) rest with
+      (match strip_prefix0 (' '::(':'::(' '::[]))) rest with
        | Some rest2 ->
          (match parse_type_expr fuel' rest2 with
           | Some p0 ->
             let (t0, rest3) = p0 in
-            (match strip_prefix (';'::(' '::[])) rest3 with
+            (match strip_prefix0 (';'::(' '::[])) rest3 with
              | Some rest4 ->
                (match parse_td_record_fields fuel' rest4 with
                 | Some p1 ->
                   let (fs, rest5) = p1 in Some (((fname, t0) :: fs), rest5)
                 | None -> None)
              | None ->
-               (match strip_prefix (' '::('}'::[])) rest3 with
+               (match strip_prefix0 (' '::('}'::[])) rest3 with
                 | Some rest4 -> Some (((fname, t0) :: []), rest4)
                 | None -> None))
           | None -> None)
@@ -14474,7 +18914,7 @@ let rec parse_td_record_fields fuel s =
 (** val parse_type_def : int -> char list -> (type_def * char list) option **)
 
 let parse_type_def fuel s =
-  match strip_prefix ('{'::(' '::[])) s with
+  match strip_prefix0 ('{'::(' '::[])) s with
   | Some rest ->
     (match parse_td_record_fields fuel rest with
      | Some p -> let (fields, rest2) = p in Some ((Td_record fields), rest2)
@@ -14507,24 +18947,24 @@ let newline_str0 =
 (** val parse_type_params : char list -> (ident list * char list) option **)
 
 let parse_type_params s =
-  match strip_prefix ('('::[]) s with
+  match strip_prefix0 ('('::[]) s with
   | Some rest ->
     let rec parse_params fuel s0 =
       (fun fO fS n -> if n=0 then fO () else fS (n-1))
         (fun _ -> None)
         (fun fuel' ->
-        match strip_prefix ('\''::[]) s0 with
+        match strip_prefix0 ('\''::[]) s0 with
         | Some rest1 ->
           (match parse_ident rest1 with
            | Some p0 ->
              let (p, rest2) = p0 in
-             (match strip_prefix (','::(' '::[])) rest2 with
+             (match strip_prefix0 (','::(' '::[])) rest2 with
               | Some rest3 ->
                 (match parse_params fuel' rest3 with
                  | Some p1 -> let (ps, rest4) = p1 in Some ((p :: ps), rest4)
                  | None -> None)
               | None ->
-                (match strip_prefix (')'::(' '::[])) rest2 with
+                (match strip_prefix0 (')'::(' '::[])) rest2 with
                  | Some rest3 -> Some ((p :: []), rest3)
                  | None -> None))
            | None -> None)
@@ -14532,12 +18972,12 @@ let parse_type_params s =
         fuel
     in parse_params (length0 s) rest
   | None ->
-    (match strip_prefix ('\''::[]) s with
+    (match strip_prefix0 ('\''::[]) s with
      | Some rest ->
        (match parse_ident rest with
         | Some p0 ->
           let (p, rest') = p0 in
-          (match strip_prefix (' '::[]) rest' with
+          (match strip_prefix0 (' '::[]) rest' with
            | Some rest'' -> Some ((p :: []), rest'')
            | None -> None)
         | None -> None)
@@ -14549,13 +18989,13 @@ let rec parse_decl fuel s =
   (fun fO fS n -> if n=0 then fO () else fS (n-1))
     (fun _ -> None)
     (fun fuel' ->
-    match strip_prefix
+    match strip_prefix0
             ('l'::('e'::('t'::(' '::('r'::('e'::('c'::(' '::[])))))))) s with
     | Some rest ->
       (match parse_ident rest with
        | Some p ->
          let (name, rest') = p in
-         (match strip_prefix (' '::('='::(' '::[]))) rest' with
+         (match strip_prefix0 (' '::('='::(' '::[]))) rest' with
           | Some rest'' ->
             (match parse_expr fuel rest'' with
              | Some p0 ->
@@ -14565,12 +19005,12 @@ let rec parse_decl fuel s =
           | None -> None)
        | None -> None)
     | None ->
-      (match strip_prefix ('l'::('e'::('t'::(' '::[])))) s with
+      (match strip_prefix0 ('l'::('e'::('t'::(' '::[])))) s with
        | Some rest ->
          (match parse_ident rest with
           | Some p ->
             let (name, rest') = p in
-            (match strip_prefix (' '::('='::(' '::[]))) rest' with
+            (match strip_prefix0 (' '::('='::(' '::[]))) rest' with
              | Some rest'' ->
                (match parse_expr fuel rest'' with
                 | Some p0 ->
@@ -14580,7 +19020,7 @@ let rec parse_decl fuel s =
              | None -> None)
           | None -> None)
        | None ->
-         (match strip_prefix ('t'::('y'::('p'::('e'::(' '::[]))))) s with
+         (match strip_prefix0 ('t'::('y'::('p'::('e'::(' '::[]))))) s with
           | Some rest ->
             (match parse_type_params rest with
              | Some p ->
@@ -14588,7 +19028,7 @@ let rec parse_decl fuel s =
                (match parse_ident rest' with
                 | Some p0 ->
                   let (name, rest'') = p0 in
-                  (match strip_prefix (' '::('='::(' '::[]))) rest'' with
+                  (match strip_prefix0 (' '::('='::(' '::[]))) rest'' with
                    | Some rest''' ->
                      (match parse_type_def fuel rest''' with
                       | Some p1 ->
@@ -14599,13 +19039,13 @@ let rec parse_decl fuel s =
                 | None -> None)
              | None -> None)
           | None ->
-            (match strip_prefix
+            (match strip_prefix0
                      ('m'::('o'::('d'::('u'::('l'::('e'::(' '::[]))))))) s with
              | Some rest ->
                (match parse_ident rest with
                 | Some p ->
                   let (name, rest') = p in
-                  (match strip_prefix
+                  (match strip_prefix0
                            (' '::('='::(' '::('s'::('t'::('r'::('u'::('c'::('t'::(' '::[]))))))))))
                            rest' with
                    | Some rest'' ->
@@ -14617,9 +19057,9 @@ let rec parse_decl fuel s =
                            match parse_decl fuel' s0 with
                            | Some p0 ->
                              let (d, rest3) = p0 in
-                             (match strip_prefix (';'::(';'::[])) rest3 with
+                             (match strip_prefix0 (';'::(';'::[])) rest3 with
                               | Some rest4 ->
-                                (match strip_prefix newline_str0 rest4 with
+                                (match strip_prefix0 newline_str0 rest4 with
                                  | Some rest5 ->
                                    (match parse_module_decls n' rest5 with
                                     | Some p1 ->
@@ -14627,7 +19067,7 @@ let rec parse_decl fuel s =
                                       Some ((d :: ds), rest6)
                                     | None -> None)
                                  | None ->
-                                   (match strip_prefix
+                                   (match strip_prefix0
                                             (' '::('e'::('n'::('d'::[]))))
                                             rest4 with
                                     | Some rest5 -> Some ((d :: []), rest5)
@@ -14645,21 +19085,21 @@ let rec parse_decl fuel s =
                    | None -> None)
                 | None -> None)
              | None ->
-               (match strip_prefix ('o'::('p'::('e'::('n'::(' '::[]))))) s with
+               (match strip_prefix0 ('o'::('p'::('e'::('n'::(' '::[]))))) s with
                 | Some rest ->
                   (match parse_ident rest with
                    | Some p ->
                      let (name, rest') = p in Some ((Decl_open name), rest')
                    | None -> None)
                 | None ->
-                  (match strip_prefix
+                  (match strip_prefix0
                            ('e'::('x'::('c'::('e'::('p'::('t'::('i'::('o'::('n'::(' '::[]))))))))))
                            s with
                    | Some rest ->
                      (match parse_ident rest with
                       | Some p ->
                         let (name, rest') = p in
-                        (match strip_prefix (' '::('o'::('f'::(' '::[]))))
+                        (match strip_prefix0 (' '::('o'::('f'::(' '::[]))))
                                  rest' with
                          | Some rest'' ->
                            (match parse_type_expr fuel rest'' with
@@ -14690,9 +19130,9 @@ let rec parse_program_aux fuel decl_fuel s =
       (match parse_decl decl_fuel s with
        | Some p ->
          let (d, rest) = p in
-         (match strip_prefix (';'::(';'::[])) rest with
+         (match strip_prefix0 (';'::(';'::[])) rest with
           | Some rest' ->
-            (match strip_prefix newline_str0 rest' with
+            (match strip_prefix0 newline_str0 rest' with
              | Some rest'' ->
                (match parse_program_aux fuel' decl_fuel rest'' with
                 | Some p0 ->
@@ -14738,3 +19178,8 @@ module App() = Pipeline(ConcreteDecoder)
 
 let main0 () =
   let module M = App() in M.main
+
+(* Backwards-compatible top-level aliases used by test_common.ml. *)
+let step = step0
+let run = run0
+let run_pure = run_pure0

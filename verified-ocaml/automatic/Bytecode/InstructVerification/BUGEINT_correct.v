@@ -269,49 +269,7 @@ Local Ltac eval_s_field_lvalue solve_le co_is Hco Hfld :=
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_BUGEINT_correct : forall n target,
-    0 <= n ->
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
-      (fun _ => None)
-      (fun _ m s ard =>
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         0 <= n /\
-         Int.min_signed <= n <= Int.max_signed /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr n)) /\
-         (exists ofs_int,
-           Mem.load Mint32 m (ar_code_base_block ard)
-             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
-           = Some (Vint ofs_int) /\
-           Ptrofs.add
-             (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
-             (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                         (ptrofs_of_int Signed ofs_int))
-           = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t))) /\
-         match Machine.accu s with
-         | Val_int a => 0 <= a < 4611686018427387904
-         | _ => False
-         end /\
-         (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_BUGEINT_handler_correct : forall n target,
-    0 <= n -> Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BUGEINT n target) f_instr_BUGEINT
-      (fun _ => None)
-      (pre_and (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) accu_unsigned_int) accu_is_long)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the canonical type expected by InstructVerificationProof.v.
 
    The handler checks instr_wfb (BUGEINT z1 z2) = ((0 <=? z1) &&

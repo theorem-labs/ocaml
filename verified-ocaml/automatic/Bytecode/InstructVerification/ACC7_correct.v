@@ -30,6 +30,15 @@ Theorem verify_ACC7 :
     handler_correct (handle_ACC 7) f_instr_ACC7
       (fun _ => None)
       (fun _ _ _ _ => True)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Theorem correct_ACC7 :
+    handler_correct (handle_ACC 7) f_instr_ACC7
+      (fun _ => None)
+      (fun _ _ _ _ => True)
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_ACC7.
+Qed.

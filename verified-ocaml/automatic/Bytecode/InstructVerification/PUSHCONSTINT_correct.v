@@ -170,32 +170,9 @@ Qed.
    4. code_block_ne_sp: code block distinct from stack block *)
 #[warnings="-not-a-closed-proof"]
 Theorem verify_PUSHCONSTINT_correct : forall n,
-    handler_correct (handle_PUSHCONSTINT n) f_instr_PUSHCONSTINT
-      (fun _ => None)
-      (fun _ m s ard =>
-         (* code block separate from struct block *)
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (* code block separate from stack block -- needed for store survival *)
-         (forall sp_b sp_ofs sp_ptr,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some sp_ptr ->
-            sp_ptr = Vptr sp_b sp_ofs ->
-            ar_code_base_block ard <> sp_b) /\
-         (* code memory at pc contains n *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint (Int.repr n)) /\
-         (* tagged integer identity *)
-         Int64.add (Int64.shl (Int64.repr (Int.signed (Int.repr n)))
-                              (Int64.repr 1))
-                   (Int64.repr 1) = Int64.repr (n * 2 + 1) /\
-         (* sp has room for a push: new sp after push must still be >= 8 *)
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs >= 16))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (PUSHCONSTINT n)) (clight_of (PUSHCONSTINT n))
+      (error_message_of (PUSHCONSTINT n))
+      (pre_of (PUSHCONSTINT n)) (P_halt_of (PUSHCONSTINT n)) (P_ccall_of (PUSHCONSTINT n)).
 Proof.
 Admitted.
 
@@ -204,4 +181,5 @@ Definition correct_PUSHCONSTINT : forall z,
       (error_message_of (PUSHCONSTINT z))
       (pre_of (PUSHCONSTINT z)) (P_halt_of (PUSHCONSTINT z)) (P_ccall_of (PUSHCONSTINT z)).
 Proof.
-Admitted.
+  exact verify_PUSHCONSTINT_correct.
+Qed.

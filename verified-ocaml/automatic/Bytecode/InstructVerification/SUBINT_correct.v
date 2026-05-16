@@ -48,14 +48,6 @@ Proof.
   - apply Int64.eqm_unsigned_repr_l. apply Int64.eqm_refl.
 Qed.
 
-Theorem verify_SUBINT_correct :
-    handler_correct handle_SUBINT f_instr_SUBINT
-      (fun _ => None)
-      (pre_and accu_is_long stack_head_is_long)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_SUBINT :
   handler_correct (handle_instr Bytecode.AST.SUBINT) (clight_of Bytecode.AST.SUBINT)

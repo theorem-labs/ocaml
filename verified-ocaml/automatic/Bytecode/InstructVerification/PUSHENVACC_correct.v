@@ -174,10 +174,9 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSHENVACC_correct : forall n,
-    handler_correct (handle_PUSHENVACC n) f_instr_PUSHENVACC
-      (fun _ => None)
-      (pushenvacc_generic_step_pre n)
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (Bytecode.AST.PUSHENVACC n)) (clight_of (Bytecode.AST.PUSHENVACC n))
+      (error_message_of (Bytecode.AST.PUSHENVACC n))
+      (pre_of (Bytecode.AST.PUSHENVACC n)) (P_halt_of (Bytecode.AST.PUSHENVACC n)) (P_ccall_of (Bytecode.AST.PUSHENVACC n)).
 Proof.
 Admitted.
 
@@ -192,5 +191,5 @@ Definition correct_PUSHENVACC : forall n,
       (error_message_of (Bytecode.AST.PUSHENVACC n))
       (pre_of (Bytecode.AST.PUSHENVACC n)) (P_halt_of (Bytecode.AST.PUSHENVACC n)) (P_ccall_of (Bytecode.AST.PUSHENVACC n)).
 Proof.
-Admitted.
-
+  exact verify_PUSHENVACC_correct.
+Qed.

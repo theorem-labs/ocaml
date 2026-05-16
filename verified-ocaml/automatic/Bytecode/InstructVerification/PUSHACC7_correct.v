@@ -33,14 +33,14 @@ Proof. intros. unfold sem_binary_operation, sem_add.
   unfold sem_add_ptr_int. reflexivity. Qed.
 
 Theorem verify_PUSHACC7_correct :
-    handler_correct (handle_PUSHACC 7) f_instr_PUSHACC7
-      (fun _ => None)
-      (fun _ m _ ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         exists sp_b sp_ofs,
-           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16)
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (PUSHACC 7)) (clight_of (PUSHACC 7))
+      (error_message_of (PUSHACC 7))
+      (pre_of (PUSHACC 7)) (P_halt_of (PUSHACC 7)) (P_ccall_of (PUSHACC 7)).
 Proof.
 Admitted.
+
+Definition correct_PUSHACC7 :
+    handler_correct (handle_instr (PUSHACC 7)) (clight_of (PUSHACC 7))
+      (error_message_of (PUSHACC 7))
+      (pre_of (PUSHACC 7)) (P_halt_of (PUSHACC 7)) (P_ccall_of (PUSHACC 7)).
+Proof. exact verify_PUSHACC7_correct. Qed.

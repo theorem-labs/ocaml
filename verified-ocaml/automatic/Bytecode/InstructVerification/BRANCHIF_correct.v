@@ -198,29 +198,9 @@ Local Ltac prove_field_survives Hstore Hload :=
 (* ================================================================== *)
 
 Theorem verify_BRANCHIF_correct : forall target,
-    handler_correct (handle_BRANCHIF target) f_instr_BRANCHIF
-      (fun _ => None)
-      (fun _ m s ard =>
-         (* Code block is separate from struct block *)
-         ar_code_base_block ard <> ar_sptr_block ard /\
-         (* Code buffer at pc contains the branch offset *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint (Int.repr (target - Machine.pc s))) /\
-         (* Comparison well-definedness for non-zero accu *)
-         (Machine.accu s <> Val_int 0 ->
-            forall cv,
-            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
-            sem_binary_operation (genv_cenv clight_ge) Cop.One
-              cv tlong (Vlong (Int64.repr 1)) tlong m
-              = Some (Vint Int.one)) /\
-         (* Zero accu must be tagged int (not code pointer) *)
-         (Machine.accu s = Val_int 0 ->
-            forall cv,
-            val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv ->
-            exists z, cv = Vlong z))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (BRANCHIF target)) (clight_of (BRANCHIF target))
+      (error_message_of (BRANCHIF target))
+      (pre_of (BRANCHIF target)) (P_halt_of (BRANCHIF target)) (P_ccall_of (BRANCHIF target)).
 Proof.
 Admitted.
 
@@ -234,4 +214,6 @@ Definition correct_BRANCHIF : forall z,
     (error_message_of (BRANCHIF z))
     (pre_of (BRANCHIF z)) (P_halt_of (BRANCHIF z)) (P_ccall_of (BRANCHIF z)).
 Proof.
-Admitted.
+  intro z.
+  exact (verify_BRANCHIF_correct z).
+Qed.

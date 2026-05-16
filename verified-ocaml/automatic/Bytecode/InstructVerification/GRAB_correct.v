@@ -240,8 +240,16 @@ Theorem verify_GRAB_correct : forall required,
          Z.of_nat (extra_args s) <= Int64.max_unsigned /\
          (* Nat.leb holds (we prove the then-branch) *)
          Nat.leb required (extra_args s) = true)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
+  (* Structurally blocked beyond the then-branch arithmetic.  The stated
+     precondition proves only the no-allocation branch
+     [required <= extra_args], but the generated C function still contains
+     the heap-allocation else branch and the canonical instruction can Step
+     there when the return frame is well-formed.  Closing the full theorem
+     requires heap-allocation semantics and [R_ex] preservation for the new
+     partial-application closure; those facts are not present in
+     [grab_step_pre]. *)
 Admitted.
 
 (* Bridge lemma: when handle_GRAB returns Error msg, error_message_of
@@ -289,4 +297,9 @@ Definition correct_GRAB : forall n,
     (error_message_of (GRAB n))
     (pre_of (GRAB n)) (P_halt_of (GRAB n)) (P_ccall_of (GRAB n)).
 Proof.
+  (* Blocked by the canonical [pre_of] and by the missing heap-mutation
+     preservation for the partial-application branch.  The error bridge
+     covers malformed frames, and [verify_GRAB_correct] can only target the
+     [required <= extra_args] branch; the canonical theorem must also justify
+     the allocation branch's exact Rocq post-state. *)
 Admitted.

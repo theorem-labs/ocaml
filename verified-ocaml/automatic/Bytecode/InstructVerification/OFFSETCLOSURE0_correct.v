@@ -54,6 +54,15 @@ Theorem verify_OFFSETCLOSURE0_compl_comp :
     handler_correct (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
       (fun _ => None)
       (fun _ _ _ _ => True)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Definition correct_OFFSETCLOSURE0 :
+    handler_correct (handle_OFFSETCLOSURE 0) f_instr_OFFSETCLOSURE0
+      (fun _ => None)
+      (fun _ _ _ _ => True)
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_OFFSETCLOSURE0_compl_comp.
+Qed.

@@ -169,34 +169,6 @@ Proof.
   f_equal. lia.
 Qed.
 
-(* ================================================================== *)
-(* Main theorem                                                        *)
-(* ================================================================== *)
-
-Theorem verify_ENVACC_correct : forall n,
-    Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ENVACC n) f_instr_ENVACC
-      (fun _ => None)
-      (fun e m s ard =>
-         (* The code buffer contains Int.repr (Z.of_nat n) at the current PC position *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         (* env field n is loadable in C memory *)
-         env_field_loadable n e m s ard)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Definition ENVACC_correct_for_spec : forall n, Z.of_nat n < Int.half_modulus ->
-    handler_correct (handle_ENVACC n) f_instr_ENVACC
-      (fun _ => None)
-      (code_at (Int.repr (Z.of_nat n)) /\p env_field_loadable n)
-      (fun _ => False) (fun _ _ _ => False).
-  Proof.
-  Admitted.
-
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr (ENVACC n) / clight_of (ENVACC n) / pre_of (ENVACC n) are
    convertible with handle_ENVACC n / f_instr_ENVACC /
@@ -209,4 +181,3 @@ Theorem correct_ENVACC : forall n,
       (pre_of (Bytecode.AST.ENVACC n)) (P_halt_of (Bytecode.AST.ENVACC n)) (P_ccall_of (Bytecode.AST.ENVACC n)).
 Proof.
 Admitted.
-

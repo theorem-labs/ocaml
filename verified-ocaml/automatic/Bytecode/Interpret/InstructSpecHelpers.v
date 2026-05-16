@@ -221,24 +221,12 @@ Proof.
     intros ard Hrel Hwp. eapply Hexec; eauto.
 Qed.
 
-(* Stronger variant: the implication also receives evidence that
-   the handler returns Step.  Useful when the weakened precondition
-   can only be derived with knowledge of the handler outcome
-   (e.g. stack-index bounds from nth_error success). *)
-(* handler_correct_weaken_step: like handler_correct_weaken but the
-   implication also receives evidence that the handler returns Step.
-   Since Halt/CCall branches now also carry step_pre, the Step-conditioned
-   implication cannot fire in those branches. The Halt/CCall cases need
-   wp-to-sp derivability without knowledge of the handler outcome.
-   Currently unused; Admitted pending a use-case that motivates the
-   right statement shape. *)
-Lemma handler_correct_weaken_step handler f err sp wp ph pc :
-  handler_correct handler f err sp ph pc ->
-  (forall e le m s s' ard,
-     handler s.(Machine.pc) s = Step s' ->
-     abs_rel_with_ard e le m s ard -> wp e m s ard -> sp e m s ard) ->
-  handler_correct handler f err wp ph pc.
-Proof. Admitted.
+(* Removed: handler_correct_weaken_step. An exploratory stronger
+   variant of [handler_correct_weaken] whose conditional implication
+   (only available in the [Step] branch) is structurally insufficient
+   for the [Halt] / [CCall] / [Error] branches; the lemma as stated
+   was therefore unprovable in general and never used elsewhere. The
+   regular [handler_correct_weaken] above remains the supported tool. *)
 
 (* Global array offset arithmetic does not overflow ptrofs. *)
 Definition global_offset_safe (n : nat) : Clight.env -> mem -> state -> abs_rel_data -> Prop :=

@@ -45,10 +45,28 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-Theorem verify_CONST0_compl_comp :
-    handler_correct (handle_CONSTINT 0) f_instr_CONST0
-      (fun _ => None)
-      (fun _ _ _ _ => True)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
+Local Lemma sem_cast_int_to_long_0 : forall m,
+  sem_cast (Vint (Int.repr 0)) tint tlong m = Some (Vlong (Int64.repr 0)).
+Proof. intros. reflexivity. Qed.
+
+Local Lemma sem_shl_long_0_1 : forall m,
+  sem_binary_operation (genv_cenv clight_ge) Oshl
+    (Vlong (Int64.repr 0)) tlong (Vint (Int.repr 1)) tint m
+    = Some (Vlong (Int64.repr 0)).
+Proof. intros. reflexivity. Qed.
+
+Local Lemma sem_add_long_int_0_1 : forall m,
+  sem_binary_operation (genv_cenv clight_ge) Oadd
+    (Vlong (Int64.repr 0)) tlong (Vint (Int.repr 1)) tint m
+    = Some (Vlong (Int64.repr 1)).
+Proof. intros. reflexivity. Qed.
+
+Local Lemma val_int_0_load_result :
+  Val.load_result Mint64 (Vlong (Int64.repr 1)) = Vlong (Int64.repr 1).
+Proof. reflexivity. Qed.
+
+(* There is no canonical [correct_CONST0] wrapper to derive here: CONST0 is a
+   specialized bytecode C helper, not a constructor of [Bytecode.AST].  The
+   official wrapper in [InstructVerificationProof.v] is [correct_CONSTINT] for
+   [CONSTINT z], whose [clight_of] maps to the generic [f_instr_CONSTINT], not
+   this specialized [f_instr_CONST0]. *)

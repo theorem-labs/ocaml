@@ -48,14 +48,6 @@ Local Ltac eval_cbn :=
         field_offset
         PTree.get PTree.set].
 
-Theorem verify_ADDINT_compl_comp :
-    handler_correct handle_ADDINT f_instr_ADDINT
-      (fun _ => None)
-      (pre_and accu_is_long stack_head_is_long)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* ================================================================== *)
 (* Wrapper with canonical InstructSpec predicates                       *)
 (* ================================================================== *)

@@ -52,14 +52,6 @@ Proof.
     rewrite Z.lxor_spec. reflexivity.
 Qed.
 
-Theorem verify_XORINT_correct :
-    handler_correct handle_XORINT f_instr_XORINT
-      (fun _ => None)
-      (pre_and accu_is_long stack_head_is_long)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_XORINT :
   handler_correct (handle_instr Bytecode.AST.XORINT) (clight_of Bytecode.AST.XORINT)
@@ -67,4 +59,3 @@ Theorem correct_XORINT :
     (pre_of Bytecode.AST.XORINT) (P_halt_of Bytecode.AST.XORINT) (P_ccall_of Bytecode.AST.XORINT).
 Proof.
 Admitted.
-

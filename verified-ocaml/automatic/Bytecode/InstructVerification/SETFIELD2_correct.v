@@ -58,6 +58,18 @@ Theorem verify_SETFIELD2_correct :
     handler_correct (handle_SETFIELD 2) f_instr_SETFIELD2
       (fun _ => None)
       (setfield_heap_pre 2)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
+  (* Skipped: SETFIELD2 can return interpreter errors, but this statement uses
+     [fun _ => None], so the Error branch requires [False] without access to
+     [setfield_heap_pre 2]. *)
 Admitted.
+
+Theorem correct_SETFIELD2 :
+    handler_correct (handle_SETFIELD 2) f_instr_SETFIELD2
+      (fun _ => None)
+      (setfield_heap_pre 2)
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_SETFIELD2_correct.
+Qed.

@@ -254,73 +254,6 @@ Local Ltac prove_field_survives Hstore Hload :=
 Local Ltac prove_field_survives_left Hstore Hload :=
   apply (load_after_store_other _ _ _ _ _ _ _ Hstore Hload); left; lia.
 
-(* ================================================================== *)
-(* Main theorem: SWITCH correctness for the Val_int case               *)
-(* ================================================================== *)
-
-(* Custom statement because handle_SWITCH doesn't take pc' and
-   does not fit handler_correct's (Z -> state -> step_result) shape.
-   We prove the Val_int case directly. The block/pointer cases are
-   excluded by precondition. *)
-
-Theorem verify_SWITCH_correct :
-  forall (_nc _nb : nat) (const_targets block_targets : list Z),
-  forall e le m s,
-    match handle_SWITCH _nc _nb const_targets block_targets s with
-    | Step s' =>
-        forall ard,
-        abs_rel_with_ard e le m s ard ->
-        (* Preconditions *)
-        (match Machine.accu s with
-         | Val_int n =>
-             0 <= n /\
-             -4611686018427387904 <= n <= 4611686018427387903 /\
-             int_vlong ard n /\
-             (* sizes word is readable from code buffer *)
-             (exists sizes_v,
-               Mem.load Mint32 m (ar_code_base_block ard)
-                 (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                    (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-               = Some (Vint sizes_v)) /\
-             (* The target offset is readable from the switch table *)
-             (exists ofs_int,
-               Mem.load Mint32 m (ar_code_base_block ard)
-                 (Ptrofs.unsigned
-                   (Ptrofs.add
-                     (Ptrofs.add (ar_code_base_ofs ard)
-                       (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
-                     (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                       (Ptrofs.of_int64 (Int64.repr n)))))
-               = Some (Vint ofs_int) /\
-               (* The computed C jump target matches the Rocq target *)
-               forall target,
-                 nth_error const_targets (Z.to_nat n) = Some target ->
-                 Ptrofs.add
-                   (Ptrofs.add (ar_code_base_ofs ard)
-                     (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t)))
-                   (Ptrofs.mul (Ptrofs.repr (sizeof (genv_cenv clight_ge) tint))
-                     (ptrofs_of_int Signed ofs_int))
-                 = Ptrofs.add (ar_code_base_ofs ard) (Ptrofs.repr (target * sizeof_code_t)))
-         | _ => False
-         end) ->
-        exists le' m' out,
-          exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_SWITCH) E0 le' m' out /\
-          abs_rel e le' m' s'
-    | Error msg =>
-        (msg = "SWITCH: constant index out of range"%string /\
-         match Machine.accu s with Val_int _ => True | _ => False end) \/
-        (msg = "SWITCH: block tag out of range"%string) \/
-        (msg = "SWITCH: dangling pointer"%string /\
-         match Machine.accu s with Val_ptr _ | Val_closure _ _ => True | _ => False end)
-    | Halt v => False
-    | CCall_request _ _ _ => False
-    end.
-(* Original proof broke after fn_body f_instr_SWITCH changed shape
-   (cpp shim migration, commit 3271267). The proof script below assumed
-   a different Ssequence nesting. Admit for now; will be repaired once
-   the handler body stabilizes. *)
-Proof. Admitted.
-
 (* Wrapper with the exact type expected by InstructVerificationProof.v.
    handle_instr (SWITCH n1 n2 l1 l2) computes to
      fun pc' s => handle_SWITCH n1 n2 l1 l2 s  (Dispatch.v, pc' ignored).
@@ -333,4 +266,3 @@ Definition correct_SWITCH : forall n1 n2 l1 l2,
     (error_message_of (Bytecode.AST.SWITCH n1 n2 l1 l2))
     (pre_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_halt_of (Bytecode.AST.SWITCH n1 n2 l1 l2)) (P_ccall_of (Bytecode.AST.SWITCH n1 n2 l1 l2)).
 Proof. Admitted.
-

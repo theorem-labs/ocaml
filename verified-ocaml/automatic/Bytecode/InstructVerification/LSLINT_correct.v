@@ -185,27 +185,6 @@ Proof.
 Qed.
 
 #[warnings="-not-a-closed-proof"]
-Theorem verify_LSLINT_correct :
-    handler_correct handle_LSLINT f_instr_LSLINT
-      (fun _ => None)
-      (fun _ _ s ard =>
-         match s.(Machine.accu), s.(Machine.stack) with
-         | Val_int a, Val_int b :: _ => 0 <= b < 64 /\ int_vlong ard a /\ int_vlong ard b
-         | _, Val_int b :: _ => 0 <= b < 64
-         | _, _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_LSLINT_handler_correct :
-    handler_correct handle_LSLINT f_instr_LSLINT
-      (fun _ => None)
-      shift_in_range
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the exact type required by InstructVerificationProof.v *)
 Local Notation LSLINT := Bytecode.AST.LSLINT.
 Theorem correct_LSLINT :

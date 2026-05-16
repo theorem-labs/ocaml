@@ -236,30 +236,13 @@ Proof. intros. simpl. rewrite ptr64_true. reflexivity. Qed.
 (* abs_rel_data record -- no precondition needed.                      *)
 (* ================================================================== *)
 
-Theorem verify_OFFSETINT_correct : forall ofs,
-    Int.min_signed <= ofs * 2 <= Int.max_signed ->
-    handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
-      (fun _ => None)
-      (fun e m s ard =>
-         (exists (i : int),
-           Mem.load Mint32 m (ar_code_base_block ard)
-             (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-                (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-           = Some (Vint i) /\
-           Int.signed i = ofs /\
-           Int.min_signed <= Int.signed i * 2 <= Int.max_signed) /\
-         accu_is_long e m s ard)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Exported version with named building-block precondition *)
 Theorem verify_OFFSETINT_handler_correct : forall ofs,
     Int.min_signed <= ofs * 2 <= Int.max_signed ->
     handler_correct (handle_OFFSETINT ofs) f_instr_OFFSETINT
       (fun _ => None)
       (pre_and (code_at (Int.repr ofs)) accu_is_long)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

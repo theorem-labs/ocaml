@@ -65,7 +65,7 @@ Theorem verify_APPTERM_correct : forall nargs slotsize,
              exec_stmt function_entry1 clight_ge e0 le m
                (fn_body f_instr_APPTERM) E0 le' m' out /\
              abs_rel e0 le' m' s')
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

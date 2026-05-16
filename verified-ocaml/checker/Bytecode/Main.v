@@ -7,9 +7,11 @@ From Stdlib Require Import ZArith PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From Stdlib Require Import Strings.String.
 From Stdlib Require Import Ascii.
+From Stdlib.Array Require Import PrimArray.
 From OCamlInterp.Manual.Utils Require Import Value.
 From OCamlInterp.Manual.Bytecode Require Import AST Machine IO DecodeSpec.
 From OCamlInterp.Checker.Bytecode Require Import InterpretChecker.
+From RecordUpdate Require Import RecordUpdate.
 Open Scope Z_scope.
 Open Scope bool_scope.
 
@@ -100,6 +102,9 @@ Definition z_to_string_codes (n : Z) : list Z :=
 Fixpoint mk_zeros (n : nat) : list value :=
   match n with O => [] | S n' => Val_int 0 :: mk_zeros n' end.
 
+Fixpoint repeat_value (n : nat) (v : value) : list value :=
+  match n with O => [] | S n' => v :: repeat_value n' v end.
+
 (* Force IO: print_string_io returns Z; we add it to the result to
    prevent extraction from dropping the call. The result is always 0. *)
 Definition print_io (cs : list Z) (v : Z) : Z :=
@@ -184,6 +189,17 @@ Definition handle_string_concat (args : list value) : option value :=
   | _ => Some (Val_int 0)
   end.
 
+Definition handle_blit_string (args : list value) : option value :=
+  match args with
+  | Val_block _ src :: Val_int src_off :: Val_block tag dst :: Val_int dst_off :: Val_int len :: _ =>
+    let n_src_off := Z.to_nat src_off in
+    let n_dst_off := Z.to_nat dst_off in
+    let n_len := Z.to_nat len in
+    let copied := firstn n_len (skipn n_src_off src) in
+    Some (Val_block tag (firstn n_dst_off dst ++ copied ++ skipn (n_dst_off + n_len) dst))
+  | _ => Some (Val_int 0)
+  end.
+
 Definition handle_identity (args : list value) : option value :=
   match args with
   | v :: _ => Some v
@@ -199,6 +215,37 @@ Definition handle_string_get (args : list value) : option value :=
     end
   | _ => Some (Val_int 0)
   end.
+
+Definition handle_make_vect (args : list value) : option value :=
+  match args with
+  | Val_int n :: init :: _ => Some (Val_block 0 (repeat_value (Z.to_nat n) init))
+  | _ => Some (Val_block 0 [])
+  end.
+
+Definition string_value (s : string) : value :=
+  Val_block String_tag (map Val_int (str_to_codes s)).
+
+Fixpoint replace_first_value (old new : value) (xs : list value) : list value :=
+  match xs with
+  | [] => []
+  | x :: rest =>
+    if value_eqb x old then new :: rest else x :: replace_first_value old new rest
+  end.
+
+Definition is_blit_primitive (name : list Z) : bool :=
+  list_z_eqb name (str_to_codes "caml_blit_string")
+  || list_z_eqb name (str_to_codes "caml_blit_bytes").
+
+Definition resume_after_ccall (name : list Z) (args : list value)
+    (cont : state) (v : value) : state :=
+  let cont' := cont <|accu := v|> in
+  if is_blit_primitive name then
+    match args with
+    | _ :: _ :: dst :: _ =>
+      cont' <|stack := replace_first_value dst v cont'.(stack)|>
+    | _ => cont'
+    end
+  else cont'.
 
 Definition make_ccall_handler (prims : list (list Z))
     : nat -> list value -> option value :=
@@ -227,6 +274,15 @@ Definition make_ccall_handler (prims : list (list Z))
       Some (Val_int (Z.shiftl 1 57 - 1))
     else if list_z_eqb name (str_to_codes "caml_sys_const_int_size") then
       Some (Val_int 63)
+    else if list_z_eqb name (str_to_codes "caml_sys_const_word_size") then
+      Some (Val_int 64)
+    else if list_z_eqb name (str_to_codes "caml_sys_const_big_endian") then
+      Some (Val_int 0)
+    else if list_z_eqb name (str_to_codes "caml_sys_const_ostype_unix") then
+      Some (Val_int 1)
+    else if list_z_eqb name (str_to_codes "caml_sys_const_ostype_win32")
+         || list_z_eqb name (str_to_codes "caml_sys_const_ostype_cygwin") then
+      Some (Val_int 0)
     else if list_z_eqb name (str_to_codes "caml_obj_tag") then
       handle_obj_tag args
     else if list_z_eqb name (str_to_codes "caml_string_length")
@@ -236,7 +292,7 @@ Definition make_ccall_handler (prims : list (list Z))
       handle_create_bytes args
     else if list_z_eqb name (str_to_codes "caml_blit_string")
          || list_z_eqb name (str_to_codes "caml_blit_bytes") then
-      Some (Val_int 0)
+      handle_blit_string args
     else if list_z_eqb name (str_to_codes "caml_string_equal") then
       handle_string_equal args
     else if list_z_eqb name (str_to_codes "caml_int_compare")
@@ -250,6 +306,9 @@ Definition make_ccall_handler (prims : list (list Z))
     else if list_z_eqb name (str_to_codes "caml_string_get")
          || list_z_eqb name (str_to_codes "caml_bytes_get") then
       handle_string_get args
+    else if list_z_eqb name (str_to_codes "caml_make_vect")
+         || list_z_eqb name (str_to_codes "caml_make_array") then
+      handle_make_vect args
     else if list_z_eqb name (str_to_codes "caml_string_set")
          || list_z_eqb name (str_to_codes "caml_bytes_set") then
       Some (Val_int 0)
@@ -265,8 +324,40 @@ Definition make_ccall_handler (prims : list (list Z))
       Some (Val_int 0)
     else if list_z_eqb name (str_to_codes "caml_sys_getenv") then
       Some (Val_int 0)
+    else if list_z_eqb name (str_to_codes "caml_sys_executable_name") then
+      Some (string_value "pipeline_runner.exe")
+    else if list_z_eqb name (str_to_codes "caml_sys_get_config") then
+      Some (Val_block 0 [string_value "Unix"; Val_int 64; Val_int 0])
+    else if list_z_eqb name (str_to_codes "caml_sys_const_backend_type") then
+      Some (Val_int 0)
     else
-      Some (Val_int 0).
+      (* Unsupported primitive: surface as a C-call failure instead of
+         silently succeeding with Val_int 0. This propagates as a
+         Run_error "C call returned None" via Run.v's run_micro, which
+         the pipeline prints as "Runtime error". Identification of the
+         specific unsupported primitive remains a downstream-tooling
+         concern (e.g. the testsuite runner) since Run.v's MErr only
+         carries a fixed string. *)
+      None.
+
+Fixpoint run_effectful (fuel : nat) (code : array instruction)
+    (s : state) (prims : list (list Z)) : run_result :=
+  match fuel with
+  | O => Out_of_fuel s
+  | S fuel' =>
+    match step code s with
+    | Step s' => run_effectful fuel' code s' prims
+    | Halt v => Finished v
+    | Error msg => Run_error msg
+    | CCall_request prim_idx args cont =>
+      let name := match nth_error prims prim_idx with
+                  | Some n => n | None => [] end in
+      match make_ccall_handler prims prim_idx args with
+      | Some v => run_effectful fuel' code (resume_after_ccall name args cont v) prims
+      | None => Run_error "C call returned None"
+      end
+    end
+  end.
 
 (* ------------------------------------------------------------------ *)
 (* Main pipeline (parameterized over decoder)                          *)
@@ -304,11 +395,10 @@ Definition main : Z :=
                       (Z.of_nat s.(sec_length))
         | None => []
         end in
-      let handler := make_ccall_handler prims in
       let init := initial_state globals in
       let fuel := Z.to_nat 100000000 in
       let code_arr := list_to_code_array code in
-      match run fuel code_arr init handler with
+      match run_effectful fuel code_arr init prims with
       | Finished _ => 0
       | Run_error _ =>
         print_io (str_to_codes "Runtime error") (print_io [10] 1)

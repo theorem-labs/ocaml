@@ -37,9 +37,11 @@ From OCamlInterp.Automatic.Bytecode Require Import Interpret.
 From OCamlInterp.Manual Require Bytecode.AST.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
+From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
+Import Bytecode.AST.
 
 Local Notation ge := clight_ge.
 
@@ -187,29 +189,12 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_CONSTINT_correct : forall n,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
-      (fun _ => None)
-      (fun _ m s ard =>
-         (* The code buffer contains Int.repr n at the current PC position *)
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr n)) /\
-         (* n fits in the int32 signed range *)
-         Int.min_signed <= n <= Int.max_signed)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Exported version with named building-block precondition *)
 Theorem verify_CONSTINT_handler_correct : forall n,
     Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_CONSTINT n) f_instr_CONSTINT
-      (fun _ => None)
-      (code_at (Int.repr n))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (CONSTINT n)) (clight_of (CONSTINT n))
+      (error_message_of (CONSTINT n))
+      (pre_of (CONSTINT n)) (P_halt_of (CONSTINT n)) (P_ccall_of (CONSTINT n)).
 Proof.
 Admitted.
 
@@ -230,4 +215,17 @@ Definition correct_CONSTINT : forall n,
     (error_message_of (CONSTINT n))
     (pre_of (CONSTINT n)) (P_halt_of (CONSTINT n)) (P_ccall_of (CONSTINT n)).
 Proof.
-Admitted.
+  intros n.
+  destruct ((Int.min_signed <=? n) && (n <=? Int.max_signed))%Z eqn:Hrange.
+  - apply verify_CONSTINT_handler_correct.
+    apply Bool.andb_true_iff in Hrange as [Hmin Hmax].
+    split; apply Z.leb_le; assumption.
+  - unfold handler_correct, handler_correct_gen.
+    intros e le m s.
+    cbn [error_message_of handle_instr clight_of pre_of P_halt_of P_ccall_of
+         instr_wfb Dispatch.handle_instr].
+    rewrite Hrange.
+    unfold Handlers.handle_CONSTINT.
+    rewrite Hrange.
+    reflexivity.
+Qed.

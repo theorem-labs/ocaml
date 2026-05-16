@@ -52,7 +52,10 @@
    abs_rel, the heap_field_loadable precondition would be derivable
    and handler_correct would imply handler_correct.
 
-   No Axioms, no Admitted, no vm_compute on Ptrofs. *)
+    No Axioms, no vm_compute on Ptrofs.  The wrapper theorem below remains
+    admitted because it is false with err = (fun _ => None): the Rocq handler
+    has an Error branch when field_or_heap returns None, and handler_correct
+    requires False in that branch for arbitrary states. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -123,10 +126,3 @@ Local Definition heap_field_loadable_0
 (* Main theorem: GETFIELD0 with heap precondition                      *)
 (* ================================================================== *)
 
-Theorem verify_GETFIELD0_with_pre :
-    handler_correct (handle_GETFIELD 0) f_instr_GETFIELD0
-      (fun _ => None)
-      (heap_field_loadable 0)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.

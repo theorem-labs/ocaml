@@ -206,30 +206,6 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_UGEINT_correct :
-    handler_correct handle_UGEINT f_instr_UGEINT
-      (fun _ => None)
-      (fun _ _ s ard =>
-         match s.(Machine.accu), s.(Machine.stack) with
-         | Val_int a, Val_int b :: _ =>
-             0 <= a < 4611686018427387904 /\
-             0 <= b < 4611686018427387904 /\
-             int_vlong ard a /\
-             int_vlong ard b
-         | _, _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_UGEINT_handler_correct :
-    handler_correct handle_UGEINT f_instr_UGEINT
-      (fun _ => None)
-      unsigned_ints_safe
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* ================================================================== *)
 (* Wrapper with the exact type required by InstructVerificationProof.v *)
 (* ================================================================== *)

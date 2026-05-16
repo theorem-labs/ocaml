@@ -942,7 +942,7 @@ Theorem verify_MAKEBLOCK_correct : forall (t size : nat),
                  b <> sb -> b <> sp_b -> b <> new_b ->
                  Mem.load chunk m_field0 b ofs = Some v ->
                  Mem.load chunk m_loop b ofs = Some v)))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof. Admitted.
 
 From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.

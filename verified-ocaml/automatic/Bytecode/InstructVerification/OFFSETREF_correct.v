@@ -259,14 +259,6 @@ Definition offsetref_heap_pre
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_OFFSETREF_correct : forall n,
-    handler_correct (handle_OFFSETREF n) f_instr_OFFSETREF
-      (fun _ => None)
-      (fun _ => offsetref_heap_pre n)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* ================================================================== *)
 (* Wrapper with the exact type expected by InstructVerificationProof.v *)
 (* ================================================================== *)

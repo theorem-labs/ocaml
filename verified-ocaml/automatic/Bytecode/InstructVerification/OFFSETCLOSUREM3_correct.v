@@ -90,6 +90,15 @@ Theorem verify_OFFSETCLOSUREM3_compl_comp :
     handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM3
       (fun _ => None)
       (closure_offset_pre (-2) (-24))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Definition correct_OFFSETCLOSUREM3 :
+    handler_correct (handle_OFFSETCLOSURE (-2)) f_instr_OFFSETCLOSUREM3
+      (fun _ => None)
+      (closure_offset_pre (-2) (-24))
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_OFFSETCLOSUREM3_compl_comp.
+Qed.

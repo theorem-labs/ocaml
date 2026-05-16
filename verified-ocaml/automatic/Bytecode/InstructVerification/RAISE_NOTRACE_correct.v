@@ -30,6 +30,7 @@ From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
 From OCamlInterp.Automatic Require Import Bytecode.StepToBigstep.
 From OCamlInterp.Automatic Require Import Bytecode.HandlerLemmas.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import RAISE_correct.
 
 Local Notation ge := clight_ge.
 
@@ -161,9 +162,10 @@ Theorem verify_RAISE_NOTRACE_correct :
     handler_correct (fun _pc s => do_raise s.(accu) s) f_instr_RAISE_NOTRACE
       (fun _ => None)
       raise_step_pre
-      (fun _ => False) (fun _ _ _ => False).
+       (fun _ => None) (fun _ => None).
 Proof.
-Admitted.
+  exact verify_RAISE_correct.
+Qed.
 
 (* Bridge lemma: when do_raise returns Error, error_message_of_raise
    returns the same message.  Both functions share the same case
@@ -201,4 +203,5 @@ Definition correct_RAISE_NOTRACE :
       (error_message_of RAISE_NOTRACE)
       (pre_of RAISE_NOTRACE) (P_halt_of RAISE_NOTRACE) (P_ccall_of RAISE_NOTRACE).
 Proof.
-Admitted.
+  exact correct_RAISE.
+Qed.

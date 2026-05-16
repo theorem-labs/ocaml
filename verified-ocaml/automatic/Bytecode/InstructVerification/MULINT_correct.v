@@ -141,14 +141,6 @@ Proof.
     rewrite HM. nia.
 Qed.
 
-Theorem verify_MULINT_correct :
-    handler_correct handle_MULINT f_instr_MULINT
-      (fun _ => None)
-      (pre_and accu_is_long stack_head_is_long)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_MULINT :
   handler_correct (handle_instr Bytecode.AST.MULINT) (clight_of Bytecode.AST.MULINT)
@@ -156,4 +148,3 @@ Theorem correct_MULINT :
     (pre_of Bytecode.AST.MULINT) (P_halt_of Bytecode.AST.MULINT) (P_ccall_of Bytecode.AST.MULINT).
 Proof.
 Admitted.
-

@@ -80,11 +80,11 @@ Definition handle_PUSH (pc' : Z) (s : state) : step_result :=
 Definition handle_PUSHACC (n : nat) (pc' : Z) (s : state) : step_result :=
   match n with
   | 1%nat | 2%nat | 3%nat | 4%nat | 5%nat | 6%nat | 7%nat =>
-    let new_stack := s.(accu) :: s.(stack) in
-    match nth_error new_stack n with
-    | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
-    | None => Error "PUSHACC: stack underflow"
-    end
+      let new_stack := s.(accu) :: s.(stack) in
+      match nth_error new_stack n with
+      | Some v => Step (s <|pc := pc'|> <|accu := v|> <|stack := new_stack|>)
+      | None => Error "PUSHACC: stack underflow"
+      end
   | _ => Error "PUSHACC: malformed operand"
   end.
 
@@ -304,12 +304,16 @@ Definition handle_CLOSURE (nvars : nat) (code_ofs : Z) (pc' : Z) (s : state) : s
    (nf*3-1+nv) fields.  Layout: [code0,ci0, infix,code1,ci1, ..., v0,v1,...]
    Each closure_i is pushed as Val_closure(addr, 3*i). *)
 Definition handle_CLOSUREREC (nfuncs nvars : nat) (code_offsets : list Z) (pc' : Z) (s : state) : step_result :=
-  let wf :=
-    match nfuncs, code_offsets with
-    | 1%nat, (code_ofs :: nil)%list =>
-        ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed))%Z
-    | _, _ => false
+  let fix offsets_wf (ofs : list Z) : bool :=
+    match ofs with
+    | [] => true
+    | code_ofs :: rest =>
+      ((Int.min_signed <=? code_ofs) && (code_ofs <=? Int.max_signed)
+       && offsets_wf rest)%Z
     end in
+  let wf := negb (Nat.eqb nfuncs 0)
+            && Nat.eqb (List.length code_offsets) nfuncs
+            && offsets_wf code_offsets in
   if wf then
     let stk := if Nat.ltb 0 nvars then s.(accu) :: s.(stack) else s.(stack) in
     let vars := firstn nvars stk in

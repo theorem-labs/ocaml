@@ -196,14 +196,10 @@ Qed.
 
 Theorem verify_ATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_ATOM t) f_instr_ATOM
-      (fun _ => None)
-      (fun _ m s ard =>
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat t))))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (Bytecode.AST.ATOM t)) (clight_of (Bytecode.AST.ATOM t))
+      (error_message_of (Bytecode.AST.ATOM t))
+      (pre_of (Bytecode.AST.ATOM t))
+      (P_halt_of (Bytecode.AST.ATOM t)) (P_ccall_of (Bytecode.AST.ATOM t)).
 Proof.
 Admitted.
 
@@ -222,4 +218,16 @@ Definition correct_ATOM : forall t,
     (error_message_of (ATOM t))
     (pre_of (ATOM t)) (P_halt_of (ATOM t)) (P_ccall_of (ATOM t)).
 Proof.
-Admitted.
+  intro t.
+  destruct (Z.of_nat t <=? 2097151)%Z eqn:Ht.
+  - apply verify_ATOM_correct.
+    apply Z.leb_le. exact Ht.
+  - unfold handler_correct, handler_correct_gen.
+    intros e le m s.
+    cbn [error_message_of handle_instr clight_of pre_of P_halt_of P_ccall_of
+         instr_wfb Dispatch.handle_instr].
+    rewrite Ht.
+    unfold handle_ATOM.
+    rewrite Ht.
+    reflexivity.
+Qed.

@@ -100,20 +100,17 @@ Theorem verify_GTINT_correct :
     handler_correct handle_GTINT f_instr_GTINT
       (fun _ => None)
       (fun _ => gtint_range_pre)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_GTINT_handler_correct :
-    handler_correct handle_GTINT f_instr_GTINT
-      (fun _ => None)
-      signed_int_op_safe
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
 (* ================================================================== *)
 (* Wrapper with canonical InstructSpec predicates                       *)
+(* Abandoned for this pass: [verify_GTINT_correct] is still admitted, and
+   [pre_of GTINT] does not unconditionally imply [signed_int_op_safe].  The
+   Clight body can execute for Vlong-represented non-[Val_int] values, whereas
+   the verified handler theorem's precondition requires [Val_int] operands and
+   signed tagged range facts. *)
 (* ================================================================== *)
 
 Theorem correct_GTINT :
@@ -122,4 +119,3 @@ Theorem correct_GTINT :
       (pre_of Bytecode.AST.GTINT) (P_halt_of Bytecode.AST.GTINT) (P_ccall_of Bytecode.AST.GTINT).
 Proof.
 Admitted.
-

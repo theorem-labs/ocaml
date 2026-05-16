@@ -103,25 +103,23 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_BRANCH_correct : forall target,
-    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
-      (fun _ => None)
-      (fun _ m s ard =>
-         exists v, Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint v))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (Bytecode.AST.BRANCH target)) (clight_of (Bytecode.AST.BRANCH target))
+      (error_message_of (Bytecode.AST.BRANCH target))
+      (pre_of (Bytecode.AST.BRANCH target))
+      (P_halt_of (Bytecode.AST.BRANCH target)) (P_ccall_of (Bytecode.AST.BRANCH target)).
 Proof.
 Admitted.
 
 (* Wrapper with building-block precondition for Module Type *)
 Theorem verify_BRANCH_handler_correct : forall target,
-    handler_correct (fun _ s => handle_BRANCH target s) f_instr_BRANCH
-      (fun _ => None)
-      code_loadable
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (Bytecode.AST.BRANCH target)) (clight_of (Bytecode.AST.BRANCH target))
+      (error_message_of (Bytecode.AST.BRANCH target))
+      (pre_of (Bytecode.AST.BRANCH target))
+      (P_halt_of (Bytecode.AST.BRANCH target)) (P_ccall_of (Bytecode.AST.BRANCH target)).
 Proof.
-Admitted.
+  intro target.
+  exact (verify_BRANCH_correct target).
+Qed.
 
 (* Wrapper with the exact type expected by InstructVerificationProof.v.
    handle_instr (BRANCH z) = fun _ s => handle_BRANCH z s and
@@ -134,5 +132,6 @@ Definition correct_BRANCH : forall z,
     (error_message_of (Bytecode.AST.BRANCH z))
     (pre_of (Bytecode.AST.BRANCH z)) (P_halt_of (Bytecode.AST.BRANCH z)) (P_ccall_of (Bytecode.AST.BRANCH z)).
 Proof.
-Admitted.
-
+  intro z.
+  exact (verify_BRANCH_handler_correct z).
+Qed.

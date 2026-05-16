@@ -189,22 +189,6 @@ Definition getmethod_heap_pre
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_GETMETHOD_correct :
-    handler_correct handle_GETMETHOD f_instr_GETMETHOD
-      (fun _ => None)
-      (fun _ m s ard =>
-         getmethod_heap_pre m s ard /\
-         match s.(Machine.accu) with
-         | Val_int n => 0 <= n /\
-                        n * 2 + 1 <= Int64.max_signed /\
-                        n < Ptrofs.half_modulus /\
-                        (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Val_int n) cv -> exists z, cv = Vlong z)
-         | _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr GETMETHOD / clight_of GETMETHOD / pre_of GETMETHOD are
    convertible with handle_GETMETHOD / f_instr_GETMETHOD / getmethod_step_pre.

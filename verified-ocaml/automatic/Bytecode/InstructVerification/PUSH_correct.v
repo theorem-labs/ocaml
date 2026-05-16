@@ -29,15 +29,9 @@ Local Ltac eval_cbn :=
         PTree.get PTree.set].
 
 Theorem verify_PUSH_correct :
-    handler_correct handle_PUSH f_instr_PUSH
-      (fun _ => None)
-      (fun _ m _ ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         exists sp_b sp_ofs,
-           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16)
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (Dispatch.handle_instr PUSH) (clight_of PUSH)
+      (error_message_of PUSH)
+      (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
 
 Proof.
 Admitted.
@@ -52,5 +46,5 @@ Definition correct_PUSH :
     (error_message_of PUSH)
     (pre_of PUSH) (P_halt_of PUSH) (P_ccall_of PUSH).
 Proof.
-Admitted.
-
+  exact verify_PUSH_correct.
+Qed.

@@ -179,31 +179,24 @@ Qed.
 
 Theorem verify_PUSHATOM_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
-      (fun _ => None)
-      (fun _ m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         (exists sp_b sp_ofs,
-           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16) /\
-         Mem.load Mint32 m (ar_code_base_block ard)
-           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat t))))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (Bytecode.AST.PUSHATOM t)) (clight_of (Bytecode.AST.PUSHATOM t))
+      (error_message_of (Bytecode.AST.PUSHATOM t))
+      (pre_of (Bytecode.AST.PUSHATOM t))
+      (P_halt_of (Bytecode.AST.PUSHATOM t)) (P_ccall_of (Bytecode.AST.PUSHATOM t)).
 Proof.
 Admitted.
 
 (* Wrapper with building-block precondition for Module Type *)
 Theorem verify_PUSHATOM_handler_correct : forall t,
     Z.of_nat t <= 2097151 ->
-    handler_correct (handle_PUSHATOM t) f_instr_PUSHATOM
-      (fun _ => None)
-      (pre_and (sp_at_least 16) (code_at (Int.repr (Z.of_nat t))))
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (Bytecode.AST.PUSHATOM t)) (clight_of (Bytecode.AST.PUSHATOM t))
+      (error_message_of (Bytecode.AST.PUSHATOM t))
+      (pre_of (Bytecode.AST.PUSHATOM t))
+      (P_halt_of (Bytecode.AST.PUSHATOM t)) (P_ccall_of (Bytecode.AST.PUSHATOM t)).
 Proof.
-Admitted.
+  intros t Ht.
+  exact (verify_PUSHATOM_correct t Ht).
+Qed.
 
 (* Wrapper matching InstructVerificationFineGrainedSpec signature.
    handle_instr (PUSHATOM t) = handle_PUSHATOM t by computation via Dispatch.
@@ -222,4 +215,16 @@ Definition correct_PUSHATOM : forall t,
     (error_message_of (PUSHATOM t))
     (pre_of (PUSHATOM t)) (P_halt_of (PUSHATOM t)) (P_ccall_of (PUSHATOM t)).
 Proof.
-Admitted.
+  intro t.
+  destruct (Z.of_nat t <=? 2097151)%Z eqn:Ht.
+  - apply verify_PUSHATOM_handler_correct.
+    apply Z.leb_le. exact Ht.
+  - unfold handler_correct, handler_correct_gen.
+    intros e le m s.
+    cbn [error_message_of handle_instr clight_of pre_of P_halt_of P_ccall_of
+         instr_wfb Dispatch.handle_instr].
+    rewrite Ht.
+    unfold handle_PUSHATOM.
+    rewrite Ht.
+    reflexivity.
+Qed.

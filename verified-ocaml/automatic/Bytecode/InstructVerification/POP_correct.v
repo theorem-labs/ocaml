@@ -238,7 +238,7 @@ Theorem verify_POP_correct : forall n,
             Ptrofs.unsigned sp_ofs + Z.of_nat n * 8 < Ptrofs.modulus) /\
          (* n does not exceed the stack length *)
          (n <= Datatypes.length (Machine.stack s))%nat)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
@@ -248,7 +248,7 @@ Theorem verify_POP_handler_correct : forall n,
     handler_correct (handle_POP n) f_instr_POP
       (fun _ => None)
       (pre_and (pre_and (code_at (Int.repr (Z.of_nat n))) code_ne_struct) (stack_length_ge n))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

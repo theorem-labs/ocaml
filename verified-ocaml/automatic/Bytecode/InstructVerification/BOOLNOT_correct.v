@@ -524,14 +524,100 @@ Proof.
        rewrite Haccu_eq in Hbool; discriminate.
 Qed.
 
+Local Lemma exec_Sset_is_normal : forall e le m id a t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m (Sset id a) t le' m' out ->
+  out = Out_normal.
+Proof. intros. inversion H; subst; reflexivity. Qed.
+
+Local Lemma exec_Sassign_is_normal : forall e le m a1 a2 t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m (Sassign a1 a2) t le' m' out ->
+  out = Out_normal.
+Proof. intros. inversion H; subst; reflexivity. Qed.
+
+Local Lemma eval_expr_Econst_int_inv : forall e le m n ty v,
+  eval_expr clight_ge e le m (Econst_int n ty) v ->
+  v = Vint n.
+Proof.
+  intros e le m n ty v Hev.
+  inversion Hev; subst; [reflexivity|].
+  match goal with H : eval_lvalue _ _ _ _ (Econst_int _ _) _ _ _ |- _ =>
+    inversion H
+  end.
+Qed.
+
+Local Lemma exec_Sreturn_const_int : forall e le m n t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m
+    (Sreturn (Some (Econst_int n tint))) t le' m' out ->
+  out = Out_return (Some (Vint n, tint)).
+Proof.
+  intros. inversion H; subst.
+  match goal with He : eval_expr _ _ _ _ (Econst_int _ _) _ |- _ =>
+    apply eval_expr_Econst_int_inv in He
+  end.
+  subst. reflexivity.
+Qed.
+
+Local Lemma exec_Sseq_normal_first : forall e le m s1 s2 t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m (Ssequence s1 s2) t le' m' out ->
+  (forall t' le0 m0 out0,
+    exec_stmt function_entry1 clight_ge e le m s1 t' le0 m0 out0 ->
+    out0 = Out_normal) ->
+  exists t1 le1 m1 t2,
+    exec_stmt function_entry1 clight_ge e le m s1 t1 le1 m1 Out_normal /\
+    exec_stmt function_entry1 clight_ge e le1 m1 s2 t2 le' m' out.
+Proof.
+  intros e le m s1 s2 t le' m' out Hseq Hs1_normal.
+  remember (Ssequence s1 s2) as stmt eqn:Hstmt.
+  destruct Hseq; try (inversion Hstmt; fail).
+  - inversion Hstmt; subst. eauto 8.
+  - inversion Hstmt; subst.
+    specialize (Hs1_normal _ _ _ _ Hseq).
+    contradiction.
+Qed.
+
+Local Lemma BOOLNOT_body_outcome : forall e le m t le' m' out,
+  exec_stmt function_entry1 clight_ge e le m (fn_body f_instr_BOOLNOT)
+    t le' m' out ->
+  out = Out_return (Some (Vint (Int.repr 0), tint)).
+Proof.
+  intros e le m t le' m' out Hexec.
+  cbn [fn_body f_instr_BOOLNOT] in Hexec.
+  apply exec_Sseq_normal_first in Hexec.
+  2:{ intros t' le0 m0 out0 HA.
+      apply exec_Sseq_normal_first in HA.
+      2:{ intros. eapply exec_Sset_is_normal; eauto. }
+      destruct HA as [? [? [? [? [_ HAssign]]]]].
+      eapply exec_Sassign_is_normal; eauto. }
+  destruct Hexec as [? [? [? [? [_ HRet]]]]].
+  eapply exec_Sreturn_const_int; eauto.
+Qed.
+
 (* Wrapper: convert to handler_correct form for the Module Type. *)
 Theorem verify_BOOLNOT_handler_correct :
     handler_correct handle_BOOLNOT f_instr_BOOLNOT
       (fun _ => None)
       (pre_and accu_is_bool accu_is_long)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
-Admitted.
+  unfold handler_correct, handler_correct_gen.
+  intros e le m s.
+  specialize (verify_BOOLNOT_correct e le m s) as H.
+  unfold handle_BOOLNOT in H |- *.
+  destruct (Machine.accu s) as [n| | |] eqn:Haccu; try solve
+    [ intros ard Hrel Hpre;
+      destruct Hpre as [Hbool Hlong];
+      destruct (H Hbool ard Hrel Hlong) as [le' [m' [out [Hexec Habs]]]];
+      exists le', m'; split;
+      [ unfold clight_returns; rewrite (BOOLNOT_body_outcome _ _ _ _ _ _ _ Hexec) in Hexec; exact Hexec
+      | unfold R_ex; exact Habs ] ].
+  destruct n;
+    (intros ard Hrel Hpre;
+     destruct Hpre as [Hbool Hlong];
+     destruct (H Hbool ard Hrel Hlong) as [le' [m' [out [Hexec Habs]]]];
+     exists le', m'; split;
+     [ unfold clight_returns; rewrite (BOOLNOT_body_outcome _ _ _ _ _ _ _ Hexec) in Hexec; exact Hexec
+     | unfold R_ex; exact Habs ]).
+Qed.
 
 (* Final wrapper with the exact type expected by InstructVerificationProof.v. *)
 Definition correct_BOOLNOT :
@@ -539,5 +625,9 @@ Definition correct_BOOLNOT :
       (error_message_of Bytecode.AST.BOOLNOT)
       (pre_of Bytecode.AST.BOOLNOT) (P_halt_of Bytecode.AST.BOOLNOT) (P_ccall_of Bytecode.AST.BOOLNOT).
 Proof.
+(* Abandoned for this pass: [verify_BOOLNOT_handler_correct] is closed under
+   the semantic precondition [pre_and accu_is_bool accu_is_long].  The canonical
+   [pre_of BOOLNOT] is the generic Clight-body executability condition and is
+   not convertible to that boolean accumulator precondition, so this wrapper
+   needs a separate weakening/strengthening argument. *)
 Admitted.
-

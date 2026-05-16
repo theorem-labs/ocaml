@@ -22,10 +22,34 @@ From OCamlInterp.Automatic.Bytecode.Interpret Require Import Handlers Dispatch.
 From OCamlInterp.Manual Require Import Bytecode.Generated.instruct_handlers.
 From OCamlInterp.Manual Require Import Bytecode.Interpret.InstructSpec.
 From OCamlInterp.Automatic Require Import Bytecode.Interpret.InstructSpecHelpers.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC1_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC2_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC3_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC4_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC5_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC6_correct.
+From OCamlInterp.Automatic.Bytecode.InstructVerification Require Import PUSHACC7_correct.
 
 Definition correct_PUSHACC : forall n,
   handler_correct (handle_instr (PUSHACC n)) (clight_of (PUSHACC n))
     (error_message_of (PUSHACC n))
     (pre_of (PUSHACC n)) (P_halt_of (PUSHACC n)) (P_ccall_of (PUSHACC n)).
 Proof.
-Admitted.
+  intros n.
+  destruct n as [|[|[|[|[|[|[|[|n']]]]]]]].
+  - unfold handler_correct, handler_correct_gen.
+    intros e le m s.
+    simpl.
+    reflexivity.
+  - exact PUSHACC1_correct.correct_PUSHACC1.
+  - exact PUSHACC2_correct.correct_PUSHACC2.
+  - exact PUSHACC3_correct.correct_PUSHACC3.
+  - exact PUSHACC4_correct.correct_PUSHACC4.
+  - exact PUSHACC5_correct.correct_PUSHACC5.
+  - exact PUSHACC6_correct.correct_PUSHACC6.
+  - exact PUSHACC7_correct.correct_PUSHACC7.
+  - unfold handler_correct, handler_correct_gen.
+    intros e le m s.
+    simpl.
+    reflexivity.
+Qed.

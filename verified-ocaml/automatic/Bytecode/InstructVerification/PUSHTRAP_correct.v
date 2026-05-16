@@ -225,10 +225,9 @@ Qed.
 (* ================================================================== *)
 
 Theorem verify_PUSHTRAP_correct : forall handler_pc,
-    handler_correct (handle_PUSHTRAP handler_pc) f_instr_PUSHTRAP
-      (fun _ => None)
-      (pushtrap_step_pre handler_pc)
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (Bytecode.AST.PUSHTRAP handler_pc)) (clight_of (Bytecode.AST.PUSHTRAP handler_pc))
+      (error_message_of (Bytecode.AST.PUSHTRAP handler_pc))
+      (pre_of (Bytecode.AST.PUSHTRAP handler_pc)) (P_halt_of (Bytecode.AST.PUSHTRAP handler_pc)) (P_ccall_of (Bytecode.AST.PUSHTRAP handler_pc)).
 Proof.
 Admitted.
 
@@ -242,5 +241,6 @@ Definition correct_PUSHTRAP : forall z,
       (error_message_of (Bytecode.AST.PUSHTRAP z))
       (pre_of (Bytecode.AST.PUSHTRAP z)) (P_halt_of (Bytecode.AST.PUSHTRAP z)) (P_ccall_of (Bytecode.AST.PUSHTRAP z)).
 Proof.
-Admitted.
-
+  intro z.
+  exact (verify_PUSHTRAP_correct z).
+Qed.

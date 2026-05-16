@@ -291,80 +291,6 @@ Proof. reflexivity. Qed.
 (* Main theorem: nvars = 0 case                                        *)
 (* ================================================================== *)
 
-Theorem verify_CLOSURE_correct : forall code_ofs,
-    Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE 0 code_ofs) f_instr_CLOSURE
-      (fun _ => None)
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         (* e does not bind heap_alloc *)
-         e ! _heap_alloc = None /\
-         (* Code buffer: nvars=0 at current PC *)
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr 0)) /\
-         (* Code buffer: code_ofs at PC+1 *)
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
-         = Some (Vint (Int.repr code_ofs)) /\
-         (* code_ofs fits in signed int range *)
-         (Int.min_signed <= code_ofs <= Int.max_signed) /\
-         (* Heap map freshness *)
-         (ar_heap_map ard) (next_addr s) = None /\
-         (* Global block valid *)
-         Mem.valid_block m gb /\
-         (* Genv lookup for heap_alloc *)
-         (exists b_ha,
-            Genv.find_symbol (genv_genv ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (* heap_alloc spec: for any memory m', allocate 2 fields with tag 247 *)
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv ge))
-                (Vptr sb so :: Vlong (Int64.repr 2) :: Vlong (Int64.repr 247) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p) /\
-              (* Field 0 storable (code ptr as Vptr) *)
-              (forall cv, exists m_s0,
-                 Mem.store Mint64 m_alloc new_b (Ptrofs.unsigned new_ofs) cv = Some m_s0 /\
-                 Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) =
-                   Some (Val.load_result Mint64 cv) /\
-                 (forall b ofs chunk v, b <> new_b ->
-                    Mem.load chunk m_alloc b ofs = Some v ->
-                    Mem.load chunk m_s0 b ofs = Some v) /\
-                 (* Field 1 storable after field 0 *)
-                 (forall cv1, exists m_s1,
-                    Mem.store Mint64 m_s0 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) cv1 = Some m_s1 /\
-                    Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned (Ptrofs.add new_ofs (Ptrofs.repr 8))) =
-                      Some (Val.load_result Mint64 cv1) /\
-                    (* Load at field 0 preserved *)
-                    (forall v0, Mem.load Mint64 m_s0 new_b (Ptrofs.unsigned new_ofs) = Some v0 ->
-                       Mem.load Mint64 m_s1 new_b (Ptrofs.unsigned new_ofs) = Some v0) /\
-                    (forall b ofs chunk v, b <> new_b ->
-                       Mem.load chunk m_s0 b ofs = Some v ->
-                       Mem.load chunk m_s1 b ofs = Some v) /\
-                    (forall b ofs k p,
-                       Mem.valid_block m_s0 b -> Mem.perm m_s0 b ofs k p ->
-                       Mem.perm m_s1 b ofs k p)))))
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-
 (* ================================================================== *)
 (* Helper lemma: Int.lt (Int.repr 0) (Int.repr (Z.of_nat (S n)))      *)
 (* when 0 <= Z.of_nat (S n) <= Int.max_signed                         *)
@@ -754,23 +680,13 @@ Qed.
 (* Main theorem: arbitrary nvars                                       *)
 (* ================================================================== *)
 
-Theorem verify_CLOSURE_general_correct : forall nvars code_ofs,
-    (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
-    Int.min_signed <= code_ofs <= Int.max_signed ->
-    handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
-      (fun _ => None)
-      (closure_general_step_pre nvars code_ofs)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 Definition CLOSURE_correct_for_spec : forall nvars code_ofs,
     (0 <= Z.of_nat (2 + nvars) <= Int.max_signed) ->
     Int.min_signed <= code_ofs <= Int.max_signed ->
     handler_correct (handle_CLOSURE nvars code_ofs) f_instr_CLOSURE
       (fun _ => None)
       (closure_general_step_pre nvars code_ofs)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
   Proof.
   Admitted.
 

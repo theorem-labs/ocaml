@@ -276,20 +276,11 @@ Theorem verify_BLEINT_correct : forall n target,
          | _ => False
          end /\
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
 (* Wrapper with building-block precondition for Module Type *)
-Theorem verify_BLEINT_handler_correct : forall n target,
-    Int.min_signed <= n <= Int.max_signed ->
-    handler_correct (handle_BLEINT n target) f_instr_BLEINT
-      (fun _ => None)
-      (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the canonical type expected by InstructVerificationProof.v.
 
    The handler checks instr_wfb (BLEINT z1 z2) = ((min_signed <=? z1) &&

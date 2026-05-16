@@ -30,6 +30,15 @@ Theorem verify_ACC5 :
     handler_correct (handle_ACC 5) f_instr_ACC5
       (fun _ => None)
       (fun _ _ _ _ => True)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Theorem correct_ACC5 :
+    handler_correct (handle_ACC 5) f_instr_ACC5
+      (fun _ => None)
+      (fun _ _ _ _ => True)
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_ACC5.
+Qed.

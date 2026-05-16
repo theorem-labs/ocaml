@@ -221,30 +221,6 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_ASRINT_correct :
-    handler_correct handle_ASRINT f_instr_ASRINT
-      (fun _ => None)
-      (fun _ _ s ard =>
-         match s.(Machine.accu), s.(Machine.stack) with
-         | Val_int a, Val_int b :: _ =>
-             0 <= b < 64 /\
-             Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
-             int_vlong ard a /\ int_vlong ard b
-         | _, Val_int b :: _ => 0 <= b < 64
-         | _, _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-Theorem verify_ASRINT_handler_correct :
-    handler_correct handle_ASRINT f_instr_ASRINT
-      (fun _ => None)
-      shift_in_range
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the canonical type expected by InstructVerificationProof.v *)
 Theorem correct_ASRINT :
   handler_correct (handle_instr Bytecode.AST.ASRINT) (clight_of Bytecode.AST.ASRINT)
@@ -252,4 +228,3 @@ Theorem correct_ASRINT :
     (pre_of Bytecode.AST.ASRINT) (P_halt_of Bytecode.AST.ASRINT) (P_ccall_of Bytecode.AST.ASRINT).
 Proof.
 Admitted.
-

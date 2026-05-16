@@ -171,44 +171,6 @@ Qed.
 (* Main theorem                                                        *)
 (* ================================================================== *)
 
-Theorem verify_POPTRAP_correct :
-    handler_correct (handle_POPTRAP) f_instr_POPTRAP
-      (fun _ => None)
-      (fun _ m s ard =>
-         (* Stack has at least 4 elements with trap link at position 1 *)
-         exists v0 prev_tsp v2 v3 rest,
-           Machine.stack s = v0 :: Val_int prev_tsp :: v2 :: v3 :: rest /\
-         (* The C-encoded trap link sp[1] is Vlong(prev_tsp*2+1) *)
-         (* which when shifted right by 1 gives prev_tsp.
-            The C code computes trap_sp = sp + (sp[1] >> 1).
-            We need the arithmetic to work out. *)
-         (* sp[1] load succeeds and equals the encoded prev_tsp *)
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Mem.load Mint64 m sp_b (Ptrofs.unsigned (Ptrofs.add sp_ofs (Ptrofs.repr 8)))
-              = Some (Vlong (Int64.repr (prev_tsp * 2 + 1)))) /\
-         (* The shift-right arithmetic identity *)
-         Int64.shr (Int64.repr (prev_tsp * 2 + 1)) (Int64.repr 1) =
-           Int64.repr prev_tsp /\
-         (* The ptrofs arithmetic: sp + prev_tsp*8 fits *)
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            Ptrofs.unsigned sp_ofs + 32 + 8 * Z.of_nat (length rest) < Ptrofs.modulus) /\
-         (* trap_sp_rel for the new trap_sp value *)
-         (forall sp_b sp_ofs,
-            Mem.load Mint64 m (ar_sptr_block ard)
-              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
-            trap_sp_rel
-              (Vptr sp_b (Ptrofs.add sp_ofs
-                 (Ptrofs.mul (Ptrofs.repr 8) (Ptrofs.of_int64 (Int64.repr prev_tsp)))))
-              (ar_stack_block ard) (ar_stack_base_ofs ard)
-              (Z.to_nat prev_tsp)))
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr POPTRAP / clight_of POPTRAP / pre_of POPTRAP are
    convertible with handle_POPTRAP / f_instr_POPTRAP / poptrap_step_pre.

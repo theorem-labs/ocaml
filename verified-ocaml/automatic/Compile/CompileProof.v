@@ -34,23 +34,11 @@ Definition st (s : state) (pc0 : Z) (accu0 : value) (stack0 : list value)
 Definition step_list (code : list instruction) (s : state) : step_result :=
   step (list_to_code_array code) s.
 
-(* ===================================================================== *)
-(* Bridge axiom for PrimArray size constraint.                           *)
-(*                                                                       *)
-(* Rocq PrimArray has max_length = 4194303 (2^22 - 1), smaller than     *)
-(* wB = 2^63. Since Rocq nat is mathematically unbounded, we cannot     *)
-(* prove within Rocq that all instruction lists fit in a PrimArray.     *)
-(* Similarly, Z.to_nat maps negative Z to 0, so nth_error can succeed   *)
-(* for negative pc where fetch_instr would fail (of_Z wraps).           *)
-(*                                                                       *)
-(* This axiom states that whenever nth_error succeeds on a code list,   *)
-(* the pc is non-negative and the code fits in PrimArray. Both hold     *)
-(* for all real bytecode programs (pc >= 0, length < 4M instructions).  *)
-(* Validated by PBT on every concrete program we test.                  *)
-(* ===================================================================== *)
-Axiom code_pc_well_formed : forall (code : list instruction) (i : instruction) (pc : Z),
-  nth_error code (Z.to_nat pc) = Some i ->
+Definition valid_pc (code : list instruction) (pc : Z) : Prop :=
   0 <= pc /\ Z.of_nat (Datatypes.length code) <= to_Z max_length.
+
+Ltac solve_valid_pc :=
+  unfold valid_pc; simpl; change (to_Z max_length) with 4194303%Z; lia.
 
 (* ===================================================================== *)
 (* Uint63/Z arithmetic helpers for the fetch_instr proof                 *)
@@ -170,16 +158,17 @@ Proof. intros A l n x H. apply nth_error_Some. congruence. Qed.
 (*   6. PrimArray.get at of_Z(pc) = of_Z(Z.of_nat(Z.to_nat pc))       *)
 (*      recovers the instruction stored by the loop at step 2           *)
 (*                                                                       *)
-(* Relies on code_pc_well_formed axiom for:                              *)
+(* Requires valid_pc for:                                                 *)
 (*   - pc >= 0 (so of_Z pc = of_Z(Z.of_nat(Z.to_nat pc)))             *)
 (*   - length code <= max_length (so PrimArray.make creates right size) *)
 (* ===================================================================== *)
 Lemma fetch_instr_list_to_code_eq : forall (code : list instruction) (i : instruction) (pc : Z),
   nth_error code (Z.to_nat pc) = Some i ->
+  valid_pc code pc ->
   fetch_instr (list_to_code_array code) pc = Some i.
 Proof.
-  intros code instr pc Hnth.
-  destruct (code_pc_well_formed _ _ _ Hnth) as [Hpc_nn Hfits].
+  intros code instr pc Hnth Hvalid.
+  destruct Hvalid as [Hpc_nn Hfits].
   pose proof (to_Z_bounded max_length) as [_ HmlwB].
   assert (HlenwB : Z.of_nat (Datatypes.length code) < wB) by lia.
   assert (Hlt : (Z.to_nat pc < Datatypes.length code)%nat)
@@ -248,8 +237,8 @@ Definition ccall_to_events (prim_idx : nat) (args : list value) : list event :=
 (* Use the parameterized run_collecting from CompileSpec, specialized to
    our concrete step_list.  This ensures the final theorem type is
    definitionally equal to what CompileSpec's Module Type expects. *)
-Notation run_collecting := (CompileSpec.run_collecting step_list) (only parsing).
-Notation bytecode_behavior := (CompileSpec.bytecode_behavior step_list) (only parsing).
+#[local] Notation "'run_collecting'" := (CompileSpec.run_collecting step_list) (only parsing).
+#[local] Notation "'bytecode_behavior'" := (CompileSpec.bytecode_behavior step_list) (only parsing).
 
 Definition behavior_equiv (b1 b2 : behavior) :=
   let t1 := b1.(trace)  in let t2 := b2.(trace)  in
@@ -362,23 +351,16 @@ Qed.
 
 (* --- Single-instruction step lemmas --- *)
 
-Lemma step_constint : forall code s n,
-  nth_error code (Z.to_nat (pc s)) = Some (CONSTINT n) ->
-  step_list code s = Step (st s (pc s + 1) (Val_int n) (Machine.stack s) (Machine.env s)
-                        (extra_args s) (Machine.global s) (trap_sp s)).
-(* False without CONSTINT operand bounds: handler rejects ints outside
-   [Int.min_signed, Int.max_signed]. *)
-Admitted.
-
 Lemma step_constint_bounded : forall code s n,
   Int.min_signed <= n <= Int.max_signed ->
   nth_error code (Z.to_nat (pc s)) = Some (CONSTINT n) ->
+  forall {Hvalid : valid_pc code (pc s)},
   step_list code s = Step (st s (pc s + 1) (Val_int n) (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s n Hbounds Hnth.
+  intros code s n Hbounds Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_CONSTINT.
   replace (andb (Int.min_signed <=? n)%Z (n <=? Int.max_signed)%Z) with true.
   - unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -392,7 +374,10 @@ Proof.
   intros n Hrange.
   unfold constint_in_range in Hrange.
   apply andb_true_iff in Hrange as [Hmin Hmax].
-  apply Z.leb_le in Hmin. apply Z.leb_le in Hmax. lia.
+  apply Z.leb_le in Hmin. apply Z.leb_le in Hmax.
+  change Int.min_signed with (-2147483648)%Z.
+  change Int.max_signed with 2147483647%Z.
+  lia.
 Qed.
 
 Lemma constint_in_range_of_bounds : forall n,
@@ -400,6 +385,8 @@ Lemma constint_in_range_of_bounds : forall n,
   constint_in_range n = true.
 Proof.
   intros n Hbounds.
+  change Int.min_signed with (-2147483648)%Z in Hbounds.
+  change Int.max_signed with 2147483647%Z in Hbounds.
   unfold constint_in_range.
   apply andb_true_intro. split; apply Z.leb_le; lia.
 Qed.
@@ -413,14 +400,27 @@ Proof.
   exfalso. apply Hoob. apply constint_in_range_true_bounds. exact Hrange.
 Qed.
 
+Ltac finish_stable_interpret :=
+  abstract (
+    unfold interpret; simpl;
+    repeat match goal with
+    | H : Int.min_signed <= ?n <= Int.max_signed |- context [constint_in_range ?n] =>
+        rewrite (constint_in_range_of_bounds n H)
+    | H : ~ (Int.min_signed <= ?n <= Int.max_signed) |- context [constint_in_range ?n] =>
+        rewrite (constint_in_range_false_of_oob n H)
+    | |- context [if ?b then _ else _] => destruct b
+    end;
+    reflexivity).
+
 Lemma step_constint_oob : forall code s n,
   ~ (Int.min_signed <= n <= Int.max_signed) ->
   nth_error code (Z.to_nat (pc s)) = Some (CONSTINT n) ->
+  forall {Hvalid : valid_pc code (pc s)},
   step_list code s = Error "CONSTINT: malformed operand".
 Proof.
-  intros code s n Hoob Hnth.
+  intros code s n Hoob Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_CONSTINT.
   replace (andb (Int.min_signed <=? n)%Z (n <=? Int.max_signed)%Z) with false.
   - reflexivity.
@@ -429,35 +429,38 @@ Qed.
 
 Lemma step_stop : forall code s,
   nth_error code (Z.to_nat (pc s)) = Some STOP ->
+  forall {Hvalid : valid_pc code (pc s)},
   step_list code s = Halt (accu s).
 Proof.
-  intros code s Hnth.
+  intros code s Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_STOP. reflexivity.
 Qed.
 
 Lemma step_push : forall code s,
   nth_error code (Z.to_nat (pc s)) = Some PUSH ->
+  forall {Hvalid : valid_pc code (pc s)},
   step_list code s = Step (st s (pc s + 1) (accu s) (accu s :: Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s Hnth.
+  intros code s Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_PUSH, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
 Qed.
 
 Lemma step_addint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some ADDINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (Val_int (a + b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_ADDINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -465,13 +468,14 @@ Qed.
 
 Lemma step_subint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some SUBINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (Val_int (a - b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_SUBINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -479,13 +483,14 @@ Qed.
 
 Lemma step_mulint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some MULINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (Val_int (a * b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_MULINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -494,12 +499,13 @@ Qed.
 Lemma step_pop : forall code s n,
   (Z.of_nat n < Int.half_modulus)%Z ->
   nth_error code (Z.to_nat (pc s)) = Some (POP n) ->
+  forall {Hvalid : valid_pc code (pc s)},
   step_list code s = Step (st s (pc s + 1) (accu s) (skipn n (Machine.stack s)) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s n Hbound Hnth.
+  intros code s n Hbound Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_POP.
   replace (Z.of_nat n <? Int.half_modulus)%Z with true.
   - unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
@@ -508,25 +514,27 @@ Qed.
 
 Lemma step_branch : forall code s target,
   nth_error code (Z.to_nat (pc s)) = Some (BRANCH target) ->
+  forall {Hvalid : valid_pc code (pc s)},
   step_list code s = Step (st s target (accu s) (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s target Hnth.
+  intros code s target Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_BRANCH, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
 Qed.
 
 Lemma step_branchifnot_zero : forall code s target,
   nth_error code (Z.to_nat (pc s)) = Some (BRANCHIFNOT target) ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int 0 ->
   step_list code s = Step (st s target (accu s) (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s target Hnth Hacc.
+  intros code s target Hnth Hvalid Hacc.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_BRANCHIFNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
   simpl. reflexivity.
@@ -534,13 +542,14 @@ Qed.
 
 Lemma step_branchifnot_nonzero : forall code s target n,
   nth_error code (Z.to_nat (pc s)) = Some (BRANCHIFNOT target) ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int n -> n <> 0 ->
   step_list code s = Step (st s (pc s + 1) (accu s) (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s target n Hnth Hacc Hn.
+  intros code s target n Hnth Hvalid Hacc Hn.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_BRANCHIFNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
   destruct n; [exfalso; apply Hn; reflexivity | |]; simpl; reflexivity.
@@ -548,41 +557,44 @@ Qed.
 
 Lemma step_eq_instr : forall code s b rest,
   nth_error code (Z.to_nat (pc s)) = Some EQ ->
+  forall {Hvalid : valid_pc code (pc s)},
   Machine.stack s = b :: rest ->
   step_list code s = Step (st s (pc s + 1)
                         (if value_phys_eqb (accu s) b then val_true else val_false)
                         rest (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s b rest Hnth Hstk.
+  intros code s b rest Hnth Hvalid Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_EQ. rewrite Hstk.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
 Qed.
 
 Lemma step_ccall : forall code s nargs prim_idx,
   nth_error code (Z.to_nat (pc s)) = Some (C_CALL nargs prim_idx) ->
+  forall {Hvalid : valid_pc code (pc s)},
   step_list code s = CCall_request prim_idx
     (accu s :: firstn (Nat.sub nargs 1) (Machine.stack s))
     (st s (pc s + 1) val_unit (skipn (Nat.sub nargs 1) (Machine.stack s))
        (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s nargs prim_idx Hnth.
+  intros code s nargs prim_idx Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_C_CALL, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
 Qed.
 
 Lemma step_negint : forall code s n,
   nth_error code (Z.to_nat (pc s)) = Some NEGINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int n ->
   step_list code s = Step (st s (pc s + 1) (Val_int (- n)) (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s n Hnth Hacc.
+  intros code s n Hnth Hvalid Hacc.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_NEGINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
   simpl. reflexivity.
@@ -590,13 +602,14 @@ Qed.
 
 Lemma step_boolnot_zero : forall code s,
   nth_error code (Z.to_nat (pc s)) = Some BOOLNOT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int 0 ->
   step_list code s = Step (st s (pc s + 1) val_true (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s Hnth Hacc.
+  intros code s Hnth Hvalid Hacc.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_BOOLNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
   simpl. reflexivity.
@@ -604,37 +617,49 @@ Qed.
 
 Lemma step_boolnot_nonzero : forall code s n,
   nth_error code (Z.to_nat (pc s)) = Some BOOLNOT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int n -> n <> 0 ->
   step_list code s = Step (st s (pc s + 1) val_false (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s n Hnth Hacc Hn.
+  intros code s n Hnth Hvalid Hacc Hn.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_BOOLNOT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc; subst acc0.
   destruct n; [exfalso; apply Hn; reflexivity | |]; simpl; reflexivity.
 Qed.
 
-Lemma step_acc : forall code s n v,
-  nth_error code (Z.to_nat (pc s)) = Some (ACC n) ->
-  nth_error (Machine.stack s) n = Some v ->
+Lemma step_envacc_early : forall code s n v,
+  (Z.of_nat n < Int.half_modulus)%Z ->
+  nth_error code (Z.to_nat (pc s)) = Some (ENVACC n) ->
+  forall {Hvalid : valid_pc code (pc s)},
+  field_or_heap s (Machine.env s) n = Some v ->
   step_list code s = Step (st s (pc s + 1) v (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
-(* False without ACC operand bounds: handler rejects n >= Int.half_modulus
-   even when the stack lookup succeeds. *)
-Admitted.
+Proof.
+  intros code s n v Hbound Hnth Hvalid Hfield.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
+  unfold handle_ENVACC.
+  replace (Z.of_nat n <? Int.half_modulus)%Z with true.
+  - rewrite Hfield. unfold st.
+    destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl.
+    reflexivity.
+  - symmetry. apply Z.ltb_lt. exact Hbound.
+Qed.
 
-Lemma step_acc_bounded : forall code s n v,
+Lemma step_acc : forall code s n v,
   (Z.of_nat n < Int.half_modulus)%Z ->
   nth_error code (Z.to_nat (pc s)) = Some (ACC n) ->
+  forall {Hvalid : valid_pc code (pc s)},
   nth_error (Machine.stack s) n = Some v ->
   step_list code s = Step (st s (pc s + 1) v (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s n v Hbound Hnth Hstk.
+  intros code s n v Hbound Hnth Hvalid Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_ACC.
   replace (Z.of_nat n <? Int.half_modulus)%Z with true.
   - rewrite Hstk. unfold st.
@@ -643,24 +668,35 @@ Proof.
   - symmetry. apply Z.ltb_lt. exact Hbound.
 Qed.
 
-Lemma step_envacc_early : forall code s n v,
-  nth_error code (Z.to_nat (pc s)) = Some (ENVACC n) ->
-  field_or_heap s (Machine.env s) n = Some v ->
+Lemma step_acc_bounded : forall code s n v,
+  (Z.of_nat n < Int.half_modulus)%Z ->
+  nth_error code (Z.to_nat (pc s)) = Some (ACC n) ->
+  forall {Hvalid : valid_pc code (pc s)},
+  nth_error (Machine.stack s) n = Some v ->
   step_list code s = Step (st s (pc s + 1) v (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
-(* False without ENVACC operand bounds: handler rejects n >= Int.half_modulus
-   even when env lookup succeeds. *)
-Admitted.
+Proof.
+  intros code s n v Hbound Hnth Hvalid Hstk.
+  unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
+  unfold handle_ACC.
+  replace (Z.of_nat n <? Int.half_modulus)%Z with true.
+  - rewrite Hstk. unfold st.
+    destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl.
+    reflexivity.
+  - symmetry. apply Z.ltb_lt. exact Hbound.
+Qed.
 
 Lemma step_gtint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some GTINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (val_bool (a >? b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_GTINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -668,13 +704,14 @@ Qed.
 
 Lemma step_ltint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some LTINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (val_bool (a <? b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_LTINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -682,13 +719,14 @@ Qed.
 
 Lemma step_leint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some LEINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (val_bool (a <=? b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_LEINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -696,13 +734,14 @@ Qed.
 
 Lemma step_geint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some GEINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (val_bool (a >=? b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_GEINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -711,13 +750,14 @@ Qed.
 Lemma step_getfield : forall code s n v,
   Int.min_signed <= Z.of_nat n <= Int.max_signed ->
   nth_error code (Z.to_nat (pc s)) = Some (GETFIELD n) ->
+  forall {Hvalid : valid_pc code (pc s)},
   field_or_heap s (accu s) n = Some v ->
   step_list code s = Step (st s (pc s + 1) v (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s n v Hbounds Hnth Hfield.
+  intros code s n v Hbounds Hnth Hvalid Hfield.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_GETFIELD.
   replace (andb (Int.min_signed <=? Z.of_nat n)%Z
                 (Z.of_nat n <=? Int.max_signed)%Z) with true.
@@ -730,6 +770,7 @@ Qed.
 (* APPLY1 step lemma *)
 Lemma step_apply1 : forall code s arg rest target_pc,
   nth_error code (Z.to_nat (pc s)) = Some APPLY1 ->
+  forall {Hvalid : valid_pc code (pc s)},
   Machine.stack s = arg :: rest ->
   get_code_ptr_s s (accu s) = Some target_pc ->
   step_list code s = Step (st s target_pc (accu s)
@@ -737,9 +778,9 @@ Lemma step_apply1 : forall code s arg rest target_pc,
      Val_int (Z.of_nat (extra_args s)) :: rest)
     (accu s) 0 (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s arg rest target_pc Hnth Hstk Hcp.
+  intros code s arg rest target_pc Hnth Hvalid Hstk Hcp.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_APPLY1. rewrite Hstk, Hcp.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
 Qed.
@@ -747,14 +788,15 @@ Qed.
 (* RETURN with extra_args = 0 and valid return frame *)
 Lemma step_return_zero_extra : forall code s stacksize ret_pc saved_env saved_ea rest,
   nth_error code (Z.to_nat (pc s)) = Some (RETURN stacksize) ->
+  forall {Hvalid : valid_pc code (pc s)},
   extra_args s = 0%nat ->
   skipn stacksize (Machine.stack s) = Val_int ret_pc :: saved_env :: Val_int saved_ea :: rest ->
   step_list code s = Step (st s ret_pc (accu s) rest saved_env (Z.to_nat saved_ea)
                         (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s stacksize ret_pc saved_env saved_ea rest Hnth Hea Hstk.
+  intros code s stacksize ret_pc saved_env saved_ea rest Hnth Hvalid Hea Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_RETURN. rewrite Hstk, Hea. simpl.
   unfold st. destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl. reflexivity.
 Qed.
@@ -764,11 +806,12 @@ Lemma step_closure : forall code s nvars code_ofs,
   Z.of_nat (2 + nvars) <= Int.max_signed ->
   Int.min_signed <= code_ofs <= Int.max_signed ->
   nth_error code (Z.to_nat (pc s)) = Some (CLOSURE nvars code_ofs) ->
+  forall {Hvalid : valid_pc code (pc s)},
   exists s', step_list code s = Step s' /\ pc s' = pc s + 1.
 Proof.
-  intros code s nvars code_ofs Hsize Hbounds Hnth.
+  intros code s nvars code_ofs Hsize Hbounds Hnth Hvalid.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_CLOSURE.
   replace (andb (andb (andb (0 <=? Z.of_nat (2 + nvars))%Z
                             (Z.of_nat (2 + nvars) <=? Int.max_signed)%Z)
@@ -784,12 +827,13 @@ Lemma step_closurerec : forall code s nfuncs nvars offsets code_ofs,
   offsets = [code_ofs] ->
   Int.min_signed <= code_ofs <= Int.max_signed ->
   nth_error code (Z.to_nat (pc s)) = Some (CLOSUREREC nfuncs nvars offsets) ->
+  forall {Hvalid : valid_pc code (pc s)},
   exists s', step_list code s = Step s' /\ pc s' = pc s + 1.
 Proof.
-  intros code s nfuncs nvars offsets code_ofs Hnfuncs Hoffsets Hbounds Hnth.
+  intros code s nfuncs nvars offsets code_ofs Hnfuncs Hoffsets Hbounds Hnth Hvalid.
   subst nfuncs offsets.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_CLOSUREREC.
   replace (andb (Int.min_signed <=? code_ofs)%Z
                 (code_ofs <=? Int.max_signed)%Z) with true.
@@ -984,6 +1028,7 @@ Definition expr_correct (e : expr) : Prop :=
     pc s = Z.of_nat base ->
     out = out' ->
     length prefix = base ->
+    Z.of_nat (Datatypes.length (prefix ++ compile_expr fuel e ce [] base ++ [STOP])) <= to_Z max_length ->
     exists n v,
       nsteps n (prefix ++ compile_expr fuel e ce [] base ++ [STOP]) s =
         Step (st s (Z.of_nat (base + length (compile_expr fuel e ce [] base)))
@@ -1016,7 +1061,7 @@ Qed.
 
 Lemma expr_correct_int : forall n, expr_correct (Exp_int n).
 Proof.
-  unfold expr_correct. intros n fuel ce base s sv out out' prefix Heval Hpc Hout Hplen.
+  unfold expr_correct. intros n fuel ce base s sv out out' prefix Heval Hpc Hout Hplen Hfits.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate|].
   cbn [eval] in Heval.
   destruct (constint_in_range n) eqn:Hrange; [|discriminate].
@@ -1029,7 +1074,9 @@ Proof.
       rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
     assert (Hbounds : Int.min_signed <= n <= Int.max_signed)
       by (apply constint_in_range_true_bounds; exact Hrange).
-    rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
+    assert (Hvalid : valid_pc (prefix ++ [CONSTINT n] ++ [STOP]) (pc s)).
+    { unfold valid_pc. split; [rewrite Hpc; lia | exact Hfits]. }
+    rewrite (@step_constint_bounded _ _ _ Hbounds Hfetch Hvalid).
     unfold st. subst base. rewrite Hpc.
     replace (Z.of_nat (Datatypes.length prefix) + 1)
       with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -1039,7 +1086,7 @@ Qed.
 
 Lemma expr_correct_bool : forall b, expr_correct (Exp_bool b).
 Proof.
-  unfold expr_correct. intros b fuel ce base s sv out out' prefix Heval Hpc Hout Hplen.
+  unfold expr_correct. intros b fuel ce base s sv out out' prefix Heval Hpc Hout Hplen Hfits.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate|].
   simpl in Heval. injection Heval. intros Hout' Hsv. subst sv out'.
   destruct b.
@@ -1052,7 +1099,9 @@ Proof.
       assert (Hbounds : Int.min_signed <= 1 <= Int.max_signed)
         by (change Int.min_signed with (-2147483648)%Z;
             change Int.max_signed with 2147483647%Z; lia).
-      rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
+      assert (Hvalid : valid_pc (prefix ++ [CONSTINT 1] ++ [STOP]) (pc s)).
+      { unfold valid_pc. split; [rewrite Hpc; lia | exact Hfits]. }
+      rewrite (@step_constint_bounded _ _ _ Hbounds Hfetch Hvalid).
       unfold st. subst base. rewrite Hpc.
       replace (Z.of_nat (Datatypes.length prefix) + 1)
         with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -1067,7 +1116,9 @@ Proof.
       assert (Hbounds : Int.min_signed <= 0 <= Int.max_signed)
         by (change Int.min_signed with (-2147483648)%Z;
             change Int.max_signed with 2147483647%Z; lia).
-      rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
+      assert (Hvalid : valid_pc (prefix ++ [CONSTINT 0] ++ [STOP]) (pc s)).
+      { unfold valid_pc. split; [rewrite Hpc; lia | exact Hfits]. }
+      rewrite (@step_constint_bounded _ _ _ Hbounds Hfetch Hvalid).
       unfold st. subst base. rewrite Hpc.
       replace (Z.of_nat (Datatypes.length prefix) + 1)
         with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -1077,7 +1128,7 @@ Qed.
 
 Lemma expr_correct_unit : expr_correct Exp_unit.
 Proof.
-  unfold expr_correct. intros fuel ce base s sv out out' prefix Heval Hpc Hout Hplen.
+  unfold expr_correct. intros fuel ce base s sv out out' prefix Heval Hpc Hout Hplen Hfits.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate|].
   simpl in Heval. injection Heval. intros Hout' Hsv. subst sv out'.
   exists 1%nat, (Val_int 0). split.
@@ -1089,7 +1140,9 @@ Proof.
     assert (Hbounds : Int.min_signed <= 0 <= Int.max_signed)
       by (change Int.min_signed with (-2147483648)%Z;
           change Int.max_signed with 2147483647%Z; lia).
-    rewrite (step_constint_bounded _ _ _ Hbounds Hfetch).
+    assert (Hvalid : valid_pc (prefix ++ [CONSTINT 0] ++ [STOP]) (pc s)).
+    { unfold valid_pc. split; [rewrite Hpc; lia | exact Hfits]. }
+    rewrite (@step_constint_bounded _ _ _ Hbounds Hfetch Hvalid).
     unfold st. subst base. rewrite Hpc.
     replace (Z.of_nat (Datatypes.length prefix) + 1)
       with (Z.of_nat (Datatypes.length prefix + 1)) by lia.
@@ -1163,9 +1216,9 @@ Proof.
   set (s0 := initial_state []).
   set (s1 := st s0 1 (Val_int n) [] val_unit 0 [] 0).
   assert (Hconst : step_list [CONSTINT n; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity | solve_valid_pc]. }
   assert (Hhalt : step_list [CONSTINT n; STOP] s1 = Halt (Val_int n)).
-  { subst s1 s0. apply step_stop. reflexivity. }
+  { subst s1 s0. apply step_stop; [reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|fuel]].
@@ -1186,7 +1239,7 @@ Proof.
   intros src_result bc_fuel n Hoob Hsrc.
   set (s0 := initial_state []).
   assert (Hconst : step_list [CONSTINT n; STOP] s0 = Error constint_malformed_msg).
-  { subst s0. apply (step_constint_oob _ _ n); [exact Hoob | reflexivity]. }
+  { subst s0. apply (step_constint_oob _ _ n); [exact Hoob | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|fuel].
@@ -1198,19 +1251,41 @@ Qed.
 Lemma constint_oob_initial_behavior_equiv : forall src_result bc_fuel n suffix,
   ~ (Int.min_signed <= n <= Int.max_signed) ->
   (src_result = Term_error constint_malformed_msg \/ src_result = Term_timeout) ->
+  Z.of_nat (Datatypes.length (CONSTINT n :: suffix)) <= to_Z max_length ->
   behavior_equiv (mk_behavior [] src_result)
                  (bytecode_behavior bc_fuel (CONSTINT n :: suffix) []).
 Proof.
-  intros src_result bc_fuel n suffix Hoob Hsrc.
+  intros src_result bc_fuel n suffix Hoob Hsrc Hfits.
   set (s0 := initial_state []).
   assert (Hconst : step_list (CONSTINT n :: suffix) s0 = Error constint_malformed_msg).
-  { subst s0. apply (step_constint_oob _ _ n); [exact Hoob | reflexivity]. }
+  { subst s0. apply (step_constint_oob _ _ n); [exact Hoob | reflexivity |].
+    unfold valid_pc. split; [simpl; lia | exact Hfits]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|fuel].
   - destruct Hsrc as [-> | ->]; simpl; split; auto.
   - rewrite (rc_error fuel (CONSTINT n :: suffix) s0 constint_malformed_msg [] Hconst).
     destruct Hsrc as [-> | ->]; simpl; split; auto.
+Qed.
+
+Lemma constint_oob_initial_any_error_behavior_equiv : forall src_result bc_fuel n suffix,
+  ~ (Int.min_signed <= n <= Int.max_signed) ->
+  ((exists msg, src_result = Term_error msg) \/ src_result = Term_timeout) ->
+  Z.of_nat (Datatypes.length (CONSTINT n :: suffix)) <= to_Z max_length ->
+  behavior_equiv (mk_behavior [] src_result)
+                 (bytecode_behavior bc_fuel (CONSTINT n :: suffix) []).
+Proof.
+  intros src_result bc_fuel n suffix Hoob Hsrc Hfits.
+  set (s0 := initial_state []).
+  assert (Hconst : step_list (CONSTINT n :: suffix) s0 = Error constint_malformed_msg).
+  { subst s0. apply (step_constint_oob _ _ n); [exact Hoob | reflexivity |].
+    unfold valid_pc. split; [simpl; lia | exact Hfits]. }
+  unfold behavior_equiv, CompileSpec.bytecode_behavior.
+  change (initial_state []) with s0.
+  destruct bc_fuel as [|fuel].
+  - destruct Hsrc as [[msg ->] | ->]; simpl; split; auto.
+  - rewrite (rc_error fuel (CONSTINT n :: suffix) s0 constint_malformed_msg [] Hconst).
+    destruct Hsrc as [[msg ->] | ->]; simpl; split; auto.
 Qed.
 
 Lemma constint_boolnot_stop_behavior_equiv : forall src_result bc_fuel n v,
@@ -1225,14 +1300,14 @@ Proof.
   set (s1 := st s0 1 (Val_int n) [] val_unit 0 [] 0).
   set (s2 := st s1 2 v [] val_unit 0 [] 0).
   assert (Hconst : step_list [CONSTINT n; BOOLNOT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity | solve_valid_pc]. }
   assert (Hboolnot : step_list [CONSTINT n; BOOLNOT; STOP] s1 = Step s2).
   { destruct Hnot as [[-> ->] | [Hnz ->]].
-    - subst s2 s1 s0. apply step_boolnot_zero; reflexivity.
+    - subst s2 s1 s0. apply step_boolnot_zero; [reflexivity | solve_valid_pc | reflexivity].
     - subst s2 s1 s0. apply step_boolnot_nonzero with (n := n);
-        [reflexivity | reflexivity | exact Hnz]. }
+        [reflexivity | solve_valid_pc | reflexivity | exact Hnz]. }
   assert (Hhalt : step_list [CONSTINT n; BOOLNOT; STOP] s2 = Halt v).
-  { subst s2. apply step_stop. reflexivity. }
+  { subst s2. apply step_stop; [reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1259,11 +1334,11 @@ Proof.
   set (s1 := st s0 1 (Val_int n) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int (- n)) [] val_unit 0 [] 0).
   assert (Hconst : step_list [CONSTINT n; NEGINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hbounds | reflexivity | solve_valid_pc]. }
   assert (Hneg : step_list [CONSTINT n; NEGINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_negint with (n := n); reflexivity. }
+  { subst s2 s1 s0. apply step_negint with (n := n); try solve_valid_pc; reflexivity. }
   assert (Hhalt : step_list [CONSTINT n; NEGINT; STOP] s2 = Halt (Val_int (- n))).
-  { subst s2. apply step_stop. reflexivity. }
+  { subst s2. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1291,11 +1366,11 @@ Proof.
   set (s1 := st s0 1 (Val_int a) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int b) [] val_unit 0 [] 0).
   assert (Hconst_a : step_list [CONSTINT a; CONSTINT b; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hconst_b : step_list [CONSTINT a; CONSTINT b; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s2 s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hhalt : step_list [CONSTINT a; CONSTINT b; STOP] s2 = Halt (Val_int b)).
-  { subst s2. apply step_stop. reflexivity. }
+  { subst s2. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1322,9 +1397,9 @@ Proof.
   set (s0 := initial_state []).
   set (s1 := st s0 1 (Val_int a) [] val_unit 0 [] 0).
   assert (Hconst_a : step_list [CONSTINT a; CONSTINT b; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hconst_b : step_list [CONSTINT a; CONSTINT b; STOP] s1 = Error constint_malformed_msg).
-  { subst s1 s0. apply (step_constint_oob _ _ b); [exact Hb | reflexivity]. }
+  { subst s1 s0. apply (step_constint_oob _ _ b); [exact Hb | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|fuel]].
@@ -1350,15 +1425,15 @@ Proof.
   set (s3 := st s2 3 (Val_int a) [Val_int b] val_unit 0 [] 0).
   set (s4 := st s3 4 (Val_int (a + b)) [] val_unit 0 [] 0).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hadd : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s3 = Step s4).
-  { subst s4 s3 s2 s1 s0. apply step_addint with (a := a) (b := b) (rest := []); reflexivity. }
+  { subst s4 s3 s2 s1 s0. apply step_addint with (a := a) (b := b) (rest := []); try solve_valid_pc; reflexivity. }
   assert (Hhalt : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s4 = Halt (Val_int (a + b))).
-  { subst s4. apply step_stop. reflexivity. }
+  { subst s4. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|fuel]]]]].
@@ -1397,11 +1472,11 @@ Proof.
   set (s1 := st s0 1 (Val_int b) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int b) [Val_int b] val_unit 0 [] 0).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1431,15 +1506,15 @@ Proof.
   set (s3 := st s2 3 (Val_int a) [Val_int b] val_unit 0 [] 0).
   set (s4 := st s3 4 (Val_int (a - b)) [] val_unit 0 [] 0).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hsub : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s3 = Step s4).
-  { subst s4 s3 s2 s1 s0. apply step_subint with (a := a) (b := b) (rest := []); reflexivity. }
+  { subst s4 s3 s2 s1 s0. apply step_subint with (a := a) (b := b) (rest := []); try solve_valid_pc; reflexivity. }
   assert (Hhalt : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s4 = Halt (Val_int (a - b))).
-  { subst s4. apply step_stop. reflexivity. }
+  { subst s4. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|fuel]]]]].
@@ -1478,11 +1553,11 @@ Proof.
   set (s1 := st s0 1 (Val_int b) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int b) [Val_int b] val_unit 0 [] 0).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; SUBINT; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1512,15 +1587,15 @@ Proof.
   set (s3 := st s2 3 (Val_int a) [Val_int b] val_unit 0 [] 0).
   set (s4 := st s3 4 (Val_int (a * b)) [] val_unit 0 [] 0).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hmul : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s3 = Step s4).
-  { subst s4 s3 s2 s1 s0. apply step_mulint with (a := a) (b := b) (rest := []); reflexivity. }
+  { subst s4 s3 s2 s1 s0. apply step_mulint with (a := a) (b := b) (rest := []); try solve_valid_pc; reflexivity. }
   assert (Hhalt : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s4 = Halt (Val_int (a * b))).
-  { subst s4. apply step_stop. reflexivity. }
+  { subst s4. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|fuel]]]]].
@@ -1559,11 +1634,11 @@ Proof.
   set (s1 := st s0 1 (Val_int b) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int b) [Val_int b] val_unit 0 [] 0).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; MULINT; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1595,15 +1670,15 @@ Proof.
     by (change Int.min_signed with (-2147483648)%Z;
         change Int.max_signed with 2147483647%Z; lia).
   assert (Hconst_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hone | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hone | reflexivity | solve_valid_pc]. }
   assert (Hbranch_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_branchifnot_nonzero with (target := 4) (n := 1); [reflexivity | reflexivity | lia]. }
+  { subst s2 s1 s0. apply step_branchifnot_nonzero with (target := 4) (n := 1); [reflexivity | solve_valid_pc | reflexivity | lia]. }
   assert (Hconst_then : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hn1 | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hn1 | reflexivity | solve_valid_pc]. }
   assert (Hbranch_end : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s3 = Step s4).
-  { subst s4 s3 s2 s1 s0. apply step_branch. reflexivity. }
+  { subst s4 s3 s2 s1 s0. apply step_branch; try solve_valid_pc; reflexivity. }
   assert (Hhalt : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s4 = Halt (Val_int n1)).
-  { subst s4. apply step_stop. reflexivity. }
+  { subst s4. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|fuel]]]]].
@@ -1644,11 +1719,11 @@ Proof.
     by (change Int.min_signed with (-2147483648)%Z;
         change Int.max_signed with 2147483647%Z; lia).
   assert (Hconst_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hone | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hone | reflexivity | solve_valid_pc]. }
   assert (Hbranch_cond : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_branchifnot_nonzero with (target := 4) (n := 1); [reflexivity | reflexivity | lia]. }
+  { subst s2 s1 s0. apply step_branchifnot_nonzero with (target := 4) (n := 1); [reflexivity | solve_valid_pc | reflexivity | lia]. }
   assert (Hconst_then : step_list [CONSTINT 1; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ n1); [exact Hn1 | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ n1); [exact Hn1 | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1679,13 +1754,13 @@ Proof.
     by (change Int.min_signed with (-2147483648)%Z;
         change Int.max_signed with 2147483647%Z; lia).
   assert (Hconst_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity | solve_valid_pc]. }
   assert (Hbranch_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_branchifnot_zero; [reflexivity | reflexivity]. }
+  { subst s2 s1 s0. apply step_branchifnot_zero; [reflexivity | solve_valid_pc | reflexivity]. }
   assert (Hconst_else : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hn2 | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hn2 | reflexivity | solve_valid_pc]. }
   assert (Hhalt : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s3 = Halt (Val_int n2)).
-  { subst s3. apply step_stop. reflexivity. }
+  { subst s3. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|fuel]]]].
@@ -1720,11 +1795,11 @@ Proof.
     by (change Int.min_signed with (-2147483648)%Z;
         change Int.max_signed with 2147483647%Z; lia).
   assert (Hconst_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity | solve_valid_pc]. }
   assert (Hbranch_cond : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_branchifnot_zero; [reflexivity | reflexivity]. }
+  { subst s2 s1 s0. apply step_branchifnot_zero; [reflexivity | solve_valid_pc | reflexivity]. }
   assert (Hconst_else : step_list [CONSTINT 0; BRANCHIFNOT 4; CONSTINT n1; BRANCH 5; CONSTINT n2; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ n2); [exact Hn2 | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ n2); [exact Hn2 | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1753,17 +1828,17 @@ Proof.
   set (s3 := st s2 3 (Val_int n) [Val_int n] val_unit 0 [] 0).
   set (s4 := st s3 4 (Val_int n) [] val_unit 0 [] 0).
   assert (Hconst : step_list [CONSTINT n; PUSH; ACC 0; POP 1; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hn | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hn | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT n; PUSH; ACC 0; POP 1; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hacc : step_list [CONSTINT n; PUSH; ACC 0; POP 1; STOP] s2 = Step s3).
   { subst s3 s2 s1 s0. apply step_acc_bounded with (n := 0%nat) (v := Val_int n);
-      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | reflexivity]. }
+      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | solve_valid_pc | reflexivity]. }
   assert (Hpop : step_list [CONSTINT n; PUSH; ACC 0; POP 1; STOP] s3 = Step s4).
   { subst s4 s3 s2 s1 s0. apply step_pop with (n := 1%nat);
-      [change Int.half_modulus with 2147483648%Z; lia | reflexivity]. }
+      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | solve_valid_pc]. }
   assert (Hhalt : step_list [CONSTINT n; PUSH; ACC 0; POP 1; STOP] s4 = Halt (Val_int n)).
-  { subst s4. apply step_stop. reflexivity. }
+  { subst s4. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|fuel]]]]].
@@ -1806,20 +1881,20 @@ Proof.
   set (s5 := st s4 5 (Val_int a) [Val_int b; Val_int a] val_unit 0 [] 0).
   set (s6 := st s5 6 (Val_int (a + b)) [Val_int a] val_unit 0 [] 0).
   assert (Hconst_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hpush_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_b : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush_b : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s3 = Step s4).
-  { subst s4 s3 s2 s1 s0. apply step_push. reflexivity. }
+  { subst s4 s3 s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hacc : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s4 = Step s5).
   { subst s5 s4 s3 s2 s1 s0. apply step_acc_bounded with (n := 1%nat) (v := Val_int a);
-      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | reflexivity]. }
+      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | solve_valid_pc | reflexivity]. }
   assert (Hadd : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s5 = Step s6).
-  { subst s6 s5 s4 s3 s2 s1 s0. apply step_addint with (a := a) (b := b) (rest := [Val_int a]); reflexivity. }
+  { subst s6 s5 s4 s3 s2 s1 s0. apply step_addint with (a := a) (b := b) (rest := [Val_int a]); try solve_valid_pc; reflexivity. }
   assert (Hhalt : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s6 = Halt (Val_int (a + b))).
-  { subst s6. apply step_stop. reflexivity. }
+  { subst s6. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|[|[|fuel]]]]]]].
@@ -1873,11 +1948,11 @@ Proof.
   set (s1 := st s0 1 (Val_int a) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int a) [Val_int a] val_unit 0 [] 0).
   assert (Hconst_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hpush_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_b : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ b); [exact Hb | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ b); [exact Hb | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -1910,23 +1985,23 @@ Proof.
   set (s6 := st s5 6 (Val_int (a + b)) [Val_int a] val_unit 0 [] 0).
   set (s7 := st s6 7 (Val_int (a + b)) [] val_unit 0 [] 0).
   assert (Hconst_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hpush_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_b : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush_b : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s3 = Step s4).
-  { subst s4 s3 s2 s1 s0. apply step_push. reflexivity. }
+  { subst s4 s3 s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hacc : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s4 = Step s5).
   { subst s5 s4 s3 s2 s1 s0. apply step_acc_bounded with (n := 1%nat) (v := Val_int a);
-      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | reflexivity]. }
+      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | solve_valid_pc | reflexivity]. }
   assert (Hadd : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s5 = Step s6).
-  { subst s6 s5 s4 s3 s2 s1 s0. apply step_addint with (a := a) (b := b) (rest := [Val_int a]); reflexivity. }
+  { subst s6 s5 s4 s3 s2 s1 s0. apply step_addint with (a := a) (b := b) (rest := [Val_int a]); try solve_valid_pc; reflexivity. }
   assert (Hpop : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s6 = Step s7).
   { subst s7 s6 s5 s4 s3 s2 s1 s0. apply step_pop with (n := 1%nat);
-      [change Int.half_modulus with 2147483648%Z; lia | reflexivity]. }
+      [change Int.half_modulus with 2147483648%Z; lia | reflexivity | solve_valid_pc]. }
   assert (Hhalt : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s7 = Halt (Val_int (a + b))).
-  { subst s7. apply step_stop. reflexivity. }
+  { subst s7. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|[|[|[|fuel]]]]]]]].
@@ -1989,11 +2064,11 @@ Proof.
   set (s1 := st s0 1 (Val_int a) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int a) [Val_int a] val_unit 0 [] 0).
   assert (Hconst_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hpush_a : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_b : step_list [CONSTINT a; PUSH; CONSTINT b; PUSH; ACC 1; ADDINT; POP 1; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ b); [exact Hb | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ b); [exact Hb | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -2029,13 +2104,13 @@ Proof.
     by (change Int.min_signed with (-2147483648)%Z;
         change Int.max_signed with 2147483647%Z; lia).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 = Step s3).
-  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity]. }
+  { subst s3 s2 s1 s0. apply step_constint_bounded; [exact Ha | reflexivity | solve_valid_pc]. }
   assert (Hgt : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s3 = Step s4).
-  { subst s4 s3 s2 s1 s0. apply step_gtint with (a := a) (b := b) (rest := []); reflexivity. }
+  { subst s4 s3 s2 s1 s0. apply step_gtint with (a := a) (b := b) (rest := []); try solve_valid_pc; reflexivity. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct (a >? b) eqn:Hcmp.
@@ -2044,14 +2119,14 @@ Proof.
     set (s7 := st s6 8 (Val_int 1) [] val_unit 0 [] 0).
     assert (Hbranch_cond : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 = Step s5).
     { subst s5 s4 s3 s2 s1 s0.
-      apply step_branchifnot_nonzero with (target := 7) (n := 1); [reflexivity | reflexivity | lia]. }
+      apply step_branchifnot_nonzero with (target := 7) (n := 1); [reflexivity | solve_valid_pc | reflexivity | lia]. }
     assert (Hconst_one : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 = Step s6).
     { subst s6 s5 s4 s3 s2 s1 s0.
-      apply step_constint_bounded; [exact Hone | reflexivity]. }
+      apply step_constint_bounded; [exact Hone | reflexivity | solve_valid_pc]. }
     assert (Hbranch_end : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s6 = Step s7).
-    { subst s7 s6 s5 s4 s3 s2 s1 s0. apply step_branch. reflexivity. }
+    { subst s7 s6 s5 s4 s3 s2 s1 s0. apply step_branch; try solve_valid_pc; reflexivity. }
     assert (Hhalt : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s7 = Halt (Val_int 1)).
-    { subst s7. apply step_stop. reflexivity. }
+    { subst s7. apply step_stop; try solve_valid_pc; reflexivity. }
     destruct bc_fuel as [|[|[|[|[|[|[|[|fuel]]]]]]]].
     + destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
     + rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
@@ -2102,12 +2177,12 @@ Proof.
     set (s6 := st s5 8 (Val_int 0) [] val_unit 0 [] 0).
     assert (Hbranch_cond : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s4 = Step s5).
     { subst s5 s4 s3 s2 s1 s0.
-      apply step_branchifnot_zero; [reflexivity | reflexivity]. }
+      apply step_branchifnot_zero; [reflexivity | solve_valid_pc | reflexivity]. }
     assert (Hconst_zero : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s5 = Step s6).
     { subst s6 s5 s4 s3 s2 s1 s0.
-      apply step_constint_bounded; [exact Hzero | reflexivity]. }
+      apply step_constint_bounded; [exact Hzero | reflexivity | solve_valid_pc]. }
     assert (Hhalt : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s6 = Halt (Val_int 0)).
-    { subst s6. apply step_stop. reflexivity. }
+    { subst s6. apply step_stop; try solve_valid_pc; reflexivity. }
     destruct bc_fuel as [|[|[|[|[|[|[|fuel]]]]]]].
     + destruct Hsrc as [[vsrc ->] | ->]; simpl; split; auto.
     + rewrite (rc_step 0 [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 s1 [] Hconst_b).
@@ -2159,11 +2234,11 @@ Proof.
   set (s1 := st s0 1 (Val_int b) [] val_unit 0 [] 0).
   set (s2 := st s1 2 (Val_int b) [Val_int b] val_unit 0 [] 0).
   assert (Hconst_b : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s0 = Step s1).
-  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity]. }
+  { subst s1 s0. apply step_constint_bounded; [exact Hb | reflexivity | solve_valid_pc]. }
   assert (Hpush : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s1 = Step s2).
-  { subst s2 s1 s0. apply step_push. reflexivity. }
+  { subst s2 s1 s0. apply step_push; try solve_valid_pc; reflexivity. }
   assert (Hconst_a : step_list [CONSTINT b; PUSH; CONSTINT a; GTINT; BRANCHIFNOT 7; CONSTINT 1; BRANCH 8; CONSTINT 0; STOP] s2 = Error constint_malformed_msg).
-  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity]. }
+  { subst s2 s1 s0. apply (step_constint_oob _ _ a); [exact Ha | reflexivity | solve_valid_pc]. }
   unfold behavior_equiv, CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|fuel]]].
@@ -2198,15 +2273,15 @@ Proof.
     by (change Int.min_signed with (-2147483648)%Z;
         change Int.max_signed with 2147483647%Z; lia).
   assert (Hconst_n : step_list code s0 = Step s1).
-  { subst code s1 s0. apply step_constint_bounded; [exact Hn | reflexivity]. }
+  { subst code s1 s0. apply step_constint_bounded; [exact Hn | reflexivity | solve_valid_pc]. }
   assert (Hccall_print : step_list code s1 = CCall_request 0 [Val_int n] cont_print).
-  { subst code cont_print s1 s0. apply step_ccall with (nargs := 1%nat) (prim_idx := 0%nat). reflexivity. }
+  { subst code cont_print s1 s0. apply step_ccall with (nargs := 1%nat) (prim_idx := 0%nat); try solve_valid_pc; reflexivity. }
   assert (Hconst_zero : step_list code s2 = Step s3).
-  { subst code s3 s2 cont_print s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity]. }
+  { subst code s3 s2 cont_print s1 s0. apply step_constint_bounded; [exact Hzero | reflexivity | solve_valid_pc]. }
   assert (Hccall_newline : step_list code s3 = CCall_request 1 [Val_int 0] cont_newline).
-  { subst code cont_newline s3 s2 cont_print s1 s0. apply step_ccall with (nargs := 1%nat) (prim_idx := 1%nat). reflexivity. }
+  { subst code cont_newline s3 s2 cont_print s1 s0. apply step_ccall with (nargs := 1%nat) (prim_idx := 1%nat); try solve_valid_pc; reflexivity. }
   assert (Hhalt : step_list code s4 = Halt (Val_int 0)).
-  { subst code s4 cont_newline s3 s2 cont_print s1 s0. apply step_stop. reflexivity. }
+  { subst code s4 cont_newline s3 s2 cont_print s1 s0. apply step_stop; try solve_valid_pc; reflexivity. }
   unfold CompileSpec.bytecode_behavior.
   change (initial_state []) with s0.
   destruct bc_fuel as [|[|[|[|[|fuel]]]]].
@@ -2220,7 +2295,7 @@ Proof.
     unfold behavior_equiv. simpl. rewrite rev_rev_app_nil.
     split.
     + replace (Nat.min (Datatypes.length (z_to_events n ++ [Out_char 10])) (Datatypes.length (z_to_events n)))
-        with (Datatypes.length (z_to_events n)) by (rewrite app_length; simpl; lia).
+        with (Datatypes.length (z_to_events n)) by (rewrite length_app; simpl; lia).
       rewrite firstn_app_exact. rewrite firstn_all. reflexivity.
     + destruct Hsrc as [[vsrc ->] | ->]; simpl; auto.
   - rewrite (rc_step 2 code s0 s1 [] Hconst_n).
@@ -2231,7 +2306,7 @@ Proof.
     unfold behavior_equiv. simpl. rewrite rev_rev_app_nil.
     split.
     + replace (Nat.min (Datatypes.length (z_to_events n ++ [Out_char 10])) (Datatypes.length (z_to_events n)))
-        with (Datatypes.length (z_to_events n)) by (rewrite app_length; simpl; lia).
+        with (Datatypes.length (z_to_events n)) by (rewrite length_app; simpl; lia).
       rewrite firstn_app_exact. rewrite firstn_all. reflexivity.
     + destruct Hsrc as [[vsrc ->] | ->]; simpl; auto.
   - rewrite (rc_step 3 code s0 s1 [] Hconst_n).
@@ -2267,8 +2342,7 @@ Lemma interpret_stable_expr_int : forall n f,
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
   intros n f Hbounds.
-  unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Hbounds). reflexivity.
+  finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_expr_int_oob : forall n f,
@@ -2277,8 +2351,7 @@ Lemma interpret_stable_expr_int_oob : forall n f,
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
   intros n f Hoob.
-  unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Hoob). reflexivity.
+  finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_expr_int : forall n,
@@ -2319,7 +2392,7 @@ Qed.
 Lemma interpret_stable_expr_bool : forall b f,
   interpret (2 + f)%nat [Decl_expr (Exp_bool b)] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
+Proof. intros. finish_stable_interpret. Qed.
 
 Lemma compiler_correct_expr_bool : forall b,
   compiler_correct [Decl_expr (Exp_bool b)].
@@ -2370,7 +2443,7 @@ Qed.
 Lemma interpret_stable_expr_unit : forall f,
   interpret (2 + f)%nat [Decl_expr Exp_unit] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; reflexivity. Qed.
+Proof. intros. finish_stable_interpret. Qed.
 
 Lemma compiler_correct_expr_unit :
   compiler_correct [Decl_expr Exp_unit].
@@ -2405,9 +2478,7 @@ Lemma interpret_stable_seq_ints : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_seq_ints_a_oob : forall a b f,
@@ -2415,8 +2486,7 @@ Lemma interpret_stable_seq_ints_a_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+  intros a b f Ha. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_seq_ints_b_oob : forall a b f,
@@ -2425,9 +2495,7 @@ Lemma interpret_stable_seq_ints_b_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_seq_ints : forall a b,
@@ -2479,21 +2547,23 @@ Proof.
         -- left. reflexivity.
   - assert (Ha : ~ (Int.min_signed <= a <= Int.max_signed)).
     { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_a. discriminate. }
+    change [CONSTINT a; CONSTINT b; STOP] with (CONSTINT a :: [CONSTINT b; STOP]).
     destruct src_fuel as [|[|[|sf]]].
     + change (interpret 0 [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 1 [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 2 [Decl_expr (Exp_seq (Exp_int a) (Exp_int b))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + replace (S (S (S sf))) with (3 + sf)%nat by lia.
       rewrite (interpret_stable_seq_ints_a_oob _ _ _ Ha).
       apply constint_oob_initial_behavior_equiv.
       * exact Ha.
       * left. reflexivity.
+      * simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_unop Op_neg (Exp_int n)): threshold = 2 --- *)
@@ -2503,8 +2573,7 @@ Lemma interpret_stable_neg_int : forall n f,
   interpret (3 + f)%nat [Decl_expr (Exp_unop Op_neg (Exp_int n))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros n f Hn. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Hn). reflexivity.
+  intros n f Hn. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_neg_int_oob : forall n f,
@@ -2512,8 +2581,7 @@ Lemma interpret_stable_neg_int_oob : forall n f,
   interpret (3 + f)%nat [Decl_expr (Exp_unop Op_neg (Exp_int n))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros n f Hoob. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Hoob). reflexivity.
+  intros n f Hoob. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_neg_int : forall n,
@@ -2546,18 +2614,19 @@ Proof.
     destruct src_fuel as [|[|[|sf]]].
     + change (interpret 0 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 1 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 2 [Decl_expr (Exp_unop Op_neg (Exp_int n))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hoob | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + replace (S (S (S sf))) with (3 + sf)%nat by lia.
       rewrite (interpret_stable_neg_int_oob _ _ Hoob).
       apply constint_oob_initial_behavior_equiv.
       * exact Hoob.
       * left. reflexivity.
+      * simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_unop Op_not (Exp_bool b)): threshold = 2 --- *)
@@ -2565,7 +2634,7 @@ Qed.
 Lemma interpret_stable_not_bool : forall b f,
   interpret (3 + f)%nat [Decl_expr (Exp_unop Op_not (Exp_bool b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
-Proof. intros. unfold interpret; simpl; destruct b; reflexivity. Qed.
+Proof. intros. finish_stable_interpret. Qed.
 
 Lemma compiler_correct_not_bool : forall b,
   compiler_correct [Decl_expr (Exp_unop Op_not (Exp_bool b))].
@@ -2645,9 +2714,7 @@ Lemma interpret_stable_add_ints : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_add_ints_a_oob : forall a b f,
@@ -2655,8 +2722,7 @@ Lemma interpret_stable_add_ints_a_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+  intros a b f Ha. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_add_ints_b_oob : forall a b f,
@@ -2665,9 +2731,7 @@ Lemma interpret_stable_add_ints_b_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_add_ints : forall a b,
@@ -2701,21 +2765,24 @@ Proof.
         -- left. exists (Val_int 0). reflexivity.
     + assert (Hb : ~ (Int.min_signed <= b <= Int.max_signed)).
       { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_b. discriminate. }
+      change [CONSTINT b; PUSH; CONSTINT a; ADDINT; STOP]
+        with (CONSTINT b :: [PUSH; CONSTINT a; ADDINT; STOP]).
       destruct src_fuel as [|[|[|sf]]].
       * change (interpret 0 [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S sf))) with (3 + sf)%nat by lia.
         rewrite (interpret_stable_add_ints_b_oob _ _ _ Ha Hb).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
   - assert (Ha : ~ (Int.min_signed <= a <= Int.max_signed)).
     { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_a. discriminate. }
     destruct (constint_in_range b) eqn:Hrange_b.
@@ -2742,18 +2809,19 @@ Proof.
       destruct src_fuel as [|[|[|sf]]].
       * change (interpret 0 [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_binop Op_add (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S sf))) with (3 + sf)%nat by lia.
         rewrite (interpret_stable_add_ints_a_oob _ _ _ Ha).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b)): threshold = 3 --- *)
@@ -2764,9 +2832,7 @@ Lemma interpret_stable_sub_ints : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_sub_ints_a_oob : forall a b f,
@@ -2774,8 +2840,7 @@ Lemma interpret_stable_sub_ints_a_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+  intros a b f Ha. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_sub_ints_b_oob : forall a b f,
@@ -2784,9 +2849,7 @@ Lemma interpret_stable_sub_ints_b_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_sub_ints : forall a b,
@@ -2823,18 +2886,19 @@ Proof.
       destruct src_fuel as [|[|[|sf]]].
       * change (interpret 0 [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S sf))) with (3 + sf)%nat by lia.
         rewrite (interpret_stable_sub_ints_b_oob _ _ _ Ha Hb).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
   - assert (Ha : ~ (Int.min_signed <= a <= Int.max_signed)).
     { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_a. discriminate. }
     destruct (constint_in_range b) eqn:Hrange_b.
@@ -2861,18 +2925,19 @@ Proof.
       destruct src_fuel as [|[|[|sf]]].
       * change (interpret 0 [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_binop Op_sub (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S sf))) with (3 + sf)%nat by lia.
         rewrite (interpret_stable_sub_ints_a_oob _ _ _ Ha).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b)): threshold = 3 --- *)
@@ -2883,9 +2948,7 @@ Lemma interpret_stable_mul_ints : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_mul_ints_a_oob : forall a b f,
@@ -2893,8 +2956,7 @@ Lemma interpret_stable_mul_ints_a_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+  intros a b f Ha. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_mul_ints_b_oob : forall a b f,
@@ -2903,9 +2965,7 @@ Lemma interpret_stable_mul_ints_b_oob : forall a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_mul_ints : forall a b,
@@ -2942,18 +3002,19 @@ Proof.
       destruct src_fuel as [|[|[|sf]]].
       * change (interpret 0 [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S sf))) with (3 + sf)%nat by lia.
         rewrite (interpret_stable_mul_ints_b_oob _ _ _ Ha Hb).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
   - assert (Ha : ~ (Int.min_signed <= a <= Int.max_signed)).
     { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_a. discriminate. }
     destruct (constint_in_range b) eqn:Hrange_b.
@@ -2980,18 +3041,19 @@ Proof.
       destruct src_fuel as [|[|[|sf]]].
       * change (interpret 0 [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_binop Op_mul (Exp_int a) (Exp_int b))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S sf))) with (3 + sf)%nat by lia.
         rewrite (interpret_stable_mul_ints_a_oob _ _ _ Ha).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2)): threshold = 2 --- *)
@@ -3002,10 +3064,7 @@ Lemma interpret_stable_if_bool_ints : forall b n1 n2 f,
   interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool b) (Exp_int n1) (Exp_int n2))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros b n1 n2 f Hn1 Hn2. unfold interpret; simpl.
-  destruct b;
-    [rewrite (constint_in_range_of_bounds _ Hn1)
-    |rewrite (constint_in_range_of_bounds _ Hn2)]; reflexivity.
+  intros b n1 n2 f Hn1 Hn2. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_if_bool_true_int : forall n1 n2 f,
@@ -3013,8 +3072,7 @@ Lemma interpret_stable_if_bool_true_int : forall n1 n2 f,
   interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros n1 n2 f Hn1. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Hn1). reflexivity.
+  intros n1 n2 f Hn1. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_if_bool_true_oob : forall n1 n2 f,
@@ -3022,8 +3080,7 @@ Lemma interpret_stable_if_bool_true_oob : forall n1 n2 f,
   interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool true) (Exp_int n1) (Exp_int n2))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros n1 n2 f Hn1. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Hn1). reflexivity.
+  intros n1 n2 f Hn1. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_if_bool_false_int : forall n1 n2 f,
@@ -3031,8 +3088,7 @@ Lemma interpret_stable_if_bool_false_int : forall n1 n2 f,
   interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros n1 n2 f Hn2. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Hn2). reflexivity.
+  intros n1 n2 f Hn2. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_if_bool_false_oob : forall n1 n2 f,
@@ -3040,8 +3096,7 @@ Lemma interpret_stable_if_bool_false_oob : forall n1 n2 f,
   interpret (3 + f)%nat [Decl_expr (Exp_if (Exp_bool false) (Exp_int n1) (Exp_int n2))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros n1 n2 f Hn2. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Hn2). reflexivity.
+  intros n1 n2 f Hn2. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_if_bool_ints : forall b n1 n2,
@@ -3133,9 +3188,7 @@ Lemma interpret_stable_let_int_var : forall x n f,
   interpret (3 + f)%nat [Decl_expr (Exp_let x (Exp_int n) (Exp_var x))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros x n f Hn. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Hn).
-  rewrite String.eqb_refl. reflexivity.
+  intros x n f Hn. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_let_int_var_oob : forall x n f,
@@ -3143,8 +3196,7 @@ Lemma interpret_stable_let_int_var_oob : forall x n f,
   interpret (3 + f)%nat [Decl_expr (Exp_let x (Exp_int n) (Exp_var x))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros x n f Hn. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Hn). reflexivity.
+  intros x n f Hn. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_let_int_var : forall x n,
@@ -3180,18 +3232,19 @@ Proof.
     destruct src_fuel as [|[|[|sf]]].
     + change (interpret 0 [Decl_expr (Exp_let x (Exp_int n) (Exp_var x))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 1 [Decl_expr (Exp_let x (Exp_int n) (Exp_var x))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 2 [Decl_expr (Exp_let x (Exp_int n) (Exp_var x))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + replace (S (S (S sf))) with (3 + sf)%nat by lia.
       rewrite (interpret_stable_let_int_var_oob _ _ _ Hn).
       apply constint_oob_initial_behavior_equiv.
       * exact Hn.
       * left. reflexivity.
+      * simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- let x = a ;; x + b (two declarations): threshold = 2 --- *)
@@ -3202,10 +3255,7 @@ Lemma interpret_stable_let_then_add : forall x a b f,
   interpret (4 + f)%nat [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros x a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite String.eqb_refl. simpl.
-  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+  intros x a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_let_then_add_a_oob : forall x a b f,
@@ -3213,8 +3263,7 @@ Lemma interpret_stable_let_then_add_a_oob : forall x a b f,
   interpret (4 + f)%nat [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros x a b f Ha. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+  intros x a b f Ha. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_let_then_add_b_oob : forall x a b f,
@@ -3223,10 +3272,7 @@ Lemma interpret_stable_let_then_add_b_oob : forall x a b f,
   interpret (4 + f)%nat [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros x a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite String.eqb_refl. simpl.
-  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+  intros x a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_let_then_add : forall x a b,
@@ -3294,10 +3340,10 @@ Proof.
     destruct src_fuel as [|[|sf]].
     + change (interpret 0 [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 1 [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + replace (S (S sf)) with (2 + sf)%nat by lia.
       replace (interpret (2 + sf)%nat [Decl_let x (Exp_int a); Decl_expr (Exp_binop Op_add (Exp_var x) (Exp_int b))])
         with (mk_behavior [] (Term_error constint_malformed_msg))
@@ -3305,6 +3351,7 @@ Proof.
       apply constint_oob_initial_behavior_equiv.
       * exact Ha.
       * left. reflexivity.
+      * simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n))
@@ -3317,11 +3364,13 @@ Lemma interpret_stable_print_int : forall n f,
   interpret (4 + f)%nat [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))] =
     mk_behavior (z_to_events n ++ [Out_char 10]) (Term_normal (Val_int 0)).
 Proof.
-  intros n f Hn. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Hn).
-  unfold apply_builtin. simpl.
-  rewrite rev_app_distr. simpl.
-  rewrite rev_involutive. reflexivity.
+  intros n f Hn.
+  abstract (
+    unfold interpret; simpl;
+    rewrite (constint_in_range_of_bounds n Hn);
+    unfold apply_builtin; simpl;
+    rewrite rev_app_distr; simpl;
+    rewrite rev_involutive; reflexivity).
 Qed.
 
 Lemma interpret_stable_print_int_oob : forall n f,
@@ -3329,8 +3378,7 @@ Lemma interpret_stable_print_int_oob : forall n f,
   interpret (4 + f)%nat [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros n f Hn. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Hn). reflexivity.
+  intros n f Hn. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_print_int : forall n,
@@ -3365,21 +3413,22 @@ Proof.
     destruct src_fuel as [|[|[|[|sf]]]].
     + change (interpret 0 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 1 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 2 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 3 [Decl_expr (Exp_seq (Exp_app (Exp_var "print_int") (Exp_int n)) (Exp_app (Exp_var "print_newline") Exp_unit))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Hn | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
       rewrite (interpret_stable_print_int_oob _ _ Hn).
       apply constint_oob_initial_behavior_equiv.
       * exact Hn.
       * left. reflexivity.
+      * simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b))):
@@ -3391,10 +3440,7 @@ Lemma interpret_stable_let_add : forall x a b f,
   interpret (4 + f)%nat [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros x a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite String.eqb_refl. simpl.
-  rewrite (constint_in_range_of_bounds _ Hb). reflexivity.
+  intros x a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_let_add_a_oob : forall x a b f,
@@ -3402,8 +3448,7 @@ Lemma interpret_stable_let_add_a_oob : forall x a b f,
   interpret (3 + f)%nat [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros x a b f Ha. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+  intros x a b f Ha. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_let_add_b_oob : forall x a b f,
@@ -3412,10 +3457,7 @@ Lemma interpret_stable_let_add_b_oob : forall x a b f,
   interpret (4 + f)%nat [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros x a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite String.eqb_refl. simpl.
-  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+  intros x a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_let_add : forall x a b,
@@ -3481,18 +3523,19 @@ Proof.
     destruct src_fuel as [|[|[|sf]]].
     + change (interpret 0 [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 1 [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + change (interpret 2 [Decl_expr (Exp_let x (Exp_int a) (Exp_binop Op_add (Exp_var x) (Exp_int b)))])
         with (mk_behavior [] Term_timeout).
-      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity].
+      apply constint_oob_initial_behavior_equiv; [exact Ha | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
     + replace (S (S (S sf))) with (3 + sf)%nat by lia.
       rewrite (interpret_stable_let_add_a_oob _ _ _ _ Ha).
       apply constint_oob_initial_behavior_equiv.
       * exact Ha.
       * left. reflexivity.
+      * simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* --- Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0)):
@@ -3504,10 +3547,7 @@ Lemma interpret_stable_if_int_cmp : forall a b f,
   interpret (4 + f)%nat [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))] =
     mk_behavior [] (Term_normal (Val_int 0)).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Hb).
-  rewrite (constint_in_range_of_bounds _ Ha).
-  destruct (a >? b); simpl; reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_if_int_cmp_a_oob : forall a b f,
@@ -3515,8 +3555,7 @@ Lemma interpret_stable_if_int_cmp_a_oob : forall a b f,
   interpret (4 + f)%nat [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha. unfold interpret; simpl.
-  rewrite (constint_in_range_false_of_oob _ Ha). reflexivity.
+  intros a b f Ha. finish_stable_interpret.
 Qed.
 
 Lemma interpret_stable_if_int_cmp_b_oob : forall a b f,
@@ -3525,9 +3564,7 @@ Lemma interpret_stable_if_int_cmp_b_oob : forall a b f,
   interpret (4 + f)%nat [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))] =
     mk_behavior [] (Term_error constint_malformed_msg).
 Proof.
-  intros a b f Ha Hb. unfold interpret; simpl.
-  rewrite (constint_in_range_of_bounds _ Ha).
-  rewrite (constint_in_range_false_of_oob _ Hb). reflexivity.
+  intros a b f Ha Hb. finish_stable_interpret.
 Qed.
 
 Lemma compiler_correct_if_int_cmp : forall a b,
@@ -3590,41 +3627,43 @@ Proof.
       destruct src_fuel as [|[|[|[|sf]]]].
       * change (interpret 0 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 3 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
         rewrite (interpret_stable_if_int_cmp_b_oob _ _ _ Ha Hb).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
     + assert (Ha : ~ (Int.min_signed <= a <= Int.max_signed)).
       { intro Hbounds. rewrite (constint_in_range_of_bounds _ Hbounds) in Hrange_a. discriminate. }
       destruct src_fuel as [|[|[|[|sf]]]].
       * change (interpret 0 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 1 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 2 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * change (interpret 3 [Decl_expr (Exp_if (Exp_binop Op_gt (Exp_int a) (Exp_int b)) (Exp_int 1) (Exp_int 0))])
           with (mk_behavior [] Term_timeout).
-        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity].
+        apply constint_oob_initial_behavior_equiv; [exact Hb | right; reflexivity | simpl; change (to_Z max_length) with 4194303%Z; lia].
       * replace (S (S (S (S sf)))) with (4 + sf)%nat by lia.
         rewrite (interpret_stable_if_int_cmp_a_oob _ _ _ Ha).
         apply constint_oob_initial_behavior_equiv.
         -- exact Hb.
         -- left. reflexivity.
+        -- simpl; change (to_Z max_length) with 4194303%Z; lia.
 Qed.
 
 (* ================================================================== *)
@@ -3655,15 +3694,11 @@ Proof.
       * (* Exp_var *)
         exact Heval.
       * (* Exp_binop *)
-        destruct (eval fuel e1 senv out) eqn:He1; try discriminate.
-        rewrite (IHfuel fuel'' e1 senv out s l He1 Hle').
-        destruct s; simpl in Heval |- *;
-          try (destruct (eval fuel e2 senv l) eqn:He2; try discriminate;
-               erewrite IHfuel; eauto; exact Heval).
-        destruct b0; destruct b; simpl in Heval |- *;
-          try (destruct (eval fuel e2 senv l) eqn:He2; try discriminate;
-               erewrite IHfuel; eauto; exact Heval);
-          exact Heval.
+        destruct (eval fuel e2 senv out) eqn:He2; try discriminate.
+        rewrite (IHfuel fuel'' e2 senv out s l He2 Hle').
+        destruct (eval fuel e1 senv l) eqn:He1; try discriminate.
+        rewrite (IHfuel fuel'' e1 senv l s0 l0 He1 Hle').
+        exact Heval.
       * (* Exp_unop *)
         destruct (eval fuel e senv out) eqn:He; try discriminate.
         rewrite (IHfuel fuel'' e senv out s l He Hle').
@@ -3686,17 +3721,19 @@ Proof.
       * (* Exp_fun *)
         exact Heval.
       * (* Exp_app *)
-        destruct (eval fuel e1 senv out) eqn:Hfunc; try discriminate.
-        rewrite (IHfuel fuel'' e1 senv out s l Hfunc Hle').
-        destruct (eval fuel e2 senv l) eqn:Harg; try discriminate.
-        rewrite (IHfuel fuel'' e2 senv l s0 l0 Harg Hle').
-        destruct s; try discriminate;
+        destruct (eval fuel e2 senv out) eqn:Harg; try discriminate.
+        rewrite (IHfuel fuel'' e2 senv out s l Harg Hle').
+        destruct (eval fuel e1 senv l) eqn:Hfunc; try discriminate.
+        rewrite (IHfuel fuel'' e1 senv l s0 l0 Hfunc Hle').
+        destruct s0; try discriminate;
           try (eapply IHfuel; eauto; fail).
         exact Heval.
       * (* Exp_tuple *)
+        remember (rev l) as elems eqn:Helems.
+        clear Helems l.
         revert out sv out' Heval.
         generalize ([] : list svalue) as acc.
-        induction l as [|e1 rest IHl]; intros acc out0 sv out' Heval.
+        induction elems as [|e1 rest IHl]; intros acc out0 sv out' Heval.
         -- simpl in Heval |- *. exact Heval.
         -- simpl in Heval |- *.
            destruct (eval fuel e1 senv out0) eqn:He1; try discriminate.
@@ -3718,9 +3755,11 @@ Proof.
         rewrite (IHfuel fuel'' e1 senv out s l He1 Hle').
         eapply IHfuel; eauto.
       * (* Exp_record *)
+        remember (rev l) as fields eqn:Hfields.
+        clear Hfields l.
         revert out sv out' Heval.
         generalize ([] : list (ident * svalue)) as acc.
-        induction l as [|[fname fe] rest IHl]; intros acc out0 sv out' Heval.
+        induction fields as [|[fname fe] rest IHl]; intros acc out0 sv out' Heval.
         -- simpl in Heval |- *. exact Heval.
         -- simpl in Heval |- *.
            destruct (eval fuel fe senv out0) eqn:He1; try discriminate.
@@ -3733,10 +3772,10 @@ Proof.
       * (* Exp_function *) exact Heval.
       * (* Exp_nil *) exact Heval.
       * (* Exp_cons *)
-        destruct (eval fuel e1 senv out) eqn:He1; try discriminate.
-        rewrite (IHfuel fuel'' e1 senv out s l He1 Hle').
-        destruct (eval fuel e2 senv l) eqn:He2; try discriminate.
-        rewrite (IHfuel fuel'' e2 senv l s0 l0 He2 Hle').
+        destruct (eval fuel e2 senv out) eqn:He2; try discriminate.
+        rewrite (IHfuel fuel'' e2 senv out s l He2 Hle').
+        destruct (eval fuel e1 senv l) eqn:He1; try discriminate.
+        rewrite (IHfuel fuel'' e1 senv l s0 l0 He1 Hle').
         exact Heval.
 Qed.
 
@@ -3860,18 +3899,13 @@ Proof.
       destruct (env_lookup senv i) eqn:?; try discriminate.
       injection Heval; intros; subst. exists []. reflexivity.
     + (* Exp_binop *)
-      destruct (eval fuel e1 senv out) eqn:He1; try discriminate.
-      destruct s; simpl in Heval;
-        try solve_eval_extends_eager_binop IHfuel Heval He1.
-      destruct b0.
-      { destruct b; simpl in Heval;
-          try solve_eval_extends_eager_binop IHfuel Heval He1.
-        all: inversion Heval; subst; try exact (IHfuel _ _ _ _ _ He1);
-          match goal with |- ?G => fail 0 G end. }
-      { destruct b; simpl in Heval;
-          try solve_eval_extends_eager_binop IHfuel Heval He1.
-        all: inversion Heval; subst; try exact (IHfuel _ _ _ _ _ He1);
-          match goal with |- ?G => fail 0 G end. }
+      destruct (eval fuel e2 senv out) eqn:He2; try discriminate.
+      destruct (eval fuel e1 senv l) eqn:He1; try discriminate.
+      destruct (eval_structural_binop b s0 s) eqn:Hbin; try discriminate.
+      injection Heval; intros; subst.
+      destruct (IHfuel _ _ _ _ _ He2) as [ne2 Hout2].
+      destruct (IHfuel _ _ _ _ _ He1) as [ne1 Hout1].
+      subst. exists (ne1 ++ ne2). rewrite app_assoc. reflexivity.
     + (* Exp_unop *)
       destruct (eval fuel e senv out) eqn:He; try discriminate.
       destruct (eval_unop u s) eqn:?; try discriminate.
@@ -3904,31 +3938,33 @@ Proof.
     + (* Exp_fun *)
       injection Heval; intros; subst. exists []. reflexivity.
     + (* Exp_app *)
-      destruct (eval fuel e1 senv out) eqn:Hfunc; try discriminate.
-      destruct (eval fuel e2 senv l) eqn:Harg; try discriminate.
-      destruct s; try discriminate.
+      destruct (eval fuel e2 senv out) eqn:Harg; try discriminate.
+      destruct (eval fuel e1 senv l) eqn:Hfunc; try discriminate.
+      destruct s0; try discriminate.
       * (* SVal_closure *)
-        destruct (IHfuel _ _ _ _ _ Hfunc) as [ne1 Hl].
-        destruct (IHfuel _ _ _ _ _ Harg) as [ne2 Hl0].
+        destruct (IHfuel _ _ _ _ _ Harg) as [ne1 Hl].
+        destruct (IHfuel _ _ _ _ _ Hfunc) as [ne2 Hl0].
         destruct (IHfuel _ _ _ _ _ Heval) as [ne3 Hout'].
         subst. exists (ne3 ++ ne2 ++ ne1). rewrite !app_assoc. reflexivity.
       * (* SVal_recclosure *)
-        destruct (IHfuel _ _ _ _ _ Hfunc) as [ne1 Hl].
-        destruct (IHfuel _ _ _ _ _ Harg) as [ne2 Hl0].
+        destruct (IHfuel _ _ _ _ _ Harg) as [ne1 Hl].
+        destruct (IHfuel _ _ _ _ _ Hfunc) as [ne2 Hl0].
         destruct (IHfuel _ _ _ _ _ Heval) as [ne3 Hout'].
         subst. exists (ne3 ++ ne2 ++ ne1). rewrite !app_assoc. reflexivity.
       * (* SVal_builtin: use apply_builtin_extends_output helper *)
-        destruct (apply_builtin b s0 l0) eqn:Hab; try discriminate.
+        destruct (apply_builtin b s l0) eqn:Hab; try discriminate.
         destruct p as [rv out3].
         injection Heval; intros; subst.
-        destruct (IHfuel _ _ _ _ _ Hfunc) as [ne1 Hl].
-        destruct (IHfuel _ _ _ _ _ Harg) as [ne2 Hl0].
+        destruct (IHfuel _ _ _ _ _ Harg) as [ne1 Hl].
+        destruct (IHfuel _ _ _ _ _ Hfunc) as [ne2 Hl0].
         destruct (apply_builtin_extends_output _ _ _ _ _ Hab) as [ne3 Hout3].
         subst. exists (ne3 ++ ne2 ++ ne1). rewrite !app_assoc. reflexivity.
     + (* Exp_tuple *)
+      remember (rev l) as elems eqn:Helems.
+      clear Helems l.
       revert out sv out' Heval.
       generalize ([] : list svalue) as acc.
-      induction l as [|e1 rest IHl]; intros acc out0 sv out' Heval.
+      induction elems as [|e1 rest IHl]; intros acc out0 sv out' Heval.
       * simpl in Heval. injection Heval; intros; subst. exists []. reflexivity.
       * simpl in Heval.
         destruct (eval fuel e1 senv out0) eqn:He1; try discriminate.
@@ -3954,9 +3990,11 @@ Proof.
       destruct (IHfuel _ _ _ _ _ Heval) as [ne2 Hout'].
       subst. exists (ne2 ++ ne1). rewrite app_assoc. reflexivity.
     + (* Exp_record *)
+      remember (rev l) as fields eqn:Hfields.
+      clear Hfields l.
       revert out sv out' Heval.
       generalize ([] : list (ident * svalue)) as acc.
-      induction l as [|[fname fe] rest IHl]; intros acc out0 sv out' Heval.
+      induction fields as [|[fname fe] rest IHl]; intros acc out0 sv out' Heval.
       * simpl in Heval. injection Heval; intros; subst. exists []. reflexivity.
       * simpl in Heval.
         destruct (eval fuel fe senv out0) eqn:He; try discriminate.
@@ -3976,12 +4014,12 @@ Proof.
     + (* Exp_nil *)
       injection Heval; intros; subst. exists []. reflexivity.
     + (* Exp_cons *)
-      destruct (eval fuel e1 senv out) eqn:He1; try discriminate.
-      destruct (eval fuel e2 senv l) eqn:He2; try discriminate.
+      destruct (eval fuel e2 senv out) eqn:He2; try discriminate.
+      destruct (eval fuel e1 senv l) eqn:He1; try discriminate.
       injection Heval; intros; subst.
-      destruct (IHfuel _ _ _ _ _ He1) as [ne1 Hl].
-      destruct (IHfuel _ _ _ _ _ He2) as [ne2 Hout'].
-      subst. exists (ne2 ++ ne1). rewrite app_assoc. reflexivity.
+      destruct (IHfuel _ _ _ _ _ He2) as [ne2 Hl].
+      destruct (IHfuel _ _ _ _ _ He1) as [ne1 Hout'].
+      subst. exists (ne1 ++ ne2). rewrite app_assoc. reflexivity.
 Qed.
 
 (* A list cannot be a proper suffix of itself. *)
@@ -3991,7 +4029,7 @@ Proof.
   intros A prefix l H.
   assert (Hlen : Datatypes.length l = Datatypes.length (prefix ++ l)).
   { f_equal. exact H. }
-  rewrite app_length in Hlen.
+  rewrite length_app in Hlen.
   assert (Datatypes.length prefix = 0)%nat by lia.
   destruct prefix; [reflexivity | simpl in H0; lia].
 Qed.
@@ -4238,6 +4276,13 @@ Lemma expr_correct_gen_var : forall x,
     (forall sv', env_lookup senv x = Some sv' -> comp_lookup ce x <> None) ->
     (* No Loc_self in this context *)
     (forall sv', env_lookup senv x = Some sv' -> comp_lookup ce x <> Some Loc_self) ->
+    (* ACC/ENVACC operands must be within the handler's accepted range. *)
+    (forall sv' n, env_lookup senv x = Some sv' ->
+       comp_lookup ce x = Some (Loc_stack n) ->
+       (Z.of_nat n < Int.half_modulus)%Z) ->
+    (forall sv' n, env_lookup senv x = Some sv' ->
+       comp_lookup ce x = Some (Loc_env n) ->
+       (Z.of_nat n < Int.half_modulus)%Z) ->
     exists n v,
       nsteps n (prefix ++ compile_expr fuel (Exp_var x) ce fe base ++ suffix) s =
         Step (st s (Z.of_nat (base + length (compile_expr fuel (Exp_var x) ce fe base)))
@@ -4245,7 +4290,7 @@ Lemma expr_correct_gen_var : forall x,
                 (Machine.global s) (trap_sp s)) /\
       val_corresponds sv v.
 Proof.
-  intros x fuel senv ce fe base s sv out out' prefix suffix Heval Hout Hpc Hplen Heinv Hscoped Hno_self.
+  intros x fuel senv ce fe base s sv out out' prefix suffix Heval Hout Hpc Hplen Heinv Hscoped Hno_self Hstack_bound Henv_bound.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
   destruct (env_lookup senv x) eqn:Hlookup; [| discriminate].
@@ -4263,7 +4308,9 @@ Proof.
                   (Z.to_nat (pc s)) = Some (ACC stk_idx)).
         { rewrite Hpc, Nat2Z.id.
           rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-        rewrite (step_acc _ _ _ _ Hfetch Hnth).
+        assert (Hbound : (Z.of_nat stk_idx < Int.half_modulus)%Z)
+          by (eapply Hstack_bound; eauto).
+        rewrite (step_acc _ _ _ _ Hbound Hfetch Hnth).
         unfold st. rewrite Hpc.
         replace (Z.of_nat base + 1) with (Z.of_nat (base + 1)) by lia. reflexivity.
       * exact Hcorr.
@@ -4277,7 +4324,9 @@ Proof.
                   (Z.to_nat (pc s)) = Some (ENVACC env_idx)).
         { rewrite Hpc, Nat2Z.id.
           rewrite nth_error_prefix with (i := base) by assumption. reflexivity. }
-        rewrite (step_envacc_early _ _ _ _ Hfetch Hfld).
+        assert (Hbound : (Z.of_nat env_idx < Int.half_modulus)%Z)
+          by (eapply Henv_bound; eauto).
+        rewrite (step_envacc_early _ _ _ _ Hbound Hfetch Hfld).
         unfold st. rewrite Hpc.
         replace (Z.of_nat base + 1) with (Z.of_nat (base + 1)) by lia. reflexivity.
       * exact Hcorr.
@@ -4347,7 +4396,7 @@ Proof.
   assert (Hpc1 : pc s1 = Z.of_nat (base + Datatypes.length c1)).
   { unfold s1, st. reflexivity. }
   assert (Hplen1 : length (prefix ++ c1) = (base + Datatypes.length c1)%nat).
-  { rewrite app_length. lia. }
+  { rewrite length_app. lia. }
   (* We need env_invariant for s1 -- it's preserved since stack/env unchanged
      Wait: s1 has a DIFFERENT accu but the same stack, so env_invariant holds *)
   assert (Heinv1 : env_invariant ce senv s1).
@@ -4406,7 +4455,7 @@ Proof.
       exact Hsteps2. }
     rewrite Hsteps2_r.
     unfold st. f_equal. f_equal; try reflexivity.
-    + rewrite app_length. lia.
+    + rewrite length_app. lia.
   - exact Hcorr2.
 Qed.
 
@@ -4414,14 +4463,15 @@ Qed.
 
 Lemma step_neqint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some NEQ ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1)
     (if value_phys_eqb (Val_int a) (Val_int b) then val_false else val_true)
     rest (Machine.env s) (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_NEQ, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -4430,13 +4480,14 @@ Qed.
 Lemma step_envacc : forall code s n v,
   (Z.of_nat n < Int.half_modulus)%Z ->
   nth_error code (Z.to_nat (pc s)) = Some (ENVACC n) ->
+  forall {Hvalid : valid_pc code (pc s)},
   field_or_heap s (Machine.env s) n = Some v ->
   step_list code s = Step (st s (pc s + 1) v (Machine.stack s) (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s n v Hbound Hnth Hfield.
+  intros code s n v Hbound Hnth Hvalid Hfield.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_ENVACC.
   replace (Z.of_nat n <? Int.half_modulus)%Z with true.
   - rewrite Hfield. unfold st.
@@ -4449,14 +4500,15 @@ Qed.
 
 Lemma step_divint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some DIVINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   b <> 0 ->
   step_list code s = Step (st s (pc s + 1) (Val_int (Z.quot a b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk Hb.
+  intros code s a b rest Hnth Hvalid Hacc Hstk Hb.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_DIVINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. destruct (Z.eqb b 0) eqn:Hb0.
@@ -4466,14 +4518,15 @@ Qed.
 
 Lemma step_modint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some MODINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   b <> 0 ->
   step_list code s = Step (st s (pc s + 1) (Val_int (Z.rem a b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk Hb.
+  intros code s a b rest Hnth Hvalid Hacc Hstk Hb.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_MODINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. destruct (Z.eqb b 0) eqn:Hb0.
@@ -4483,13 +4536,14 @@ Qed.
 
 Lemma step_andint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some ANDINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (Val_int (Z.land a b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_ANDINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -4497,13 +4551,14 @@ Qed.
 
 Lemma step_orint : forall code s a b rest,
   nth_error code (Z.to_nat (pc s)) = Some ORINT ->
+  forall {Hvalid : valid_pc code (pc s)},
   accu s = Val_int a -> Machine.stack s = Val_int b :: rest ->
   step_list code s = Step (st s (pc s + 1) (Val_int (Z.lor a b)) rest (Machine.env s)
                         (extra_args s) (Machine.global s) (trap_sp s)).
 Proof.
-  intros code s a b rest Hnth Hacc Hstk.
+  intros code s a b rest Hnth Hvalid Hacc Hstk.
   unfold step_list, step, DispatchImpl.handle_instr, Dispatch.handle_instr.
-  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth).
+  rewrite (fetch_instr_list_to_code_eq _ _ _ Hnth Hvalid).
   unfold handle_ORINT, st.
   destruct s as [pc0 acc0 stk0 env0 ea0 g0 tsp0 hp0 na0]; simpl in Hacc, Hstk; subst.
   simpl. reflexivity.
@@ -4569,20 +4624,18 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
     try (simpl in Heval; discriminate).
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_add e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -4604,7 +4657,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -4639,7 +4692,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -4667,7 +4720,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -4741,7 +4794,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_add, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - simpl. rewrite Hval_eq. simpl. reflexivity.
 Qed.
 
@@ -4766,20 +4819,18 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
     try (simpl in Heval; discriminate).
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_sub e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -4799,7 +4850,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -4833,7 +4884,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -4859,7 +4910,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -4917,7 +4968,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - simpl. rewrite Hval_eq. simpl. reflexivity.
 Qed.
 
@@ -4942,19 +4993,18 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_mul e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -4974,7 +5024,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -5008,7 +5058,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -5034,7 +5084,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -5092,7 +5142,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - simpl. rewrite Hval_eq. simpl. reflexivity.
 Qed.
 
@@ -5117,22 +5167,21 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   destruct (Z.eqb z0 0) eqn:Hz0; [discriminate |].
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
+  subst out1.
   assert (Hz0_neq : z0 <> 0).
   { intro H. apply Z.eqb_eq in H. rewrite H in Hz0. discriminate. }
-  assert (He1_pure : out1 = out).
+  assert (He2_pure : out2 = out).
   { symmetry. eapply eval_pure_intermediate; eauto. }
-  subst out1.
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_div e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -5152,7 +5201,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -5186,7 +5235,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -5212,7 +5261,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -5271,7 +5320,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - simpl. rewrite Hval_eq. simpl. reflexivity.
 Qed.
 
@@ -5296,22 +5345,21 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   destruct (Z.eqb z0 0) eqn:Hz0; [discriminate |].
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
+  subst out1.
   assert (Hz0_neq : z0 <> 0).
   { intro H. apply Z.eqb_eq in H. rewrite H in Hz0. discriminate. }
-  assert (He1_pure : out1 = out).
+  assert (He2_pure : out2 = out).
   { symmetry. eapply eval_pure_intermediate; eauto. }
-  subst out1.
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_mod e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -5331,7 +5379,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -5365,7 +5413,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -5391,7 +5439,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -5450,7 +5498,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - simpl. rewrite Hval_eq. simpl. reflexivity.
 Qed.
 
@@ -5481,19 +5529,18 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_lt e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -5513,7 +5560,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -5547,7 +5594,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -5573,7 +5620,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -5631,7 +5678,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - rewrite Hval_eq. apply val_bool_corresponds.
 Qed.
 
@@ -5656,19 +5703,18 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_le e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -5688,7 +5734,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -5722,7 +5768,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -5748,7 +5794,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -5806,7 +5852,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - rewrite Hval_eq. apply val_bool_corresponds.
 Qed.
 
@@ -5831,19 +5877,18 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_gt e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -5863,7 +5908,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -5897,7 +5942,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -5923,7 +5968,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -5981,7 +6026,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - rewrite Hval_eq. apply val_bool_corresponds.
 Qed.
 
@@ -6006,19 +6051,18 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | err out_err | out_timeout] eqn:He2.
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  2: { exfalso; clear -Heval; destruct v1; simpl in Heval; try destruct b0; inversion Heval. }
-  try rewrite He1 in Heval. try rewrite He2 in Heval.
+  destruct (eval fuel' e2 senv out) as [v2 out2 | err out_err | out_timeout] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | err1 out_err1 | out_timeout1] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1; simpl in Heval;
     try (destruct v2; simpl in Heval; try destruct b0; discriminate).
   destruct v2; simpl in Heval; try discriminate.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_ge e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -6038,7 +6082,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -6072,7 +6116,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -6098,7 +6142,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -6156,7 +6200,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - rewrite Hval_eq. apply val_bool_corresponds.
 Qed.
 
@@ -6185,14 +6229,10 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | msg1 l1 | ] eqn:He1;
-    try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | msg2 l2 | ] eqn:He2;
-    try solve [destruct v1; simpl in Heval;
-      repeat match goal with
-      | b' : bool |- _ => destruct b'
-      | o : option _ |- _ => destruct o
-      end; discriminate].
+  destruct (eval fuel' e2 senv out) as [v2 out2 | msg2 l2 | ] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | msg1 l1 | ] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1;
     try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
       simpl in Heval;
@@ -6209,10 +6249,10 @@ Proof.
       end; discriminate].
   unfold eval_structural_binop, eval_binop in Heval; simpl in Heval.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_eq e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -6232,7 +6272,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -6266,7 +6306,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -6292,7 +6332,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -6353,7 +6393,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - rewrite Hval_eq. apply val_bool_corresponds.
 Qed.
 
@@ -6381,14 +6421,10 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | msg1 l1 | ] eqn:He1;
-    try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | msg2 l2 | ] eqn:He2;
-    try solve [destruct v1; simpl in Heval;
-      repeat match goal with
-      | b' : bool |- _ => destruct b'
-      | o : option _ |- _ => destruct o
-      end; discriminate].
+  destruct (eval fuel' e2 senv out) as [v2 out2 | msg2 l2 | ] eqn:He2;
+    try (simpl in Heval; discriminate).
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | msg1 l1 | ] eqn:He1;
+    try (simpl in Heval; discriminate).
   destruct v1;
     try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
       simpl in Heval;
@@ -6405,10 +6441,10 @@ Proof.
       end; discriminate].
   unfold eval_structural_binop, eval_binop in Heval; simpl in Heval.
   injection Heval; intros Hout_eq Hval_eq.
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_neq e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -6428,7 +6464,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -6462,7 +6498,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_int z) out out
@@ -6488,7 +6524,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
       with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
       by reflexivity.
@@ -6550,7 +6586,7 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_op, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - rewrite Hval_eq. apply val_bool_corresponds.
 Qed.
 
@@ -6581,16 +6617,10 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+  destruct (eval fuel' e2 senv out) as [v2 out2 | | ] eqn:He2;
     simpl in Heval; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2;
-    simpl in Heval;
-    [ | destruct v1; simpl in Heval;
-          repeat match goal with | b' : bool |- _ => destruct b' end;
-          discriminate
-      | destruct v1; simpl in Heval;
-          repeat match goal with | b' : bool |- _ => destruct b' end;
-          discriminate ].
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | | ] eqn:He1;
+    simpl in Heval; try discriminate.
   destruct v1 as [z_left|b0| |tuple_left|constr_left arg_left|fname_left body_left env_left|rf_left rx_left rbody_left renv_left|builtin_left|record_left|string_left];
     try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
       cbn in Heval; discriminate].
@@ -6600,12 +6630,12 @@ Proof.
   unfold eval_structural_binop, eval_binop in Heval; cbn in Heval.
   assert (Hval_eq : (b0 && b1)%bool = (a && b)%bool).
   { destruct b0; simpl in Heval |- *; inversion Heval; reflexivity. }
-  assert (Hout_eq : out2 = out).
+  assert (Hout_eq : out1 = out).
   { destruct b0; simpl in Heval; inversion Heval; reflexivity. }
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_and e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -6627,7 +6657,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -6662,7 +6692,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_bool b0) out out
@@ -6689,7 +6719,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -6747,7 +6777,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
   + (* b0 = true, b1 = false *)
     apply val_corresponds_bool_true_inv in Hcorr1. subst bv1.
@@ -6766,7 +6796,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -6824,7 +6854,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
   + (* b0 = false, b1 = true *)
     apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
@@ -6843,7 +6873,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -6901,7 +6931,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
   + (* b0 = false, b1 = false *)
     apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
@@ -6920,7 +6950,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -6978,7 +7008,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
 Qed.
 
@@ -7008,16 +7038,10 @@ Proof.
     Heval Hpc Hplen Heinv.
   destruct fuel as [|fuel']; [simpl in Heval; discriminate |].
   simpl in Heval.
-  destruct (eval fuel' e1 senv out) as [v1 out1 | | ] eqn:He1;
+  destruct (eval fuel' e2 senv out) as [v2 out2 | | ] eqn:He2;
     simpl in Heval; try discriminate.
-  destruct (eval fuel' e2 senv out1) as [v2 out2 | | ] eqn:He2;
-    simpl in Heval;
-    [ | destruct v1; simpl in Heval;
-          repeat match goal with | b' : bool |- _ => destruct b' end;
-          discriminate
-      | destruct v1; simpl in Heval;
-          repeat match goal with | b' : bool |- _ => destruct b' end;
-          discriminate ].
+  destruct (eval fuel' e1 senv out2) as [v1 out1 | | ] eqn:He1;
+    simpl in Heval; try discriminate.
   destruct v1 as [z_left|b0| |tuple_left|constr_left arg_left|fname_left body_left env_left|rf_left rx_left rbody_left renv_left|builtin_left|record_left|string_left];
     try solve [destruct v2; unfold eval_structural_binop, eval_binop in Heval;
       cbn in Heval; discriminate].
@@ -7027,12 +7051,12 @@ Proof.
   unfold eval_structural_binop, eval_binop in Heval; cbn in Heval.
   assert (Hval_eq : (b0 || b1)%bool = (a || b)%bool).
   { destruct b0; simpl in Heval |- *; inversion Heval; reflexivity. }
-  assert (Hout_eq : out2 = out).
+  assert (Hout_eq : out1 = out).
   { destruct b0; simpl in Heval; inversion Heval; reflexivity. }
-  subst out2.
-  assert (He1_pure : out1 = out).
-  { symmetry. eapply eval_pure_intermediate; eauto. }
   subst out1.
+  assert (He2_pure : out2 = out).
+  { symmetry. eapply eval_pure_intermediate; eauto. }
+  subst out2.
   simpl (compile_expr (S fuel') (Exp_binop Op_or e1 e2) ce fe base).
   set (c2 := compile_expr fuel' e2 ce fe base).
   set (c1 := compile_expr fuel' e1 (shift ce 1) fe
@@ -7054,7 +7078,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + Datatypes.length c2)%nat
       with (Datatypes.length (prefix ++ c2))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c2))
       by reflexivity.
@@ -7089,7 +7113,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c2 ++ [PUSH]) =
     (base + Datatypes.length c2 + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe1 fuel' senv (shift ce 1) fe
     (base + Datatypes.length c2 + 1)%nat
     s_after_push (SVal_bool b0) out out
@@ -7115,7 +7139,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -7173,7 +7197,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
   + (* b0 = true, b1 = false *)
     apply val_corresponds_bool_true_inv in Hcorr1. subst bv1.
@@ -7192,7 +7216,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -7250,7 +7274,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
   + (* b0 = false, b1 = true *)
     apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
@@ -7269,7 +7293,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -7327,7 +7351,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
   + (* b0 = false, b1 = false *)
     apply val_corresponds_bool_false_inv in Hcorr1. subst bv1.
@@ -7346,7 +7370,7 @@ Proof.
         by (rewrite <- !app_assoc; reflexivity).
       replace (base + Datatypes.length c2 + 1 + Datatypes.length c1)%nat
         with (Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ c2 ++ [PUSH] ++ c1))
         by reflexivity.
@@ -7404,7 +7428,7 @@ Proof.
         rewrite <- app_assoc. reflexivity. }
       rewrite Hcode_eq. rewrite Hfull.
       unfold s_after_op, st. f_equal. f_equal.
-      rewrite app_length. simpl. rewrite app_length. simpl. lia.
+      rewrite length_app. simpl. rewrite length_app. simpl. lia.
     * rewrite <- Hval_eq. simpl. exact I.
 Qed.
 
@@ -7478,14 +7502,14 @@ Proof.
     unfold s1, st. simpl.
     replace (Datatypes.length (c1 ++ [NEGINT]))
       with (Datatypes.length c1 + 1)%nat
-      by (rewrite app_length; simpl; lia).
+      by (rewrite length_app; simpl; lia).
     replace (Z.of_nat (base + Datatypes.length c1) + 1)
       with (Z.of_nat (base + (Datatypes.length c1 + 1))) by lia.
     reflexivity.
   - simpl.
     replace (Datatypes.length (c1 ++ [NEGINT]))
       with (Datatypes.length c1 + 1)%nat
-      by (rewrite app_length; simpl; lia).
+      by (rewrite length_app; simpl; lia).
     reflexivity.
 Qed.
 
@@ -7560,14 +7584,14 @@ Proof.
       unfold s1, st. simpl.
       replace (Datatypes.length (c1 ++ [BOOLNOT]))
         with (Datatypes.length c1 + 1)%nat
-        by (rewrite app_length; simpl; lia).
+        by (rewrite length_app; simpl; lia).
       replace (Z.of_nat (base + Datatypes.length c1) + 1)
         with (Z.of_nat (base + (Datatypes.length c1 + 1))) by lia.
       reflexivity.
     + simpl.
       replace (Datatypes.length (c1 ++ [BOOLNOT]))
         with (Datatypes.length c1 + 1)%nat
-        by (rewrite app_length; simpl; lia).
+        by (rewrite length_app; simpl; lia).
       exact I.
   - (* b = false: v1 = Val_int 0, negb false = true, step_boolnot_zero *)
     apply val_corresponds_bool_false_inv in Hcorr1. subst v1.
@@ -7585,14 +7609,14 @@ Proof.
       unfold s1, st. simpl.
       replace (Datatypes.length (c1 ++ [BOOLNOT]))
         with (Datatypes.length c1 + 1)%nat
-        by (rewrite app_length; simpl; lia).
+        by (rewrite length_app; simpl; lia).
       replace (Z.of_nat (base + Datatypes.length c1) + 1)
         with (Z.of_nat (base + (Datatypes.length c1 + 1))) by lia.
       reflexivity.
     + simpl.
       replace (Datatypes.length (c1 ++ [BOOLNOT]))
         with (Datatypes.length c1 + 1)%nat
-        by (rewrite app_length; simpl; lia).
+        by (rewrite length_app; simpl; lia).
       exact I.
 Qed.
 
@@ -7674,7 +7698,7 @@ Proof.
         by (rewrite <- app_assoc; reflexivity).
       replace (base + cc_len)%nat
         with (Datatypes.length (prefix ++ cc))%nat
-        by (rewrite app_length; lia).
+        by (rewrite length_app; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ cc))
         by reflexivity.
@@ -7714,7 +7738,7 @@ Proof.
     assert (Hplen_br :
       length (prefix ++ cc ++ [BRANCHIFNOT (Z.of_nat else_base)]) =
       (base + cc_len + 1)%nat).
-    { rewrite !app_length. simpl. lia. }
+    { rewrite !length_app. simpl. lia. }
     specialize (IHthen fuel' senv ce fe
       (base + cc_len + 1)%nat
       s_after_br sv out out
@@ -7744,7 +7768,7 @@ Proof.
       replace (base + cc_len + 1 + ct_len)%nat
         with (Datatypes.length (prefix ++ cc ++
               [BRANCHIFNOT (Z.of_nat else_base)] ++ ct))%nat
-        by (rewrite !app_length; simpl; lia).
+        by (rewrite !length_app; simpl; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ cc ++
               [BRANCHIFNOT (Z.of_nat else_base)] ++ ct))
@@ -7825,7 +7849,7 @@ Proof.
           Datatypes.length ct + 1 + Datatypes.length ce_code)) :: ce_code))
         with (Datatypes.length cc + 1 + Datatypes.length ct + 1 +
               Datatypes.length ce_code)%nat
-        by (rewrite app_length; simpl; rewrite app_length; simpl; lia).
+        by (rewrite length_app; simpl; rewrite length_app; simpl; lia).
       lia.
     + exact Hcorr_t.
   - (* cond = false *)
@@ -7869,7 +7893,7 @@ Proof.
         by (rewrite <- app_assoc; reflexivity).
       replace (base + cc_len)%nat
         with (Datatypes.length (prefix ++ cc))%nat
-        by (rewrite app_length; lia).
+        by (rewrite length_app; lia).
       rewrite nth_error_prefix with
         (i := Datatypes.length (prefix ++ cc))
         by reflexivity.
@@ -7909,7 +7933,7 @@ Proof.
       length (prefix ++ cc ++ [BRANCHIFNOT (Z.of_nat else_base)] ++
               ct ++ [BRANCH (Z.of_nat (else_base + ce_len))]) =
       else_base).
-    { rewrite !app_length. simpl. unfold else_base, cc_len, ct_len. lia. }
+    { rewrite !length_app. simpl. unfold else_base, cc_len, ct_len. lia. }
     specialize (IHelse fuel' senv ce fe
       else_base
       s_after_br sv out out
@@ -7964,7 +7988,7 @@ Proof.
           Datatypes.length ct + 1 + Datatypes.length ce_code)) :: ce_code))
         with (Datatypes.length cc + 1 + Datatypes.length ct + 1 +
               Datatypes.length ce_code)%nat
-        by (rewrite app_length; simpl; rewrite app_length; simpl; lia).
+        by (rewrite length_app; simpl; rewrite length_app; simpl; lia).
       lia.
     + exact Hcorr_e.
 Qed.
@@ -8146,7 +8170,7 @@ Proof.
       by (rewrite <- app_assoc; reflexivity).
     replace (base + c1_len)%nat
       with (Datatypes.length (prefix ++ c1))%nat
-      by (rewrite app_length; lia).
+      by (rewrite length_app; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c1))
       by reflexivity.
@@ -8217,7 +8241,7 @@ Proof.
   assert (Hplen_push :
     length (prefix ++ c1 ++ [PUSH]) =
     (base + c1_len + 1)%nat).
-  { rewrite !app_length. simpl. lia. }
+  { rewrite !length_app. simpl. lia. }
   specialize (IHe2 fuel' (env_extend senv x sv1)
     ((x, Loc_stack 0) :: shift ce 1) fe
     (base + c1_len + 1)%nat
@@ -8240,7 +8264,7 @@ Proof.
       by (rewrite <- !app_assoc; reflexivity).
     replace (base + c1_len + 1 + c2_len)%nat
       with (Datatypes.length (prefix ++ c1 ++ [PUSH] ++ c2))%nat
-      by (rewrite !app_length; simpl; lia).
+      by (rewrite !length_app; simpl; lia).
     rewrite nth_error_prefix with
       (i := Datatypes.length (prefix ++ c1 ++ [PUSH] ++ c2))
       by reflexivity.
@@ -8303,13 +8327,40 @@ Proof.
       rewrite <- app_assoc. reflexivity. }
     rewrite Hcode_eq. rewrite Hfull.
     unfold s_after_pop, st. f_equal. f_equal.
-    rewrite app_length. simpl. rewrite app_length. simpl. lia.
+    rewrite length_app. simpl. rewrite length_app. simpl. lia.
   - exact Hcorr2.
 Qed.
 
 (* ================================================================== *)
 (* === MAIN THEOREM                                               === *)
 (* ================================================================== *)
+
+Lemma compiler_correct_unbound_var :
+  compiler_correct [Decl_expr (Exp_var ""%string)].
+Proof.
+  intros src_fuel bc_fuel.
+  unfold compiler_correct.
+  assert (Hcompile :
+    compile_program [Decl_expr (Exp_var ""%string)] = [CONSTINT 2147483648; STOP]).
+  { unfold compile_program. simpl. reflexivity. }
+  rewrite Hcompile.
+  assert (Hoob : ~ (Int.min_signed <= 2147483648 <= Int.max_signed)).
+  { change Int.min_signed with (-2147483648)%Z.
+    change Int.max_signed with 2147483647%Z. lia. }
+  destruct src_fuel as [|[|sf]].
+  - change (interpret 0 [Decl_expr (Exp_var ""%string)])
+      with (mk_behavior [] Term_timeout).
+    apply constint_oob_initial_any_error_behavior_equiv; [exact Hoob | right; reflexivity].
+  - change (interpret 1 [Decl_expr (Exp_var ""%string)])
+      with (mk_behavior [] Term_timeout).
+    apply constint_oob_initial_any_error_behavior_equiv; [exact Hoob | right; reflexivity].
+  - replace (interpret (S (S sf)) [Decl_expr (Exp_var ""%string)])
+      with (mk_behavior [] (Term_error "unbound variable"))
+      by (unfold interpret; simpl; reflexivity).
+    apply constint_oob_initial_any_error_behavior_equiv.
+    + exact Hoob.
+    + left. exists "unbound variable". reflexivity.
+Qed.
 
 (* The main theorem matches the signature in CompileSpec.v exactly. *)
 Theorem compiler_correctness :

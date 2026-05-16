@@ -266,7 +266,7 @@ Theorem verify_BEQ_correct : forall n target,
          | _ => False
          end /\
          (forall cv, val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) (Machine.accu s) cv -> exists z, cv = Vlong z))
-      (fun _ => False) (fun _ _ _ => False).
+       (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
@@ -276,9 +276,18 @@ Theorem verify_BEQ_handler_correct : forall n target,
     handler_correct (handle_BEQ n target) f_instr_BEQ
       (fun _ => None)
       (pre_and (pre_and (pre_and code_ne_struct (code_at (Int.repr n))) (branch_offset_at target)) (pre_and accu_signed_int accu_is_long))
-      (fun _ => False) (fun _ _ _ => False).
+       (fun _ => None) (fun _ => None).
 Proof.
-Admitted.
+  intros n target Hn.
+  eapply handler_correct_weaken.
+  - exact (verify_BEQ_correct n target Hn).
+  - intros e le m s ard _ Hpre.
+    unfold pre_and, code_ne_struct, code_at, branch_offset_at, accu_signed_int, accu_is_long in Hpre.
+    destruct Hpre as [[[Hne Hcode] Hbranch] [Haccu Hlong]].
+    destruct Hn as [Hnlo Hnhi].
+    split; [exact Hne|]. split; [split; assumption|].
+    split; [exact Hcode|]. split; [exact Hbranch|]. split; assumption.
+Qed.
 
 (* Wrapper with the canonical type expected by InstructVerificationProof.v.
    handle_instr (BEQ z1 z2) / clight_of (BEQ z1 z2) / pre_of (BEQ z1 z2)
@@ -294,4 +303,3 @@ Definition correct_BEQ : forall z1 z2,
     (pre_of (Bytecode.AST.BEQ z1 z2)) (P_halt_of (Bytecode.AST.BEQ z1 z2)) (P_ccall_of (Bytecode.AST.BEQ z1 z2)).
 Proof.
 Admitted.
-

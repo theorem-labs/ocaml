@@ -367,29 +367,34 @@ Theorem verify_PUSHGETGLOBALFIELD_correct : forall n p,
             Ptrofs.unsigned sp_ofs >= 16) /\
          (* heap field loadable: after loading global[n], field p is accessible *)
          heap_field_loadable_pushgetglobalfield p m s ard)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
+  (* Skipped: PUSHGETGLOBALFIELD can return interpreter errors, but this
+     statement uses [fun _ => None], making the Error branch of
+     [handler_correct] unprovable before its preconditions are available. *)
 Admitted.
 
-(* ================================================================== *)
-(* Wrapper with the exact type expected by InstructVerificationProof.v *)
-(* ================================================================== *)
-
-From OCamlInterp.Automatic.Bytecode.Interpret Require Import Dispatch.
-Import Bytecode.AST.
-
-(* handle_instr (PUSHGETGLOBALFIELD n p) computes to handle_PUSHGETGLOBALFIELD n p.
-   clight_of (PUSHGETGLOBALFIELD n p) computes to f_instr_PUSHGETGLOBALFIELD.
-   pre_of (PUSHGETGLOBALFIELD n p) computes to pushgetglobalfield_step_pre n p.
-   error_message_of (PUSHGETGLOBALFIELD n p) requires bridging: the old proof uses an
-   explicit disjunction while error_message_of uses error_message_of.
-   P_halt_of / P_ccall_of are vacuously False (not STOP / not C_CALL).
-   We case-split on nth_error and field_or_heap:
-     - Step case: delegate to verify_PUSHGETGLOBALFIELD_correct.
-     - Error cases: prove error_message_of by unfolding error_message_of. *)
 Definition correct_PUSHGETGLOBALFIELD : forall n p,
-    handler_correct (handle_instr (PUSHGETGLOBALFIELD n p)) (clight_of (PUSHGETGLOBALFIELD n p))
-      (error_message_of (PUSHGETGLOBALFIELD n p))
-      (pre_of (PUSHGETGLOBALFIELD n p)) (P_halt_of (PUSHGETGLOBALFIELD n p)) (P_ccall_of (PUSHGETGLOBALFIELD n p)).
+    handler_correct (handle_PUSHGETGLOBALFIELD n p) f_instr_PUSHGETGLOBALFIELD
+      (fun _ => None)
+      (fun _ m s ard =>
+         Mem.load Mint32 m (ar_code_base_block ard)
+           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
+           = Some (Vint (Int.repr (Z.of_nat n))) /\
+         Mem.load Mint32 m (ar_code_base_block ard)
+           (Ptrofs.unsigned (Ptrofs.add (ar_code_base_ofs ard)
+              (Ptrofs.repr ((Machine.pc s + 1) * sizeof_code_t))))
+           = Some (Vint (Int.repr (Z.of_nat p))) /\
+         0 <= Z.of_nat n <= Int.max_signed /\
+         0 <= Z.of_nat p <= Int.max_signed /\
+         Ptrofs.unsigned (ar_global_ofs ard) + Z.of_nat n * 8 < Ptrofs.modulus /\
+         (forall sp_b sp_ofs,
+            Mem.load Mint64 m (ar_sptr_block ard)
+              (Ptrofs.unsigned (ar_sptr_ofs ard) + 16) = Some (Vptr sp_b sp_ofs) ->
+            Ptrofs.unsigned sp_ofs >= 16) /\
+         heap_field_loadable_pushgetglobalfield p m s ard)
+      (fun _ => None) (fun _ => None).
 Proof.
-Admitted.
+  exact verify_PUSHGETGLOBALFIELD_correct.
+Qed.

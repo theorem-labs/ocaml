@@ -299,7 +299,7 @@ Theorem verify_MAKEFLOATBLOCK_correct_v1 : forall (n : nat),
                  b <> sb -> b <> sp_b -> b <> new_b ->
                  Mem.load chunk m_field0 b ofs = Some v ->
                  Mem.load chunk m_loop b ofs = Some v)))
-      (fun _ _ => False) (fun _ => False) (fun _ _ _ => False).
+      (fun _ _ => False) (fun _ => None) (fun _ => None).
 Proof.
   intros n Hn_ge1.
   intros e le m s.
@@ -880,122 +880,6 @@ Proof.
   { admit. }
 Abort.
 *)
-
-(* ================================================================== *)
-(* Restructured theorem: the step_pre's "body postcondition" covers   *)
-(* everything from after Sset _block through s->accu = block, which   *)
-(* includes the double reads, field 0 store, init+loop, and accu      *)
-(* store.  This cleanly abstracts the float-specific operations.      *)
-(* ================================================================== *)
-
-(* makefloatblock_body_after_setblock is in InstructSpec.v *)
-
-Theorem verify_MAKEFLOATBLOCK_correct : forall (n : nat),
-    (n >= 1)%nat ->
-    handler_correct (handle_MAKEFLOATBLOCK n) f_instr_MAKEFLOATBLOCK
-      (fun _ => None)
-      (fun e m s ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         let cb := ar_code_base_block ard in
-         let co := ar_code_base_ofs ard in
-         let gb := ar_global_block ard in
-         let sp_b := ar_stack_block ard in
-         let hm := ar_heap_map ard in
-         (* 0. e does not bind _heap_alloc *)
-         e ! _heap_alloc = None /\
-         (* 1. Code buffer: size at PC *)
-         Mem.load Mint32 m cb
-           (Ptrofs.unsigned (Ptrofs.add co
-              (Ptrofs.repr (Machine.pc s * sizeof_code_t))))
-         = Some (Vint (Int.repr (Z.of_nat n))) /\
-         (* 2. n fits in signed int range as positive *)
-         (0 < Z.of_nat n <= Int.max_signed) /\
-         (* 3. Heap map freshness *)
-         hm (next_addr s) = None /\
-         (* 4. Global block is valid *)
-         Mem.valid_block m gb /\
-         (* 5. Genv lookup for heap_alloc *)
-         (exists b_ha,
-            Genv.find_symbol (genv_genv ge) _heap_alloc = Some b_ha /\
-            Genv.find_funct (genv_genv ge) (Vptr b_ha Ptrofs.zero) =
-              Some heap_alloc_fundef) /\
-         (* 6. heap_alloc succeeds on any memory *)
-         (forall m',
-            exists m_alloc new_b new_ofs,
-              external_call heap_alloc_ef
-                (Genv.to_senv (genv_genv ge))
-                (Vptr sb so :: Vlong (Int64.repr (Z.of_nat n)) :: Vlong (Int64.repr 254) :: nil)
-                m' E0 (Vptr new_b new_ofs) m_alloc /\
-              (forall b, Mem.valid_block m' b -> new_b <> b) /\
-              (forall b ofs chunk v,
-                 Mem.load chunk m' b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc b ofs = Some v) /\
-              (forall b ofs k p,
-                 Mem.valid_block m' b -> Mem.perm m' b ofs k p ->
-                 Mem.perm m_alloc b ofs k p)) /\
-         (* 7. Body postcondition: covers everything from after Sset _block
-            through s->accu = block, including double reads/stores and loop *)
-         (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs,
-            le_pre ! _s = Some (Vptr sb so) ->
-            le_pre ! _block = Some (Vptr new_b new_ofs) ->
-            le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
-            new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
-            Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some (Vptr sp_b sp_ofs) ->
-            val_repr hm cb co (Machine.accu s) (Vptr sp_b sp_ofs) ->
-            False) /\
-         (* 7 (revised). Body postcondition *)
-         (forall le_pre m_alloc0 new_b new_ofs sp_b sp_ofs accu_v0,
-            le_pre ! _s = Some (Vptr sb so) ->
-            le_pre ! _block = Some (Vptr new_b new_ofs) ->
-            le_pre ! _size = Some (Vlong (Int64.repr (Z.of_nat n))) ->
-            new_b <> sb -> new_b <> sp_b -> new_b <> gb -> new_b <> cb ->
-            Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 8) = Some accu_v0 ->
-            val_repr hm cb co (Machine.accu s) accu_v0 ->
-            Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) ->
-            stack_repr hm cb co m_alloc0 (Machine.stack s) sp_b sp_ofs ->
-            Mem.range_perm m_alloc0 sb (Ptrofs.unsigned so) (Ptrofs.unsigned so + 56)
-              Cur Writable ->
-            (forall b ofs chunk v,
-                 Mem.load chunk m_alloc0 b ofs = Some v -> b <> new_b ->
-                 Mem.load chunk m_alloc0 b ofs = Some v) ->
-            exists le_out m_out sp_ofs_out,
-              exec_stmt function_entry1 clight_ge e le_pre m_alloc0
-                makefloatblock_body_after_setblock
-                E0 le_out m_out Out_normal /\
-              le_out ! _s = Some (Vptr sb so) /\
-              le_out ! _block = Some (Vptr new_b new_ofs) /\
-              (* pc field preserved *)
-              (forall v,
-                 Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + 0) = Some v ->
-                 Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 0) = Some v) /\
-              (* accu field stores block *)
-              Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 8) =
-                Some (Vptr new_b new_ofs) /\
-              (* sp updated *)
-              Mem.load Mint64 m_out sb (Ptrofs.unsigned so + 16) =
-                Some (Vptr sp_b sp_ofs_out) /\
-              stack_repr hm cb co m_out (skipn (Nat.sub n 1) (Machine.stack s))
-                sp_b sp_ofs_out /\
-              Ptrofs.unsigned sp_ofs_out >= 8 /\
-              (align_chunk Mint64 | Ptrofs.unsigned sp_ofs_out) /\
-              Ptrofs.unsigned sp_ofs_out + 8 * Z.of_nat (length (skipn (Nat.sub n 1) (Machine.stack s))) < Ptrofs.modulus /\
-              Ptrofs.unsigned sp_ofs_out + 8 * Z.of_nat (length (skipn (Nat.sub n 1) (Machine.stack s))) <=
-                Ptrofs.unsigned sp_ofs + 8 * Z.of_nat (length (Machine.stack s)) /\
-              (* Fields at offsets >= 24 preserved *)
-              (forall fo v, fo >= 24 ->
-                 Mem.load Mint64 m_alloc0 sb (Ptrofs.unsigned so + fo) = Some v ->
-                 Mem.load Mint64 m_out sb (Ptrofs.unsigned so + fo) = Some v) /\
-              (* Permissions preserved *)
-              (forall b ofs k p,
-                 Mem.perm m_alloc0 b ofs k p ->
-                 Mem.perm m_out b ofs k p) /\
-              (* Loads on gb preserved *)
-              (forall ofs v,
-                 Mem.load Mint64 m_alloc0 gb ofs = Some v ->
-                 Mem.load Mint64 m_out gb ofs = Some v)))
-      (fun _ => False) (fun _ _ _ => False).
-Proof. Admitted.
 
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr (MAKEFLOATBLOCK n) / clight_of (MAKEFLOATBLOCK n) /

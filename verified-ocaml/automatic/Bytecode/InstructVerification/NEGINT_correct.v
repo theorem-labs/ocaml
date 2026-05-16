@@ -151,18 +151,6 @@ Proof.
   intros. reflexivity.
 Qed.
 
-(* ================================================================== *)
-(* Main theorem                                                        *)
-(* ================================================================== *)
-
-Theorem verify_NEGINT_compl_comp :
-    handler_correct handle_NEGINT f_instr_NEGINT
-      (fun _ => None)
-      accu_is_long
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the uniform type expected by InstructVerificationProof.v.
    handle_instr NEGINT / clight_of NEGINT / pre_of NEGINT are convertible
    with handle_NEGINT / f_instr_NEGINT / accu_is_long.

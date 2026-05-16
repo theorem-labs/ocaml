@@ -1,0 +1,35 @@
+continue working on the verified-ocaml gate.
+
+ULTIMATE GOAL: drive bash /data/jeffrey/ocaml/docs/verified-ocaml-completion-gate.sh
+to 0 admits AND a fully verified compiler.
+
+CRITICAL: GATE-GAMING IS WORTHLESS. The user has explicitly rejected
+contradiction-trick closures that derive False from an admitted-but-inconsistent
+verify_X (with `(fun _ => None)` error precondition while handle_X returns Error).
+
+Such closures:
+  - DO reduce the lexical admit count
+  - DO NOT verify anything
+  - SHIFT trust debt from `correct_X` (visible in IVP) to `verify_X` (hidden)
+  - Are equivalent to opening a back door and closing the front
+
+ACCEPTABLE closure paths:
+  1. REAL Clight bigstep proofs of correct_X, treating canonical pre_of properly.
+  2. Delegation to a verify_X helper THAT USES `error_message_of X` as the error
+     precondition (consistent with handle_X) AND is genuinely provable.
+  3. Case-splits on operand well-formedness where the unsound branch is
+     literally unreachable.
+
+UNACCEPTABLE (will be reverted on detection):
+  - exfalso from admitted-but-inconsistent verify_X
+  - Adding new admitted theorems with weaker preconditions than handle_X actually requires
+  - Modifying spec signatures in manual/ to bypass blockers
+  - Reverting to Abort./admit. to hide unproven steps
+
+EVERY DISPATCHED SUBAGENT MUST:
+  - Verify the verify_X helper they delegate to is CONSISTENT (uses error_message_of, not fun _ => None)
+  - If the helper is inconsistent, leave correct_X Admitted and report it as a real blocker
+  - Run `bash /data/jeffrey/ocaml/docs/verified-ocaml-completion-gate.sh` after edits
+  - Never claim "closure" if the path involves an inconsistent admitted assumption
+
+do not stop, no matter what — but ALL progress must be REAL VERIFICATION.

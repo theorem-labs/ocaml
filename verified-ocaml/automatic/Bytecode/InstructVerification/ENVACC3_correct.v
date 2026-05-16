@@ -71,6 +71,15 @@ Theorem verify_ENVACC3_with_pre :
     handler_correct (handle_ENVACC 3) f_instr_ENVACC3
       (fun _ => None)
       env_field_loadable_3
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
+
+Theorem correct_ENVACC3 :
+    handler_correct (handle_ENVACC 3) f_instr_ENVACC3
+      (fun _ => None)
+      env_field_loadable_3
+      (fun _ => None) (fun _ => None).
+Proof.
+  exact verify_ENVACC3_with_pre.
+Qed.

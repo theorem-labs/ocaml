@@ -42,14 +42,6 @@ Proof.
     rewrite Z.lor_spec. reflexivity.
 Qed.
 
-Theorem verify_ORINT_correct :
-    handler_correct handle_ORINT f_instr_ORINT
-      (fun _ => None)
-      (pre_and accu_is_long stack_head_is_long)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Wrapper with the exact type expected by InstructVerificationProof.v *)
 Theorem correct_ORINT :
     handler_correct (handle_instr ORINT) (clight_of ORINT)

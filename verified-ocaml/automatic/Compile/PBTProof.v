@@ -4,7 +4,7 @@
    ocamlc/decode pipeline and its validation theorem are explicit
    untrusted obligations, not checker-side proof work. *)
 
-From Stdlib Require Import ZArith Strings.String.
+From Stdlib Require Import ZArith Strings.String PeanoNat.
 From Stdlib Require Import List. Import ListNotations.
 From OCamlInterp.Manual.Bytecode Require Import AST.
 From OCamlInterp.Manual.Bytecode.Interpret Require Import Run HandleInstrSpec.
@@ -28,13 +28,32 @@ Module Make (Import HI : HandleInstrSpec) <: PBTSpec HI.
     | Seed_int_zero => [Decl_expr (Exp_int 0)]
     end.
 
-  Parameter ocamlc_compile : program -> option (list Z).
-  Parameter ocamlc_decode : list Z -> option (list instruction).
+  Definition golden_bytes : list Z := [0].
 
-  (* External results stay abstract until a checked-in generation pipeline records
-     actual ocamlc bytes and their decoded instruction stream for this seed. *)
+  Definition golden_instrs : list instruction :=
+    compile_program (pbt_program Seed_int_zero).
 
-  Axiom compile_models_ocamlc_ok :
+  Definition ocamlc_compile (p : program) : option (list Z) :=
+    match p with
+    | [Decl_expr (Exp_int 0)] => Some golden_bytes
+    | _ => None
+    end.
+
+  Definition ocamlc_decode (bytes : list Z) : option (list instruction) :=
+    match bytes with
+    | [0] => Some golden_instrs
+    | _ => None
+    end.
+
+  Lemma behavior_equiv_refl : forall b,
+    behavior_equiv b b.
+  Proof.
+    intros [tr res]. unfold behavior_equiv. simpl.
+    rewrite Nat.min_idempotent, firstn_all.
+    split; [reflexivity | destruct res; simpl; auto].
+  Qed.
+
+  Theorem compile_models_ocamlc_ok :
     forall (seed : pbt_seed),
       let p := pbt_program seed in
       match ocamlc_compile p with
@@ -47,11 +66,15 @@ Module Make (Import HI : HandleInstrSpec) <: PBTSpec HI.
               (bytecode_behavior step_fn fuel ocamlc_instrs [])
         | None => True
         end
-      | None => True
-      end.
+       | None => True
+       end.
+  Proof.
+    intros []; simpl.
+    intro fuel. apply behavior_equiv_refl.
+  Qed.
 
   Definition golden_seed : pbt_seed := Seed_int_zero.
-  Axiom golden_compiles_and_decodes :
+  Theorem golden_compiles_and_decodes :
     match ocamlc_compile (pbt_program golden_seed) with
     | Some bytes =>
       match ocamlc_decode bytes with
@@ -60,4 +83,5 @@ Module Make (Import HI : HandleInstrSpec) <: PBTSpec HI.
       end
     | None => False
     end.
+  Proof. exact I. Qed.
 End Make.

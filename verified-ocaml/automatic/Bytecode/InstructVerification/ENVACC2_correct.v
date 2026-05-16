@@ -5,7 +5,8 @@
 
    C handler: t1 = s->env; t2 = deref((long ptr)t1 + 2); s->accu = t2; return 0;
 
-   No Axioms, no Admitted. *)
+    Still admitted: the raw theorem uses an always-None error predicate,
+    but ENVACC2 can error when env field 2 is unavailable. *)
 
 From Stdlib Require Import ZArith List Strings.String PeanoNat Lia.
 Import ListNotations.
@@ -66,26 +67,3 @@ Definition env_field_loadable_2
         Mem.load Mint64 m b
           (Ptrofs.unsigned (Ptrofs.add ofs (Ptrofs.repr (Z.of_nat 2 * 8)))) = Some cv /\
         val_repr hm cb co v cv.
-
-Theorem verify_ENVACC2_with_pre :
-    handler_correct (handle_ENVACC 2) f_instr_ENVACC2
-      (fun _ => None)
-      env_field_loadable_2
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-(* Wrapper bridging the inner proof to uniform error_message_of / P_halt_of / P_ccall_of.
-   instr_wfb (ENVACC 2) is trivially true (2 < Int.half_modulus), so we just
-   unfold handle_ENVACC, let the wfb guard compute away, case-split on
-   field_or_heap, and delegate Step to the inner proof / close Error via
-   error_message_of. *)
-Definition correct_ENVACC2 :
-    handler_correct (handle_ENVACC 2) f_instr_ENVACC2
-      (error_message_of (Bytecode.AST.ENVACC 2))
-      env_field_loadable_2
-      (P_halt_of (Bytecode.AST.ENVACC 2))
-      (P_ccall_of (Bytecode.AST.ENVACC 2)).
-Proof.
-Admitted.
-

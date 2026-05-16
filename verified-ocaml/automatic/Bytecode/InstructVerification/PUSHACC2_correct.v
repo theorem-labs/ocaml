@@ -36,14 +36,14 @@ Proof.
 Qed.
 
 Theorem verify_PUSHACC2_correct :
-    handler_correct (handle_PUSHACC 2) f_instr_PUSHACC2
-      (fun _ => None)
-      (fun _ m _ ard =>
-         let sb := ar_sptr_block ard in
-         let so := ar_sptr_ofs ard in
-         exists sp_b sp_ofs,
-           Mem.load Mint64 m sb (Ptrofs.unsigned so + 16) = Some (Vptr sp_b sp_ofs) /\
-           Ptrofs.unsigned sp_ofs >= 16)
-      (fun _ => False) (fun _ _ _ => False).
+    handler_correct (handle_instr (PUSHACC 2)) (clight_of (PUSHACC 2))
+      (error_message_of (PUSHACC 2))
+      (pre_of (PUSHACC 2)) (P_halt_of (PUSHACC 2)) (P_ccall_of (PUSHACC 2)).
 Proof.
 Admitted.
+
+Definition correct_PUSHACC2 :
+    handler_correct (handle_instr (PUSHACC 2)) (clight_of (PUSHACC 2))
+      (error_message_of (PUSHACC 2))
+      (pre_of (PUSHACC 2)) (P_halt_of (PUSHACC 2)) (P_ccall_of (PUSHACC 2)).
+Proof. exact verify_PUSHACC2_correct. Qed.

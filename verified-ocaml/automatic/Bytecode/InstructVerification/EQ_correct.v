@@ -88,24 +88,20 @@ Theorem verify_EQ_correct :
     handler_correct handle_EQ f_instr_EQ
       (fun _ => None)
       (fun _ => eq_int_range_pre)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
 (* Exported version with named building-block precondition *)
-Theorem verify_EQ_handler_correct :
-    handler_correct handle_EQ f_instr_EQ
-      (fun _ => None)
-      int_op_safe
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-(* Wrapper with the canonical type expected by InstructVerificationProof.v *)
+(* Wrapper with the canonical type expected by InstructVerificationProof.v.
+   Abandoned for this pass: [verify_EQ_correct] is still admitted, and
+   [handler_correct_weaken] would also require an unconditional proof that
+   canonical [pre_of EQ] implies [int_op_safe].  That implication is stronger
+   than Clight-body executability: EQ can execute on any Vlong-represented
+   values, while [int_op_safe] requires both operands to be [Val_int]. *)
 Theorem correct_EQ :
   handler_correct (handle_instr Bytecode.AST.EQ) (clight_of Bytecode.AST.EQ)
     (error_message_of Bytecode.AST.EQ)
     (pre_of Bytecode.AST.EQ) (P_halt_of Bytecode.AST.EQ) (P_ccall_of Bytecode.AST.EQ).
 Proof.
 Admitted.
-

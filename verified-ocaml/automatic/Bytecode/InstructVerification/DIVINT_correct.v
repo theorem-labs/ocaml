@@ -220,36 +220,6 @@ Proof.
   - apply Int64.eqm_refl.
 Qed.
 
-(* ================================================================== *)
-(* Main theorem                                                        *)
-(* ================================================================== *)
-
-Theorem verify_DIVINT_correct :
-    handler_correct handle_DIVINT f_instr_DIVINT
-      (fun _ => None)
-      (fun _ _ s ard =>
-         match s.(Machine.accu), s.(Machine.stack) with
-         | Val_int a, Val_int b :: _ =>
-             b <> 0%Z /\
-             Int64.min_signed <= a * 2 + 1 <= Int64.max_signed /\
-             Int64.min_signed <= b * 2 + 1 <= Int64.max_signed /\
-             int_vlong ard a /\
-             int_vlong ard b
-         | _, _ => True
-         end)
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
-(* Exported version with named building-block precondition *)
-Theorem verify_DIVINT_handler_correct :
-    handler_correct handle_DIVINT f_instr_DIVINT
-      (fun _ => None)
-      divmod_safe
-      (fun _ => False) (fun _ _ _ => False).
-Proof.
-Admitted.
-
 (* Helper: do_raise returning Error implies error_message_of_raise = Some msg *)
 Local Lemma do_raise_error_iff : forall exn s msg,
   do_raise exn s = Error msg ->

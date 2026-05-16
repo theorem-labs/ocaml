@@ -364,7 +364,7 @@ Theorem verify_APPTERM3_correct : forall slotsize,
          (* extra_args fits in Int64 range *)
          Z.of_nat (extra_args s) <= Int64.max_unsigned /\
          Z.of_nat (extra_args s) <= Int64.max_signed)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

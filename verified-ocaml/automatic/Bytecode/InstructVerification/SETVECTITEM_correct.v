@@ -183,7 +183,7 @@ Theorem verify_SETVECTITEM_correct :
     handler_correct handle_SETVECTITEM f_instr_SETVECTITEM
       (fun _ => None)
       (fun e m s ard => setvectitem_pre e m s ard)
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 

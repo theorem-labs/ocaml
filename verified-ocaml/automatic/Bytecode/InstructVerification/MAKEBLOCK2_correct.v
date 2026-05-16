@@ -226,7 +226,7 @@ Theorem verify_MAKEBLOCK2_correct : forall t,
                     (forall b ofs k p,
                        Mem.perm m_alloc b ofs k p ->
                        Mem.perm m_store1 b ofs k p)))))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
 Admitted.
 
@@ -235,7 +235,7 @@ Definition MAKEBLOCK2_correct_for_spec : forall t, 0 <= Z.of_nat t <= 255 ->
       (fun _ => None)
       (heap_alloc_with_stores 2 (Z.of_nat t) alloc_store_2
        /\p code_at (Int.repr (Z.of_nat t)))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
   Proof.
   Admitted.
 

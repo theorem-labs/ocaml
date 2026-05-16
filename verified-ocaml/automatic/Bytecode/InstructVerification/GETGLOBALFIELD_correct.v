@@ -349,8 +349,11 @@ Theorem verify_GETGLOBALFIELD_correct : forall n p,
                    (Ptrofs.mul (Ptrofs.repr 8) (ptrofs_of_int Signed (Int.repr (Z.of_nat p))))))
                 = Some cv /\
               val_repr (ar_heap_map ard) (ar_code_base_block ard) (ar_code_base_ofs ard) v cv))
-      (fun _ => False) (fun _ _ _ => False).
+      (fun _ => None) (fun _ => None).
 Proof.
+  (* Skipped: GETGLOBALFIELD can return interpreter errors, but this statement
+     uses [fun _ => None], making the Error branch of [handler_correct]
+     unprovable before its field/global preconditions are available. *)
 Admitted.
 
 (* ================================================================== *)
@@ -374,4 +377,5 @@ Definition correct_GETGLOBALFIELD : forall n p,
       (error_message_of (GETGLOBALFIELD n p))
       (pre_of (GETGLOBALFIELD n p)) (P_halt_of (GETGLOBALFIELD n p)) (P_ccall_of (GETGLOBALFIELD n p)).
 Proof.
+  (* Skipped: depends on the aborted GETGLOBALFIELD proof above. *)
 Admitted.
